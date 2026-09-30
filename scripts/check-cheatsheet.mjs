@@ -27,13 +27,15 @@
  * and nor does an image.
  *
  * The boundary: it checks that a page is linked, not that the anchor it names
- * exists, and not that the line beside the link is right, which is what
+ * exists (`check-doc-links.mjs` does that for every page), and not that the line beside the link is right, which is what
  * `DocExamples.spec.ts` proves. Links under `/api/` are skipped, since that
  * reference is generated at build time and is not in the repository.
  *
  * Text matching rather than a markdown parser, for the reason
  * `check-sidebar.mjs` gives for reading the Astro config as text: a lint should
- * not need a working docs install to run.
+ * not need a working docs install to run. The reading is shared with
+ * `check-doc-links.mjs` through `lib/markdown-links.mjs`, so the two agree on
+ * what a link is.
  *
  * Usage:
  *   node scripts/check-cheatsheet.mjs
@@ -45,6 +47,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { linkTargets, pageSlugs, slugOf } from "./lib/markdown-links.mjs";
 
 const rootArgument = process.argv.find((arg) => arg.startsWith("--root="));
 const ROOT = rootArgument ? path.resolve(rootArgument.slice("--root=".length)) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -63,166 +66,6 @@ const NOT_AREAS = new Map([
 		"the generated list of every unit spelling, a lookup rather than an area of syntax; the units pages and the sidebar's Reference group link it",
 	],
 ]);
-
-/**
- * Every page slug on disk, in the form a root-relative link names it.
- *
- * Starlight lowercases a file's name into its slug, and a slug is matched
- * exactly, so a link that differs from the page only in case is not taken as
- * reaching it (the published site is served case-sensitively). An `index` page
- * is its directory's slug.
- *
- * @param {string} dir - Directory to walk.
- * @param {string} prefix - Slug prefix accumulated so far.
- * @param {Set<string>} out - The slugs found so far, added to in place.
- * @returns {Set<string>} Slugs.
- */
-function pageSlugs(dir, prefix = "", out = new Set()) {
-	if (!fs.existsSync(dir)) return out;
-	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-		const full = path.join(dir, entry.name);
-		if (entry.isDirectory()) {
-			pageSlugs(full, `${prefix}${entry.name.toLowerCase()}/`, out);
-			continue;
-		}
-		if (!/\.mdx?$/i.test(entry.name)) continue;
-		const name = entry.name.replace(/\.mdx?$/i, "").toLowerCase();
-		out.add(name === "index" ? prefix.replace(/\/$/, "") : prefix + name);
-	}
-	return out;
-}
-
-/**
- * The text of a page as it renders, with everything that is not rendered as a
- * link taken out: the frontmatter, fenced code, inline code spans and HTML
- * comments.
- *
- * A code span is replaced by nothing rather than removed with its brackets, so
- * a link whose text is code (`` [`x`](/syntax/x/) ``) still reads as a link.
- *
- * @param {string} markdown - The page source.
- * @returns {string} The prose.
- */
-function prose(markdown) {
-	const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
-	let start = 0;
-	if (lines[0] === "---") {
-		const end = lines.indexOf("---", 1);
-		if (end !== -1) start = end + 1;
-	}
-	const kept = [];
-	let fence = null;
-	for (const line of lines.slice(start)) {
-		const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-		if (fence === null && marker) {
-			fence = marker[1];
-			continue;
-		}
-		if (fence !== null) {
-			// A fence closes on a run of the same character at least as long.
-			if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && line.trim() === marker[1]) fence = null;
-			continue;
-		}
-		kept.push(line);
-	}
-	return withoutCodeSpans(withoutComments(kept.join("\n")));
-}
-
-/**
- * Text with its HTML comments removed. A comment left open runs to the end of
- * the page, as an HTML block does in markdown.
- *
- * A scan with `indexOf` rather than a lazy pattern, so that many unclosed
- * `<!--` cost one pass rather than one pass each.
- *
- * @param {string} text - The text.
- * @returns {string} The text, without comments.
- */
-function withoutComments(text) {
-	let out = "";
-	let position = 0;
-	for (;;) {
-		const open = text.indexOf("<!--", position);
-		if (open === -1) return out + text.slice(position);
-		out += text.slice(position, open);
-		const close = text.indexOf("-->", open + 4);
-		if (close === -1) return out;
-		position = close + 3;
-	}
-}
-
-/**
- * Text with its inline code spans removed.
- *
- * A span opens on a run of backticks and closes on the next run of the same
- * length in the same paragraph; a run with no partner is literal text. A
- * paragraph ends at a blank line, so a stray backtick cannot swallow the links
- * of the next one. Each run's partner is found from a table built in one pass
- * from the right, rather than by a pattern with a backreference, which
- * backtracks without bound on a long run of backticks.
- *
- * @param {string} text - The text.
- * @returns {string} The text, without code spans.
- */
-function withoutCodeSpans(text) {
-	return text
-		.split(/(\n[ \t]*\n)/)
-		.map((paragraph) => {
-			const runs = Array.from(paragraph.matchAll(/`+/g), (match) => ({ start: match.index, end: match.index + match[0].length }));
-			const partner = new Array(runs.length).fill(-1);
-			const nextOfLength = new Map();
-			for (let i = runs.length - 1; i >= 0; i--) {
-				const length = runs[i].end - runs[i].start;
-				partner[i] = nextOfLength.get(length) ?? -1;
-				nextOfLength.set(length, i);
-			}
-			let out = "";
-			let position = 0;
-			for (let i = 0; i < runs.length; i++) {
-				if (partner[i] === -1) continue;
-				out += paragraph.slice(position, runs[i].start);
-				position = runs[partner[i]].end;
-				i = partner[i];
-			}
-			return out + paragraph.slice(position);
-		})
-		.join("");
-}
-
-/**
- * Every link target in a page: inline links, reference definitions and HTML
- * anchors. Images are not links, so `![...](...)` is skipped.
- *
- * @param {string} markdown - The page source.
- * @returns {string[]} The targets, as written.
- */
-function linkTargets(markdown) {
-	const text = prose(markdown);
-	const targets = [];
-	// Each pattern stops at the next opening bracket, line or tag, so an
-	// unclosed `[` or `<a` costs a short scan rather than one to the end of
-	// the page for every such character. Link text holding brackets of its
-	// own is not a form the docs use.
-	for (const match of text.matchAll(/(!?)\[(?:[^[\]\\]|\\.)*\]\(\s*<?([^\s)>]+)>?(?:\s+(?:"[^"\n]*"|'[^'\n]*'))?\s*\)/g)) {
-		if (match[1] !== "!") targets.push(match[2]);
-	}
-	for (const match of text.matchAll(/^ {0,3}\[[^[\]\n]+\]:[ \t]*<?([^\s>]+)>?/gm)) targets.push(match[1]);
-	for (const match of text.matchAll(/<a\s[^<>]*?href\s*=\s*["']([^"'<>]+)["']/gi)) targets.push(match[1]);
-	return targets;
-}
-
-/**
- * The page slug a root-relative link names, or null for any other link: an
- * external address, a protocol-relative one, a relative path, or an anchor on
- * the same page.
- *
- * @param {string} target - The link target.
- * @returns {string | null} The slug, `""` for the site root.
- */
-function slugOf(target) {
-	if (!target.startsWith("/") || target.startsWith("//")) return null;
-	return target.split(/[?#]/)[0].replace(/^\/+|\/+$/g, "");
-}
 
 const pages = pageSlugs(CONTENT);
 const syntaxPages = [...pages].filter((slug) => slug.startsWith("syntax/") && slug !== CHEATSHEET).sort();

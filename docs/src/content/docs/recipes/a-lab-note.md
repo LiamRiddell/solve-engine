@@ -48,7 +48,7 @@ supports, so 2.5 is the honest way to report the density. See
 **`check mass / volume ≈ 2.5 within 5%`** compares the result with the value it
 should be, allowing a margin. It passes and says how close it came; a result
 outside the margin would fail and show both sides. See
-[conditionals](/syntax/conditionals/).
+[checks](/syntax/checks/).
 
 **The units part** works in quantities that carry their unit: a mass over a
 volume is a density, a mass times an acceleration is a force (the engine writes

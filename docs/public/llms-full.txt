@@ -1,0 +1,5926 @@
+# Solve
+
+> Solve (the `solve-engine` package on npm) evaluates the lines a person writes in a note: arithmetic, percentages, units, currencies, dates and times, statistics, finance and symbolic algebra, in plain phrasing, one line or a whole document at a time.
+
+Each line of a note is worked out on its own unless it reads another: a name defined on one line (`price = 20`) is read by the lines below it, and forms such as `total above`, `line 3`, `#tag` totals, `check`, what-if (`with`) and `inputs of` work across lines. Text after `//` is a comment. Every example these files show is proven against the engine when the documentation is built.
+
+Each block below is proven: the text after the last `//` on a line is the answer the engine gives, with the leading `= ` left off. A line with no answer defines a name or sets up the next line. A block marked (one document) is evaluated as one note, so its lines read each other; a blank line in it is a boundary that totals stop at. Examples that read the clock were computed at 2026-03-11T12:00:00Z (Europe/London).
+
+## age
+
+https://liamriddell.github.io/solve-engine/syntax/age/
+
+```
+age of 15/06/1990 on 25/12/2030 // 40 years
+age of 15/06/1990 on 26/08/2026 in years, months and days // 36 years, 2 months, 11 days
+```
+
+```
+age of 15/06/1990 // 35 years
+```
+
+## banded-rates
+
+https://liamriddell.github.io/solve-engine/syntax/banded-rates/
+
+```
+(one document)
+| from   | rate |
+| ------ | ---- |
+| 0      | 0%   |
+| 10,000 | 20%  |
+| 40,000 | 40%  |
+
+45,000 through bands above // 8,000
+45,000 through bands above / 45,000 as % // 17.78%
+column "rate" for 45,000 in bands above // 40.00%
+```
+
+```
+(one document)
+| weight (kg) | price  |
+| ----------- | ------ |
+| 0           | $4.50  |
+| 2           | $7.95  |
+| 10          | $14.00 |
+
+column "price" for 3.5 in bands above // $7.95
+column "price" for 2 in bands above // $7.95
+column "price" for 12 in bands above // $14.00
+```
+
+```
+(one document)
+| sales from | commission |
+| ---------- | ---------- |
+| $0         | 5%         |
+| $50,000    | 8%         |
+| $100,000   | 10%        |
+
+$120,000 through bands above // $8,500.00
+120000 through bands above // $8,500.00
+column "commission" for $120,000 in bands above // 10.00%
+```
+
+```
+(one document)
+| kWh | price |
+| --- | ----- |
+| 0   | $0.12 |
+| 100 | $0.18 |
+| 500 | $0.25 |
+
+350 through bands above // $57.00
+column "price" for 350 in bands above // $0.18
+```
+
+```
+(one document)
+| up to  | rate |
+| ------ | ---- |
+| 10,000 | 0%   |
+| 40,000 | 20%  |
+
+45,000 through bands above // ERROR: The first column is headed "up to", which reads as where each band ends. Bands are read by where each one starts: head the column "from" and write each band's starting point, the first being 0.
+```
+
+```
+(one document)
+| from   | rate |
+| ------ | ---- |
+| 10,000 | 20%  |
+| 40,000 | 40%  |
+
+45,000 through bands above // ERROR: The first band starts at 10,000, so the part of an amount below it falls in no band. Add a band from 0, at 0% if nothing is charged there.
+column "rate" for 5,000 in bands above // ERROR: 5,000 falls below the first band, which starts at 10,000.
+```
+
+```
+(one document)
+| from   | rate |
+| ------ | ---- |
+| 0      | 0    |
+| 10,000 | 20   |
+| 40,000 | 40%  |
+
+45,000 through bands above // ERROR: Line 4's rate 20 is a plain number among percentages: write 20% if a percentage is meant.
+```
+
+## big-integers
+
+https://liamriddell.github.io/solve-engine/syntax/big-integers/
+
+```
+2^53 // 9,007,199,254,740,992
+2^53 + 1 // 9,007,199,254,740,993
+3^40 // 12,157,665,459,056,928,801
+2^64 // 18,446,744,073,709,551,616
+fact(25) // 15,511,210,043,330,985,984,000,000
+```
+
+```
+7^77 mod 13 // 11
+3^40 mod 7 // 4
+floor(2^53 + 1) // 9,007,199,254,740,993
+lcm(2^40, 3^20) // 3,833,759,992,447,475,122,176
+combination(56, 23) // 3,167,295,784,216,200
+(2^53 + 1) as hex // 0x20000000000001
+(2^60 + 1) * $1 // $1,152,921,504,606,846,977.00
+3^40 to 2 dp // 12,157,665,459,056,928,801.00
+```
+
+```
+12345678901234567890 + 1 // 12,345,678,901,234,567,000
+1e16 + 1 - 1e16 // 0
+10^16 + 1 - 10^16 // 1
+```
+
+```
+2^60 + 0.5 // 1,152,921,504,606,847,000
+2^1024 // ∞
+(2^53 + 1) kg // 9,007,199,254,740,992.00 kg
+```
+
+```
+12345678901234567890n + 1 // 12345678901234567891
+123n * 2 // 246
+7n / 2n // 3
+1n << 40 // 1099511627776
+```
+
+```
+3^40 - 12157665459056928801n // 0
+3^40 == 12157665459056928801n // true
+(2^53 + 1) & 1n // 1
+```
+
+## bit-shifting
+
+https://liamriddell.github.io/solve-engine/syntax/bit-shifting/
+
+```
+1 << 8 // 256
+1 << 10 // 1,024
+256 >> 4 // 16
+```
+
+```
+1 << 31 // -2,147,483,648
+1 << 32 // 1
+```
+
+```
+-16 >> 2 // -4
+-1 >> 1 // -1
+-8 >>> 1 // 2,147,483,644
+```
+
+```
+8 >> 1 // 4
+8 >>> 1 // 4
+```
+
+## bitwise-operators
+
+https://liamriddell.github.io/solve-engine/syntax/bitwise-operators/
+
+```
+0xFF & 0x0F // 15
+0xF0 | 0x0F // 255
+0xFF xor 0x0F // 240
+0b1010 & 0b0110 // 2
+0b1010 | 0b0110 // 14
+0b1010 xor 0b0110 // 12
+~5 // -6
+~0 // -1
+```
+
+```
+2^10 // 1,024
+```
+
+```
+clz32(1) // 31
+clz32(0) // 32
+imul(3, 4) // 12
+imul(2147483647, 2) // -2
+fround(5.5) // 5.50
+```
+
+```
+1 | 2 << 3 // 17
+1 + 2 << 3 // 24
+4 & 3 + 1 // 4
+4 | 6 & 3 // 6
+```
+
+```
+(0xF0 | 0x0F) & 0xFF // 255
+(1 << 8) | 1 // 257
+```
+
+```
+5 and 3 // 8
+```
+
+## calculus
+
+https://liamriddell.github.io/solve-engine/syntax/calculus/
+
+```
+der(x^3, x) // 3x^2
+der(x^3+x, x) // 3x^2+1
+der(sin(x), x) // cos(x)
+derivative(exp(x), x) // exp(x)
+```
+
+```
+der(x^3, x, 2) // 6x
+der(x^3, x, 3) // 6
+```
+
+```
+der(x*y, x) // y
+```
+
+```
+integral(x^2, x) // 1/3x^3
+integral(3x^2+2x+1, x) // x^3+x^2+x
+integral(cos(x), x) // sin(x)
+integral(1/x, x) // log(x)
+```
+
+```
+integral((3x+5)/(x^2-1), x) // 4*log(x-1)-log(x+1)
+integral(x^2/(x^2+1), x) // x-atan(x)
+integral(1/(x-1)^2, x) // -1/(x-1)
+integral(1/(x^2+2x+2), x) // atan(x+1)
+```
+
+```
+integral(exp(x^2), x) // Cannot integrate this: no elementary antiderivative is known for this expression.
+```
+
+```
+integral(x^2, x, 0, 3) // 9
+integral(x^2, x, 0, 1) // 1/3
+integral(3x^2+2x+1, x, 0, 1) // 3
+integral(x^2, x, 3, 0) // -9
+```
+
+```
+integral(sin(x), x, 0, pi) // 2
+integral(cos(x), x, 0, 1) // 0.84
+integral(1/(1+x^2), x, 0, 1) // 0.79
+```
+
+```
+integral(exp(x^2), x, 0, 1) // 1.46
+integral(sin(x)/x, x, 0, 1) // 0.95
+```
+
+```
+integral(1/x, x, 0, 1) // Cannot integrate this: the integrand has no finite value at x = 0, the lower bound, so this is an improper integral.
+integral(1/x^2, x, -1, 1) // Cannot integrate this: the integrand has no finite value at x = 0, inside the range, so this is an improper integral.
+```
+
+```
+integral(tan(x), x, 0, 2) // Cannot integrate this: the numeric estimate does not settle on a value; the integrand may grow without bound near x = 1.570796327, which would make the integral diverge.
+```
+
+```
+limit(sin(x)/x, x, 0) // 1
+limit((x^2-1)/(x-1), x, 1) // 2
+limit((1-cos(x))/x^2, x, 0) // 0.50
+limit((1+x)^(1/x), x, 0) // 2.72
+```
+
+```
+limit(abs(x)/x, x, 0) // The limit does not exist: from the left it approaches -1 and from the right 1 as x approaches 0.
+limit(1/x^2, x, 0) // The limit does not exist: it grows without bound, towards +∞ from both sides, as x approaches 0.
+limit(sin(1/x), x, 0) // The limit does not exist: the values do not settle on one number as x approaches 0; they may oscillate, as sin(1/x) does at 0.
+```
+
+```
+limit(sqrt(x), x, 0) // 0
+```
+
+```
+taylor(exp(x), x=0, 4) // 1/24x^4+1/6x^3+0.5x^2+x+1
+taylor(sin(x), x=0, 5) // 1/120x^5-1/6x^3+x
+```
+
+```
+jacobian(x*y, x+y) // [y, x; 1, 1]
+```
+
+## cancelling-fractions
+
+https://liamriddell.github.io/solve-engine/syntax/cancelling-fractions/
+
+```
+cancel((x^2-1)/(x-1)) // x+1
+cancel((x^3-1)/(x-1)) // x^2+x+1
+cancel((2x^2+4x)/(2x)) // x+2
+```
+
+```
+cancel((x^2+1)/(x-1)) // (x^2+1)/(x-1)
+```
+
+## cash-flow
+
+https://liamriddell.github.io/solve-engine/syntax/cash-flow/
+
+```
+npv of -1000, 300, 400, 500 at 10% // -21.04
+irr of -1000, 300, 400, 500 // 8.90%
+payback of -1000, 300, 400, 500 // 2.60
+```
+
+```
+npv of -1000, 300, 400, 500 at 10% // -21.04
+npv of -1000, 300, 400, 500 at 5% // 80.44
+npv of -100, 110 at 10% // 0
+```
+
+```
+net present value of -1000, 300, 400, 500 at 10% // -21.04
+-1000 + 300 / 1.1 + 400 / 1.1^2 + 500 / 1.1^3 // -21.04
+```
+
+```
+npv of -$1,000, $300, $400, $500 at 10% // -$21.04
+npv of -£5,000, £1,500, £2,000, £2,500 at 8% // £88.15
+npv of -$1,000, 300, 400, 500 at 10% // -$21.04
+```
+
+```
+flows = [-1000, 300, 400, 500]
+npv of flows at 10% // -21.04
+irr of flows // 8.90%
+payback of flows // 2.60
+```
+
+```
+irr of -1000, 300, 400, 500 // 8.90%
+irr of -$1,000, $300, $400, $500 // 8.90%
+```
+
+```
+irr of -10000, 4000, 4000, -3000, 6000, 5000 // 16.79%
+```
+
+```
+payback of -1000, 300, 400, 500 // 2.60
+payback period of -1000, 300, 400, 500 // 2.60
+```
+
+```
+payback of -1000, 1200, -500, 600 // 2.50
+```
+
+```
+(one document)
+irr of -100, 230, -132 // ERROR: irr: these flows have 2 internal rates of return, 10.00% and 20.00%, so no single rate is given
+irr of -100, 250, -200 // ERROR: irr: no rate above -100% makes the net present value of these flows zero, so they have no internal rate of return
+irr of 100, 200 // ERROR: irr: the flows never change sign (all money out or all money in), so no rate makes their net present value zero
+```
+
+```
+(one document)
+payback of -1000, 300, 400 // ERROR: payback: the flows never pay back the outlay; the running total is still 300 short after the last one
+payback of 100, 200 // ERROR: payback: the running total of the flows is never below zero, so there is no outlay to pay back
+```
+
+## category-tags
+
+https://liamriddell.github.io/solve-engine/syntax/category-tags/
+
+```
+(one document)
+40 + 15 #grocery // 55
+```
+
+```
+(one document)
+40 + 15 #grocery
+30 #transport
+
+12.50 #grocery
+total of #grocery // 67.50
+```
+
+```
+(one document)
+40 #grocery
+12.50 #grocery
+total of #grocery // 52.50
+average of #grocery // 26.25
+count of #grocery // 2
+```
+
+```
+(one document)
+40 #grocery #reviewed
+12.50 #grocery
+9 #reviewed
+total of #grocery // 52.50
+total of #reviewed // 49
+```
+
+```
+(one document)
+40 #grocery
+12.50 #grocery
+count of #grocery // 2
+```
+
+```
+(one document)
+$40 #food
+$25 #food
+total of #food // $65.00
+```
+
+```
+(one document)
+$40 #food
+$25 #food
+$30 #transport
+total by tag // food $65.00 (68%) · transport $30.00 (32%)
+```
+
+```
+(one document)
+# Budget
+Rent: $1200 #home
+Power: $80 #home
+Train: $60 #transport
+Lunch: $45 #food
+total by tag // home $1,280.00 (92%) · transport $60.00 (4%) · food $45.00 (3%)
+```
+
+```
+(one document)
+$1000 #rent
+$1 #snack
+total by tag // rent $1,000.00 (100%) · snack $1.00 (<1%)
+```
+
+```
+(one document)
+40 #grocery #reviewed
+12.50 #grocery
+9 #reviewed
+total by tag // grocery 52.50 (85%) · reviewed 49 (80%)
+```
+
+```
+(one document)
+$40 #food
+5 km #run
+total by tag // ERROR: money and length cannot be added. A breakdown needs every tagged line in one measure, so the tags share one whole.
+```
+
+```
+(one document)
+1200 #assuming
+800 #assuming
+total of #assuming // 2,000
+```
+
+## charts
+
+https://liamriddell.github.io/solve-engine/syntax/charts/
+
+```
+[120, 135, 128, 150, 162] as sparkline // [120, 135, 128, 150, 162]
+map(x^2, 0:5) as sparkline // [0, 1, 4, 9, 16, 25]
+[1.23456, 2.5, 3.14159] as sparkline // [1.23, 2.50, 3.14]
+```
+
+```
+plot x^2 from -3 to 3 // x^2 over [-3, 3]
+plot sin(x) from 0 to 2pi // sin(x) over [0, 6.28]
+plot 1000 * 1.05^x from 0 to 10 // 1000 * 1.05^x over [0, 10]
+plot 1/x from 0.5 to 5 // 1/x over [0.5, 5]
+```
+
+## cheatsheet
+
+https://liamriddell.github.io/solve-engine/syntax/cheatsheet/
+
+```
+2 + 2 // comment // 4
+```
+
+```
+total: 5 + 3 // 8
+Rent $1200 // $1,200.00
+```
+
+```
+2 + 2 * 10 // 22
+10 plus 5 times 2 // 20
+17 mod 5 // 2
+```
+
+```
+2.5k // 2,500
+3M // 3,000,000
+```
+
+```
+0.1 + 0.2 == 0.3 // true
+```
+
+```
+1/3 + 1/3 + 1/3 // 1
+10/4 as fraction // 5/2
+```
+
+```
+10% of 250 // 25
+15% off 80 // 68
+100 to 150 // 50.00%
+5% of what is 6 // 120
+```
+
+```
+ratio(1920, 1080) // 16:9
+```
+
+```
+round(3.14159, 2) // 3.14
+3.14159 to 4 dp // 3.1416
+-25 to nearest 10 // -30
+```
+
+```
+sqrt(16) // 4
+abs(-5) // 5
+gcd(12, 18) // 6
+```
+
+```
+(12.3 +/- 0.5) * 4 // 49.2 ± 2.0
+```
+
+```
+10 == 10 // true
+not (1 > 2) // true
+if 5 > 3 then 100 else 200 // 100
+```
+
+```
+1234 as words // one thousand two hundred and thirty-four
+3 as ordinal // 3rd
+2024 as roman // MMXXIV
+```
+
+```
+2^53 + 1 // 9,007,199,254,740,993
+123n * 2 // 246
+```
+
+```
+isprime(97) // true
+factor(360) // 2^3 * 3^2 * 5
+5! // 120
+```
+
+```
+sqrt(-4) // 2i
+(1+1i)*(1-1i) // 2
+```
+
+```
+speed of light // 299,792,458.00 m/s
+gravity * 70 kg as N // 686.47 N
+```
+
+```
+0xFF // 255
+255 as binary // 0b11111111
+```
+
+```
+1 << 8 // 256
+```
+
+```
+0xFF & 0x0F // 15
+12 xor 10 // 6
+```
+
+```
+1 KiB in bytes // 1,024.00 bytes
+4 GB at 50 Mbps // 10.67 min
+```
+
+```
+expand((x+1)*(x+2)) // x^2+3x+2
+```
+
+```
+factor(x^2-4) // (x-2)*(x+2)
+```
+
+```
+solve(x^2-4=0, x) // [-2, 2]
+solve(cos(x) = x, x) // 0.74
+```
+
+```
+cancel((x^2-1)/(x-1)) // x+1
+```
+
+```
+apart((3x+5)/(x^2-1)) // 4/(x-1)-1/(x+1)
+```
+
+```
+0.1x + 0.2x => // 0.3x
+```
+
+```
+der(x^3, x) // 3x^2
+integral(x^2, x, 0, 3) // 9
+```
+
+```
+1+2+b+3+b => // 2b+6
+```
+
+```
+[1,2,3] * 10 // [10, 20, 30]
+det([1,2;3,4]) // -2
+```
+
+```
+map(10*x, 0:3) // [0, 10, 20, 30]
+sum(x, 0:4) // 10
+reduce(acc+x, [1,2,3]) // 6
+```
+
+```
+average of 10, 20, 30 // 20
+median of 1, 5, 3 // 3
+half of 50 // 25
+```
+
+```
+normalcdf(1.96) // 0.98
+binompdf(10, 0.5, 3) // 0.12
+```
+
+```
+$100 + $50 // $150.00
+10 dollars // $10.00
+```
+
+```
+$0.10 + $0.20 // $0.30
+$10 / 3 // $3.33
+```
+
+```
+tax on 100 at 20% // 20
+tax off 120 at 20% // 100
+tax in 120 at 20% // 20
+```
+
+```
+450 monthly for 18 months // 8,100
+```
+
+```
+split $100 between 3 // $33.33 each, with 1 share paying $33.34
+$120 + 18% split 3 ways // $47.20 each
+```
+
+```
+interest on 1000 over 3 years at 5% // 157.63
+monthly repayment on 200000 over 25 years at 4% // 1,055.67
+what is $500 in 1990 worth in 2010 // $834.35
+```
+
+```
+$1,000 after 3 years at 7% // $1,225.04
+present value of $1,225.04 after 3 years at 7% // $1,000.00
+$500 invested $1,500 returned // 200.00%
+```
+
+```
+how long to save $10,000 at $500 monthly // 20 months
+how much per month to save $12,000 in 2 years // $500.00
+```
+
+```
+npv of -1000, 300, 400, 500 at 10% // -21.04
+irr of -1000, 300, 400, 500 // 8.90%
+```
+
+```
+£50,000 after tax // £39,519.60
+```
+
+```
+£3 / 500g vs £4 / 750g // the second is cheaper, 11% less
+```
+
+```
+25/12/2023 // Monday, December 25, 2023
+25 Dec 2026 // Friday, December 25, 2026
+```
+
+```
+25/12/2023 + 20 days // Sunday, January 14, 2024
+30 days from 3 March 2026 // Thursday, April 2, 2026
+```
+
+```
+tomorrow // Thursday, March 12, 2026, 12:00:00 PM
+next friday // Friday, March 13, 2026, 12:00:00 PM
+3 days ago // Sunday, March 8, 2026, 12:00:00 PM
+end of month // Tuesday, March 31, 2026
+```
+
+```
+next month // Wednesday, April 1, 2026
+```
+
+```
+last Friday of November 2026 // Friday, November 27, 2026
+```
+
+```
+what day is it on 2026-12-25 // Friday
+week number of 2026-12-25 // 52
+```
+
+```
+age of 15/06/1990 // 35 years
+age of 15/06/1990 on 25/12/2030 // 40 years
+```
+
+```
+days until 25/12/2026 // 288.50 days
+weeks between 01/01/2024 and 01/06/2024 // 21.71 weeks
+```
+
+```
+1710000000 as date // Saturday, March 9, 2024, 4:00:00 PM
+2024-03-09 as timestamp // 1,709,942,400
+```
+
+```
+25/12/2023 + 5 workdays // Monday, January 1, 2024
+working days between 01/01/2024 and 31/01/2024 // 23
+```
+
+```
+11 March 2026 - 3000 years // Saturday, March 11, 975 BC
+```
+
+```
+9:00am + 3 hours // 12:00:00 PM
+11pm + 2 hours // 1:00:00 AM (+1 day)
+7:30 to 20:45 // 795 minutes
+2h 30m // 150 minutes
+```
+
+```
+3pm London in Tokyo and New York // Tokyo 12:00 AM (+1 day), New York 11:00 AM
+overlap of 9am to 5pm in London and New York // 4 hours: London 1:00 PM to 5:00 PM, New York 9:00 AM to 1:00 PM
+3pm London on 23 September 2026 in Tokyo // 11:00 PM
+```
+
+```
+9am to 5:30pm // 510 minutes
+8:15 + 7:45 at £15/hour // £240.00
+```
+
+```
+100cm + 2m // 300.00 cm
+1 km + 500 m // 1.50 km
+```
+
+```
+5 m * 3 m // 15.00 m²
+3 kg * $5/kg // $15.00
+```
+
+```
+180C in gas mark // gas 4
+1 metric cup in ml // 250.00 ml
+scale 4 servings to 6 // 1.50
+```
+
+```
+5 km to miles // 3.11 miles
+72F to C // 22.22 C
+```
+
+```
+0.5 as % // 50.00%
+0.75 as fraction // 3/4
+```
+
+```
+1 sprint = 2 weeks // sprint defined
+6 sprints in days // 84 days
+```
+
+```
+16px in rem // 1.00 rem
+```
+
+```
+1920x1080 as ratio // 16:9
+resize 4000x3000 to 1200 wide // 1200 x 900
+4000px at 300 dpi // 13.33 in
+```
+
+```
+100 km/h in mph // 62.14 mph
+120 km / 60 km/h // 2.00 h
+```
+
+```
+cost to drive 500 km at 7 l/100km at £1.50/litre // £52.50
+250 miles at 60 mph // 4.17 h
+```
+
+```
+40 mpg in l/100km // 5.88 l/100km
+35 mpg imperial in l/100km // 8.07 l/100km
+```
+
+```
+230 V * 13 A as W // 2,990.00 W
+```
+
+```
+12 V / 2 A // 6.00 Ω
+3000 mAh * 3.7 V // 11.10 Wh
+```
+
+```
+2000 kcal in kJ // 8,368.00 kJ
+1 therm in kWh // 29.31 kWh
+```
+
+```
+32 psi in bar // 2.21 bar
+120 mmHg in kPa // 16.00 kPa
+```
+
+```
+1 AU in km // 149,597,870.70 km
+```
+
+```
+1 mol in mmol // 1,000.00 mmol
+```
+
+```
+1 furlong in m // 201.17 m
+```
+
+```
+area of circle radius 5 // 78.54
+```
+
+```
+bmi(70 kg, 175 cm) // 22.86
+pace(10 km, 50 min) // 5:00 /km
+```
+
+```
+length of "hello" // 5
+"hello world" as upper // HELLO WORLD
+```
+
+```
+total of numbers in "Coffee 3.20, lunch 12.50, taxi 18" // 33.70
+```
+
+```
+"hello" as base64 // aGVsbG8=
+```
+
+```
+sha256("hello") // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+```
+
+```
+hosts in 192.168.1.0/24 // 254
+```
+
+```
+plot x^2 from -3 to 3 // x^2 over [-3, 3]
+```
+
+```
+lighten(#3366cc, 20%) // #85a3e0
+mix(#ff0000, #0000ff) // #800080
+contrast(#ffffff, #000000) // 21
+```
+
+```
+London = 51.5074°N 0.1278°W // [51.51, -0.13]
+Tokyo = 35.6762°N 139.6503°E // [35.68, 139.65]
+distance from London to Tokyo // 9,558.57 km
+```
+
+```
+:a = 10
+:b = 20
+:a + :b // 30
+```
+
+```
+:budget = 500
+budget -= 120 // 380
+budget -= 63 // 317
+```
+
+```
+f(x) = 2*x + 1
+f(5) // 11
+```
+
+```
+:total = 100
+:total + 5 // 105
+```
+
+```
+(one document)
+random seed 42
+roll(1, 6) // 1
+```
+
+```
+(one document)
+random seed 42
+pick("north", "south", "east", "west") // east
+coin // tails
+```
+
+```
+(one document)
+:deposit = 250 * 4 frozen // 1,000
+deposit + 50 // 1,050
+```
+
+```
+(one document)
+10
+20
+30
+total above // 60
+line 1 * 2 // 20
+```
+
+```
+(one document)
+40 + 15 #grocery // 55
+12 #grocery // 12
+30 #fuel // 30
+total of #grocery // 67
+sum of #grocery // 67
+average of #grocery // 33.50
+count of #grocery // 2
+total by tag // grocery 67 (69%) · fuel 30 (31%)
+```
+
+```
+(one document)
+# Travel
+Flights: $450 // $450.00
+Hotel: $220 // $220.00
+
+# Summary
+total of section "Travel" // $670.00
+sum of section "Travel" // $670.00
+average of section "Travel" // $335.00
+count of section "Travel" // 2
+```
+
+```
+(one document)
+| item | cost |
+| ---- | ---- |
+| rent | 1200 |
+| food |  300 |
+| taxi |   12 |
+sum of column "cost" above // 1,512
+average of column "cost" above // 504
+column "cost" for "food" // 300
+```
+
+```
+(one document)
+| from   | rate |
+| ------ | ---- |
+| 0      | 0%   |
+| 10,000 | 20%  |
+| 40,000 | 40%  |
+45,000 through bands above // 8,000
+```
+
+```
+(one document)
+:budget = $1950
+:spent = $2010
+check :spent <= :budget // ERROR: check failed: $2,010.00 is more than $1,950.00
+check 22/7 ≈ pi within 0.1% // ✓ (differs by 0.04%)
+```
+
+```
+(one document)
+:deposit = 100000
+:rate = 4%
+monthly repayment on deposit over 25 years at rate // 527.84
+solve line 3 for deposit = 900 // 170,507.23
+```
+
+```
+(one document)
+10
+20
+total above
+line 3 * 2
+inputs of line 4 // 60 (line 4) <- 30 (line 3) <- [10 (line 1), 20 (line 2)]
+```
+
+```
+(one document)
+deposit = 100000 // 100,000
+rate = 4% // 4.00%
+payment = monthly repayment on deposit over 25 years at rate // 527.84
+line 3 with deposit = 150000 // 791.76
+line 3 for rate from 3% to 5% step 1% // [474.21, 527.84, 584.59]
+```
+
+## checks
+
+https://liamriddell.github.io/solve-engine/syntax/checks/
+
+```
+check 2^53 + 1 > 2^53 // ✓
+check 1.845 == 1.85 // check failed: 1.845 is not equal to 1.850
+check 10 > 20 // check failed: 10 is not more than 20
+```
+
+```
+check 22/7 ≈ pi within 0.1% // ✓ (differs by 0.04%)
+check 5 m ≈ 5.01 m within 1 cm // ✓ (differs by 0.01 m)
+check 1/3 ≈ 0.33 within 1% // check failed: 0.333333 differs from 0.33 by 1.01%, more than 1%
+```
+
+```
+check = 45
+check * 2 // 90
+```
+
+```
+check 1 m == 1 kg // check: length and mass cannot be compared
+check "a" == "a" // ✓
+check "a" > "b" // check: text can only be compared with == or !=, not >
+```
+
+```
+(one document)
+:budget = $1950
+:spent = $2010
+check :spent <= :budget // ERROR: check failed: $2,010.00 is more than $1,950.00
+check 1 km == 1000 m // ✓
+```
+
+```
+(one document)
+:a = 3
+:b = 4
+check :a^2 + :b^2 == 25 // ✓
+check :a^2 + :b^2 == 26 // ERROR: check failed: 25 is not equal to 26
+```
+
+```
+(one document)
+£900
+£300
+check line 1 + line 2 <= £1,000 // ERROR: check failed: £1,200.00 is more than £1,000.00
+total above // £1,200.00
+```
+
+## colours
+
+https://liamriddell.github.io/solve-engine/syntax/colours/
+
+```
+#ff0000 // #ff0000
+#f00 // #ff0000
+#ff000080 // #ff000080
+```
+
+```
+rgb(255, 128, 0) // rgb(255, 128, 0)
+rgba(255, 0, 0, 0.5) // rgba(255, 0, 0, 0.5)
+hsl(210, 50, 40) // hsl(210, 50%, 40%)
+```
+
+```
+hsv(120, 100, 100) // #00ff00
+hwb(0, 50, 0) // #ff8080
+```
+
+```
+hsva(200, 50%, 60%, 0.5) // #4d7f9980
+```
+
+```
+color("rebeccapurple") // rebeccapurple
+color("transparent") // transparent
+```
+
+```
+red(#3366cc) // 51
+green(#3366cc) // 102
+blue(#3366cc) // 204
+hue(#ff0000) // 0
+saturation(#ff0000) // 100
+lightness(#3366cc) // 50
+alpha(rgba(255, 0, 0, 0.5)) // 0.50
+```
+
+```
+lighten(#3366cc, 20%) // #85a3e0
+darken(#ff0000, 20%) // #990000
+saturate(#8899aa, 30%) // #6999c9
+desaturate(#6999c9, 30%) // #8899aa
+rotate(#ff0000, 120) // #00ff00
+complement(#ff0000) // #00ffff
+```
+
+```
+invert(#ff0000) // #00ffff
+grayscale(#3366cc) // #626262
+```
+
+```
+mix(#ff0000, #0000ff) // #800080
+tint(#ff0000, 50%) // #ff8080
+shade(#ff0000, 50%) // #800000
+tone(#ff0000, 50%) // #c04040
+```
+
+```
+alpha(#ff0000, 0.5) // #ff000080
+```
+
+```
+contrast(#ffffff, #000000) // 21
+contrast(#ffffff, #767676) // 4.54
+luminance(#ffffff) // 1
+```
+
+```
+isDark(#3366cc) // true
+isLight(#ffffff) // true
+readable(#3366cc) // #ffffff
+contrastColour(#eeeeee) // #000000
+```
+
+```
+isContrastCompliant(#ffffff, #000000) // true
+isContrastCompliant(#ffffff, #949494, "AA large") // true
+isContrastCompliant(#ffffff, #767676, "AAA") // false
+```
+
+```
+wcagLevel(#ffffff, #000000) // AAA
+wcagLevel(#ffffff, #767676) // AA
+wcagLevel(#ffffff, #949494) // AA Large
+wcagLevel(#ffffff, #cccccc) // Fail
+```
+
+```
+#ff0000 as hsl // hsl(0, 100%, 50%)
+#ff0000 as rgb // rgb(255, 0, 0)
+```
+
+```
+#ff0000 == rgb(255, 0, 0) // true
+```
+
+## complex
+
+https://liamriddell.github.io/solve-engine/syntax/complex/
+
+```
+3i // 3i
+2+3i // 2+3i
+1i*1i // -1
+```
+
+```
+(2+3i)+(1-1i) // 3+2i
+(1+1i)*(1-1i) // 2
+```
+
+```
+:i = 5
+:i + 1 // 6
+3 * i // 15
+```
+
+```
+sqrt(-4) // 2i
+sqrt(-2) // sqrt(2)*i
+```
+
+```
+re(2+3i) // 2
+im(2+3i) // 3
+conj(2+3i) // 2-3i
+abs(3+4i) // 5
+```
+
+```
+solve(x^2+1=0, x) // [-i, i]
+solve(x^2+2x+5=0, x) // [-1-2i, -1+2i]
+solve(x^2+2=0, x) // [-sqrt(2)*i, sqrt(2)*i]
+```
+
+```
+factor(x^2+1) // x^2+1
+```
+
+## conditionals
+
+https://liamriddell.github.io/solve-engine/syntax/conditionals/
+
+```
+5 > 3 // true
+10 == 10 // true
+3 != 4 // true
+5 >= 5 // true
+```
+
+```
+true and false // false
+true or false // true
+```
+
+```
+not true // false
+not (1 > 2) // true
+!(1 > 2) // true
+!false // true
+```
+
+```
+not 1 > 2 // true
+not true and false // false
+if not 5 > 3 then 1 else 2 // 2
+```
+
+```
+not 5 // "not" works on true or false, and 5 is a number: compare it first, as in not (x > 3).
+!1 > 2 // "!" works on true or false, and 1 is a number: compare it first, as in not (x > 3).
+```
+
+```
+if 5 > 3 then 100 else 200 // 100
+```
+
+```
+10 >= 5 and 3 > 1 // true
+10 >= 5 and 3 > 4 // false
+10 >= 5 && 3 > 1 // true
+```
+
+```
+x = 10
+y = 5
+x >= y and y > 1 // true
+x >= y and y > 7 // false
+```
+
+```
+2 and 3 // 5
+```
+
+```
+2 and 3 > 1 // 3
+(2 and 3) > 1 // true
+```
+
+```
+(one document)
+not = 3 // 3
+not + 1 // 4
+```
+
+## constants
+
+https://liamriddell.github.io/solve-engine/syntax/constants/
+
+```
+speed of light // 299,792,458.00 m/s
+gravity // 9.81 m/s²
+```
+
+```
+gravity * 70 kg as N // 686.47 N
+speed of light in km/h // 1,079,252,848.80 km/h
+```
+
+```
+tau // 6.28
+golden ratio // 1.62
+```
+
+```
+avogadro // 602,214,076,000,000,000,000,000
+```
+
+```
+boltzmann // 1.38e-23 J/K
+boltzmann * 300 K // 4.14e-21 J
+```
+
+```
+planck * 5e14 // 3.31e-19
+avogadro * 2 // 1,204,428,152,000,000,000,000,000
+planck * 5e14 Hz // A constant measured in J·s and a quantity in Hz cannot be multiplied: the engine cannot spell J·s yet, so the answer would wrongly be in Hz. Leave the unit off the other side and read the result in the unit it should have.
+```
+
+## converting-units
+
+https://liamriddell.github.io/solve-engine/syntax/converting-units/
+
+```
+5 km to miles // 3.11 miles
+100 cm into m // 1.00 m
+1 hour to minutes // 60 minutes
+72F to C // 22.22 C
+20C in F // 68.00 F
+```
+
+```
+km in 1 mile // 1.61 km
+m in 1 furlong // 201.17 m
+km in a furlong // 0.20 km
+g in 1 carat // 0.20 g
+kJ in 1 kcal // 4.18 kJ
+mW in 1 W // 1,000.00 mW
+seconds in a day // 86,400 seconds
+km in -1 mile // -1.61 km
+```
+
+```
+5 km in nautical miles // 2.70 nautical miles
+1 nautical mile in km // 1.85 km
+5 cubic metres in litres // 5,000.00 litres
+3 imperial gallons in litres // 13.64 litres
+10 US fluid ounces in ml // 295.74 ml
+2 troy ounces in g // 62.21 g
+```
+
+```
+12 typographic points in mm // 4.23 mm
+72 typographic points in inches // 1.00 inches
+1 inch in typographic points // 72.00 typographic points
+1 pica in typographic points // 12.00 typographic points
+```
+
+```
+12 pt in mm // a volume cannot be converted to a length
+1 pica in points // 12.00 points
+```
+
+```
+2 L in ml // 2,000.00 ml
+1.5L + 500 ml // 2.00 L
+500 ml in L // 0.50 L
+```
+
+```
+5 µs in ns // 5,000.00 ns
+5 μs in ns // 5,000.00 ns
+1 mL in µL // 1,000.00 µL
+3 µm in nm // 3,000.00 nm
+```
+
+```
+20°C in F // 68.00 F
+100°F in C // 37.78 C
+180°C in gas mark // gas 4
+37°C // 37.00 °C
+```
+
+```
+90° // 90.00 degrees
+```
+
+```
+20 C in F // 68.00 F
+20 degrees C in F // 68.00 F
+20° C in F // 68.00 F
+```
+
+```
+1 cup in ml // 236.59 ml
+```
+
+```
+32 °F in °C // 0.00 °C
+273.15 K in °C // 0.00 °C
+32.0018 °F in °C // 0.001 °C
+```
+
+```
+20 °C + 10 °F // 25.56 °C
+20 °C + 10 K // 30.00 °C
+68 °F + 10 °C // 86.00 °F
+20 °C + 10 °C // 30.00 °C
+```
+
+```
+20 °C - 10 °F // 32.22 °C
+(30 °C - 20 °C) in F // 50.00 F
+```
+
+```
+12 in in cm // 30.48 cm
+2 in + 3 in // 5.00 in
+12 in to cm // 30.48 cm
+```
+
+```
+3 ft in in // 36.00 in
+```
+
+```
+12 inches in cm // 30.48 cm
+1 inch in mm // 25.40 mm
+```
+
+```
+(one document)
+(1, 2) in miles // ERROR: A bracketed list has no single amount to convert to miles: only a number or a quantity can be converted.
+```
+
+## cooking
+
+https://liamriddell.github.io/solve-engine/syntax/cooking/
+
+```
+180C in gas mark // gas 4
+350F in gas mark // gas 4
+gas mark 4 // 180.00 C
+gas 6 // 200.00 C
+```
+
+```
+gas 6 in F // 392.00 F
+```
+
+```
+gas 1/4 in C // 110.00 C
+gas 1/2 in C // 120.00 C
+```
+
+```
+300C in gas mark // 300C is not a gas setting: the dial runs from gas 1/4 (110C) to gas 9 (240C)
+```
+
+```
+1 cup in ml // 236.59 ml
+1 US cup in ml // 236.59 ml
+1 metric cup in ml // 250.00 ml
+1 imperial cup in ml // 284.13 ml
+```
+
+```
+2 metric cups flour in grams // 265.00 grams
+1 1/2 metric cups in ml // 375.00 ml
+300g butter in metric cups // 1.25 metric cups
+2 imperial cups in imperial pints // 1.00 imperial pints
+```
+
+```
+1 1/2 cups in ml // 354.88 ml
+2 1/4 kg in lb // 4.96 lb
+```
+
+```
+½ tsp in ml // 2.46 ml
+2 ½ cups in ml // 591.47 ml
+¼ // 0.25
+```
+
+```
+1 and 1/2 cups in ml // 354.88 ml
+```
+
+```
+1 + 1/2 cups in ml // 119.29 ml
+```
+
+```
+scale 4 servings to 6 // 1.50
+scale 6 servings to 4 // 0.67
+```
+
+```
+scale 4 people to 10 // 2.50
+scale 2 to 5 // 2.50
+```
+
+```
+2 cups flour in grams // 250.78 grams
+300g butter in cups // 1.32 cups
+180C in F // 356.00 F
+```
+
+```
+(one document)
+:factor = scale 4 servings to 6 // 1.50
+300g * factor // 450.00 g
+200g * factor // 300.00 g
+```
+
+## coordinates
+
+https://liamriddell.github.io/solve-engine/syntax/coordinates/
+
+```
+(51.5074, -0.1278) // [51.51, -0.13]
+51.5074°N 0.1278°W // [51.51, -0.13]
+51°30'26.64"N 0°07'40.08"W // [51.51, -0.13]
+```
+
+```
+0.1278°W 51.5074°N // [51.51, -0.13]
+51.5072° N, 0.1276° W // [51.51, -0.13]
+```
+
+```
+London = 51.5074°N 0.1278°W // [51.51, -0.13]
+Tokyo = 35.6762°N 139.6503°E // [35.68, 139.65]
+distance from London to Tokyo // 9,558.57 km
+```
+
+```
+51°30'27" // 51.51 degrees
+51°30.45' // 51.51 degrees
+33°52'07.68"S // -33.87 degrees
+```
+
+```
+51.5074° as dms // 51°30'26.64"
+1 rad as dms // 57°17'44.81"
+(51.5074, -0.1278) as dms // 51°30'26.64"N 0°07'40.08"W
+```
+
+```
+distance from (51.5074, -0.1278) to (48.8566, 2.3522) // 343.56 km
+distance between (51.5074, -0.1278) and (48.8566, 2.3522) // 343.56 km
+```
+
+```
+distance from 51.5074°N 0.1278°W to 35.6762°N 139.6503°E // 9,558.57 km
+distance from 51.5074°N 0.1278°W to 35.6762°N 139.6503°E in miles // 5,939.42 miles
+distance from 51.5074°N 0.1278°W to 35.6762°N 139.6503°E in nmi // 5,161.22 nmi
+```
+
+```
+distance from 51.5074, -0.1278 to 48.8566, 2.3522 // 343.56 km
+```
+
+```
+distance from (0, 179.5) to (0, -179.5) // 111.20 km
+```
+
+```
+bearing from (51.5074, -0.1278) to (48.8566, 2.3522) // 148.12 degrees
+bearing from (51.5074, -0.1278) to (48.8566, 2.3522) as dms // 148°06'56.22"
+bearing from (0, 179.5) to (0, -179.5) // 90.00 degrees
+```
+
+```
+bearing from (90, 0) to (51.5074, -0.1278) // 180.00 degrees
+```
+
+```
+distance from (91, 0) to (0, 0) // latitude 91° is past a pole: latitudes run from -90° (the South Pole) to 90° (the North Pole)
+51°75' // 51°75' has 75 minutes: minutes of arc run from 0 to 59, and 60 of them make a degree
+51°N 48°N // 51°N and 48°N are both latitudes (N or S): a place is one latitude and one longitude, as in 51.5074°N 0.1278°W
+bearing from (0, 0) to (0, 0) // the two places are the same point, so there is no direction from one to the other
+bearing from (0, 0) to (0, 180) // the two places are on exactly opposite sides of the Earth, so every direction reaches the second and there is no single bearing
+5 kg as dms // "as dms" writes an angle in degrees, minutes and seconds, and 5 kg is not an angle
+```
+
+## css-units
+
+https://liamriddell.github.io/solve-engine/syntax/css-units/
+
+```
+16px in rem // 1.00 rem
+24px in rem // 1.50 rem
+1.5rem in px // 24.00 px
+```
+
+```
+2rem + 8px // 2.50 rem
+```
+
+```
+1.5rem at 16px base // 24.00 px
+1.5rem at 20px base // 30.00 px
+24px at 20px base // 1.20 rem
+```
+
+```
+96 px in inches // a CSS length cannot be converted to a length
+```
+
+```
+4000px at 300 dpi // 13.33 in
+```
+
+## currency
+
+https://liamriddell.github.io/solve-engine/syntax/currency/
+
+```
+$100 + $50 // $150.00
+10 dollars // $10.00
+```
+
+```
+$50 - $80 // -$30.00
+-£3.50 // -£3.50
+```
+
+```
+10 pounds in kg // 4.54 kg
+10 GBP // £10.00
+```
+
+```
+$5 CAD in CAD // $5.00
+¥500 CNY in CNY // ¥500.00
+```
+
+```
+100 € // €100.00
+1,000 ₹ // ₹1,000.00
+12 ₽ // 12.00 ₽
+-100 € // -€100.00
+```
+
+```
+12.00 kr + 1 SEK // 13.00 kr
+12 zł // 12.00 zł
+12 Ft // 12.00 Ft
+12 Kč // 12.00 Kč
+12 Fr // 12.00 Fr
+```
+
+```
+A$100 + $5 AUD // $105.00
+R$12.00 // R$12.00
+```
+
+```
+R12.00 + R1,234.56 // R1,246.56
+```
+
+```
+100 usd // $100.00
+50 eur + 50 EUR // €100.00
+```
+
+```
+compoundInterest($1,000, 5%, 3) // $1,157.63
+max($1,000, $2) // $1,000.00
+max($1,000.50, $2) // $1,000.50
+max(1,000, 2) // 2
+```
+
+```
+₹1,00,000 // ₹100,000.00
+₹1,00,00,000 // ₹10,000,000.00
+12,34,567 INR // ₹1,234,567.00
+₹12,34,567.89 // ₹1,234,567.89
+```
+
+## custom-units
+
+https://liamriddell.github.io/solve-engine/syntax/custom-units/
+
+```
+1 sprint = 2 weeks // sprint defined
+6 sprints in days // 84 days
+1 story point = 4 hours // story point defined
+13 story points // 52 hours
+```
+
+```
+1 sprint = 2 weeks // sprint defined
+84 days in sprints // 6 sprints
+3 weeks in sprints // 1.50 sprints
+```
+
+```
+1 click = 1 km // click defined
+3 clicks // 3.00 clicks
+3 clicks in m // 3,000.00 m
+5 km in clicks // 5.00 clicks
+```
+
+## data-sizes
+
+https://liamriddell.github.io/solve-engine/syntax/data-sizes/
+
+```
+1 kB in bytes // 1,000.00 bytes
+1 KiB in bytes // 1,024.00 bytes
+1 GB in MB // 1,000.00 MB
+1 TiB in GiB // 1,024.00 GiB
+1 byte in bits // 8.00 bits
+1.5 MB in KB // 1,500.00 KB
+```
+
+```
+1 GB in bits // 8,000,000,000.00 bits
+1 Gb in Mb // 1,000.00 Mb
+```
+
+```
+4 GB at 50 Mbps // 10.67 min
+2 GB at 1 Gbps // 16.00 s
+```
+
+## date-arithmetic
+
+https://liamriddell.github.io/solve-engine/syntax/date-arithmetic/
+
+```
+25/12/2023 + 20 days // Sunday, January 14, 2024
+```
+
+```
+now + 3 hours // Wednesday, March 11, 2026, 3:00:00 PM
+today - 1 week // Wednesday, March 4, 2026, 12:00:00 PM
+```
+
+```
+30 days from 3 March 2026 // Thursday, April 2, 2026
+2 weeks after 3 March 2026 // Tuesday, March 17, 2026
+30 days before 3 March 2026 // Sunday, February 1, 2026
+3 months from 3 March 2026 // Wednesday, June 3, 2026
+```
+
+```
+3 days from today // Saturday, March 14, 2026, 12:00:00 PM
+```
+
+```
+2 April 2026 to 6 September 2026 // 157 days
+(1 Jan 2026 to 1 Mar 2026) in weeks // 8.43 weeks
+1 Mar 2026 to 1 Jan 2026 // -59 days
+```
+
+## date-differences
+
+https://liamriddell.github.io/solve-engine/syntax/date-differences/
+
+```
+weeks between 01/01/2024 and 01/06/2024 // 21.71 weeks
+```
+
+```
+days until 25/12/2026 // 288.50 days
+days since 01/01/2023 // 1,165.50 days
+```
+
+```
+fridays between 01/06/2026 and 31/08/2026 // 13
+how many fridays between 01/06/2026 and 31/08/2026 // 13
+mondays between 01/06/2026 and 31/08/2026 // 14
+weeks between 01/06/2026 and 31/08/2026 // 13 weeks
+```
+
+```
+mondays until 25/12/2026 // 41
+sundays since 01/01/2026 // 10
+```
+
+## date-literals
+
+https://liamriddell.github.io/solve-engine/syntax/date-literals/
+
+```
+25/12/2023 // Monday, December 25, 2023
+2023-12-25 // Monday, December 25, 2023
+2024-5-3 // Friday, May 3, 2024
+25.12.2023 // Monday, December 25, 2023
+March 9, 2024 // Saturday, March 9, 2024
+25 Dec 2026 // Friday, December 25, 2026
+1 Oct 2026 // Thursday, October 1, 2026
+```
+
+```
+2024 - 5 - 3 // 2,016
+```
+
+```
+2026-01-04 14:30 // Sunday, January 4, 2026, 2:30:00 PM
+23 September 2026 3pm // Wednesday, September 23, 2026, 3:00:00 PM
+23 September 2026 at 3pm // Wednesday, September 23, 2026, 3:00:00 PM
+3pm on 23 September 2026 // Wednesday, September 23, 2026, 3:00:00 PM
+25/12/2026 9:30am // Friday, December 25, 2026, 9:30:00 AM
+2026-01-04 14:30:15 // Sunday, January 4, 2026, 2:30:15 PM
+```
+
+```
+23 September 2026 3pm + 90 minutes // Wednesday, September 23, 2026, 4:30:00 PM
+hours between 2026-01-04 9am and 2026-01-10 5pm // 152 hours
+```
+
+```
+1000/10/5 // 20
+1024/8/2 // 64
+12/13/14 // 0.07
+```
+
+```
+(one document)
+launch = 23 September 2026
+3pm on launch // Wednesday, September 23, 2026, 3:00:00 PM
+5:30pm on launch // Wednesday, September 23, 2026, 5:30:00 PM
+```
+
+```
+(one document)
+2026-01-04 24:00 // ERROR: "24:00" is not a valid time
+February 2026 3pm // ERROR: Expected an operator or the end of the line, but found "3pm"
+```
+
+```
+(one document)
+12/25/2023 // ERROR: "12/25/2023" is not a date read day first: there is no month 25. Read month first it is 25 December 2023. Set date.inputOrder to "MDY" to read numeric dates month first.
+```
+
+```
+(one document)
+31/04/2026 // ERROR: "31/04/2026" is not a real date: April 2026 has 30 days.
+2026-02-29 // ERROR: "2026-02-29" is not a real date: February 2026 has 28 days.
+29 February 2026 // ERROR: "29 February 2026" is not a real date: February 2026 has 28 days.
+```
+
+## decimals
+
+https://liamriddell.github.io/solve-engine/syntax/decimals/
+
+```
+0.1 + 0.2 // 0.30
+0.1 + 0.2 == 0.3 // true
+1.1 * 1.1 == 1.21 // true
+0.1 + 0.2 - 0.3 // 0
+floor((0.7 + 0.1) * 10) // 8
+```
+
+```
+0.3 / 0.1 // 3
+1 / 0.8 // 1.25
+0.1 / 3 * 3 == 0.1 // true
+1.1 ^ 2 == 1.21 // true
+0.5 mod 0.2 == 0.1 // true
+100 + 10% // 110
+0.1 + 10% == 0.11 // true
+```
+
+```
+if 0.1 + 0.2 == 0.3 then "equal" else "different" // equal
+```
+
+```
+(0.5 + 0.505) to 2 dp // 1.01
+(0.1 + 0.2) to 17 dp // 0.30000000000000000
+```
+
+```
+sqrt(2) * sqrt(2) == 2 // false
+1e-1 + 2e-1 == 3e-1 // false
+1.05 ^ 30 // 4.32
+0.1 km + 0.2 km == 0.3 km // true
+```
+
+```
+1 Hz in MHz // 1e-6 MHz
+1 byte in GB // 1e-9 GB
+1 second in years // 3.17e-8 years
+0.001 km // 0.001 km
+0.001% // 0.001%
+```
+
+```
+1 Hz in MHz as scientific // 1e-6
+1500000 as scientific // 1.5e+6
+0.25 as sci // 2.5e-1
+```
+
+```
+12345 as engineering // 12.345e+3
+0.00012 as eng // 120e-6
+3 million + 10% as compact // 3.3M
+1234 as compact // 1.23k
+$3300000 as compact // $3.3M
+$15/hour as compact // $15/hour
+```
+
+```
+1e20 as compact // 1e+20
+999.95e12 as compact // 1e+15
+$1e308/hour as compact // $1e+308/hour
+```
+
+```
+1.23456 km to 4 dp // 1.2346 km
+5 km to 0 dp // 5 km
+```
+
+```
+(one document)
+0.1
+0.2
+total above // 0.30
+line 3 == 0.3 // true
+```
+
+## derived-units
+
+https://liamriddell.github.io/solve-engine/syntax/derived-units/
+
+```
+70 kg * 9.81 m/s^2 as N // 686.70 N
+230 V * 13 A as W // 2,990.00 W
+50 N * 4 m as J // 200.00 J
+2000 W * 3 hours as kWh // 6.00 kWh
+```
+
+```
+100 J / 5 s // 20.00 W
+200 N / 2 m² // 100.00 Pa
+100 Pa * 2 m² // 200.00 N
+```
+
+```
+10 lbf * 3 ft // 40.67 J
+5 lb * 9.8 m/s^2 // 22.23 N
+```
+
+```
+100 W / 20 V // 5.00 A
+100 W / 20 V in mA // 5,000.00 mA
+2 A * 12 V // 24.00 W
+```
+
+```
+2 kW * 3 h // 6.00 kWh
+100 W * 3 hours // 300.00 Wh
+6 kWh / 3 h // 2.00 kW
+100 W * 30 s // 3,000.00 J
+```
+
+```
+12 V / 2 A // 6.00 Ω
+12 V / 6 Ω // 2.00 A
+2 A * 3 h // 6.00 Ah
+3000 mAh * 3.7 V // 11.10 Wh
+```
+
+```
+5 W as mW // 5,000.00 mW
+5 W in mW // 5,000.00 mW
+5 MW as mW // 5,000,000,000.00 mW
+1 W as pW // 1,000,000,000,000.00 pW
+```
+
+```
+9.81 m/s^2 * 3 s // 29.43 m/s
+3 s * 9.81 m/s^2 // 29.43 m/s
+100 km/h / 10 s // 2.78 m/s²
+29.43 m/s / 9.81 m/s^2 // 3.00 s
+10 Hz * 2 s // 20
+10 m/s * 5 N // 50.00 W
+```
+
+```
+9.81 m/s^2 * 3 s in mph // 65.83 mph
+3 ft/s^2 * 2 s // 6.00 ft/s
+100 km/h / 10 s in ft/s^2 // 9.11 ft/s²
+```
+
+```
+10 Hz in /s // 10.00 /s
+10 Hz in /min // 600.00 /min
+600 /min in Hz // 10.00 Hz
+```
+
+```
+(one document)
+5 W as mw // ERROR: "as mw" could be "as mW" or "as MW": write the unit with its prefix in its own case (m is milli, M is mega, p is pico, P is peta)
+1 V as MV // ERROR: "as MV" is not a unit: the one spelled alike is "as mV", whose prefix is written in the other case (m is milli, M is mega, p is pico, P is peta)
+10 N as n // 10.00 N
+```
+
+```
+(one document)
+9.81 m/s² in m/s^2 // 9.81 m/s²
+9.81 m/s^2 in ft/s^2 // 32.19 ft/s²
+2 kg * 3 ft/s^2 // 1.83 N
+9.81 m/s^2 in N // ERROR: an acceleration cannot be converted to a force
+```
+
+## dice
+
+https://liamriddell.github.io/solve-engine/syntax/dice/
+
+```
+(one document)
+random seed 42
+roll(1, 6) // 1
+roll(1, 6) // 2
+roll between 1 and 100 // 15
+```
+
+## displaying-dates
+
+https://liamriddell.github.io/solve-engine/syntax/displaying-dates/
+
+```
+11 March 2026 - 3000 years // Saturday, March 11, 975 BC
+1 Jan 0001 - 1 day // Sunday, December 31, 1 BC
+1 Jan 0001 // Monday, January 1, 1
+```
+
+```
+3 April 0026 // Friday, April 3, 26
+days between 1 Jan 0001 and 1 Jan 0002 // 365 days
+```
+
+## distances-in-space
+
+https://liamriddell.github.io/solve-engine/syntax/distances-in-space/
+
+```
+1 AU in km // 149,597,870.70 km
+1 AU in miles // 92,955,807.27 miles
+5.2 AU in km // 777,908,927.64 km
+1 ly in AU // 63,241.08 AU
+1 pc in ly // 3.26 ly
+```
+
+## electricity
+
+https://liamriddell.github.io/solve-engine/syntax/electricity/
+
+```
+12 V // 12.00 V
+12 volts // 12.00 volts
+230 V in kV // 0.23 kV
+500 mA in A // 0.50 A
+5 amps in mA // 5,000.00 mA
+```
+
+```
+10 ohm // 10.00 ohm
+10 Ω // 10.00 Ω
+4.7 kΩ in ohm // 4,700.00 ohm
+1 MΩ in kΩ // 1,000.00 kΩ
+```
+
+```
+12 V / 2 A // 6.00 Ω
+2 A * 6 Ω // 12.00 V
+12 V / 6 Ω // 2.00 A
+2 mA * 4.7 kΩ // 9.40 V
+230 V * 13 A // 2,990.00 W
+2990 W / 230 V // 13.00 A
+```
+
+```
+3000 mAh in Ah // 3.00 Ah
+2 A * 3 h // 6.00 Ah
+3 Ah / 6 h // 0.50 A
+```
+
+```
+3000 mAh * 3.7 V // 11.10 Wh
+100 Ah * 12 V // 1,200.00 Wh
+100 Ah * 12 V in kWh // 1.20 kWh
+11.1 Wh / 3.7 V // 3.00 Ah
+```
+
+```
+1 Ah in coulombs // 3,600.00 coulombs
+2 A * 30 s // 0.02 Ah
+2 A * 30 s in coulombs // 60.00 coulombs
+60 coulombs * 12 V // 720.00 J
+```
+
+```
+3000 mAh / 500 mA // 6.00 mAh/mA
+```
+
+## energy-units
+
+https://liamriddell.github.io/solve-engine/syntax/energy-units/
+
+```
+1 kWh in kJ // 3,600.00 kJ
+2000 kcal in kJ // 8,368.00 kJ
+1 therm in kWh // 29.31 kWh
+```
+
+```
+2000 kcal in kJ // 8,368.00 kJ
+250 Cal in kJ // 1,046.00 kJ
+1 kcal in cal // 1,000.00 cal
+1 kWh in kcal // 860.42 kcal
+```
+
+```
+1 calorie in J // 4.18 J
+2000 calories in kJ // 8.37 kJ
+2000 Calories in kJ // 8,368.00 kJ
+```
+
+```
+100000 BTU in kWh // 29.31 kWh
+1 therm in BTU // 100,000.00 BTU
+45 therms in kWh // 1,318.82 kWh
+```
+
+```
+1 eV in J // 1.6e-19 J
+13.6 eV in J // 2.18e-18 J
+1 MeV in keV // 1,000.00 keV
+```
+
+```
+12000 BTU/h in kJ/h // 12,660.67 kJ/h
+```
+
+## exact-coefficients
+
+https://liamriddell.github.io/solve-engine/syntax/exact-coefficients/
+
+```
+0.1x + 0.2x => // 0.3x
+x/3 + x/3 => // 2/3x
+```
+
+## expanding
+
+https://liamriddell.github.io/solve-engine/syntax/expanding/
+
+```
+expand((x+1)*(x+2)) // x^2+3x+2
+expand((x+1)^3) // x^3+3x^2+3x+1
+expand((x+y)^2) // x^2+2x*y+y^2
+```
+
+```
+expand(sin(x)) // sin(x)
+```
+
+```
+expand(x/y + 1) // x/y+1
+```
+
+## factoring
+
+https://liamriddell.github.io/solve-engine/syntax/factoring/
+
+```
+factor(x^2-4) // (x-2)*(x+2)
+factor(x^2+3x+2) // (x+1)*(x+2)
+factor(x^2-2x+1) // (x-1)^2
+factor(2x^2+4x) // 2x*(x+2)
+factor(x^3-1) // (x-1)*(x^2+x+1)
+```
+
+```
+factor(x^2-2) // x^2-2
+factor(x^2+1) // x^2+1
+```
+
+```
+factor(x^2-y^2) // (x-y)*(x+y)
+factor(x^3-8y^3) // (x-2y)*(x^2+2x*y+4y^2)
+factor(x^2+2x*y+y^2) // (x+y)^2
+factor(a*x+a*y+b*x+b*y) // (a+b)*(x+y)
+```
+
+```
+factor(x^2+3x*y+y^2) // x^2+3x*y+y^2
+```
+
+## fractions
+
+https://liamriddell.github.io/solve-engine/syntax/fractions/
+
+```
+1/3 + 1/3 + 1/3 // 1
+2/7 * 14 // 4
+1/49 * 49 // 1
+```
+
+```
+1/3 as fraction // 1/3
+10/4 as fraction // 5/2
+(1/3 + 1/7) as fraction // 10/21
+```
+
+```
+(1/3 + 0.1) as fraction // 13/30
+(0.1 / 3) as fraction // 1/30
+0.1 / 3 * 3 == 0.1 // true
+```
+
+```
+0.333333 as fraction // 333333/1000000
+3.14159 as fraction // 314159/100000
+0.3333333 as fraction // 3333333/10000000
+0.125 as fraction // 1/8
+$0.25 as fraction // 1/4
+```
+
+```
+sqrt(2) as fraction // 47321/33461
+```
+
+## frozen-answers
+
+https://liamriddell.github.io/solve-engine/syntax/frozen-answers/
+
+```
+(one document)
+:deposit = 250 * 4 frozen // 1,000
+deposit + 50 // 1,050
+```
+
+```
+(one document)
+10 USD in GBP frozen on 2024-01-15 // ERROR: This line was frozen on 2024-01-15, but no value frozen that day is stored in this engine. A frozen value is never fetched again: restore the snapshot or frozen values it was saved with, or remove "on 2024-01-15" to freeze it anew.
+```
+
+```
+(one document)
+10 USD in GBP frozen on tuesday // ERROR: "frozen on" needs the day the answer was frozen, written as a date at the end of the line, as in "frozen on 2026-09-23".
+```
+
+```
+(one document)
+f(x) = 2x frozen // ERROR: frozen keeps a line's answer, and a function definition has no answer to keep. Freeze a line that calls the function instead.
+```
+
+## fuel-economy
+
+https://liamriddell.github.io/solve-engine/syntax/fuel-economy/
+
+```
+40 mpg in l/100km // 5.88 l/100km
+6 l/100km in mpg // 39.20 mpg
+30 mpg in km/l // 12.75 km/l
+```
+
+```
+1 gallon in litres // 3.79 litres
+1 imperial gallon in litres // 4.55 litres
+1 imperial gallon in gallons // 1.20 gallons
+```
+
+```
+35 mpg imperial in l/100km // 8.07 l/100km
+35 UK mpg in l/100km // 8.07 l/100km
+8.07 l/100km in mpg imperial // 35.00 mpg imperial
+50 mpg uk in mpg // 41.63 mpg
+```
+
+```
+35 mpg imperial in mpg // 29.14 mpg
+50 miles / 1 imperial gallon in l/100km // 5.65 l/100km
+```
+
+```
+50 mpg in l/100km // 4.70 l/100km
+50 mpg uk in l/100km // 5.65 l/100km
+```
+
+## geometry
+
+https://liamriddell.github.io/solve-engine/syntax/geometry/
+
+```
+area of circle radius 5 // 78.54
+circumference of circle radius 5 // 31.42
+area of square side 4 // 16
+perimeter of square side 4 // 16
+area of triangle base 3, height 4 // 6
+```
+
+```
+area of rectangle width 4, height 6 // 24
+perimeter of rectangle width 4, height 6 // 20
+```
+
+```
+volume of sphere radius 3 // 113.10
+surface area of sphere radius 3 // 113.10
+volume of cube side 2 // 8
+volume of cylinder radius 2, height 5 // 62.83
+volume of cone radius 2, height 6 // 25.13
+```
+
+```
+area of circle radius 5 m // 78.54 m²
+area of circle radius 5 m in cm² // 785,398.16 cm²
+volume of sphere radius 2 m // 33.51 m³
+perimeter of circle radius 5 m in cm // 3,141.59 cm
+area of rectangle width 3 m, height 4 m // 12.00 m²
+volume of cube side 2 ft // 8.00 ft³
+```
+
+```
+area of rectangle width 3 m, height 400 cm // 12.00 m²
+area of rectangle width 300 cm, height 4 m // 120,000.00 cm²
+area of rectangle width 3 m, height 4 // 12.00 m²
+area of square side 2 furlong // 161,874.26 m²
+```
+
+```
+area of circle radius 5 m in cm // an area cannot be converted to a length
+area of circle radius 5 kg // a radius is a length, not a mass: give it in a unit of length, such as m or ft
+area of rectangle width $3, height 4 m // a width is a length, not money: give it in a unit of length, such as m or ft
+```
+
+## goal-seek
+
+https://liamriddell.github.io/solve-engine/syntax/goal-seek/
+
+```
+(one document)
+:deposit = 100000
+:rate = 4%
+monthly repayment on deposit over 25 years at rate // 527.84
+solve line 3 for deposit = 900 // 170,507.23
+```
+
+```
+(one document)
+:price = £200 // £200.00
+:qty = 3 // 3
+price * qty // £600.00
+solve line 3 for price = £1,500 // £500.00
+solve line 3 for qty = £1,500 // 7.50
+```
+
+```
+(one document)
+:d = 5 km // 5.00 km
+d * 2 // 10.00 km
+solve line 2 for d = 3000 m // 1.50 km
+solve line 2 for d = 3 kg // ERROR: Line 2 answers in km and the target is in kg, so the two cannot be compared. Write the target in km.
+```
+
+```
+(one document)
+x = 1 // 1
+x + sin(x) // 1.84
+solve line 2 for x = -2 // -1.11
+solve line 2 for x = 3 // 2.18
+```
+
+```
+(one document)
+x = 1 // 1
+2^x // 2
+solve line 2 for x = 4 // 2
+solve line 2 for x = 0.25 // -2
+```
+
+```
+(one document)
+x = 1 // 1
+x^2 // 1
+solve line 2 for x = 4 // [-2, 2]
+solve line 2 for x = 4 between 0 and 10 // 2
+solve line 2 for x = 4 between 5 and 10 // ERROR: No value of x between 5 and 10 was found that makes line 2 equal 4: none of the values that make it so lies in that range.
+```
+
+```
+(one document)
+:p = 5 km // 5.00 km
+p * p / 1 km // 25.00 km
+solve line 2 for p = 4 km // ERROR: 2 values of p make line 2 equal 4: -2.00 km, 2.00 km. Name a range after the target to choose one, as in "solve line 2 for p = 4 between 0 and 4".
+solve line 2 for p = 4 km between 0 and 4 // 2.00 km
+```
+
+```
+(one document)
+:x = 0 // 0
+floor(x) // 0
+solve line 2 for x = 2.5 // ERROR: Goal seek narrowed x to a single point near 3 without line 2 reaching 2.5: the relationship jumps across the target rather than passing through it.
+```
+
+```
+(one document)
+:k = 1 // 1
+:x = 1 // 1
+x * 2 // 2
+(line 3 with x = 5) * k // 10
+solve line 4 for k = 30 // ERROR: Goal seek cannot target a line that holds a what-if or a sweep, since every one of its probes would re-run the document again. Target a line without one.
+```
+
+## hashing
+
+https://liamriddell.github.io/solve-engine/syntax/hashing/
+
+```
+sha256("hello") // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+sha1("hello") // aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d
+md5("hello") // 5d41402abc4b2a76b9719d911017c592
+crc32("hello") // 3610a686
+```
+
+```
+sha512("abc") // ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f
+```
+
+## health
+
+https://liamriddell.github.io/solve-engine/syntax/health/
+
+```
+bmi(70, 1.75) // 22.86
+```
+
+```
+pace(10, 50) // 5:00 /km
+speed(10, 50) // 12.00 km/h
+pace(21.1, 100) // 4:44 /km
+```
+
+```
+bmi(70 kg, 175 cm) // 22.86
+bmi(154 lb, 5 ft 9 in) // 22.74
+speed(10 km, 1 h) // 10.00 km/h
+speed(26.2 mi, 3.5 h) // 12.05 km/h
+pace(10 mi, 80 min) // 4:58 /km
+```
+
+```
+bmi(175 cm, 70 kg) // bmi: the weight is a mass, not a length. Give it with a unit (70 kg or 154 lb) or as a plain number of kilograms.
+bmi(70 kg, -175 cm) // bmi: the height cannot be negative.
+```
+
+```
+4:30/km // 4:30 /km
+4:30/km in min/mi // 7:15 /mi
+10 km at 4:30/km as laptime // 00:45:00
+42.2 km at 4:30/km as laptime // 03:09:54
+```
+
+```
+10 km at 4:30/km as lap // 00:45:00
+90 minutes as lap // 01:30:00
+```
+
+```
+5:30 min/km // 5:30 /km
+5:30 min per km // 5:30 /km
+10 km at 5:30 min/km // 3,300 seconds
+```
+
+```
+1:30:00/km // 1:30:00 /km
+```
+
+## interest-and-inflation
+
+https://liamriddell.github.io/solve-engine/syntax/interest-and-inflation/
+
+```
+interest on 1000 over 3 years at 5% // 157.63
+monthly repayment on 200000 over 25 years at 4% // 1,055.67
+```
+
+```
+compound interest on 1000 over 3 years at 5% // 1,157.63
+```
+
+```
+daily repayment on 200000 over 25 years at 4% // 34.71
+monthly repayment on 200000 over 25 years at 4% // 1,055.67
+annual repayment on 200000 over 25 years at 4% // 12,668.08
+total repayment on 200000 over 25 years at 4% // 316,702.10
+daily interest on 200000 over 25 years at 4% // 12.79
+monthly interest on 200000 over 25 years at 4% // 389.01
+annual interest on 200000 over 25 years at 4% // 4,668.08
+total interest on 200000 over 25 years at 4% // 116,702.10
+```
+
+```
+interest on 1000 over 3 years at 5% compounding annually // 157.63
+interest on 1000 over 3 years at 5% compounding quarterly // 160.75
+interest on 1000 over 3 years at 5% compounding monthly // 161.47
+interest on 1000 over 3 years at 5% compounding daily // 161.82
+```
+
+```
+interest on 1000 over 3 years at 5% compounding semi-annually // 159.69
+interest on 1000 over 3 years at 5% compounded monthly // 161.47
+```
+
+```
+interest on £2,400 over 45 days at 8% // £22.88
+interest on £2,400 over 18 months at 8% // £293.69
+monthly repayment on £200,000 over 300 months at 4.5% // £1,111.66
+```
+
+```
+interest on 1000 at 5% over 3 years // 157.63
+monthly repayment on 200000 at 4% over 25 years // 1,055.67
+```
+
+```
+compoundInterest(1000, 5%, 3) // 1,157.63
+interestEarned(1000, 5%, 3) // 157.63
+compoundInterestRate(1000, 1157.63, 3) // 5.00%
+compoundInterestYears(1000, 1157.63, 5%) // 3.00
+monthlyPayment(200000, 4%, 25) // 1,055.67
+loanRepayment(200000, 4%, 25, 12) // 1,055.67
+loanInterest(200000, 4%, 25, 12) // 389.01
+```
+
+```
+$1,000 invested $1,500 returned // 50.00%
+$500 invested $1,500 returned // 200.00%
+annual return on $1,000 invested $1,500 returned after 3 years // 14.47%
+compoundInterestRate($1,000, $1,500, 3) // 14.47%
+```
+
+```
+compoundInterest($1,000, 5%, 3) // $1,157.63
+```
+
+```
+what is $100 from 1990 // $254.55
+inflationAdjust($100, 1990, 2020) // $198.01
+what is $500 in 1990 worth in 2010 // $834.35
+```
+
+```
+what is $100 from 1960 // Year 1960 is outside the bundled CPI table's range (1970-2026)
+```
+
+```
+what is £100 from 1990 // this is the US consumer price index, which says nothing about what GBP bought: only an amount in US dollars, such as $100, can be adjusted with it
+what is 100 from 1990 // this is the US consumer price index, so it adjusts an amount in US dollars: write the amount with its currency, as $100 or 100 USD
+```
+
+## investments
+
+https://liamriddell.github.io/solve-engine/syntax/investments/
+
+```
+$1,000 after 3 years at 7% // $1,225.04
+£1,000 after 3 years at 7% // £1,225.04
+1000 after 3 years at 7% // 1,225.04
+```
+
+```
+$1,000 after 3 years at -7% // $804.36
+$1,000 after 3 kg at 7% // a term is a length of time, and "kg" is not: write it as days, months or years
+```
+
+```
+$1,000 for 3 years at 7% // $1,225.04
+$1,000 for 3 years at 7% compounding quarterly // $1,231.44
+$1,000 for 3 years at 7% compounding monthly // $1,232.93
+$1,000 for 3 years at 7% compounded monthly // $1,232.93
+$1,000 for 3 years at 7% compounding daily // $1,233.65
+```
+
+```
+present value of $1,225.04 after 3 years at 7% // $1,000.00
+present value of $10,000 over 5 years at 6% // $7,472.58
+present value of 10000 after 5 years at 6% // 7,472.58
+```
+
+```
+$500 invested $1,500 returned // 200.00%
+$1,000 invested $1,500 returned // 50.00%
+$1,000 invested $1,000 returned // 0.00%
+$1,000 invested $500 returned // -50.00%
+```
+
+```
+$0 invested $100 returned // roi: nothing was invested, so there is no return on it
+(1/0) invested $1,500 returned // roi: the amount invested is not a finite number, so there is no return on it
+$1,000 invested (1/0) returned // roi: the amount returned is not a finite number, so there is no return to give
+```
+
+```
+annual return on $1,000 invested $2,000 returned after 5 years // 14.87%
+annual return on $1,000 invested $2,000 returned in 5 years // 14.87%
+annual return on $1,000 invested $500 returned after 5 years // -12.94%
+```
+
+```
+(one document)
+$1,000 after 18 months at 7% // $1,106.82
+:start = $1,000
+start after 10 years at 5% // $1,628.89
+```
+
+```
+(one document)
+$1,000 for 3 years at 7% compounding biannually // ERROR: compounding biannually: expected one of annually, yearly, semi-annually, semiannually, half-yearly, quarterly, monthly, fortnightly, weekly, daily
+```
+
+## labels
+
+https://liamriddell.github.io/solve-engine/syntax/labels/
+
+```
+Rent: $1200 // $1,200.00
+pi approximation: 355/113 // 3.14
+total: 5 + 3 // 8
+Groceries: 45 // 45
+```
+
+```
+Rent $1200 // $1,200.00
+Flight to Paris $450 // $450.00
+Petrol 40 l // 40.00 l
+Fees 45 EUR // €45.00
+```
+
+```
+(one document)
+Rent $1200 // $1,200.00
+Food $300 // $300.00
+sum // $1,500.00
+```
+
+```
+(one document)
+I walked 5 km to the shop // ERROR: Expected an operator or the end of the line, but found "walked"
+Meeting at 3 in room 4 // ERROR: Expected an operator or the end of the line, but found "at"
+Chapter 12 // ERROR: Expected an operator or the end of the line, but found "12"
+Back in 5 min // ERROR: Expected an operator or the end of the line, but found "5"
+Remember the $5 // ERROR: Expected an operator or the end of the line, but found "the"
+```
+
+```
+(one document)
+Refund -$50 // ERROR: Undefined variable: Refund
+Refund: -$50 // -$50.00
+```
+
+## line-references
+
+https://liamriddell.github.io/solve-engine/syntax/line-references/
+
+```
+(one document)
+120
+80
+prev // 80
+line 1 // 120
+```
+
+```
+(one document)
+10
+ans * 2 // 20
+```
+
+```
+(one document)
+10
+20
+30
+total above // 60
+```
+
+```
+(one document)
+10
+20
+30
+sum above // 60
+```
+
+```
+(one document)
+10
+20
+30
+count above // 3
+max above // 30
+median above // 20
+```
+
+```
+(one document)
+Rent $1200 // $1,200.00
+Food $300 // $300.00
+Subtotal: sum // $1,500.00
+Car $250 // $250.00
+total // $1,750.00
+```
+
+```
+(one document)
+total = 100 // 100
+total // 100
+```
+
+```
+(one document)
+10
+20
+
+100
+total above // 100
+```
+
+```
+(one document)
+rent: $500
+// remember to check the gas bill // (no result)
+food: $200
+total above // $700.00
+```
+
+```
+(one document)
+10
+total above // 10
+5
+total above // 15
+```
+
+```
+(one document)
+10
+20
+30
+sum(line 1 : line 3) // 60
+average(line 1 : line 3) // 20
+```
+
+```
+(one document)
+10
+
+30
+sum(line 1 : line 3) // 40
+```
+
+```
+(one document)
+10
+line deleted + 5 // ERROR: This reference pointed at a line that has been deleted
+```
+
+```
+(one document)
+line 2 + 5 // ERROR: Line 2 has not been evaluated yet (forward reference, or out of range)
+prev + 5 // ERROR: Line 1 has an error
+```
+
+```
+(one document)
+line 2 + 1 // ERROR: Line 2 has not been evaluated yet (forward reference, or out of range)
+7
+```
+
+## map-reduce-and-aggregates
+
+https://liamriddell.github.io/solve-engine/syntax/map-reduce-and-aggregates/
+
+```
+map(10*x, 0:3) // [0, 10, 20, 30]
+```
+
+```
+map(10*x, [1,2,3]) // [10, 20, 30]
+map(x^2, [4, 5, 6]) // [16, 25, 36]
+```
+
+```
+reduce(acc+x, [1,2,3]) // 6
+reduce(acc*x, [2,3,4]) // 24
+reduce(acc - x, [10, 1, 2]) // 7
+reduce(max(acc, x), [3, 9, 4]) // 9
+```
+
+```
+sum(x, [10, 20, 30]) // 60
+prod(x, [2,3,4]) // 24
+sum(x, 0:4) // 10
+```
+
+## moles
+
+https://liamriddell.github.io/solve-engine/syntax/moles/
+
+```
+1 mol in mmol // 1,000.00 mmol
+250 mmol in mol // 0.25 mol
+2 mol + 500 mmol // 2.50 mol
+```
+
+```
+(one document)
+1 mol in g // ERROR: an amount of substance cannot be converted to a mass
+2 mol * 3 kg // ERROR: amount of substance and mass cannot be multiplied
+```
+
+## money-precision
+
+https://liamriddell.github.io/solve-engine/syntax/money-precision/
+
+```
+$0.10 + $0.20 // $0.30
+$19.99 * 3 // $59.97
+$100 - $99.99 // $0.01
+$10 / 3 // $3.33
+$0.70 * 1.10 // $0.77
+```
+
+```
+$1.005 // $1.01
+$2.675 // $2.68
+$0.10 + 15% // $0.12
+```
+
+```
+$0.15 * 12.3 // $1.85
+12.3 kWh * $0.15/kWh // $1.85
+12.3 kg at $0.15/kg // $1.85
+$0.15 per kg * 12.3 kg // $1.85
+$0.15 * 12.3 kWh // $1.85
+12300 Wh * $0.15/kWh // $1.85
+```
+
+```
+$1.005/kg // $1.01/kg
+$0.001/kWh // $0.001/kWh
+$0.001 // $0.00
+```
+
+```
+$15 per hour // $15.00/hour
+£12 per hour // £12.00/hour
+€20 per day // €20.00/day
+12 SEK per hour // 12.00 kr/hour
+$30/hour * 8 hours/day // $240.00/day
+```
+
+```
+$100 / 3 // $33.33
+¥1000 / 3 // ¥333
+₩50000 / 7 // ₩7,143
+100 KWD / 3 // 33.333 KWD
+1.0005 BHD // 1.001 BHD
+```
+
+```
+¥1000 / 3 * 3 // ¥1,000
+¥0.5 // ¥1
+¥1000 / 3 to 2 dp // ¥333.33
+100 KWD / 3 to 2 dp // 33.33 KWD
+```
+
+```
+0.00012345 BTC // 0.00012345 BTC
+1 BTC / 3 // 0.33333333 BTC
+1 BTC // 1.00 BTC
+```
+
+```
+¥31.5/kWh // ¥31.5/kWh
+¥3/kWh // ¥3/kWh
+12 kWh * ¥31.5/kWh // ¥378
+```
+
+```
+$0.00499999999999999999999999999999999 // $0.01
+$0.0049999999999999999999999999999999 // $0.00
+```
+
+```
+$1234567890123456789012345678901234 * 10 // $1.2345678901234567e+34
+```
+
+```
+0.1 + 0.2 == 0.3 // true
+0.70 * 1.10 // 0.77
+```
+
+```
+(one document)
+x = $100 // $100.00
+x = x * 1.123456789 // $112.35
+x = x * 1.123456789 // $126.22
+x = x * 1.123456789 // $141.80
+x = x * 1.123456789 // $159.30
+```
+
+## networking
+
+https://liamriddell.github.io/solve-engine/syntax/networking/
+
+```
+hosts in 192.168.1.0/24 // 254
+netmask of /24 // 255.255.255.0
+broadcast of 192.168.1.0/24 // 192.168.1.255
+192.168.1.10 in 10.0.0.0/8 // false
+10.0.0.0/8 as int // 167,772,160
+```
+
+## nth-weekday
+
+https://liamriddell.github.io/solve-engine/syntax/nth-weekday/
+
+```
+2nd Tuesday of March 2026 // Tuesday, March 10, 2026
+4th Thursday of November 2026 // Thursday, November 26, 2026
+last Friday of November 2026 // Friday, November 27, 2026
+```
+
+```
+1st Monday of next month // Monday, April 6, 2026
+```
+
+```
+first Monday of next month // Monday, April 6, 2026
+second Tuesday of April // Tuesday, April 14, 2026
+2nd Tuesday of March // Tuesday, March 10, 2026
+last Friday of Dec // Friday, December 25, 2026
+```
+
+## number-bases
+
+https://liamriddell.github.io/solve-engine/syntax/number-bases/
+
+```
+0xFF // 255
+0b1010 // 10
+0o17 // 15
+0xDEADBEEF // 3,735,928,559
+```
+
+```
+0xff // 255
+0XFF // 255
+```
+
+```
+0xFF + 0b1010 + 0o17 // 280
+0x1F + 1 // 32
+```
+
+```
+255 as hex // 0xFF
+255 as binary // 0b11111111
+255 as octal // 0o377
+hex(4095) // 0xFFF
+hex(255) // 0xFF
+bin(10) // 0b1010
+bin(5) // 0b101
+```
+
+```
+int(0xFF) // 255
+```
+
+```
+hex(255) + 1 // 256
+(255 as binary) + 1 // 256
+~hex(255) // -256
+```
+
+```
+hex(-255) // -0xFF
+255.7 as hex // 0xFF
+```
+
+## number-functions
+
+https://liamriddell.github.io/solve-engine/syntax/number-functions/
+
+```
+sqrt(16) // 4
+abs(-5) // 5
+round(3.7) // 4
+floor(3.7) // 3
+ceil(3.2) // 4
+min(3, 7) // 3
+max(3, 7) // 7
+gcd(12, 18) // 6
+```
+
+```
+gcd of 12 and 18 // 6
+lcm of 4 and 6 // 12
+```
+
+```
+max(1 km, 500 m) // 1.00 km
+max(25/12/2026, 1/1/2027) // Friday, January 1, 2027
+```
+
+```
+pow(2, 10) // 1,024
+2^10 // 1,024
+exp(1) // 2.72
+```
+
+```
+expm1(1) // 1.72
+log1p(1) // 0.69
+```
+
+```
+ln(e) // 1
+log(100) // 4.61
+log10(100) // 2
+log2(8) // 3
+log 8 base 2 // 3
+log 1000 base 10 // 3
+```
+
+```
+sin(30 degrees) // 0.50
+cos(60 degrees) // 0.50
+tan(45 degrees) // 1
+sin(pi/2) // 1
+```
+
+```
+sin(180 degrees) // 0
+cos(90 degrees) // 0
+sin(pi) // 0
+sin(45 degrees) // 0.71
+```
+
+```
+asin(1) // 1.57
+arcsin(1) // 1.57
+acosd(0.5) // 60.00
+atand(1) // 45
+```
+
+```
+atan2(1, 1) // 0.79
+atan2(-1, -1) // -2.36
+atan2(1 m, 2 kg) // length and mass cannot be compared
+```
+
+```
+degtorad(180) // 3.14
+radtodeg(pi) // 180
+```
+
+```
+asin(0.5) // 0.52
+asin(0.5) in degrees // 30.00 degrees
+atan2(1, 1) in degrees // 45.00 degrees
+asind(0.5) // 30.00
+```
+
+```
+sinh(1) // 1.18
+cosh(1) // 1.54
+tanh(1) // 0.76
+asinh(1) // 0.88
+acosh(2) // 1.32
+atanh(0.5) // 0.55
+```
+
+```
+(one document)
+trunc(3.7 m) // 3.00 m
+hypot(3 m, 400 cm) // 5.00 m
+fact(3 m) // ERROR: fact takes a plain number, not a length
+```
+
+```
+(one document)
+root(3, -8) // -2
+root(2, -4) // ERROR: root(2, -4) has no real value: a negative number has a real root only of odd degree, as in root(3, -8).
+```
+
+```
+(one document)
+sin(1 m) // ERROR: sin takes an angle or a plain number, not a length
+log(10 kg) // ERROR: log takes a plain number, not a mass
+sin(1 m / 2 m) // 0.48
+```
+
+```
+(one document)
+tan(90 degrees) // ERROR: tan is undefined at 90 degrees: at an odd multiple of a right angle the tangent has no value, only an asymptote.
+tan(89.9 degrees) // 572.96
+```
+
+```
+(one document)
+log(0) // ERROR: log(0) has no real value: log is only defined for positive numbers.
+asin(2) // ERROR: asin(2) has no real value: asin is only defined for numbers from -1 to 1.
+```
+
+```
+(one document)
+sin(1/0) // ERROR: sin(Infinity) has no real value: sin is only defined for finite angles.
+```
+
+## number-suffixes
+
+https://liamriddell.github.io/solve-engine/syntax/number-suffixes/
+
+```
+2.5k // 2,500
+3M // 3,000,000
+5B // 5,000,000,000
+2T // 2,000,000,000,000
+```
+
+## number-theory
+
+https://liamriddell.github.io/solve-engine/syntax/number-theory/
+
+```
+isprime(97) // true
+isprime(561) // false
+isprime(2^61 - 1) // true
+nextprime(100) // 101
+```
+
+```
+7 is prime // true
+2^61 - 1 is prime // true
+8 is prime // false
+```
+
+```
+factor(360) // 2^3 * 3^2 * 5
+factor(600851475143) // 71 * 839 * 1471 * 6857
+factor(97) // 97
+```
+
+```
+modpow(7, 77, 13) // 11
+modpow(2, 100, 1000000007) // 976,371,285
+modinv(3, 11) // 4
+powmod(7, 77, 13) // 11
+```
+
+```
+5! // 120
+25! // 15,511,210,043,330,985,984,000,000
+10 choose 3 // 120
+52 choose 5 // 2,598,960
+permutation(10, 3) // 720
+```
+
+```
+(one document)
+factor(3.5) // ERROR: factor of a number works on whole numbers
+modinv(4, 8) // ERROR: 4 has no inverse modulo 8: they share a factor, so no multiple of 4 leaves remainder 1.
+factor(2^64 + 1) // ERROR: factor works on whole numbers up to 2^64 (18,446,744,073,709,551,616); 18446744073709551617 is larger.
+```
+
+## numerals
+
+https://liamriddell.github.io/solve-engine/syntax/numerals/
+
+```
+1234 as words // one thousand two hundred and thirty-four
+105 as words // one hundred and five
+1000000 as words // one million
+```
+
+```
+3 as ordinal // 3rd
+22 as ordinal // 22nd
+11 as ordinal // 11th
+```
+
+```
+2024 as roman // MMXXIV
+1994 as roman // MCMXCIV
+"MMXXIV" from roman // 2,024
+```
+
+```
+2024 in roman // MMXXIV
+42 in words // forty-two
+3 in ordinal // 3rd
+```
+
+## operators
+
+https://liamriddell.github.io/solve-engine/syntax/operators/
+
+```
+2 + 2 * 10 // 22
+(2 + 3) * 4 // 20
+10 - 4 // 6
+20 / 4 // 5
+2^10 // 1,024
+17 mod 5 // 2
+```
+
+```
+2^3^2 // 512
+(2^3)^2 // 64
+```
+
+```
+-2^2 // 4
+-(2^2) // -4
+0 - 2^2 // -4
+```
+
+```
+8 times 9 // 72
+2 plus 3 // 5
+5 minus 3 // 2
+10 divide by 2 // 5
+3 multiplied by 4 // 12
+```
+
+```
+6 times by 7 // 42
+6 multiply by 7 // 42
+2 to the power of 10 // 1,024
+```
+
+```
+40 with 2 // 42
+40 without 2 // 38
+```
+
+```
+add 3 to 10 // 13
+add $5 to $10 // $15.00
+add 3 and 4 // 7
+3 to 10 // 233.33%
+```
+
+```
+10 − 3 // 7
+10 – 3 // 7
+3 × 4 // 12
+12 ÷ 4 // 3
+```
+
+```
+3 ≥ 2 // true
+3 ≤ 2 // false
+√16 + 9 // 13
+√(9 + 16) // 5
+2√3 // 3.46
+2π // 6.28
+1/∞ // 0
+```
+
+```
+(one document)
+5 mod 0 // ERROR: 5 mod 0 has no value: nothing is left over from a division by zero, because it never ends.
+```
+
+```
+(one document)
+(-8)^(1/3) // -2
+(-32)^0.2 // -2
+(-8)^(2/3) // 4
+(-1)^0.5 // ERROR: (-1)^0.5 has no real value: a negative number to a fractional power has one only when the fraction's denominator is odd, as in (-8)^(1/3).
+```
+
+```
+(one document)
+exponent = 3 // 3
+2 ^ exponent // 8
+```
+
+## pasted-text
+
+https://liamriddell.github.io/solve-engine/syntax/pasted-text/
+
+```
+numbers in "Coffee 3.20, lunch 12.50, taxi 18" // [3.20, 12.50, 18]
+total of numbers in "Coffee 3.20, lunch 12.50, taxi 18" // 33.70
+average of numbers in "Coffee 3.20, lunch 12.50, taxi 18" // 11.23
+count of numbers in "Coffee 3.20, lunch 12.50, taxi 18" // 3
+```
+
+```
+sum(x, numbers in "3 4 5") // 12
+```
+
+```
+numbers in "1,234,567.89 and 7" // [1,234,567.89, 7]
+numbers in "costs .50" // [0.50]
+numbers in "a -5, b 10-20" // [-5, 10, 20]
+numbers in "15% off 3 kg" // [15, 3]
+numbers in "Meeting on 23/09 at 14:05" // [23, 9, 14, 5]
+```
+
+```
+amounts in "2 coffees £3.20, 1 cake £2.50" // [3.20, 2.50]
+total of amounts in "2 coffees £3.20, 1 cake £2.50" // £5.70
+total of numbers in "2 coffees £3.20, 1 cake £2.50" // 8.70
+```
+
+```
+total of amounts in "Rent EUR 950, bills 120 EUR, fees €12.50" // €1,082.50
+amounts in "-£5 refund, £20 charge" // [-5, 20]
+```
+
+```
+amounts in "rent ₹12,34,567.89" // [1,234,567.89]
+total of amounts in "rent ₹12,34,567.89, deposit ₹1,00,000" // ₹1,334,567.89
+numbers in "12,34,567" // [12, 34,567]
+```
+
+```
+match("Order #4471 shipped", "#(\d+)") // 4471
+match("Order #4471 shipped", "#\d+") // #4471
+match("Total: £12.50 paid by card", "Total: (\S+)") // £12.50
+match("GET /api/orders 200 35ms", "(\d+)ms") as number // 35
+```
+
+```
+matches("2026-09-23", "^\d{4}-\d{2}-\d{2}$") // true
+matches("23/09/2026", "^\d{4}-\d{2}-\d{2}$") // false
+matchcount("GET 200, GET 404, POST 200", "\b200\b") // 2
+```
+
+```
+match("ERROR disk full", "(?i)error (.+)") // disk full
+```
+
+```
+matches("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!", "(a+)+$") // false
+```
+
+```
+field(query("name=John+Doe&page=2"), "name") // John Doe
+field(query("name=John+Doe&page=2"), "page") as number + 1 // 3
+field(jwt("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"), "name") // John Doe
+```
+
+```
+field("{\"order\": {\"paid\": true, \"items\": [{\"name\": \"tea\", \"price\": 3.5}, {\"name\": \"cake\", \"price\": 4}]}}", "order.items[0].price") // 3.50
+field("{\"order\": {\"paid\": true, \"items\": [{\"name\": \"tea\", \"price\": 3.5}, {\"name\": \"cake\", \"price\": 4}]}}", "order.items[1].name") // cake
+field("{\"order\": {\"paid\": true, \"items\": [{\"name\": \"tea\", \"price\": 3.5}, {\"name\": \"cake\", \"price\": 4}]}}", "order.paid") // true
+```
+
+```
+total of numbers in field("{\"prices\": [3.5, 4, 2.25]}", "prices") // 9.75
+```
+
+```
+(one document)
+match("abab", "(ab)\1") // ERROR: match: in the pattern "(ab)\1", a backreference such as \1 is not supported: no matcher can promise to answer one in time proportional to the text, and this one makes that promise
+match("abc", "(a") // ERROR: match: in the pattern "(a", the pattern has a "(" that is never closed
+match("abc", "x") // ERROR: match: the pattern "x" does not occur in the text
+```
+
+```
+(one document)
+field(query("name=John+Doe&page=2"), "nme") // ERROR: The JSON has no "nme": at the top its fields are "name", "page"
+field("{\"note\": null}", "note") // ERROR: The field "note" is null: it holds no value
+```
+
+## payroll
+
+https://liamriddell.github.io/solve-engine/syntax/payroll/
+
+```
+£50,000 after tax // £39,519.60
+take home on £30,000 // £25,119.60
+£120,000 after tax // £76,157.40
+```
+
+```
+£50,000 salary after tax // £39,519.60
+```
+
+```
+£60,000 salary per month after tax // £3,779.78
+£50,000 monthly after tax // £3,293.30
+```
+
+```
+£50,000 after 20% tax // £40,000.00
+$50,000 after 20% tax // $40,000.00
+50000 after 20% tax // 40,000
+```
+
+```
+hourly for 45000 // 23.44
+hourly for $45,000 // $23.44
+```
+
+## percentages
+
+https://liamriddell.github.io/solve-engine/syntax/percentages/
+
+```
+50% of 200 // 100
+10% of 250 // 25
+```
+
+```
+15 percent of 60 // 9
+0.25 as percent // 25.00%
+```
+
+```
+15% off 80 // 68
+20% on 50 // 60
+10% off $120 // $108.00
+```
+
+```
+5 + 20% off 100 // 85
+10% off 20% off $100 // $72.00
+10% on 10% on 100 // 121
+10% off 100 + 100 // 180
+```
+
+```
+increase 100 by 10% // 110
+decrease 80 by 25% // 60
+100 + 10% // 110
+$80 - 25% // $60.00
+```
+
+```
+50 increased by 20% // 60
+50 decreased by 20% // 40
+reduce 50 by 20% // 40
+100 increase by 10% // 110
+100 decrease by 10% // 90
+100 reduced by 20% // 80
+```
+
+```
+50 up 20% // 60
+80 down 15% // 68
+120 up 10% then down 10% // 118.80
+```
+
+```
+$300 up 10% then down 10% // $297.00
+```
+
+```
+100 up 10% three times // 133.10
+```
+
+```
+25 is what % of 200 // 12.50%
+25 is what % on 20 // 25.00%
+15 is what % off 20 // 25.00%
+40 as % of 50 // 80.00%
+$60 as a % on $50 // 20.00%
+```
+
+```
+75 is what % more than 50 // 50.00%
+20 is what % less than 50 // 60.00%
+20 is what percent of 80 // 25.00%
+```
+
+```
+0.5 as % // 50.00%
+1/8 as % // 12.50%
+0.25 to % // 25.00%
+20/80 in % // 25.00%
+```
+
+```
+100 to 150 // 50.00%
+800 to 1000 // 25.00%
+150 to 100 // -33.33%
+10 to 0 // -100.00%
+```
+
+```
+percent change from 50 to 75 // 50.00%
+```
+
+```
+0 to 10 // A change from zero has no percentage: every multiple of zero is zero, so no percentage of it reaches the new value. Give the difference instead, the new value minus the old.
+-100 to -50 // A percentage change from a negative base has two readings, each the other's negative: the rise measured against the base's size, and the ratio of the two less one. Write the one you mean, as in (new - old) / abs(old).
+```
+
+```
+50% as multiplier // 1.5x
+(100 to 150) as multiplier // 1.5x
+0.5 as multiplier // 0.5x
+```
+
+```
+5% of what is 6 // 120
+120 is 20% on what // 100
+120 is 20% off what // 150
+20% off what is $80 // $100.00
+```
+
+```
+100 ppm as % // 0.01%
+0.5% in ppm // 5,000.00 ppm
+2 permille of $5000 // $10.00
+```
+
+```
+5 km as % // A length is not a proportion, so it has no percentage: only a number, a ratio or a parts-per quantity (ppm, permille) can be written as one.
+```
+
+```
+20% as multiplier // 1.2x
+150% as multiplier // 2.5x
+0.5 as multiplier // 0.5x
+```
+
+```
+(one document)
+5 km as multiplier // ERROR: A multiplier is a plain number or a percentage, as in "0.5 as multiplier" or "50% as multiplier", not a length.
+```
+
+## pressure
+
+https://liamriddell.github.io/solve-engine/syntax/pressure/
+
+```
+32 psi in bar // 2.21 bar
+1 atm in psi // 14.70 psi
+1 bar in kPa // 100.00 kPa
+1013 hPa in atm // 1.00 atm
+30 inHg in hPa // 1,015.92 hPa
+```
+
+```
+120 mmHg in kPa // 16.00 kPa
+80 mmHg in kPa // 10.67 kPa
+760 mmHg in atm // 1.00 atm
+```
+
+```
+120 mmHg in torr // 120.00 torr
+```
+
+## probability-distributions
+
+https://liamriddell.github.io/solve-engine/syntax/probability-distributions/
+
+```
+binompdf(10, 0.5, 3) // 0.12
+binomcdf(10, 0.5, 3) // 0.17
+normalinv(0.975) // 1.96
+```
+
+```
+normalcdf(1.96) // 0.98
+normalpdf(0) // 0.40
+```
+
+```
+normalcdf(110, 100, 15) // 0.75
+1 - normalcdf(130, 100, 15) // 0.02
+normalpdf(110, 100, 15) // 0.02
+```
+
+```
+normalinv(0.975) // 1.96
+normalinv(97.5%) // 1.96
+normalinv(0.05) // -1.64
+normalinv(0.9, 100, 15) // 119.22
+invnorm(0.5) // 0
+```
+
+```
+binompdf(10, 0.5, 3) // 0.12
+binomcdf(10, 0.5, 3) // 0.17
+1 - binomcdf(10, 0.5, 7) // 0.05
+binompdf(50, 2%, 1) // 0.37
+```
+
+```
+binomcdf(10, 0.5, 3) to 7 dp // 0.1718750
+```
+
+```
+poissonpdf(2, 3) // 0.18
+poissoncdf(2, 3) // 0.86
+1 - poissoncdf(4, 7) // 0.05
+poissonpdf(4, 0) // 0.02
+```
+
+```
+tinv(0.975, 9) // 2.26
+invt(0.975, 9) // 2.26
+tinv(0.975, 1000) // 1.96
+tcdf(2.262, 9) // 0.97
+tpdf(0, 5) // 0.38
+```
+
+```
+2 * (1 - tcdf(2.5, 12)) // 0.03
+```
+
+```
+tinv(0.05, 10) // -1.81
+tinv(0.975, 10) // 2.23
+```
+
+```
+erf(0.5) // 0.52
+erf(1) // 0.84
+erfc(3) // 2.21e-5
+```
+
+```
+gamma(5) // 24
+gamma(0.5) // 1.77
+gamma(4.5) // 11.63
+lgamma(200) // 857.93
+```
+
+```
+normalcdf(-10) // 7.62e-24
+normalcdf(-5) // 2.87e-7
+```
+
+```
+(one document)
+sd = 15
+n = 100
+margin = normalinv(0.975) * sd / sqrt(n) // 2.94
+120 ± margin // 120 ± 2.94
+```
+
+```
+(one document)
+count = 10
+s = 4.2
+margin = tinv(0.975, count - 1) * s / sqrt(count) // 3.00
+52.3 ± margin // 52.3 ± 3.0
+```
+
+```
+(one document)
+normalcdf(110, 100) // ERROR: normalcdf takes 1 or 3 arguments, but was given 2, as in normalcdf(1.96) or normalcdf(110, 100, 15)
+normalcdf(110, 100, 0) // ERROR: normalcdf: a standard deviation must be greater than zero, but was 0
+normalinv(1) // ERROR: normalinv: the probability must be greater than 0 and less than 1, but was 1
+binompdf(10, 0.5, 11) // ERROR: binompdf: the number of successes cannot be more than the number of trials (10), but was 11
+binompdf(10, 0.5, 2.5) // ERROR: binompdf: the number of successes must be a whole number, but was 2.5
+poissonpdf(0, 3) // ERROR: poissonpdf: the average number of events must be a finite number greater than zero, but was 0
+tcdf(-1, 2, 10) // ERROR: tcdf takes 2 arguments, but was given 3, as in tcdf(2.23, 10)
+gamma(-2) // ERROR: gamma is undefined at zero and the negative whole numbers, but was given -2
+gamma(200) // ERROR: gamma(200) is too large to represent (gamma is finite up to about 171.6), but lgamma(200) gives its natural logarithm
+```
+
+## random
+
+https://liamriddell.github.io/solve-engine/syntax/random/
+
+```
+(one document)
+random seed 42
+uuid // 218d5e25-71f0-4f2f-920c-f6f25498daa0
+random hex 8 // c9b83768
+pick("north", "south", "east", "west") // east
+shuffle [1, 2, 3, 4, 5] // [2, 3, 4, 1, 5]
+coin // tails
+```
+
+## rates-and-speeds
+
+https://liamriddell.github.io/solve-engine/syntax/rates-and-speeds/
+
+```
+100 km/h // 100.00 km/h
+5 m/s // 5.00 m/s
+3 hours / day // 3.00 hours/day
+```
+
+```
+100 km/h in mph // 62.14 mph
+10 m/s in km/h // 36.00 km/h
+60 mph in km/h // 96.56 km/h
+100 km/h to m/s // 27.78 m/s
+```
+
+```
+20 knots in km/h // 37.04 km/h
+20 kn in mph // 23.02 mph
+1 knot in m/s // 0.51 m/s
+```
+
+```
+60 km/h in miles per hour // 37.28 miles/hour
+60 km/h to miles per hour // 37.28 miles/hour
+$20/hour in $/day // $480.00/day
+$20/hour in dollars per day // $480.00/day
+$20 per hour in USD per day // $480.00/day
+100 Mbps in MB per s // 12.50 MB/s
+```
+
+```
+$50/week in /month // $214.29/month
+60 mph in /min // 1.00 mi/min
+10 Hz in /min // 600.00 /min
+```
+
+```
+120 km / 2 hours // 60.00 km/hours
+120 km / 2 hours in kph // 60.00 kph
+```
+
+```
+3000 rpm in Hz // 50.00 Hz
+50 Hz in rpm // 3,000.00 rpm
+1 revolution in deg // 360.00 deg
+2 revolutions in rad // 12.57 rad
+```
+
+```
+60 km/h * 2 h // 120.00 km
+120 km / 60 km/h // 2.00 h
+60 mph * 30 min // 30.00 mi
+```
+
+```
+250 miles at 60 mph // 4.17 h
+100 km at 60 kph // 1.67 h
+```
+
+```
+(one document)
+$20 in $ // $20.00
+100 km in miles a day // 62.14 miles/day
+5 km in miles per hour // ERROR: Cannot convert km to miles/hour: they do not measure the same thing
+```
+
+## ratios
+
+https://liamriddell.github.io/solve-engine/syntax/ratios/
+
+```
+ratio(1920, 1080) // 16:9
+ratio(4, 8) // 1:2
+ratio(2, 4, 6) // 1:2:3
+```
+
+## recurring-schedules
+
+https://liamriddell.github.io/solve-engine/syntax/recurring-schedules/
+
+```
+450 monthly for 18 months // 8,100
+12.99 monthly for 2 years // 311.76
+2000 every 2 weeks for 6 months // 26,000
+```
+
+```
+$12.99 monthly for 2 years // $311.76
+```
+
+```
+2000 every 2 weeks for 5 weeks // 4,000
+```
+
+## relative-dates
+
+https://liamriddell.github.io/solve-engine/syntax/relative-dates/
+
+```
+now // Wednesday, March 11, 2026, 12:00:00 PM
+today // Wednesday, March 11, 2026, 12:00:00 PM
+tomorrow // Thursday, March 12, 2026, 12:00:00 PM
+yesterday // Tuesday, March 10, 2026, 12:00:00 PM
+next friday // Friday, March 13, 2026, 12:00:00 PM
+last monday // Monday, March 9, 2026, 12:00:00 PM
+```
+
+```
+today // Wednesday, March 11, 2026, 12:00:00 PM
+days until 25 december // 288.50 days
+3 days from today // Saturday, March 14, 2026, 12:00:00 PM
+3 days before today // Sunday, March 8, 2026, 12:00:00 PM
+```
+
+```
+next friday // Friday, March 13, 2026, 12:00:00 PM
+last friday // Friday, March 6, 2026, 12:00:00 PM
+next saturday // Saturday, March 14, 2026, 12:00:00 PM
+```
+
+```
+3 days ago // Sunday, March 8, 2026, 12:00:00 PM
+2 hours ago // Wednesday, March 11, 2026, 10:00:00 AM
+1 year ago // Tuesday, March 11, 2025, 12:00:00 PM
+```
+
+```
+next week // Monday, March 16, 2026
+this week // Monday, March 9, 2026
+last week // Monday, March 2, 2026
+next month // Wednesday, April 1, 2026
+next year // Friday, January 1, 2027
+last year // Wednesday, January 1, 2025
+```
+
+```
+start of month // Sunday, March 1, 2026
+end of month // Tuesday, March 31, 2026
+end of next month // Thursday, April 30, 2026
+end of week // Sunday, March 15, 2026
+start of year // Thursday, January 1, 2026
+end of last year // Wednesday, December 31, 2025
+```
+
+```
+end of month + 1 day // Wednesday, April 1, 2026
+next week + 2 days // Wednesday, March 18, 2026
+```
+
+```
+this friday // Friday, March 13, 2026, 12:00:00 PM
+this wednesday // Wednesday, March 11, 2026, 12:00:00 PM
+next wednesday // Wednesday, March 18, 2026, 12:00:00 PM
+```
+
+```
+friday + 1 week // Friday, March 20, 2026, 12:00:00 PM
+days until friday // 2 days
+```
+
+## relative-months
+
+https://liamriddell.github.io/solve-engine/syntax/relative-months/
+
+```
+this month // Sunday, March 1, 2026
+next month // Wednesday, April 1, 2026
+last month // Sunday, February 1, 2026
+```
+
+## rounding
+
+https://liamriddell.github.io/solve-engine/syntax/rounding/
+
+```
+round(3.7) // 4
+round(3.14159, 2) // 3.14
+3.14159 to 4 dp // 3.1416
+1.5 to 2 dp // 1.50
+100 to 2 dp // 100.00
+```
+
+```
+1.005 to 2 dp // 1.01
+round(2.675, 2) // 2.68
+```
+
+```
+round(2.5) // 3
+round(-2.5) // -3
+-2.5 rounded // -3
+-2.5 rounded up // -2
+-25 to nearest 10 // -30
+-0.4 rounded // 0
+```
+
+```
+1234567 to 3 sf // 1,230,000
+0.0012345 to 2 sf // 0.0012
+2.5 to 3 sf // 2.50
+9.99 to 2 sf // 10
+5.678 km to 2 sf // 5.7 km
+```
+
+```
+5.5 rounded // 6
+5.4 rounded up // 6
+5.6 rounded down // 5
+37 to nearest 10 // 40
+490 rounded to nearest hundred // 500
+21 rounded up to nearest 5 // 25
+```
+
+## savings-goals
+
+https://liamriddell.github.io/solve-engine/syntax/savings-goals/
+
+```
+how long to save $10,000 at $500 monthly // 20 months
+how much per month to save $12,000 in 2 years // $500.00
+```
+
+```
+how long to save $10,000 at $500 monthly at 12% // 19 months
+how much per month to save $12,000 in 2 years at 6% // $471.85
+```
+
+```
+how much per month to reach $12,000 in 2 years // $500.00
+how much per month to reach $12,000 over 2 years // $500.00
+how much per month to reach $10,000 over 2 years at 5% // $397.05
+```
+
+## screen-and-image-sizes
+
+https://liamriddell.github.io/solve-engine/syntax/screen-and-image-sizes/
+
+```
+1920x1080 as ratio // 16:9
+3840x2160 as ratio // 16:9
+1024x768 as ratio // 4:3
+```
+
+```
+1920 x 1080 as ratio // 16:9
+1920x1080 in ratio // 16:9
+```
+
+```
+resize 4000x3000 to 1200 wide // 1200 x 900
+resize 4000x3000 to 900 tall // 1200 x 900
+```
+
+```
+resize 4000x3000 to 1200 width // 1200 x 900
+resize 4000x3000 to 900 high // 1200 x 900
+```
+
+```
+resize 1000x333 to 500 wide // 500 x 167
+```
+
+```
+4000px at 300 dpi // 13.33 in
+4000px at 300 dpi in mm // 338.67 mm
+3000 px at 300 ppi in cm // 25.40 cm
+```
+
+```
+8 in at 300 dpi // 2,400.00 px
+210 mm at 300 dpi // 2,480.31 px
+```
+
+```
+(4000px + 200px) at 300 dpi // 14.00 in
+```
+
+```
+4000px at 0 dpi // a density is a finite number of dots per inch above zero, and 0 is not
+4 kg at 300 dpi // a density relates pixels and a printed length, and "kg" is neither
+```
+
+## sections
+
+https://liamriddell.github.io/solve-engine/syntax/sections/
+
+```
+(one document)
+# Travel
+Flights: $450
+Hotel: $220
+Taxi: $50
+
+# Food
+Groceries: $40
+Dinner: $25
+
+# Summary
+total of section "Travel" // $720.00
+total of section "Food" // $65.00
+average of section "Travel" // $240.00
+count of section "Travel" // 3
+```
+
+```
+(one document)
+# Travel
+## Flights
+Outbound: $300
+Return: $150
+## Hotels
+Rome: $220
+
+# Summary
+total of section "Travel" // $670.00
+total of section "Flights" // $450.00
+total of section "Hotels" // $220.00
+```
+
+```
+(one document)
+# Travel
+Flights: $450
+
+## Extras
+Seat upgrade: $20
+
+# Summary
+total of section "Travel" // $470.00
+```
+
+```
+(one document)
+# Walks
+Park: 1.2 km
+Canal: 3 km
+Hill: 800 m
+
+# Week
+total of section "Walks" // 5.00 km
+```
+
+```
+(one document)
+# Travel
+Flights: $450
+Hotel: $220
+Subtotal: total above // $670.00
+
+# Summary
+total of section "Travel" // $670.00
+count of section "Travel" // 2
+```
+
+```
+(one document)
+# Travel
+Flights: $450
+Hotel: $220
+total of section "Travel" // $670.00
+```
+
+```
+(one document)
+# Travel
+Flights: $450
+Hotel: $220
+
+# Plan
+total of section "Travel" * 1.2 // $804.00
+:budget = total of section "Travel" // $670.00
+budget - $100 // $570.00
+```
+
+```
+(one document)
+# Travel
+Flights: $450
+
+# Summary
+total of section "Travle" // ERROR: No heading is named "Travle". The headings in this note are "Travel" and "Summary".
+```
+
+```
+(one document)
+# March
+## Travel
+Train: $40
+# April
+## Travel
+Train: $55
+
+# Summary
+total of section "Travel" // ERROR: 2 headings are named "Travel" (lines 2 and 5), so the section is unclear. Give each its own name.
+```
+
+```
+(one document)
+# Travel
+Flights: $450
+"booked in May"
+
+# Summary
+total of section "Travel" // ERROR: Line 3, under "Travel", is text, so it cannot be added: only numbers and quantities can.
+count of section "Travel" // 2
+```
+
+```
+(one document)
+# Travel
+Flights: $450
+Luggage: 23 kg
+
+# Summary
+total of section "Travel" // ERROR: money and mass cannot be added
+```
+
+```
+(one document)
+# Travel
+
+# Summary
+total of section "Travel" // ERROR: The section "Travel" has no figures to add up.
+count of section "Travel" // 0
+```
+
+```
+(one document)
+total of section "Travel" // ERROR: Line 3 has not been evaluated yet (forward reference, or out of range)
+# Travel
+Flights: $450
+```
+
+## shopping
+
+https://liamriddell.github.io/solve-engine/syntax/shopping/
+
+```
+£3 / 500g vs £4 / 750g // the second is cheaper, 11% less
+£3 vs £4 // the first is cheaper, 25% less
+```
+
+## solving-equations
+
+https://liamriddell.github.io/solve-engine/syntax/solving-equations/
+
+```
+solve(2x+6=0, x) // -3
+solve(x^2-4=0, x) // [-2, 2]
+solve(x^2-3x+2=0, x) // [1, 2]
+solve(3x-1=0, x) // 1/3
+```
+
+```
+solve(x^2-4, x) // [-2, 2]
+```
+
+```
+x^2-4 = 0
+x => // [-2, 2]
+```
+
+```
+2x+1 = x+4
+x => // 3
+```
+
+```
+:a = 2
+a*n = 10
+n => // 5
+```
+
+```
+solve(x^2-2=0, x) // [-sqrt(2), sqrt(2)]
+```
+
+```
+solve(x^3-x=0, x) // [-1, 0, 1]
+solve(x^5-x=0, x) // [-1, 0, 1, -i, i]
+```
+
+```
+solve(x^3-8=0, x) // [2, -1-sqrt(3)*i, -1+sqrt(3)*i]
+solve(x^3-2=0, x) // [cbrt(2), -cbrt(2)/2-cbrt(2)*sqrt(3)/2*i, -cbrt(2)/2+cbrt(2)*sqrt(3)/2*i]
+```
+
+```
+solve(x^4-4x^2+4=0, x) // [-sqrt(2), sqrt(2)]
+solve(x^4-3x^2+1=0, x) // [-sqrt((3+sqrt(5))/2), sqrt((3+sqrt(5))/2), -sqrt((3-sqrt(5))/2), sqrt((3-sqrt(5))/2)]
+solve(x^4+4x^2+4x+15=0, x) // [-1-sqrt(2)*i, -1+sqrt(2)*i, 1-2i, 1+2i]
+```
+
+```
+solve(x^4-2x^2+3=0, x) // [-sqrt((sqrt(3)+1)/2)-sqrt((sqrt(3)-1)/2)*i, -sqrt((sqrt(3)+1)/2)+sqrt((sqrt(3)-1)/2)*i, sqrt((sqrt(3)+1)/2)-sqrt((sqrt(3)-1)/2)*i, sqrt((sqrt(3)+1)/2)+sqrt((sqrt(3)-1)/2)*i]
+```
+
+```
+solve(x^3-3x+1=0, x) // [-1.88, 0.35, 1.53]
+```
+
+```
+solve(x^5-1=0, x) // [1, -0.8090169944-0.5877852523i, -0.8090169944+0.5877852523i, 0.3090169944-0.9510565163i, 0.3090169944+0.9510565163i]
+```
+
+```
+solve(cos(x) = x, x) // 0.74
+solve(2^x = 10, x) // 3.32
+solve(e^x = 10, x) // 2.30
+solve(log(x) = 2, x) // 7.39
+solve(1000*1.05^n = 2000, n) // 14.21
+```
+
+```
+solve(exp(x) = x + 2, x) // [-1.84, 1.15]
+```
+
+```
+2^x = 10
+x => // 3.32
+```
+
+```
+solve(sin(x) = 0.5, x, 0, 3) // [0.52, 2.62]
+solve(log(x) = 20, x, 0, 1e9) // 485,165,195.41
+```
+
+```
+solve(sin(x) = 0, x, 0, pi) // [0, 3.14]
+```
+
+```
+solve(x^2 = 4, x, 0, 10) // 2
+solve(x^2 = 4, x, 5, 10) // no solution between 5 and 10
+```
+
+```
+solve(sin(x) = 0.5, x) // More than 10 roots lie between -1000000 and 1000000, so this equation may have infinitely many, as one built on sin or cos does. Name a narrower range after the unknown, as in solve(sin(x) = 0.5, x, 0, 3).
+```
+
+```
+solve(log(x) = 20, x) // No root was found between -1000000 and 1000000: the two sides never cross there. This equation is solved numerically, which finds crossings, so a root where the sides only touch, or one outside the range searched, is not found. To search elsewhere, name a range after the unknown, as in solve(log(x) = 20, x, 0, 1e9).
+```
+
+```
+solve(1=2, x) // no solution
+```
+
+```
+solve(a*x+b=0, x) // -b/a
+```
+
+```
+:factor = 1.5
+:factor * 2 // 3
+```
+
+## splitting-a-bill
+
+https://liamriddell.github.io/solve-engine/syntax/splitting-a-bill/
+
+```
+split $120 between 3 // $40.00 each
+$120 split 3 ways // $40.00 each
+split $100 between 4 people // $25.00 each
+```
+
+```
+$120 + 18% split 3 ways // $47.20 each
+10 split 3 ways // 3.33 each
+```
+
+```
+split $100 between 3 // $33.33 each, with 1 share paying $33.34
+```
+
+```
+¥100 split 3 ways // ¥33 each, with 1 share paying ¥34
+split ¥1000 between 3 // ¥333 each, with 1 share paying ¥334
+split (10 KWD) between 3 // 3.333 KWD each, with 1 share paying 3.334 KWD
+```
+
+## splitting-fractions
+
+https://liamriddell.github.io/solve-engine/syntax/splitting-fractions/
+
+```
+apart((3x+5)/(x^2-1)) // 4/(x-1)-1/(x+1)
+apart((x^2+1)/(x^3-x)) // -1/x+1/(x-1)+1/(x+1)
+```
+
+```
+apart(1/(x*(x+1)^2)) // 1/x-1/(x+1)-1/(x+1)^2
+apart((x^3+1)/(x^2-1)) // x+1/(x-1)
+```
+
+```
+apart((2x+3)/(x^2+x+1)) // (2x+3)/(x^2+x+1)
+```
+
+## statistics
+
+https://liamriddell.github.io/solve-engine/syntax/statistics/
+
+```
+average of 10, 20, 30 // 20
+median of 1, 5, 3 // 3
+```
+
+```
+sum of 1, 2, 3 // 6
+mean of 1, 2, 3 // 2
+min of 4, 2, 9 // 2
+max of $5, $7 and $3 // $7.00
+product of 2 m, 3 m // 6.00 m²
+```
+
+```
+sum(1, 2, 3) // 6
+average(4, 8) // 6
+mean(1, 2, 3) // 2
+median(1, 5, 3) // 3
+stdev(1, 2, 3) // 0.82
+```
+
+```
+total of $4.99, $12.50, $3.20 // $20.69
+total of 1.2 km, 3 km, 800 m // 5.00 km
+total of 800 m, 1.2 km, 3 km // 5,000.00 m
+```
+
+```
+standard deviation of 2, 4, 4, 4, 5, 5, 7, 9 // 2
+variance of 2, 4, 4, 4, 5, 5, 7, 9 // 4
+spread of 3, 7, 2, 9 // 7
+mode of 4, 2, 4, 3, 4, 2 // 4
+```
+
+```
+sample standard deviation of 2, 4, 4, 4, 5, 5, 7, 9 // 2.14
+sample variance of 2, 4, 4, 4, 5, 5, 7, 9 // 4.57
+```
+
+```
+standard deviation of 1 kg, 1000 g // 0.00 kg
+standard deviation of $10, $20, $30 // $8.16
+mode of 1 kg, 1000 g, 2 kg // 1.00 kg
+spread of 1 kg, 1000 g // 0.00 kg
+```
+
+```
+variance of 2 m, 4 m // 1.00 m²
+variance of 1 kg, 1000 g // A variance of quantities in kg would be in kg squared, which has no unit: only a length squared has one, an area. The standard deviation is the same spread in kg.
+```
+
+```
+standard deviation of 1 kg, 2 m // mass and length cannot be used in a standard deviation
+standard deviation of 1/0, 1000 // A standard deviation of a list with an infinity in it has no value: an infinite value has no finite distance from the mean.
+```
+
+```
+weighted average of 72 at 30%, 88 at 70% // 83.20
+weighted average of 4.0 at 3 credits, 3.0 at 1 credit // 3.75
+weighted average of 10 at 2, 20 at 3 // 16
+weighted mean of 10 at 2, 20 at 3 // 16
+```
+
+```
+correlation of [1, 2, 3, 4] and [2, 4, 5, 8] // 0.98
+```
+
+```
+slope of [1, 2, 3, 4] and [2, 4, 5, 8] // 1.90
+intercept of [1, 2, 3, 4] and [2, 4, 5, 8] // 0
+```
+
+```
+rsquared([1, 2, 3, 4], [2, 4, 5, 8]) // 0.96
+```
+
+```
+percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 90) // 9.10
+```
+
+```
+zscore(9, [2, 4, 4, 4, 5, 5, 7, 9]) // 2
+```
+
+```
+larger of 10 and 4 // 10
+greater of 10 and 4 // 10
+larger of 10 and 4 and 12 // 12
+smaller of 10 and 4 and 12 // 4
+lesser of 10 and 4 // 4
+gcd of 12 and 18 and 8 // 2
+half of 50 // 25
+midpoint between 10 and 20 // 15
+```
+
+```
+clamp 15 between 1 and 10 // 10
+```
+
+```
+2 is to 4 as 5 is to what // 10
+```
+
+```
+(one document)
+total of "Travel" // ERROR: Text cannot be added: only numbers and quantities can. To gather the lines under a heading, write total of section "Travel"; to gather tagged lines, use "total of #tag".
+total of [1, 2, 3] // ERROR: A bracketed list cannot be added: only numbers and quantities can. List the values with commas instead, as in "total of 1, 2, 3".
+total of 1, 2, 3 // 6
+```
+
+```
+(one document)
+1.2 km
+3 km
+800 m
+total above // 5.00 km
+```
+
+```
+(one document)
+percentile([1, 2, 3], 50, 9) // ERROR: percentile takes 2 arguments, but was given 3, as in percentile([1, 2, 3], 90)
+zscore(1, [1, 2, 3], 5) // ERROR: zscore takes 2 arguments, but was given 3, as in zscore(5, [1, 2, 3])
+```
+
+## surveying-units
+
+https://liamriddell.github.io/solve-engine/syntax/surveying-units/
+
+```
+1 furlong in m // 201.17 m
+1 chain in m // 20.12 m
+1 rod in m // 5.03 m
+1 league in km // 4.83 km
+1 hand in cm // 10.16 cm
+1 mile in furlongs // 8.00 furlongs
+```
+
+```
+1 m in mil // 39,370.08 mil
+```
+
+```
+1 carat in g // 0.20 g
+1 centner in kg // 100.00 kg
+```
+
+## symbolic
+
+https://liamriddell.github.io/solve-engine/syntax/symbolic/
+
+```
+1+2+b+3+b => // 2b+6
+```
+
+```
+x^2+3x+2 => // x^2+3x+2
+-x => // -x
+sqrt(x) => // sqrt(x)
+```
+
+```
+x/3 => // x/3
+2^10 + x => // x+1024
+```
+
+```
+a = [1, 2; 3, 4]
+a*x = [60; 70]
+x => // [-50.00; 55.00]
+```
+
+## table-columns
+
+https://liamriddell.github.io/solve-engine/syntax/table-columns/
+
+```
+(one document)
+| item | cost |
+| ---- | ---- |
+| rent | 1200 |
+| food |  300 |
+| taxi |   12 |
+
+sum of column "cost" in table above // 1,512
+average of column "cost" above // 504
+min of column "cost" above // 12
+max of column "cost" above // 1,200
+count of column "cost" above // 3
+median of column "cost" above // 300
+```
+
+```
+(one document)
+| reading | score |
+| ------- | ----- |
+| a       |     2 |
+| b       |     4 |
+| c       |     4 |
+| d       |     4 |
+| e       |     5 |
+| f       |     5 |
+| g       |     7 |
+| h       |     9 |
+
+standard deviation of column "score" above // 2
+variance of column "score" above // 4
+spread of column "score" above // 7
+mode of column "score" above // 4
+```
+
+```
+(one document)
+| reading | score |
+| ------- | ----- |
+| a       |     2 |
+| b       |     4 |
+| c       |     4 |
+| d       |     4 |
+| e       |     5 |
+| f       |     5 |
+| g       |     7 |
+| h       |     9 |
+
+sample standard deviation of column "score" above // 2.14
+sample variance of column "score" above // 4.57
+stdev of column "score" above // 2
+minimum of column "score" above // 2
+maximum of column "score" above // 9
+```
+
+```
+(one document)
+| item | cost  |
+| ---- | ----- |
+| rent | 500   |
+| food | $200  |
+| car  | 1,200 |
+
+total of column "cost" above // $1,900.00
+count of column "cost" above // 3
+max of column "cost" above // $1,200.00
+```
+
+## table-lookups
+
+https://liamriddell.github.io/solve-engine/syntax/table-lookups/
+
+```
+(one document)
+| item | cost |
+| ---- | ---- |
+| rent | 1200 |
+| food |  300 |
+| taxi |   12 |
+
+column "cost" for "food" // 300
+column "cost" for "rent" in table above // 1,200
+column "cost" for "Taxi" above // 12
+column "cost" for "food" * 12 // 3,600
+```
+
+```
+(one document)
+| item   | price | discount |
+| ------ | ----- | -------- |
+| coffee | $3.40 | 10%      |
+| cake   | $4.25 | 0%       |
+
+column "price" for "coffee" // $3.40
+column "price" for "coffee" * 3 // $10.20
+column "price" for "coffee" - column "discount" for "coffee" // $3.06
+```
+
+```
+(one document)
+| size | price |
+| ---- | ----- |
+| 1    | 4     |
+| 2    | 7     |
+| 3    | 9     |
+
+column "price" for 2 // 7
+:size = 3
+column "price" for size // 9
+```
+
+```
+(one document)
+| item | cost | note  |
+| ---- | ---- | ----- |
+| rent | 1200 | fixed |
+| food |  300 |       |
+| food |   40 | snack |
+
+column "cost" for "fuel" // ERROR: The table above has no row labelled "fuel" in its first column. Its rows are: "rent", "food", "food".
+column "cost" for "food" // ERROR: The table above has 2 rows labelled "food" (lines 4 and 5), so the lookup cannot tell which one is meant.
+column "note" for "rent" // ERROR: The "note" cell on line 3 reads "fixed", which is not a number, an amount of money or a percentage.
+column "price" for "rent" // ERROR: The table above has no column named "price". Its columns are: "item", "cost", "note".
+```
+
+## tax
+
+https://liamriddell.github.io/solve-engine/syntax/tax/
+
+```
+tax on 100 at 20% // 20
+100 + 20% // 120
+tax off 120 at 20% // 100
+tax in 120 at 20% // 20
+```
+
+```
+vat on £100 at 20% // £20.00
+vat off £120 at 20% // £100.00
+vat in £120 at 20% // £20.00
+vat of £120 at 20% // £20.00
+vat from £120 at 20% // £20.00
+```
+
+```
+taxAdd(100, 20%) // 120
+taxRemove(120, 20%) // 100
+```
+
+```
+tax on $0.10 at 15% // $0.02
+tax off $0.09 at 20% // $0.08
+tax in $0.09 at 20% // $0.02
+```
+
+## text-encoding
+
+https://liamriddell.github.io/solve-engine/syntax/text-encoding/
+
+```
+"hello" as base64 // aGVsbG8=
+"aGVsbG8=" from base64 // hello
+"a b&c=1" as url // a%20b%26c%3D1
+"a%20b%26c%3D1" from url // a b&c=1
+"Hi" as hex bytes // 48 69
+"48 69" from hex bytes // Hi
+```
+
+```
+base64("Hello, World!") // SGVsbG8sIFdvcmxkIQ==
+```
+
+```
+jwt("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c") // {"sub":"1234567890","name":"John Doe","iat":1516239022}
+```
+
+```
+query("name=John+Doe&page=2") // {"name":"John Doe","page":"2"}
+```
+
+```
+field(query("name=John+Doe&page=2"), "name") // John Doe
+```
+
+```
+255 as hex // 0xFF
+```
+
+## text-operations
+
+https://liamriddell.github.io/solve-engine/syntax/text-operations/
+
+```
+"hello" + " world" // hello world
+```
+
+```
+("5" as number) + 5 // 10
+"1,234.5" as number // 1,234.50
+```
+
+```
+length of "hello" // 5
+words in "the quick brown fox" // 4
+characters in "hello" // 5
+```
+
+```
+characters in "👍🏽" // 1
+length of "🇬🇧" // 1
+reverse "👍🏽a" // a👍🏽
+```
+
+```
+"hello" contains "ell" // true
+"hello" starts with "he" // true
+"report" ends with "port" // true
+```
+
+```
+trim "  spaced out  " // spaced out
+reverse "hello" // olleh
+"ha" repeated 3 times // hahaha
+```
+
+```
+replace("banana", "a", "@") // b@n@n@
+```
+
+```
+"hello world" as upper // HELLO WORLD
+"HELLO" as lower // hello
+"the lord of the rings" as title // The Lord Of The Rings
+"Hello, World!" as slug // hello-world
+```
+
+```
+length("hello") // 5
+upper("hi there") // HI THERE
+```
+
+```
+wordcount("the quick brown fox") // 4
+charcount("hello") // 5
+linecount("one line") // 1
+titlecase("hello world") // Hello World
+slugify("Hello World") // hello-world
+```
+
+```
+lines in "a\nb" // 1
+length of "a\nb" // 4
+```
+
+```
+(one document)
+"11:00 PM" + 2 // ERROR: Text and a number cannot be added: + joins text only to other text. To add a number held as text, convert it first with "as number".
+"5" * 2 // ERROR: Text cannot be used in arithmetic: only numbers and quantities can. To use a number held as text, convert it first with "as number".
+```
+
+```
+(one document)
+"11:00 PM" as number // ERROR: "11:00 PM" is not a number: "as number" reads text that is a number and nothing else.
+```
+
+## time
+
+https://liamriddell.github.io/solve-engine/syntax/time/
+
+```
+9:00am + 3 hours // 12:00:00 PM
+16:00 // 4:00:00 PM
+3.30pm // 3:30:00 PM
+```
+
+```
+11pm + 2 hours // 1:00:00 AM (+1 day)
+1am - 2 hours // 11:00:00 PM (-1 day)
+```
+
+```
+2026-04-03T09:30 as time // 9:30:00 AM
+```
+
+```
+noon // 12:00:00 PM
+noon + 90 minutes // 1:30:00 PM
+midnight // 12:00:00 AM
+```
+
+```
+2h 30m // 150 minutes
+2h30m // 150 minutes
+1d6h // 30 hours
+1h30m15s // 5,415 seconds
+```
+
+```
+1h30m in minutes // 90 minutes
+```
+
+```
+5415 seconds as timespan // 1 hour 30 minutes 15 seconds
+2h30m as timespan // 2 hours 30 minutes
+```
+
+```
+90m // 90.00 m
+```
+
+```
+$15/hr // $15.00/hr
+30 mins // 30.00 mins
+$15/hr * 37.5 hrs // $562.50
+2 hours in mins // 120.00 mins
+90 minutes in hr // 1.50 hr
+```
+
+```
+7:30 to 20:45 // 795 minutes
+9am until 5pm // 480 minutes
+9am to noon // 180 minutes
+```
+
+```
+4pm to 3am // 660 minutes
+```
+
+```
+30 fps // 30.00 frames/s
+01:02:03:04 at 30 fps in frames // 111,694.00 frames
+111694 frames at 30 fps // 01:02:03:04
+```
+
+```
+01:02:03:04 at 30 fps // 111,694.00 timecode@30
+```
+
+```
+(one document)
+hr = 2
+hr * 3 // 6
+$15/hr // $15.00/hr
+```
+
+## time-zones
+
+https://liamriddell.github.io/solve-engine/syntax/time-zones/
+
+```
+3pm London in Tokyo // 12:00 AM (+1 day)
+6pm Sydney in Chicago // 2:00 AM
+```
+
+```
+3pm London on 23 September 2026 in Tokyo // 11:00 PM
+3pm London in Tokyo on 23 September 2026 // 11:00 PM
+```
+
+```
+3pm London on 23 September 2026 in Sydney // 12:00 AM (+1 day)
+9am Tokyo on 23 September 2026 in San Francisco // 5:00 PM (-1 day)
+```
+
+```
+3pm London on 23 September 2026 in Tokyo, New York and Sydney // Tokyo 11:00 PM, New York 10:00 AM, Sydney 12:00 AM (+1 day)
+```
+
+```
+3pm JST on 23 September 2026 in EST and CET // EST 2:00 AM, CET 8:00 AM
+3pm GMT+9 on 23 September 2026 in London and UTC-5 // London 7:00 AM, UTC-5 1:00 AM
+```
+
+```
+3pm London on 23 September 2026 in Los Angeles, Mexico City and Kuala Lumpur // Los Angeles 7:00 AM, Mexico City 8:00 AM, Kuala Lumpur 10:00 PM
+3pm London on 23 September 2026 in Las Vegas // 7:00 AM
+3pm London on 23 September 2026 in New Delhi // 7:30 PM
+3pm London on 23 September 2026 in Cape Town // 4:00 PM
+3pm London on 23 September 2026 in Rio de Janeiro // 11:00 AM
+3pm London on 23 September 2026 in Sao Paulo // 11:00 AM
+3pm London on 23 September 2026 in South Africa // 4:00 PM
+3pm Los Angeles on 23 September 2026 in United Kingdom // 11:00 PM
+```
+
+```
+3pm London on 1 March 2026 in New York // 10:00 AM
+3pm London on 20 March 2026 in New York // 11:00 AM
+3pm London on 23 September 2026 in New York // 10:00 AM
+```
+
+```
+9am Sydney on 1 October 2026 in London // 12:00 AM
+9am Sydney on 5 October 2026 in London // 11:00 PM (-1 day)
+```
+
+```
+1:30am London on 29 March 2026 in Tokyo // 1:30 AM did not happen in London on March 29, 2026: the clocks went forward past it
+1:30am London on 25 October 2026 in Tokyo // 1:30 AM happened twice in London on October 25, 2026, when the clocks went back, so it names no single moment
+2:30am London on 29 March 2026 in Tokyo // 10:30 AM
+```
+
+```
+overlap of 9am to 5pm in London and New York on 23 September 2026 // 3 hours: London 2:00 PM to 5:00 PM, New York 9:00 AM to 12:00 PM
+overlap of 9am-5pm in London and New York on 23 September 2026 // 3 hours: London 2:00 PM to 5:00 PM, New York 9:00 AM to 12:00 PM
+```
+
+```
+overlap of 9am to 5pm in London, Paris and New York on 23 September 2026 // 2 hours: London 2:00 PM to 4:00 PM, Paris 3:00 PM to 5:00 PM, New York 9:00 AM to 11:00 AM
+```
+
+```
+overlap of 9am to 5pm in London and New York on 20 March 2026 // 4 hours: London 1:00 PM to 5:00 PM, New York 9:00 AM to 1:00 PM
+```
+
+```
+overlap of 8am to 6pm in Tokyo and San Francisco on 23 September 2026 // 2 hours: Tokyo 8:00 AM to 10:00 AM, San Francisco 4:00 PM to 6:00 PM (-1 day)
+```
+
+```
+overlap of 9am to 5pm in London and Tokyo on 23 September 2026 // No overlap between London and Tokyo
+```
+
+```
+overlap of 10pm to 6am in London and New York on 23 September 2026 // 3 hours: London 3:00 AM to 6:00 AM, New York 10:00 PM to 1:00 AM (-1 day)
+overlap of 5am to 11pm in London and Tokyo on 23 September 2026 // 12 hours: London 5:00 AM to 3:00 PM, Tokyo 1:00 PM to 11:00 PM; London 9:00 PM to 11:00 PM, Tokyo 5:00 AM to 7:00 AM (+1 day)
+```
+
+```
+overlap of 9am to 5pm in London and New York // 4 hours: London 1:00 PM to 5:00 PM, New York 9:00 AM to 1:00 PM
+```
+
+```
+overlap of 9am to 5pm in London on 23 September 2026 // An overlap needs two or more places, as in "overlap of 9am to 5pm in London and New York"
+overlap of 9am to 9am in London and Paris on 23 September 2026 // 9:00 AM to 9:00 AM has no length, so no time falls inside it
+```
+
+```
+time in Paris // 1:00 PM
+date in Vancouver // March 11, 2026
+time difference between Seattle and Moscow // Moscow is 10 hours ahead of Seattle
+```
+
+```
+time difference between London and New York on 1 March 2027 // London is 5 hours ahead of New York on March 1, 2027
+time difference between London and New York on 20 March 2027 // London is 4 hours ahead of New York on March 20, 2027
+time difference between London and Tokyo on 1 July 2027 // Tokyo is 8 hours ahead of London on July 1, 2027
+time difference between Tokyo and Adelaide on 1 March 2027 // Adelaide is 1 hour 30 minutes ahead of Tokyo on March 1, 2027
+```
+
+```
+2026-04-03 in Tokyo // Friday, April 3, 2026
+3 April 2026 in New York // Friday, April 3, 2026
+2026-04-03T09:00 in Tokyo // Friday, April 3, 2026, 9:00:00 AM
+2026-04-03 in UTC // Friday, April 3, 2026
+```
+
+```
+6pm in Chicago // 6:00:00 PM
+```
+
+```
+2026-04-03 in Atlantis // "Atlantis" is not a time zone this engine knows. Name a city ("in Tokyo"), a standard abbreviation ("in JST") or "in UTC"
+2026-04-03 in furlongs // A date cannot be read in "furlongs". "in <name>" after a date names a time zone, as in "2026-04-03 in Tokyo"
+5 in Tokyo // "Tokyo" is not a unit.
+```
+
+```
+2026-04-03T15:00 in UTC-5 // Friday, April 3, 2026, 3:00:00 PM
+2026-04-03T15:00 in GMT+9 // Friday, April 3, 2026, 3:00:00 PM
+2026-04-03T15:00 in UTC+5:45 // Friday, April 3, 2026, 3:00:00 PM
+2026-04-03 in UTC-05:00 // Friday, April 3, 2026
+```
+
+```
+2026-04-03T15:00Z in UTC-5 // Friday, April 3, 2026, 10:00:00 AM
+```
+
+```
+2026-04-03T15:00 in UTC - 5 hours // Friday, April 3, 2026, 10:00:00 AM
+2026-04-03T15:00 in UTC+25 // "UTC+25" is not an offset a clock keeps: write whole hours and minutes from UTC-12 to UTC+14, as in "UTC-5" or "UTC+5:45"
+```
+
+```
+time difference between Kathmandu and Kolkata // Kathmandu is 15 minutes ahead of Kolkata
+3pm London on 1 March 2027 in Hobart // 2:00 AM (+1 day)
+```
+
+## timesheets
+
+https://liamriddell.github.io/solve-engine/syntax/timesheets/
+
+```
+8:15 + 7:45 // 960 minutes
+8:15 + 7:45 + 8:30 // 1,470 minutes
+```
+
+```
+8:15 + 7:45 + 8:30 in hours // 24.50 hours
+```
+
+```
+8:15 + 7:45 + 30 minutes // 990 minutes
+8:15 + 7:45 at £15/hour // £240.00
+```
+
+```
+9:00 to 17:30 // 510 minutes
+9am to 5:30pm // 510 minutes
+```
+
+```
+9pm to 5am // 480 minutes
+```
+
+```
+9:30 - 8:30 // 1:00
+18:00 - 12:55 // 5:05
+```
+
+```
+17:30 - 9:00 + 0:45 // 9:15
+18:00 - 12:55 + 1:00 + 0:30 // 6:35
+```
+
+```
+(9:30 - 8:30) + 30 minutes // 1:30
+(9:30 - 8:30) - 15 minutes // 0:45
+```
+
+```
+(9:30 - 8:30) in minutes // 60 minutes
+```
+
+```
+40ms + 120ms + 30ms // 190.00 ms
+2 minutes in ms // 120,000.00 ms
+```
+
+```
+1:30:00 * 3 // 16,200.00 s
+1h30m * 3 // 270 minutes
+1:30 * 3 // A date or time cannot be multiplied: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.
+1:30 hours // A date or time cannot take a unit, hours: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.
+```
+
+```
+40 hours at £15/hour // £600.00
+9:00 to 17:30 at £15/hour // £127.50
+```
+
+```
+9:00 to 17:30 at £15 per hour // £127.50
+```
+
+```
+(one document)
+9:30 - 8:30
+12:00 - 11:00
+18:00 - 12:55
+total above // 7:05
+```
+
+## timestamps
+
+https://liamriddell.github.io/solve-engine/syntax/timestamps/
+
+```
+1710000000 to date // Saturday, March 9, 2024, 4:00:00 PM
+1710000000 as date // Saturday, March 9, 2024, 4:00:00 PM
+```
+
+```
+1710000000000 as date // Saturday, March 9, 2024, 4:00:00 PM
+```
+
+```
+"2024-03-09T16:00:00Z" as date // Saturday, March 9, 2024, 4:00:00 PM
+-86400 as date // Wednesday, December 31, 1969, 1:00:00 AM
+```
+
+```
+2024-03-09 to timestamp // 1,709,942,400
+2024-03-09 as timestamp // 1,709,942,400
+1710000000000 as timestamp // 1,710,000,000
+```
+
+```
+current timestamp // 1,773,230,400
+```
+
+```
+1710000000 as iso8601 // 2024-03-09T16:00:00+00:00
+```
+
+```
+5 kg as date // as date reads a Unix timestamp (in seconds or milliseconds), ISO 8601 text or a date, and this value is none of them.
+```
+
+## tracing-inputs
+
+https://liamriddell.github.io/solve-engine/syntax/tracing-inputs/
+
+```
+(one document)
+:rate = 4%
+:deposit = 100000
+
+:payment = monthly repayment on deposit over 25 years at rate
+inputs of line 4 // payment 527.84 (line 4) <- deposit 100,000 (line 2), rate 4.00% (line 1)
+```
+
+```
+(one document)
+10
+20
+total above
+line 3 * 2
+inputs of line 4 // 60 (line 4) <- 30 (line 3) <- [10 (line 1), 20 (line 2)]
+```
+
+```
+(one document)
+40 #food
+20 #food
+total of #food
+inputs of line 3 // 60 (line 3) <- 40 (line 1), 20 (line 2)
+```
+
+```
+(one document)
+:rate = 4%
+inputs of line 1 // rate 4.00% (line 1) reads no other line
+```
+
+```
+(one document)
+:scores = map(x * 10, 1:50)
+inputs of line 1 // scores [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, and 40 more] (line 1) reads no other line
+```
+
+```
+(one document)
+line 2 + 5
+prev + 5
+inputs of line 2 // ERROR: Line 1 reads line 2, which leads back to line 1: lines that read each other have no answer to trace
+```
+
+```
+(one document)
+120
+inputs of line 3 // ERROR: Line 3 is not above this line, so its answer has not been worked out yet: a trace reads the lines above it
+240
+```
+
+```
+(one document)
+# Travel
+train = 12
+taxi = 7
+# Food
+t = total of section "Travel"
+inputs of line 5 // t 19 (line 5) <- train 12 (line 2), taxi 7 (line 3)
+```
+
+## travel
+
+https://liamriddell.github.io/solve-engine/syntax/travel/
+
+```
+fuel for 500 km at 7 l/100km // 35.00 litre
+fuel for 300 miles at 35 mpg // 32.45 litre
+```
+
+```
+fuel to drive 500 km at 7 l/100km // 35.00 litre
+```
+
+```
+fuel for 300 miles at 35 mpg imperial // 38.97 litre
+```
+
+```
+cost to drive 500 km at 7 l/100km at £1.50/litre // £52.50
+cost to drive 300 miles at 35 mpg imperial at £1.50/litre // £58.45
+```
+
+```
+cost to drive 300 miles at 35 mpg at $4.20/gallon // $36.00
+```
+
+```
+cost to drive 500 km at 7 l/100km at £1.50 per litre // £52.50
+```
+
+```
+250 miles at 60 mph // 4.17 h
+```
+
+```
+fuel for 500 km at 35 kg // "kg" is not a fuel economy: write it as mpg or l/100km
+fuel for 50 kg at 7 l/100km // a trip starts with a distance, as in "fuel for 500 km at 7 l/100km"
+cost to drive 300 miles at 35 mpg at 5 kg // a fuel price is an amount for a volume, as in "£1.50/litre"
+```
+
+```
+40 mpg in l/100km // 5.88 l/100km
+6 l/100km in mpg // 39.20 mpg
+```
+
+## trigger-words
+
+https://liamriddell.github.io/solve-engine/syntax/trigger-words/
+
+```
+:total = 100
+:total + 5 // 105
+```
+
+```
+:sum = 42
+:sum + 8 // 50
+```
+
+```
+:column = 5
+column * 2 // 10
+```
+
+```
+:section = 5
+total of section + 1 // 6
+```
+
+```
+total: 5 + 3 // 8
+Rent $1200 // $1,200.00
+```
+
+```
+(one document)
+step = 2 // 2
+x = 5 // 5
+x * step // 10
+line 3 with 10 // 20
+line 3 with x = 1 // 2
+line 3 for x from 1 to 3 step 1 // [2, 4, 6]
+```
+
+## uncertainty
+
+https://liamriddell.github.io/solve-engine/syntax/uncertainty/
+
+```
+12.3 +/- 0.5 // 12.3 ± 0.5
+(12.3 +/- 0.5) * 4 // 49.2 ± 2.0
+(10 +/- 1) + (20 +/- 2) // 30 ± 2.24
+(100 +/- 5) + 10% // 110 ± 5.5
+```
+
+```
+100 +/- 5% // 100 ± 5.0
+12.3 +/- 2% // 12.3 ± 0.25
+(100 +/- 5%) * 2 // 200 ± 10.0
+```
+
+```
+45% +/- 3% // 0.45 ± 0.03
+```
+
+```
+5 m +/- 1 cm // 5 ± 0.01
+5 km +/- 100 m // 5 ± 0.1
+20 C +/- 1 F // 20 ± 0.56
+```
+
+```
+(5 m +/- 1 cm) in mm // A value with a tolerance cannot be converted to mm: a tolerance is read without its unit, so 5 m +/- 1 cm is the plain 5 ± 0.01. Convert the value first and give the tolerance after, as in (5 m in mm) +/- 10.
+(5 +/- 0.1) km // A value with a tolerance cannot be converted to km: a tolerance is read without its unit, so 5 m +/- 1 cm is the plain 5 ± 0.01. Convert the value first and give the tolerance after, as in (5 m in mm) +/- 10.
+(5 m in mm) +/- 10 // 5,000 ± 10.0
+5000 mm +/- 1 cm // 5,000 ± 10.0
+```
+
+```
+(5 m +/- 1 cm) + 2 m // A value with a tolerance and a quantity in m cannot be added: a tolerance is read without its unit, so 5 m +/- 1 cm is the plain 5 ± 0.01, and the two are not in the same terms. Keep both sides plain numbers, as in (5 +/- 0.01) + 2.
+(5 +/- 0.1) * 2 m // A value with a tolerance and a quantity in m cannot be multiplied: a tolerance is read without its unit, so 5 m +/- 1 cm is the plain 5 ± 0.01, and the two are not in the same terms. Keep both sides plain numbers, as in (5 +/- 0.01) + 2.
+(5 m +/- 1 cm) * 2 // 10 ± 0.02
+```
+
+```
+(one document)
+5 m +/- 1 kg // ERROR: A tolerance in kg cannot be read against a value in m: they do not measure the same thing.
+5 +/- 1 cm // ERROR: A tolerance in cm needs a value measured in a unit it converts to, as in "5 m +/- 1 cm"; this value has no unit to read it in.
+```
+
+## unit-algebra
+
+https://liamriddell.github.io/solve-engine/syntax/unit-algebra/
+
+```
+5 m * 3 m // 15.00 m²
+2 m * 3 m * 4 m // 24.00 m³
+5 m * 3 ft // 4.57 m²
+5 m2 * 3 m // 15.00 m³
+```
+
+```
+15 m² in ft² // 161.46 ft²
+3 m * 2 m in square feet // 64.58 square feet
+15 sq ft in m² // 1.39 m²
+15 m² + 10 sq ft // 15.93 m²
+2 cubic metres in litres // 2,000.00 litres
+```
+
+```
+5 m^2 // 5.00 m²
+10 m^3 in litres // 10,000.00 litres
+(3 m)^2 // 9.00 m²
+```
+
+```
+1000 kg/m^3 // 1,000.00 kg/m³
+1 g/cm^3 in kg/m^3 // 1,000.00 kg/m³
+1 g/cm³ in g/mL // 1.00 g/mL
+9.81 m/s^2 in ft/s^2 // 32.19 ft/s²
+```
+
+```
+15 m² / 3 m // 5.00 m
+24 m³ / 6 m² // 4.00 m
+24 m³ / 6 m // 4.00 m²
+1 ha / 50 m // 200.00 m
+```
+
+```
+sqrt(16 m²) // 4.00 m
+cbrt(27 m³) // 3.00 m
+(9 m²)^0.5 // 3.00 m
+sqrt(1 ha) // 100.00 m
+```
+
+```
+6 kWh * $0.30/kWh // $1.80
+3 kg * $5/kg // $15.00
+2 kW * 3 h * $0.30/kWh // $1.80
+60 mph * 2 hours // 120.00 mi
+```
+
+```
+20 m² / (5 m²/l) // 4.00 l
+120 miles / 60 mph // 2.00 h
+100 miles / 30 mpg // 3.33 gal
+$100 / ($5/kg) // 20.00 kg
+```
+
+```
+$30/hour * 8 hours/day // $240.00/day
+(100 km/h) / (10 l/h) // 10.00 km/l
+```
+
+```
+$0.30/kWh * 2 kW // $0.60/h
+$0.30/kWh * 2 kW * 3 h // $1.80
+$0.30/kWh * 3 h * 2 kW // $1.80
+$0.30/kWh * 2 kW * 180 min // $1.80
+$300/MWh * 2000 W * 3 h // $1.80
+2 kW * 3 h * $0.30/kWh // $1.80
+```
+
+```
+$0.30/kWh * 3 h // $0.90/kW
+$0.305/kWh * 2 kW * 3 h // $1.83
+```
+
+```
+1 / (2 m) // 0.50 /m
+10 / (5 s) // 2.00 /s
+1 / (2 m) * 4 m // 2
+1 / (50 Hz) // 0.02 s
+1 / (2/week) // 0.50 weeks
+```
+
+```
+1/2 hour // 0.50 hours
+3 / 4 cup // 0.75 cup
+1 / (2 hour) // 0.50 /hour
+```
+
+```
+$30 * 4 days // $120.00
+```
+
+```
+(one document)
+check 1 g/mL == 1 g/cm^3 // ✓
+check 1 kg/m^3 < 1 g/cm^3 // ✓
+```
+
+```
+(one document)
+$0.30/kWh * 2 kg // ERROR: Cannot multiply a rate per kWh by a quantity in kg: they measure different things, and together they make no unit.
+```
+
+```
+(one document)
+1 / (20 C) // ERROR: A number divided by a temperature in C has no unit: a temperature is measured from a zero point of its own, so there is no "per degree" to show it in.
+```
+
+```
+(one document)
+wall = 4 m * 2.5 m // 10.00 m²
+coats = 2 // 2
+paint = wall * coats / (12 m²/l) // 1.67 l
+```
+
+```
+(one document)
+kettle = 3 kW // 3.00 kW
+used = kettle * 20 min // 1.00 kWh
+cost = used * £0.28/kWh // £0.28
+```
+
+```
+(one document)
+2 kg * 3 kg // ERROR: A quantity in kg times one in kg has no unit: mass times mass is not a unit. Lengths multiply into an area or a volume, and no other quantity squares into one.
+$5 * $3 // ERROR: A quantity in USD times one in USD has no unit: money times money is not a unit. Lengths multiply into an area or a volume, and no other quantity squares into one.
+5 m2 * 3 m2 // ERROR: A quantity in m2 times one in m2 has no unit: lengths multiply into an area or a volume, and a product of more than three lengths is not a unit.
+$100/h / 2 h // ERROR: A quantity in USD/h divided by one in h has no unit: nothing cancels, and USD/h per h is a rate of a rate, which is not a unit.
+sqrt(5 m) // ERROR: sqrt: a quantity in m has no square root with a unit; only an area has a length as its root.
+```
+
+## unit-arithmetic
+
+https://liamriddell.github.io/solve-engine/syntax/unit-arithmetic/
+
+```
+100cm + 2m // 300.00 cm
+1 km + 500 m // 1.50 km
+```
+
+```
+5 m * 3 m // 15.00 m²
+3 kg * $5/kg // $15.00
+```
+
+```
+9.81 m/s² // 9.81 m/s²
+10 kg * 9.81 m/s² // 98.10 N
+```
+
+```
+10^3 m in km // 1.00 km
+1.5 * 10^3 kg // 1,500.00 kg
+10^-3 m in mm // 1.00 mm
+```
+
+```
+(one document)
+20 kilomters in miles // ERROR: Undefined variable: kilomters. Did you mean kilometers?
+5 km in mies // ERROR: "mies" is not a unit. Did you mean miles?
+```
+
+```
+(one document)
+5 in km // 5.00 km
+5 in EUR // €5.00
+5 in widgets // ERROR: "widgets" is not a unit.
+2024 in roman // MMXXIV
+```
+
+```
+(one document)
+5 kg^2 // ERROR: "kg^2" is not a unit: a power on a unit makes an area or a volume, so it applies only to a length the unit table spells squared or cubed, such as m^2 or ft^3.
+```
+
+```
+(one document)
+5 kg m // ERROR: A quantity in kg cannot take a second unit, m: two units side by side are not a unit. To convert, write "in m".
+2^(3 m) // ERROR: An exponent cannot carry a unit (m): a power counts multiplications. For a quantity in scientific notation, write the unit after the power, as in "10^3 m".
+```
+
+## unit-reference
+
+https://liamriddell.github.io/solve-engine/syntax/unit-reference/
+
+```
+5 metre // 5.00 metre
+5 meter // 5.00 meter
+1 mps // 1.00 mps
+```
+
+```
+100 cm + 2 m // 300.00 cm
+5 km to miles // 3.11 miles
+1 KiB in bytes // 1,024.00 bytes
+```
+
+## unit-representations
+
+https://liamriddell.github.io/solve-engine/syntax/unit-representations/
+
+```
+0.5 as % // 50.00%
+0.75 as fraction // 3/4
+```
+
+```
+10/4 as fraction // 5/2
+(1/3 + 1/7) as fraction // 10/21
+```
+
+## variables
+
+https://liamriddell.github.io/solve-engine/syntax/variables/
+
+```
+:subtotal = 100
+:subtotal * 2 // 200
+```
+
+```
+count = 10
+count + 5 // 15
+```
+
+```
+:budget = 500
+budget -= 120 // 380
+budget -= 63 // 317
+budget // 317
+```
+
+```
+spent += 40 // 40
+spent += 12 // 52
+```
+
+```
+:balance = $1000
+balance *= 1.05 // $1,050.00
+balance *= 1.05 // $1,102.50
+```
+
+```
+:length = 10 m
+length /= 4 // 2.50 m
+```
+
+```
+f(x) = 2*x + 1
+f(5) // 11
+```
+
+```
+:x = 100
+double(x) = x * 2
+double(5) // 10
+```
+
+```
+(one document)
+deposit = 100
+payment = deposit * 40 // 4,000
+```
+
+```
+(one document)
+y = x + 1 // x+1
+x = 5 // 5
+y + x // 11
+```
+
+```
+(one document)
+y = x + 1 // x+1
+x = $5 // $5.00
+y + x // ERROR: y was written as a formula in x before x had a value, and x now holds money, which the formula cannot take. Define x above the line that defines y.
+```
+
+```
+(one document)
+m = 3
+s = 2
+m/s^2 // 0.75
+9.81 m/s^2 // 9.81 m/s²
+```
+
+```
+(one document)
+L = 3
+L * 2 // 6
+2 * L // 6
+2L // 2.00 L
+```
+
+```
+(one document)
+distance = 120
+t = 2
+speed = distance / t // 60
+```
+
+```
+(one document)
+h = 4
+100 / h // 25
+$15 / h // $15.00/h
+60 km / h // 60.00 km/h
+```
+
+```
+(one document)
+budget = 100
+budgte * 2 // ERROR: Undefined variable: budgte. Did you mean budget?
+sqr(16) // ERROR: Undefined function: sqr. Did you mean sqrt?
+```
+
+```
+(one document)
+hourly rate = $50 // $50.00
+hours = 8 // 8
+hourly rate * hours // $400.00
+```
+
+```
+(one document)
+rate = 5 // 5
+hourly rate = $50 // $50.00
+hourly rate * rate // $250.00
+```
+
+```
+(one document)
+hourly rate * 2 // ERROR: Expected an operator or the end of the line, but found "rate"
+hourly rate = $50 // $50.00
+```
+
+```
+(one document)
+take home = 5 // ERROR: "take home" cannot be a name: "take" is a spelling of minus. Choose other words, or join them as take_home. For the equation, write -home = 5.
+tax on = 5 // ERROR: "tax on" cannot be a name: "tax on" is a phrase the engine reads. Choose other words, or join them as tax_on.
+```
+
+## vectors-and-matrices
+
+https://liamriddell.github.io/solve-engine/syntax/vectors-and-matrices/
+
+```
+[1,2,3] // [1, 2, 3]
+[1,2;3,4] // [1, 2; 3, 4]
+```
+
+```
+vec2(1, 2) // [1, 2]
+vec3(1, 2, 3) // [1, 2, 3]
+vec4(1, 2, 3, 4) // [1, 2, 3, 4]
+```
+
+```
+[1 km, 2 km] // [1, 2]
+[1 km, 500] // [1, 500]
+```
+
+```
+[1 km, 500 m] // A list cannot hold quantities in km and m side by side: each cell holds one number, so both would be read in one unit. Convert the cells to one unit first, writing "in km" after each cell in another unit.
+[1 kg, 3 m] // A list cannot hold quantities in kg and m side by side: each cell holds one number, and mass and length are not one measure.
+[1 km, 500 m in km] // [1, 0.50]
+```
+
+```
+[1, 2, 3] km // A bracketed list has no single amount to convert to km: only a number or a quantity can be converted.
+[1, 2] * 1 km // A bracketed list and a quantity in km cannot be multiplied: a bracketed list has no single amount to put in km. A list does not carry a unit yet.
+[1, 2] * 2 // [2, 4]
+```
+
+```
+[1,2,3] * 10 // [10, 20, 30]
+[1,2,3] + [10,20,30] // [11, 22, 33]
+```
+
+```
+[1, 2; 3, 4] * [1; 2] // [5; 11]
+```
+
+```
+dot([1,2,3], [4,5,6]) // 32
+dot([1,2,3], [4;5;6]) // 32
+dot([1, 0], [0, 1]) // 0
+```
+
+```
+vec3(1, 2, 3) // [1, 2, 3]
+dot(vec2(3, 4), vec2(3, 4)) // 25
+```
+
+```
+float(2.5) // 2.50
+float(50%) // 0.50
+float("1,234.5") // 1,234.50
+```
+
+```
+[1,2,3][0] // 1
+[1,2;3,4][1,1] // 4
+```
+
+```
+[1,2;3,4]^T // [1, 3; 2, 4]
+transpose([1,2;3,4]) // [1, 3; 2, 4]
+det([1,2;3,4]) // -2
+[1,2;3,4]^-1 // [-2.00, 1.00; 1.50, -0.50]
+```
+
+```
+(one document)
+[(1, 2), 3] // ERROR: A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3].
+```
+
+```
+(one document)
+[1,2,3] * [4,5,6] // ERROR: Cannot multiply a 1x3 matrix by a 1x3 matrix: the first has 3 columns and the second 1 row, and the two must match.
+```
+
+```
+(one document)
+dot([1,2], [4,5,6]) // ERROR: dot needs two vectors of the same length, but one has 2 components and the other 3.
+dot([1,2;3,4], [5,6;7,8]) // ERROR: dot takes two vectors, and a 2x2 matrix is not one. For a matrix product, write "*".
+```
+
+```
+(one document)
+vec2(1, 2, 3) // ERROR: vec2() takes 2 arguments, but was given 3 arguments
+vec3(1, 2) // ERROR: vec3() takes 3 arguments, but was given 2 arguments
+```
+
+```
+(one document)
+float("hello") // ERROR: float takes a number, or text that is a number, and "hello" is not one.
+float(5 km) // ERROR: float takes a plain number, not a length.
+```
+
+## weekdays-and-week-numbers
+
+https://liamriddell.github.io/solve-engine/syntax/weekdays-and-week-numbers/
+
+```
+what day is it on 2026-12-25 // Friday
+what day is it on 25 december // Friday
+day of the week on 1 January 2000 // Saturday
+weekday on 2026-12-25 // Friday
+```
+
+```
+what day is it // Wednesday
+what day is it in 3 days // Saturday
+what day will it be in 3 days // Saturday
+what day will it be on 2026-12-25 // Friday
+```
+
+```
+what month is it // March
+what month is it on 2026-12-25 // December
+what month is it in 3 months // June
+what month will it be in 10 months // January
+month of 2026-12-25 // December
+```
+
+```
+week number // 11
+week number of 2026-12-25 // 52
+week number on 2026-12-25 // 52
+week number of 2027-01-01 // 53
+what week is it // 11
+what week is it on 2026-12-25 // 52
+what week is it in 2 weeks // 13
+what week will it be in 2 weeks // 13
+```
+
+```
+2026-12-25 as weekday // Friday
+2026-12-25 as month // December
+2026-12-25 as week // 52
+```
+
+## what-if
+
+https://liamriddell.github.io/solve-engine/syntax/what-if/
+
+```
+(one document)
+deposit = 100000 // 100,000
+rate = 4% // 4.00%
+payment = monthly repayment on deposit over 25 years at rate // 527.84
+payment * 12 // 6,334.04
+line 4 with deposit = 150000 // 9,501.06
+```
+
+```
+(one document)
+deposit = 100000 // 100,000
+rate = 4% // 4.00%
+payment = monthly repayment on deposit over 25 years at rate // 527.84
+payment * 12 // 6,334.04
+line 4 with deposit = 150000 and rate = 5% // 10,522.62
+(line 4 with deposit = 150000) - line 4 // 3,167.02
+```
+
+```
+(one document)
+price = $100 // $100.00
+discount = 10% // 10.00%
+sale = price - discount // $90.00
+sale * 3 // $270.00
+line 4 with discount = 25% // $225.00
+line 4 with price = $120 // $324.00
+```
+
+```
+(one document)
+:price = 100 // 100
+:total = :price * 1.2 // 120
+line 2 with :price = 300 // 360
+:price // 100
+```
+
+```
+(one document)
+deposit = 100000 // 100,000
+deposit * 2 // 200,000
+line 1 with deposit = 150000 // 150,000
+deposit // 100,000
+```
+
+```
+(one document)
+deposit = 100000 // 100,000
+rate = 4% // 4.00%
+payment = monthly repayment on deposit over 25 years at rate // 527.84
+payment * 12 // 6,334.04
+line 4 for rate from 3% to 6% step 1% // [5,690.54, 6,334.04, 7,015.08, 7,731.62]
+line 4 for deposit from 100000 to 200000 step 50000 // [6,334.04, 9,501.06, 12,668.08]
+line 4 for rate from 6% to 3% step -1% // [7,731.62, 7,015.08, 6,334.04, 5,690.54]
+```
+
+```
+(one document)
+price = $100 // $100.00
+qty = 3 // 3
+price * qty // $300.00
+line 3 for price from $100 to $300 step $50 // [300, 450, 600, 750, 900]
+line 3 for qty from 1 to 10 step 4 // [100, 500, 900]
+```
+
+```
+(one document)
+length = 2 m // 2.00 m
+width = 3 m // 3.00 m
+length * width // 6.00 m²
+line 3 for length from 1 m to 3 m step 50 cm // [3, 4.50, 6, 7.50, 9]
+line 3 for length from 1 m to 2 m step 30 cm // [3, 3.90, 4.80, 5.70]
+```
+
+```
+(one document)
+x = 5 // 5
+# Budget
+x * 2 // 10
+line 2 with x = 1 // ERROR: Line 2 is not a calculation (it is prose, a heading or a blank line), so it has no answer to work out again.
+line 3 with y = 3 // ERROR: No line up to line 3 uses y, so changing it cannot change line 3's answer.
+line 3 for x from 1 to 3 step 0 // ERROR: A sweep's step cannot be zero: it would never reach the end of the range.
+line 3 for x from 1 to 3 step -1 // ERROR: This sweep runs up from its start to its end, so its step must be positive: as written it moves away from the end and never reaches it.
+line 3 for x from 1 to 5000 step 1 // ERROR: This sweep would try 5,000 values, past the limit of 1,000 for one sweep. Use a larger step or a shorter range.
+line 3 for x from 3% to 6% step 1 // ERROR: A sweep's start, end and step must be the same kind of value (all plain numbers, all percentages, or all quantities of one kind), so that each step reads one way.
+```
+
+## working-days
+
+https://liamriddell.github.io/solve-engine/syntax/working-days/
+
+```
+25/12/2023 + 5 workdays // Monday, January 1, 2024
+working days between 01/01/2024 and 31/01/2024 // 23
+workdays between 01/01/2024 and 31/01/2024 // 23
+workdays in 3 weeks // 15
+```
+
+```
+3 business days from today // Monday, March 16, 2026, 12:00:00 PM
+```
+
+```
+10 business days after 2026-09-30 // Wednesday, October 14, 2026
+10 working days before 2026-09-30 // Wednesday, September 16, 2026
+1 working day from 2026-09-30 // Thursday, October 1, 2026
+1 business day before 2026-09-30 // Tuesday, September 29, 2026
+business days between 2026-09-01 and 2026-09-30 // 22
+how many working days between 2026-09-01 and 2026-09-30 // 22
+```
+
+```
+10 working days after 2026-09-30 // Wednesday, October 14, 2026
+10 business days before 2026-09-30 // Wednesday, September 16, 2026
+1 business day after 2026-09-30 // Thursday, October 1, 2026
+1 business day from 2026-09-30 // Thursday, October 1, 2026
+1 working day before 2026-09-30 // Tuesday, September 29, 2026
+workday between 2026-09-01 and 2026-09-30 // 22
+how many business days between 2026-09-01 and 2026-09-30 // 22
+how many workdays between 2026-09-01 and 2026-09-30 // 22
+```
+
+```
+2026-09-26 is a weekend // true
+2026-09-26 is on a weekend // true
+2026-09-26 is a business day // false
+2026-09-28 is a workday // true
+2026-09-28 is a weekday // true
+```

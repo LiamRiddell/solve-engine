@@ -178,7 +178,7 @@ empty line, and a line ending in `\r\n` has the `\r` left out of its `text`.
 editor's line number.
 
 A whole document parsed with `parseDocument` also reports its
-[checks](/syntax/conditionals/#checks), the lines that assert something must hold,
+[checks](/syntax/checks/), the lines that assert something must hold,
 as `result.checks`, a `{ passed, failed }` count present only when the document
 has any. A host can read it to flag a note whose checks have started failing
 without reading any error text.

@@ -63,7 +63,7 @@ can use it. `left / 4` is roughly a week's share of it.
 **`check left >= £500`** is a check: a comparison that answers with a tick when
 it holds and with an error, naming both sides, when it does not. It is the line
 that tells you, at a glance, whether the month worked. See
-[conditionals](/syntax/conditionals/).
+[checks](/syntax/checks/).
 
 ## Changing the shape of the month
 

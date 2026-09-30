@@ -1,0 +1,14 @@
+{
+	"otherApps": {
+		"supported": 8,
+		"gaps": 2,
+		"declined": 1,
+		"total": 11
+	},
+	"soulver": {
+		"supported": 104,
+		"gaps": 0,
+		"formattingOnly": 17,
+		"total": 121
+	}
+}

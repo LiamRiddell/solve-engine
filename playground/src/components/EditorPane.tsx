@@ -77,9 +77,15 @@ function popoverRow(label: string, value: string | undefined, accent = false): H
  * via `getBoundingClientRect()` on show, so it's never clipped by the
  * editor scroller's `overflow: auto`.
  */
+let nextPopoverId = 0
+
 function buildErrorPopover(detail: ErrorDetail): HTMLDivElement {
   const meta = categoryMeta(detail.category)
   const popover = document.createElement("div")
+  // Named so the chip can point at it with aria-describedby, and a tooltip
+  // role so a screen reader announces it as the chip's description.
+  popover.id = `os-error-popover-${++nextPopoverId}`
+  popover.setAttribute("role", "tooltip")
   popover.className =
     "os-error-popover fixed z-50 w-80 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg " +
     "p-3 flex flex-col gap-2 pointer-events-auto opacity-0 -translate-y-1 transition-all duration-100"
@@ -170,11 +176,29 @@ class ResultWidget extends WidgetType {
     if (this.lineNumber === undefined) return
     const line = this.lineNumber
     el.classList.add("os-result-expandable")
+    el.setAttribute("aria-label", `${el.getAttribute("aria-label") ?? el.textContent ?? ""}, line ${line} details`)
     el.addEventListener("mousedown", (e) => {
       e.preventDefault()
       e.stopPropagation()
       usePipelineStore.getState().toggleLineExpanded(line)
     })
+    // A button answers Enter and Space, so the panel is reachable without a
+    // pointer. Handled on keydown and stopped there, so the editor does not
+    // also read the key as typing.
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return
+      e.preventDefault()
+      e.stopPropagation()
+      usePipelineStore.getState().toggleLineExpanded(line)
+    })
+  }
+
+  /** A result chip: a button, so it takes focus and a key press like any control. */
+  private chip(className: string): HTMLButtonElement {
+    const button = document.createElement("button")
+    button.type = "button"
+    button.className = className
+    return button
   }
   eq(other: ResultWidget) {
     return (
@@ -209,8 +233,9 @@ class ResultWidget extends WidgetType {
     })
     popover.onmouseenter = () => this.cancelHide()
     popover.onmouseleave = () => this.scheduleHide()
+    anchor.setAttribute("aria-describedby", popover.id)
   }
-  private hidePopover() {
+  private hidePopover(anchor?: HTMLElement) {
     if (!this.popover) return
     this.popover.style.opacity = "0"
     this.popover.style.visibility = "hidden"
@@ -218,31 +243,55 @@ class ResultWidget extends WidgetType {
 
   toDOM() {
     if (this.errorDetail) {
-      const span = document.createElement("span")
-      span.className = "os-result-inline os-result-error"
-      span.textContent = `⚠ ${this.errorDetail.code ?? "Error"}`
-      span.addEventListener("mouseenter", () => this.showPopover(span))
-      span.addEventListener("mouseleave", () => this.scheduleHide())
-      this.attachToggle(span)
-      return span
+      // The detail opens on focus as well as on hover, so a keyboard or
+      // screen-reader user reaches the message, the expected and found
+      // tokens and the suggestion; Escape closes it.
+      const chip = this.chip("os-result-inline os-result-error")
+      const warning = document.createElement("span")
+      warning.setAttribute("aria-hidden", "true")
+      warning.textContent = "⚠ "
+      chip.append(warning, document.createTextNode(this.errorDetail.code ?? "Error"))
+      chip.setAttribute("aria-label", `Error: ${this.errorDetail.message}`)
+      this.popover ??= buildErrorPopover(this.errorDetail)
+      chip.setAttribute("aria-describedby", this.popover.id)
+      chip.addEventListener("mouseenter", () => this.showPopover(chip))
+      chip.addEventListener("mouseleave", () => this.scheduleHide())
+      chip.addEventListener("focus", () => this.showPopover(chip))
+      chip.addEventListener("blur", () => this.hidePopover(chip))
+      chip.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return
+        e.preventDefault()
+        e.stopPropagation()
+        this.hidePopover(chip)
+      })
+      this.attachToggle(chip)
+      return chip
     }
 
-    const span = document.createElement("span")
-    span.title = this.pending ? "Awaiting async resolution…" : this.type
-
     if (this.pending) {
+      // The spinner and the dots are decoration; the words are what a screen
+      // reader says and what a reader sees on hover.
+      const span = document.createElement("span")
       span.className = "os-result-inline os-result-pending"
+      span.title = "Waiting for live data"
+      span.setAttribute("role", "status")
       const spinner = document.createElement("span")
       spinner.className = "os-result-inline-spinner"
+      spinner.setAttribute("aria-hidden", "true")
       spinner.textContent = "⟳"
       const label = document.createElement("span")
       label.className = "os-result-inline-pending-label"
+      label.setAttribute("aria-hidden", "true")
       label.textContent = "..."
-      span.appendChild(spinner)
-      span.appendChild(label)
+      const words = document.createElement("span")
+      words.className = "os-visually-hidden"
+      words.textContent = "waiting for live data"
+      span.append(spinner, label, words)
       return span
     }
 
+    const span = this.lineNumber === undefined ? document.createElement("span") : this.chip("")
+    span.title = this.type
     span.className = "os-result-inline"
     // A colour result gets a small swatch before the value, drawn from the
     // engine-supplied CSS string, so a hex/rgb/hsl answer is visible at a glance.
