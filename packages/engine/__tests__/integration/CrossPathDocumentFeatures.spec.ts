@@ -1529,7 +1529,6 @@ describe("names of several words across entry points (#743)", () => {
     expect(read.message).toBe('Expected an operator or the end of the line, but found "rate"');
   });
 });
-});
 
 // The worker is a further entry point (#770): `evaluateDocument` through the
 // worker client must agree with the main thread's `evaluateDocument` value for
