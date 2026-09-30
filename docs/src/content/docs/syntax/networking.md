@@ -67,7 +67,32 @@ plain number, even the number `as int` gives for it; compare `as int` with
 ```
 
 IPv4 and IPv6 follow the same rule, so `2001:db8::/32 == 2001:db8::/48` is
-false as well.
+false as well. A [`check`](/syntax/checks/) line compares two addresses the same
+way, so `check 192.168.1.0/24 != 192.168.1.0/25` passes.
+
+### A block kept in a variable
+
+A block a note uses more than once is easier to name once and ask about by
+name. `in` followed by a variable holding a block is the same membership
+question as `in` followed by the block itself:
+
+```solve-doc
+lab = 192.168.1.0/24
+192.168.1.7 in lab // true
+10.0.0.1 in lab // false
+```
+
+The name is read when the line runs, and only an address before `in` and a
+block or address in the name make it a membership question. Any other value
+after `in` keeps its meaning as the unit or zone to convert into, so a variable
+that happens to share a unit's name (`m`, `h`) still converts a quantity into
+that unit. A name holding a single address rather than a block is refused, as
+`192.168.1.5 in 192.168.1.5` would be, since one address contains nothing:
+
+```solve-doc
+host = 192.168.1.5
+192.168.1.5 in host // ERROR: "in" expects a subnet on the right, e.g. 10.0.0.0/8
+```
 
 ## IPv6 addresses
 

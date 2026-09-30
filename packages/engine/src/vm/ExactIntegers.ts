@@ -31,7 +31,7 @@
  *   bits, so an exact power here never needs more than a dozen squarings.
  */
 
-import { Value, ValueType, numberValue, numberValueRational, type IpCidrData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueRational, errorValue, hexValue, bigIntValue, type IpCidrData, type DisplayBase } from "@solve-js/vm/Value";
 import { rational, rationalNeg } from "@solve-js/symbolic";
 
 /**
@@ -191,6 +191,84 @@ export function baseConversionOperand(v: Value): number | bigint {
     const r = v.rational;
     if (r !== undefined && r.d === 1n && !Number.isSafeInteger(v.value as number)) return r.n;
     return v.toNumber();
+}
+
+/** How a base is named after `in`, for a message: "in hex", "in binary", "in octal". */
+const BASE_WORDS: Readonly<Record<DisplayBase, string>> = { hex: "in hex", bin: "in binary", oct: "in octal" };
+
+/**
+ * The refusal for a number with no digits to write in a base, or null when it
+ * has them.
+ *
+ * An infinity or a NaN has no digits in any base, and `(1/0) in hex` and
+ * `2^4000 in binary as hex` displayed "Infinity" as though it were a numeral.
+ * An ordinary number past about 1.8e308 (the largest a double holds) is
+ * already infinite before any conversion, since no exact integer is made for
+ * it (see this module's doc comment), so the message points at the `n` form,
+ * which keeps every digit up to its own stated power limit.
+ *
+ * @param n - What {@link baseConversionOperand} read.
+ * @param base - The base asked for.
+ * @returns The `BASE_NOT_FINITE` error Value, or null for a finite number or a bigint.
+ */
+export function nonFiniteInBase(n: number | bigint, base: DisplayBase): Value | null {
+    if (typeof n === "bigint" || Number.isFinite(n)) return null;
+    const where = BASE_WORDS[base];
+    return errorValue(
+        "BASE_NOT_FINITE",
+        Number.isNaN(n)
+            ? `A result with no value has no digits to write ${where}.`
+            : `An infinite value has no digits to write ${where}. An ordinary number past about 1.8e308 is infinite; a whole number written with n, as in 2n^4000, keeps every digit.`,
+    );
+}
+
+/**
+ * A value written in base 16, 2 or 8 from its own digits (see
+ * {@link baseConversionOperand}), or the refusal for one with none (see
+ * {@link nonFiniteInBase}). What `in hex`, `as binary`, `hex()` and `bin()`
+ * give for everything but a colour.
+ *
+ * @param v - The value, already checked for a fault.
+ * @param base - The base to write it in.
+ */
+export function valueInBase(v: Value, base: DisplayBase): Value {
+    const n = baseConversionOperand(v);
+    return nonFiniteInBase(n, base) ?? hexValue(n, base);
+}
+
+/** `Number.MAX_SAFE_INTEGER` as a bigint, the line past which a double stops holding every whole number. */
+const MAX_SAFE_BIG = BigInt(Number.MAX_SAFE_INTEGER);
+
+/**
+ * The whole number a value written in a base holds past the safe range, or
+ * null for any other value.
+ *
+ * `in hex` keeps a bigint inside the value it writes once the number passes
+ * 2^53 (see {@link baseConversionOperand}), and arithmetic straight on it read
+ * it through `toNumber()`, the nearest double: `(2^100 + 1) in hex + 1` lost
+ * its last digits while `(2^100 + 1) in hex as number + 1` kept them. Within
+ * the safe range the double is already exact, so null leaves that value on
+ * its ordinary path.
+ *
+ * @param v - Any value.
+ */
+export function bigBaseInteger(v: Value): bigint | null {
+    if (v.type !== ValueType.Hex || typeof v.value !== "bigint") return null;
+    const n = v.value;
+    return n > MAX_SAFE_BIG || n < -MAX_SAFE_BIG ? n : null;
+}
+
+/**
+ * A whole number read out of a value written in a base, as an answer: an
+ * ordinary number carrying its exact integer (see {@link exactIntegerValue}),
+ * or, past about 1.8e308 where a double has no finite value, the `n` whole
+ * number, so `(2n^2000) in hex + 1` and `-((2n^2000) in hex)` keep every digit
+ * rather than answering an infinity.
+ *
+ * @param n - The whole number.
+ */
+export function wholeFromBase(n: bigint): Value {
+    return Number.isFinite(Number(n)) ? exactIntegerValue(n) : bigIntValue(n);
 }
 
 /**

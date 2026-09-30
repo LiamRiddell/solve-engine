@@ -202,6 +202,21 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"X + 9007199254740993",
 		"X / 0",
 	],
+	// Arithmetic straight on a value written in a base, a base conversion of
+	// a value with no digits, and checks between colours and addresses.
+	basesAndIdentities: [
+		"X in hex + 1",
+		"(X in hex) * 2",
+		"(X in hex) mod 3",
+		"(X in binary) ^ 2",
+		"-(X in hex)",
+		"(X in hex) > 2^100",
+		"X in octal",
+		"hex(X)",
+		"check (X in hex) == (X in hex)",
+		"check #ff0000 == rgb(X, 0, 0)",
+		"check 192.168.1.1 < X",
+	],
 };
 
 describe("every form stays honest over the numeric edges", () => {
@@ -280,6 +295,11 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "t = X\nt London in Tokyo" },
 	{ form: "salary = £X\nsalary after tax" },
 	{ form: "x = X\nx:3\nx + 1" },
+	// Membership through a variable holding a block, and a variable holding
+	// anything else after `in`.
+	{ form: "lab = 192.168.1.0/24\nX in lab" },
+	{ form: "lab = X\n192.168.1.7 in lab" },
+	{ form: "big = (2^100 + X) in hex\nbig + 1" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {
@@ -318,6 +338,8 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"X(16)",
 		"fe80::1%X",
 		"fe80::1 in X",
+		"192.168.1.7 in X",
+		"check X == #ff0000",
 		"hosts in X",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {

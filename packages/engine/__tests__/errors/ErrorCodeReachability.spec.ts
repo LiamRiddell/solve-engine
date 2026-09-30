@@ -54,6 +54,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	AS_TIME_NEEDS_DATE: "5 as time",
 	AS_UNIT_EXPECTED_QUANTITY: "5 as n",
 	AS_UNIT_INCOMPATIBLE: "5 kg as n",
+	BASE_NOT_FINITE: "(1/0) in hex",
 	BIGINT_DIVISION_BY_ZERO: "10n / 0",
 	BIGINT_INEXACT_OPERAND: "e / 8n",
 	BIGINT_POW_LIMIT_EXCEEDED: "2n ^ 100000",

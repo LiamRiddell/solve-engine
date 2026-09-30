@@ -1,6 +1,7 @@
 import { Value, ValueType, boolValue, faultedOperand, type MatrixData } from "@solve-js/vm/Value";
 import { compareUom, incomparableUnitsError, compareBigIntOperands, compareRationalOperands, ipEqual, ipv6Order, colourEqual, colourRefused } from "@solve-js/vm/VMConversion";
 import { unitListCompare } from "@solve-js/vm/MatrixUnits";
+import { bigBaseInteger } from "@solve-js/vm/ExactIntegers";
 
 /**
  * The six comparison opcodes past their plain-number fast path.
@@ -33,6 +34,20 @@ const ORDER_CELLS: readonly ((a: number, b: number) => boolean)[] = [
 ];
 const EQUAL_CELLS = (a: number, b: number): boolean => a === b;
 const UNEQUAL_CELLS = (a: number, b: number): boolean => a !== b;
+
+/**
+ * Whether either side carries an exact value to compare on: a fraction or an
+ * exact decimal sidecar, or a whole number past 2^53 held by a value written
+ * in a base (see bigBaseInteger()). `(2^100 + 1) in hex == (2^100) in hex`
+ * compared the two nearest doubles, which are the same.
+ *
+ * @param l - The left operand.
+ * @param r - The right operand.
+ */
+export function hasExactSide(l: Value, r: Value): boolean {
+	return l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined
+		|| bigBaseInteger(l) !== null || bigBaseInteger(r) !== null;
+}
 
 /**
  * Whether an operator holds between two doubles. A NaN on either side holds
@@ -81,7 +96,7 @@ export function valuesEqual(l: Value, r: Value, negate: boolean): Value {
 	if (fault) return fault;
 	const ip = ipEqual(l, r);
 	if (ip !== null) return boolValue(ip !== negate);
-	if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
+	if (hasExactSide(l, r)) {
 		const cmp = compareRationalOperands(l, r);
 		if (cmp !== null) return boolValue((cmp === 0) !== negate);
 	}
@@ -129,7 +144,7 @@ export function valuesOrdered(l: Value, r: Value, op: Order): Value {
 	const ipv6 = ipv6Order(l, r);
 	if (ipv6 !== null) return ipv6 instanceof Value ? ipv6 : boolValue(orderHoldsFor(op, ipv6));
 	if (l.type === ValueType.Colour || r.type === ValueType.Colour) return colourRefused("put in order");
-	if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
+	if (hasExactSide(l, r)) {
 		const cmp = compareRationalOperands(l, r);
 		if (cmp !== null) return boolValue(orderHoldsFor(op, cmp));
 	}
