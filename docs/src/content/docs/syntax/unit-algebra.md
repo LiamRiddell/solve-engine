@@ -55,6 +55,28 @@ metres. To square a whole quantity, put it in brackets.
 (3 m)^2 // 9.00 m²
 ```
 
+After a slash, the power belongs to the unit after it, the same way. A density
+is a mass per volume, so water at 1,000 kilograms per cubic metre is written
+`1000 kg/m^3`, and it converts to grams per cubic centimetre or per millilitre,
+which are the same size. A time squared after a slash is the time of an
+acceleration (see [named derived units](/syntax/derived-units/)).
+
+```solve
+1000 kg/m^3 // 1,000.00 kg/m³
+1 g/cm^3 in kg/m^3 // 1,000.00 kg/m³
+1 g/cm³ in g/mL // 1.00 g/mL
+9.81 m/s^2 in ft/s^2 // 32.19 ft/s²
+```
+
+A check compares two such units whenever one converts into the other, so a
+density in grams per millilitre can be checked against one in grams per cubic
+centimetre.
+
+```solve-doc
+check 1 g/mL == 1 g/cm^3 // ✓
+check 1 kg/m^3 < 1 g/cm^3 // ✓
+```
+
 ## Dividing back down
 
 Dividing an area by a length gives a length: the answer to "how long is a
@@ -123,6 +145,41 @@ $30/hour * 8 hours/day // $240.00/day
 (100 km/h) / (10 l/h) // 10.00 km/l
 ```
 
+## A price per kilowatt-hour, in reading order
+
+An electricity cost is usually said in the order it is worked out: the price,
+then the power, then how long. A kilowatt-hour is one kilowatt for one hour, so
+a price per kilowatt-hour times a power is a price per hour, and that price per
+hour times the time is the bill. The line reads left to right in that order, and
+the bill is the one the energy-first order gives.
+
+```solve
+$0.30/kWh * 2 kW // $0.60/h
+$0.30/kWh * 2 kW * 3 h // $1.80
+$0.30/kWh * 3 h * 2 kW // $1.80
+$0.30/kWh * 2 kW * 180 min // $1.80
+$300/MWh * 2000 W * 3 h // $1.80
+2 kW * 3 h * $0.30/kWh // $1.80
+```
+
+The time can come before the power: a price per kilowatt-hour for three hours is
+a price per kilowatt, which the power then cancels. The answer stays exact to the
+cent, as a price times an energy is, so half a cent a kilowatt-hour rounds the
+way a till rounds it.
+
+```solve
+$0.30/kWh * 3 h // $0.90/kW
+$0.305/kWh * 2 kW * 3 h // $1.83
+```
+
+This works for any rate whose unit is a product of the next quantity and a time:
+a price per kilowatt-hour meets a power or a time. A price per kilowatt-hour
+times a mass makes nothing, and is refused by name.
+
+```solve-doc
+$0.30/kWh * 2 kg // ERROR: Cannot multiply a rate per kWh by a quantity in kg: they measure different things, and together they make no unit.
+```
+
 ## One per something
 
 A plain number divided by a quantity is its reciprocal: how many of something
@@ -184,8 +241,9 @@ cost = used * £0.28/kWh // £0.28
 Only lengths square into a new unit, and only up to a volume. A mass times a
 mass, a time times a time, or money times money has no unit the engine can show;
 neither has an area times an area, which would be a metre to the fourth power.
-A rate divided by what it is per, such as a speed divided by a time, is a rate
-of a rate. Each is refused by name. A like product used to keep the left
+A price per hour divided by a time is a rate of a rate. Each is refused by name.
+A speed divided by a time is the exception, since that is an acceleration (see
+[named derived units](/syntax/derived-units/)). A like product used to keep the left
 operand's unit, so `2 kg * 3 kg` was reported as 6 kg, a confident answer in the
 wrong unit.
 
@@ -193,7 +251,7 @@ wrong unit.
 2 kg * 3 kg // ERROR: A quantity in kg times one in kg has no unit: mass times mass is not a unit. Lengths multiply into an area or a volume, and no other quantity squares into one.
 $5 * $3 // ERROR: A quantity in USD times one in USD has no unit: money times money is not a unit. Lengths multiply into an area or a volume, and no other quantity squares into one.
 5 m2 * 3 m2 // ERROR: A quantity in m2 times one in m2 has no unit: lengths multiply into an area or a volume, and a product of more than three lengths is not a unit.
-(100 km/h) / (2 h) // ERROR: A quantity in km/h divided by one in h has no unit: nothing cancels, and km/h per h is a rate of a rate, which is not a unit.
+$100/h / 2 h // ERROR: A quantity in USD/h divided by one in h has no unit: nothing cancels, and USD/h per h is a rate of a rate, which is not a unit.
 sqrt(5 m) // ERROR: sqrt: a quantity in m has no square root with a unit; only an area has a length as its root.
 ```
 
@@ -214,10 +272,12 @@ units, so a product such as a kilogram-metre, or a metre to the fourth power,
 is refused rather than shown.
 
 - A reciprocal is a per-unit rate (`/s`), not a named unit, so ten per second is
-  `10.00 /s` rather than ten hertz, and the two do not convert into each other.
-- A rate cancels against the quantity it meets. `$0.30/kWh * 2 kW * 3 h` is
-  refused, because the price meets a power before the time has made it an
-  energy; write the energy first, as in `2 kW * 3 h * $0.30/kWh`.
+  `10.00 /s` rather than ten hertz. The two convert into each other with `in`
+  (`10 Hz in /s`), but a quotient is not renamed in hertz on its own.
+- A rate meets a quantity of another measure only when the two make up what the
+  rate is per with a time or a named unit: a price per kilowatt-hour meets a
+  power or a time. A rate per something that no such pair makes (a price per
+  hour times a mass) is refused.
 - A single capital letter after a slash, as in `$0.50/W`, is read as a variable
   called `W`, since `N` and `W` are common names for a count. Write the unit as a
   word, `$0.50 per watt`.

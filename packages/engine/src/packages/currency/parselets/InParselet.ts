@@ -8,6 +8,7 @@ import { readsAsRadians, emitRadiansTag } from "@solve-js/parser/InverseTrigAngl
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
 import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN } from "@solve-js/uom/HistoricalCurrency";
 import { tryReadUtcOffset } from "@solve-js/calendar/UtcOffset";
+import { takeUnitPower } from "@solve-js/parser/UnitPower";
 
 /**
  * InParselet, handles the standalone `IN` keyword as a postfix conversion.
@@ -83,7 +84,10 @@ export class InParselet implements InfixParselet {
 			targetToken.type === "IN"
 		)) {
 			parser.consume();
-			const targetUnit = resolveCurrencyAlias(targetToken.value) ?? targetToken.value;
+			let targetUnit = resolveCurrencyAlias(targetToken.value) ?? targetToken.value;
+			// A power on the target is the target's, as on a literal's own target:
+			// `(100 km/h / 10 s) in ft/s^2` (#834).
+			if (targetToken.type === "UNIT" && parser.peek()?.type === "CARET") targetUnit = takeUnitPower(parser, targetUnit);
 
 			// `<money> in <currency> on <date>` where the left side is an
 			// expression (`$100`, a variable, a subexpression) rather than a bare

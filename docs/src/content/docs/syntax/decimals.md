@@ -197,7 +197,11 @@ in is 3,300,000 again.
 3 million + 10% as compact // 3.3M
 1234 as compact // 1.23k
 $3300000 as compact // $3.3M
+$15/hour as compact // $15/hour
 ```
+
+Money keeps its currency symbol, and a price per unit keeps the unit after a
+slash, as the full answer writes it.
 
 Both answer text, the way `as scientific` does, so they end a line rather than
 feed further arithmetic.

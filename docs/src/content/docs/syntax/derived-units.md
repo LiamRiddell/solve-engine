@@ -39,14 +39,14 @@ feet and pound-force (`lbf`) compose just as kilograms, metres and newtons do.
 5 lb * 9.8 m/s^2 // 22.23 N
 ```
 
-An acceleration is written in metres per second squared, `m/s^2` or `m/s²`, and
-that is the one acceleration unit the engine holds. It converts to itself, and
-anything else asked of it is refused in words: an acceleration is not a force
-until a mass multiplies it.
+Dividing a power by a voltage gives the **current**, the rate at which electric
+charge flows, in amperes (`A`): a 100 watt load on 20 volts draws 5 amps. It
+converts to milliamps and kiloamps like any other unit.
 
-```solve-doc
-9.81 m/s² in m/s^2 // 9.81 m/s²
-9.81 m/s^2 in N // ERROR: an acceleration cannot be converted to a force
+```solve
+100 W / 20 V // 5.00 A
+100 W / 20 V in mA // 5,000.00 mA
+2 A * 12 V // 24.00 W
 ```
 
 A power used for a time of a minute or more is named in watt-hours, with the
@@ -115,6 +115,67 @@ that is not a prefix carries no such meaning, so `as n` is still the newton and
 10 N as n // 10.00 N
 ```
 
+## Speed, acceleration and frequency
+
+A **speed** is a distance per time, such as kilometres per hour. An
+**acceleration** is how fast a speed changes, a speed per time: a falling stone
+gains 9.81 metres per second every second, written `9.81 m/s^2`, metres per
+second squared. A **frequency** is how often something happens per second, in
+hertz (`Hz`): 10 Hz is ten times a second.
+
+These combine the way a physics book says they do. An acceleration for a time is
+the speed gained; a change of speed over a time is an acceleration; a speed times
+a force is a power; and a frequency for a time is a plain count of how many times
+it happened.
+
+```solve
+9.81 m/s^2 * 3 s // 29.43 m/s
+3 s * 9.81 m/s^2 // 29.43 m/s
+100 km/h / 10 s // 2.78 m/s²
+29.43 m/s / 9.81 m/s^2 // 3.00 s
+10 Hz * 2 s // 20
+10 m/s * 5 N // 50.00 W
+```
+
+The answers convert like any other speed or acceleration. A speed is built in
+metres per second, or in the acceleration's own length and time when it was
+written in feet or hours, and an acceleration in metres per second squared.
+
+```solve
+9.81 m/s^2 * 3 s in mph // 65.83 mph
+3 ft/s^2 * 2 s // 6.00 ft/s
+100 km/h / 10 s in ft/s^2 // 9.11 ft/s²
+```
+
+An acceleration can be written in any length over a time squared, `ft/s^2` or
+`km/h^2` as well as `m/s^2`, and they convert into one another. Anything else
+asked of one is refused in words: an acceleration is not a force until a mass
+multiplies it.
+
+```solve-doc
+9.81 m/s² in m/s^2 // 9.81 m/s²
+9.81 m/s^2 in ft/s^2 // 32.19 ft/s²
+2 kg * 3 ft/s^2 // 1.83 N
+9.81 m/s^2 in N // ERROR: an acceleration cannot be converted to a force
+```
+
+A frequency is a count per second, so it converts to any count per unit of time
+written with a bare slash, and back again.
+
+```solve
+10 Hz in /s // 10.00 /s
+10 Hz in /min // 600.00 /min
+600 /min in Hz // 10.00 Hz
+```
+
+A speed is only built this way when one side is already a speed, an
+acceleration or a frequency. A distance over a time keeps the units it was
+written in, `90 km / 3 days` is a rate in kilometres per day, and a distance
+over a speed is a time in the speed's own hours (see
+[rates and speeds](/syntax/rates-and-speeds/)).
+
+## The boundary
+
 This works only where the combination makes a named quantity, and multiplying
 two unrelated quantities is still reported as a mismatch rather than invented
 into a unit. Lengths are the exception that needs no name: a length times a
@@ -123,7 +184,9 @@ length is an area and a length times an area is a volume, so `5 m * 3 m` is
 [multiplying and dividing units](/syntax/unit-algebra/).
 
 The boundary: the named units are the newton, joule, watt, pascal, volt, ohm,
-ampere and amp-hour. A combination with no name among them, such as a
-kilogram-metre, is not shown as a compound unit, and neither is a time worked out
-from other quantities, so an energy over a power stays `kWh/kW`. The mole is not
-part of this arithmetic at all (see [moles](/syntax/moles/)).
+ampere and amp-hour, with the speeds, accelerations and counts above. A
+combination with no name among them, such as a kilogram-metre or a momentum
+(`100 kg * 10 m/s`), is not shown as a compound unit, and neither is a time
+worked out from quantities other than an acceleration, so an energy over a power
+stays `kWh/kW`. Torque is not covered, and the mole is not part of this
+arithmetic at all (see [moles](/syntax/moles/)).
