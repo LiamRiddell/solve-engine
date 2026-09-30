@@ -58,10 +58,10 @@ describe("the six comparison opcodes answer as they did", () => {
 		["10n == 10", "true"],
 		["true == true", "true"],
 		["5% < 10%", "true"],
-		["(0/0) == (0/0)", "false"],
-		["(0/0) != (0/0)", "true"],
-		["(0/0) < 1", "false"],
-		["(0/0) >= 1", "false"],
+		["(1/0 - 1/0) == (1/0 - 1/0)", "false"],
+		["(1/0 - 1/0) != (1/0 - 1/0)", "true"],
+		["(1/0 - 1/0) < 1", "false"],
+		["(1/0 - 1/0) >= 1", "false"],
 	])("%s is %s", (line, answer) => {
 		expect(shown(line)).toBe(answer);
 	});
