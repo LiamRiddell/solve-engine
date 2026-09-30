@@ -27,7 +27,14 @@ formatValue(value, {
   ...DEFAULT_FORMATTING_SETTINGS,
   numberResult: { decimalSeparatorLocale: "de-DE" },
 }); // "= €1.250,00"
+
+engine.formatValue(value); // "= €1.250,00", from the engine's own locale
 ```
+
+`engine.formatValue` takes the output tag from the engine's `locale` option, so
+the two halves agree unless the host says otherwise; the default `en`, and a
+tag `Intl` has no number data for, write `en-US`. A worker runtime writes its
+results the same way.
 
 A host usually passes the reader's own tag to both, `navigator.language` in a
 browser, so that the engine reads the way the reader types and answers the way
