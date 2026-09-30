@@ -11,6 +11,8 @@ export const GoalSeekErrorCodes = {
 	GOAL_SEEK_REQUIRES_VARIABLE_NAME: "GOAL_SEEK_REQUIRES_VARIABLE_NAME",
 	/** A goal seek whose target is not a finite number, or whose target line does not give a number for a value tried. */
 	GOAL_SEEK_TARGET_NOT_NUMERIC: "GOAL_SEEK_TARGET_NOT_NUMERIC",
+	/** A goal seek's target in a unit that cannot be compared with the target line's answer: another measure, or money in another currency. The reader writes the target in the line's unit (#835). */
+	GOAL_SEEK_TARGET_UNIT_MISMATCH: "GOAL_SEEK_TARGET_UNIT_MISMATCH",
 	/** A goal seek varying a name its target line does not read, which could never move the answer. */
 	GOAL_SEEK_VARIABLE_NOT_USED: "GOAL_SEEK_VARIABLE_NOT_USED",
 	/** A goal seek whose target line gives a value that is not finite for one of the values tried. */

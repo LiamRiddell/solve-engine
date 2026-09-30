@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 506 codes, grouped below by the part
+ship. The engine and its built-in packages ship 509 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -328,6 +328,8 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `INVALID_DATETIME_OP` | as a value | A date moved by a plain number, or by a quantity that is not a length of time, or `to` between a date and something that is not one. The message says what a date moves by. |
 | `TIMECODE_FPS_MISMATCH` | as a value | Two video timecodes at different frame rates added or subtracted. |
 | `UNKNOWN_AS_CONVERTER` | as a value | `as <name>` naming no converter any package registered. |
+| `FLOAT_TAKES_NUMBER` | as a value | `float("hello")`, `float(5 km)`: `float` given something with no plain number, text that is not a number or a quantity with a unit. The reader passes a number (#828). |
+| `MULTIPLIER_TAKES_NUMBER` | as a value | `"hello" as multiplier`, `5 km as multiplier`: a multiplier asked of something that is not a plain number or a percentage. The reader converts a number (#829). |
 | `AS_CONVERTER_AMBIGUOUS_CASE` | as a value | `as mw`: the target, read regardless of case, could be two units whose prefixes differ only in case (`mW` and `MW`), so it is refused rather than guessed (#824). |
 | `AS_CONVERTER_PREFIX_CASE` | as a value | `as MV` when only `mV` is a unit: reading it regardless of case would turn a mega into a milli, so it is refused by name (#824). |
 | `PLOT_INVALID_RANGE` | as a value | A plot's range whose ends are not finite numbers. |
@@ -706,6 +708,7 @@ In the package as `ERROR_CODE_CATALOGUES.GoalSeekErrorCodes`.
 | `GOAL_SEEK_SYNTAX` | thrown | A goal seek not written as `solve line N for <name> = <target>`. The message shows the form. |
 | `GOAL_SEEK_REQUIRES_VARIABLE_NAME` | thrown | A goal seek with no name to vary after `for`. |
 | `GOAL_SEEK_TARGET_NOT_NUMERIC` | as a value | A goal seek whose target is not a finite number, or whose target line does not give a number for a value tried. |
+| `GOAL_SEEK_TARGET_UNIT_MISMATCH` | as a value | A goal seek's target in a unit that cannot be compared with the target line's answer: another measure, or money in another currency. The reader writes the target in the line's unit (#835). |
 | `GOAL_SEEK_VARIABLE_NOT_USED` | as a value | A goal seek varying a name its target line does not read, which could never move the answer. |
 | `GOAL_SEEK_NON_FINITE` | as a value | A goal seek whose target line gives a value that is not finite for one of the values tried. |
 | `GOAL_SEEK_NO_SOLUTION` | as a value | A goal seek over a range in which the target line stays on one side of the target. |
