@@ -497,6 +497,8 @@ export default defineConfig({
                 // Beside installing the package: the other way to run the
                 // engine, from a shell or a CI job, with no host to write.
                 { slug: "guide/command-line" },
+                // The command's sibling: the same engine for an AI tool.
+                { slug: "guide/mcp-server" },
                 { slug: "guide/subpath-exports" },
                 { slug: "guide/versioning-and-support" },
                 { slug: "guide/upgrading-to-2" },

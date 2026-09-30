@@ -118,6 +118,21 @@ The [`solve` command](/guide/command-line/) does read files, which is why it is
 a package of its own (`packages/cli`) rather than part of the engine: it depends
 on the engine, and the engine's package, source and promise are unchanged by it.
 
+## The MCP server
+
+The [MCP server](/guide/mcp-server/) (`packages/mcp`) lets an AI tool call the
+engine, which means evaluating text a model wrote. Its defaults are chosen for
+that, and a tool call can change none of them: the network is off unless the
+person starting the server passes `--network on`; every call gets a fresh
+engine, cleared when the call ends, so no call can read a variable, a unit or a
+cached value another call left; and its engines are built without
+`solve-global-variables`, whose `global :name` is the one form that reaches a
+store shared across engines. An input the engine refuses as a whole, such as a
+document past its line limit, costs that call a coded refusal and leaves the
+next call unaffected. The server depends on the official MCP SDK, which is why
+it is a package of its own: the engine's single runtime dependency, below, is
+unchanged.
+
 That is also why it runs unchanged in Node, in a browser and in a worker: there
 is no host facility it expects to find.
 

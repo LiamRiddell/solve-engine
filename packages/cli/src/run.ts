@@ -7,23 +7,23 @@
  * was written, so the whole command runs in-process with nothing on the network.
  */
 
-import type { CalendarBackend, CreateEngineOptions, DateCalendarOptions, ExpressionEngine, Value } from "solve-engine";
+import type { CalendarBackend, CreateEngineOptions, DateCalendarOptions, ExpressionEngine } from "solve-engine";
 import type { ParsingResult } from "solve-engine/engine";
 import { DEFAULT_WAIT_MS, EXIT, MAX_WAIT_MS, parseArguments, type CliOptions, type ExitCode } from "./arguments";
 import { classifyInput, decodeDocument, readDocumentFile, tooLarge, MAX_INPUT_BYTES } from "./input";
+import { checkSummary, expressionDisplay, isFailure, plural, renderRows } from "./report";
 import {
-	checkSummary,
-	documentAnswers,
-	documentChecks,
-	expressionDisplay,
-	hasPending,
-	isFailure,
-	plural,
-	renderRows,
-	statusOf,
-	type ReportedAnswer,
-} from "./report";
+	answerExpression,
+	checkReport,
+	documentReport,
+	evaluateDocumentSettled,
+	expressionReport,
+	isKnownZone,
+	messageOf,
+} from "./evaluate";
 import { escapeForTerminal, quoted } from "./terminal";
+
+export { isKnownZone } from "./evaluate";
 
 /** The engine functions a run calls, so a test can hand in its own. */
 export interface EngineKit {
@@ -50,9 +50,6 @@ export interface CliIO {
 	/** The zone the machine is in, for `--now` given without `--tz`. */
 	systemZone(): string;
 }
-
-/** The most times a run re-evaluates while waiting for live values, whatever the wait. */
-const MAX_SETTLE_ROUNDS = 8;
 
 /** The help text, `solve --help`. */
 export const HELP = `solve: evaluate a Solve expression or document from the command line.
@@ -150,18 +147,6 @@ function usage(io: CliIO, message: string): ExitCode {
 	return EXIT.USAGE;
 }
 
-/** A thrown value's message, whatever was thrown. */
-function messageOf(error: unknown): string {
-	if (error instanceof Error) return error.message;
-	return String(error);
-}
-
-/** A thrown value's code, when it carries one. */
-function codeOf(error: unknown): string | null {
-	const code = (error as { code?: unknown } | null)?.code;
-	return typeof code === "string" ? code : null;
-}
-
 /** The engine the options describe, or why it could not be built. */
 function buildEngine(options: CliOptions, io: CliIO, kit: EngineKit): { ok: true; engine: ExpressionEngine } | { ok: false; message: string } {
 	const engineOptions: CreateEngineOptions = {};
@@ -187,82 +172,16 @@ function buildEngine(options: CliOptions, io: CliIO, kit: EngineKit): { ok: true
 	return { ok: true, engine };
 }
 
-/** Whether this runtime can compute in a zone. */
-export function isKnownZone(zone: string): boolean {
-	try {
-		new Intl.DateTimeFormat("en", { timeZone: zone });
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-/**
- * Evaluates, and while anything is still waiting for live data, waits for it
- * to settle and evaluates again, within the one deadline the run was given.
- *
- * `settle` waits for the fetches already started; a value whose first fetch
- * reveals a second needs another round, which is why this loops. The rounds
- * are capped as well as the time, so a data source that starts a new fetch on
- * every run cannot keep the loop turning until the deadline.
- */
-async function evaluateSettled<T>(engine: ExpressionEngine, evaluate: () => T, pending: (result: T) => boolean, waitMs: number): Promise<T> {
-	const deadline = Date.now() + waitMs;
-	let result = evaluate();
-	for (let round = 0; round < MAX_SETTLE_ROUNDS && pending(result); round++) {
-		const left = deadline - Date.now();
-		if (left <= 0) break;
-		try {
-			await engine.settle({ timeoutMs: left });
-		} catch (error) {
-			if (codeOf(error) !== "SETTLE_TIMEOUT") throw error;
-			return evaluate();
-		}
-		result = evaluate();
-	}
-	return result;
-}
-
-/** One expression's outcome: a value, or the error that stopped it being read. */
-type ExpressionOutcome = { value: Value } | { error: unknown };
-
 /** Evaluates one expression and writes its answer. */
 async function runExpression(engine: ExpressionEngine, text: string, options: CliOptions, io: CliIO): Promise<ExitCode> {
-	const outcome = await evaluateSettled<ExpressionOutcome>(
-		engine,
-		() => {
-			try {
-				return { value: engine.evaluateExpression(text) };
-			} catch (error) {
-				return { error };
-			}
-		},
-		(o) => "value" in o && o.value.isPending(),
-		options.waitMs,
-	);
-
-	let answer: ReportedAnswer;
-	if ("value" in outcome) {
-		const status = statusOf(outcome.value);
-		answer = {
-			line: 1,
-			text,
-			status,
-			display: status === "pending" ? `no answer from live data within ${options.waitMs} ms` : engine.formatValue(outcome.value),
-			code: status === "answered" ? null : outcome.value.errorCode ?? null,
-			value: outcome.value.toJSON(),
-		};
-	} else {
-		answer = { line: 1, text, status: "not-read", display: messageOf(outcome.error), code: codeOf(outcome.error), value: null };
-	}
-
+	const answer = await answerExpression(engine, text, options.waitMs);
 	// An expression the engine could not read is a failure here, strict or
 	// not: the command was asked for this expression, not handed a note that
 	// may hold prose.
 	const failed = answer.status !== "answered";
 	const exit = failed ? EXIT.FAILED : EXIT.OK;
 	if (options.json) {
-		io.out(`${JSON.stringify({ expression: text, status: answer.status, display: answer.display, code: answer.code, value: answer.value, exitCode: exit }, null, 2)}\n`);
+		io.out(`${JSON.stringify({ ...expressionReport(answer), exitCode: exit }, null, 2)}\n`);
 	} else if (failed) {
 		const label = answer.status === "pending" ? "pending" : "error";
 		const message = escapeForTerminal(answer.display);
@@ -275,33 +194,29 @@ async function runExpression(engine: ExpressionEngine, text: string, options: Cl
 
 /** Evaluates a document and writes its answers, or, for `solve check`, its checks. */
 async function runDocument(engine: ExpressionEngine, text: string, name: string, options: CliOptions, io: CliIO, kit: EngineKit): Promise<ExitCode> {
-	const result = await evaluateSettled(engine, () => kit.evaluateDocument(engine, text), hasPending, options.waitMs);
-	const format = (value: Value) => engine.formatValue(value);
+	const result = await evaluateDocumentSettled(engine, kit.evaluateDocument, text, options.waitMs);
 
 	if (options.command === "check") {
-		const checks = documentChecks(result, format, options.waitMs);
-		const exit = checks.every((c) => c.status === "passed") ? EXIT.OK : EXIT.FAILED;
+		const report = checkReport(engine, result, options.waitMs);
+		const exit = report.checks.every((c) => c.status === "passed") ? EXIT.OK : EXIT.FAILED;
 		if (options.json) {
-			const count = (s: string) => checks.filter((c) => c.status === s).length;
-			const summary = { passed: count("passed"), failed: count("failed"), unevaluated: count("error") + count("not-read"), pending: count("pending") };
-			io.out(`${JSON.stringify({ checks, ...summary, exitCode: exit }, null, 2)}\n`);
-		} else if (checks.length === 0) {
+			io.out(`${JSON.stringify({ ...report, exitCode: exit }, null, 2)}\n`);
+		} else if (report.checks.length === 0) {
 			io.out(`No check lines in ${name}.\n`);
 		} else {
-			io.out(renderRows(checks));
-			io.out(`${checkSummary(checks)}\n`);
+			io.out(renderRows(report.checks));
+			io.out(`${checkSummary(report.checks)}\n`);
 		}
 		return exit;
 	}
 
-	const answers = documentAnswers(result, format, options.waitMs);
-	const failures = answers.filter((a) => isFailure(a, options.strict));
-	const exit = failures.length > 0 ? EXIT.FAILED : EXIT.OK;
+	const report = documentReport(engine, result, options.waitMs, options.strict);
+	const exit = report.failed > 0 ? EXIT.FAILED : EXIT.OK;
 	if (options.json) {
-		io.out(`${JSON.stringify({ lines: answers, failed: failures.length, exitCode: exit }, null, 2)}\n`);
+		io.out(`${JSON.stringify({ ...report, exitCode: exit }, null, 2)}\n`);
 	} else {
-		io.out(renderRows(answers, (a) => a.status !== "not-read" || options.strict));
-		const failedLines = new Set(failures.map((a) => a.line)).size;
+		io.out(renderRows(report.lines, (a) => a.status !== "not-read" || options.strict));
+		const failedLines = new Set(report.lines.filter((a) => isFailure(a, options.strict)).map((a) => a.line)).size;
 		if (failedLines > 0) io.err(`solve: ${plural(failedLines, "line")} in ${name} failed.\n`);
 	}
 	return exit;

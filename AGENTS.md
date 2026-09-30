@@ -27,6 +27,7 @@ skips the fuzz and long-document suites; the full run is still the gate.
 | `packages/engine` | The published package, `solve-engine` |
 | `packages/playground-bridge` | Shared glue between the engine and the playground |
 | `packages/cli` | The `solve` command (`solve-engine-cli`), not yet published: the engine from a shell and in CI. Its spec is `packages/engine/__tests__/bugs/Issue774_solveCli.spec.ts`, and `npm run smoke:cli` runs the built command |
+| `packages/mcp` | The MCP server (`solve-engine-mcp`, `solve-mcp`), not yet published: the engine as tools for an AI client, network off and a fresh engine per call. It bundles the shared code from `packages/cli/src/evaluate.ts`. Its spec is `packages/engine/__tests__/bugs/Issue774_mcpServer.spec.ts`, and `npm run smoke:mcp` runs the built server over stdio |
 | `playground` | Interactive playground, own lockfile, not a workspace member |
 | `docs` | Documentation site, own lockfile, not a workspace member |
 | `docs-internal` | Maintainer notes, not published |
