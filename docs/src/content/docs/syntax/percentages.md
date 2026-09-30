@@ -238,5 +238,6 @@ one, with an `x` after it. The conversion is read by `CONVERTERS_PACKAGE`, which
   was written in.
 - A percentage of zero (`40 is what % of 0`), or of any value that is not a
   finite number, is refused rather than shown as an infinite percentage.
-- A decimal comma in a percentage (`12,5%`) is not read yet, even under a
-  locale that writes one.
+- A decimal comma in a percentage (`12,5%`) is read only by an engine whose
+  locale writes one, German or French (see [locales](/guide/locales/#the-decimal-comma));
+  an English engine refuses it, as it refuses `12,5` alone.

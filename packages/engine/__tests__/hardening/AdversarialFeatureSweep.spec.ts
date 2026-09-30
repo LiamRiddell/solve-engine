@@ -19,6 +19,7 @@
  */
 
 import { describe, test } from "@jest/globals";
+import { newTrackedEngine } from "@tools/trackedEngine";
 import {
 	DOCUMENT_EDGES,
 	NUMERIC_EDGES,
@@ -103,16 +104,18 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	],
 	finance: ["npv of -1000, X, 400 at 10%", "irr of -1000, X, 400"],
 	// The investment grammar the investments page documents (#778). The amount
-	// invested is not swept: an infinite one answers NaN, pinned in
-	// Issue778_investments.spec.ts.
+	// invested is swept too, now that an infinite one is refused by name.
 	investments: [
 		"$X after 3 years at 7%",
+		"X invested $1,500 returned",
 		"$1,000 after X years at 7%",
 		"$1,000 for 3 years at X% compounding monthly",
 		"present value of $X after 3 years at 7%",
 		"$1,000 invested X returned",
 		"annual return on $1,000 invested $X returned after 5 years",
 	],
+	// A savings goal over a duration, read as in one is.
+	savingsGoals: ["how much per month to reach $X over 2 years", "how much per month to reach $10,000 over X years"],
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
 	solving: ["solve(x^2 = X, x)", "integral(x, x, 0, X)"],
 	// The forms #828, #829, #830 and #835 changed.
@@ -183,6 +186,13 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "X\ninputs of line 1" },
 	{ form: "x = 1\ny = x * 3\nsolve line 2 for x = X", agree: false },
 	{ form: ":price = £200\nprice * 3\nsolve line 2 for price = £X", agree: false },
+	// Both signs, a gap in the scan and a stated range (#739).
+	{ form: "x = 1\ny = 2^x\nsolve line 2 for x = X", agree: false },
+	{ form: "x = 1\ny = 1/x\nsolve line 2 for x = X between -10 and 10", agree: false },
+	{ form: "x = 1\ny = x * 3\nsolve line 2 for x = 6 between X and 10", agree: false },
+	// A formula stored before its unknown had a value, read below it (#732).
+	{ form: "y = x + 1\nx = X\ny + x" },
+	{ form: "y = x * 2\nx = X\ny" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {
@@ -247,5 +257,35 @@ describe("inputs sized to exhaust time are answered or refused in time", () => {
 
 	test("a long chain of previous-line reads", () => {
 		expectHonestDocument(RESOURCE_PROBES.manyLines(1_000), { budgetMs: 10_000 });
+	});
+});
+
+/**
+ * The forms that depend on how an engine is configured: a sentence ending read
+ * when the host opts in (#741), and the decimal comma and `;` separator of a
+ * comma-decimal locale (#740).
+ */
+describe("the configured forms stay honest over the numeric and text edges", () => {
+	const punctuated = newTrackedEngine({ config: { validation: { allowTrailingPunctuation: true } } });
+	test.each([...fill("X?", NUMERIC_EDGES), ...fill("X + 1.", NUMERIC_EDGES), ...fill("what is X km in miles?", NUMERIC_EDGES), ...TEXT_EDGES.map((t) => `${t}?`)])(
+		"a trailing mark, opted in: %j",
+		(line) => {
+			expectHonestLine(line, { engine: punctuated, allowNaN: line.includes("0/0") });
+		},
+	);
+
+	const german = newTrackedEngine({ locale: "de" });
+	const french = newTrackedEngine({ locale: "fr" });
+	const COMMA_FORMS = ["X + 1,5", "max(X; 2,5)", "max(X, 1,5)", "[X, 1,5; 2, 3]", "€X * 1,5", "X * 12,5%"];
+	test.each(COMMA_FORMS.flatMap((form) => fill(form, NUMERIC_EDGES)))("a decimal comma under de and fr: %j", (line) => {
+		expectHonestLine(line, { engine: german, allowNaN: line.includes("0/0") });
+		expectHonestLine(line, { engine: french, allowNaN: line.includes("0/0") });
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`${word} + 1,5`, `max(${word}; 1,5)`, `${word}?`]))("a prototype word beside the configured forms: %s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line, { engine: german });
+			expectHonestLine(line, { engine: punctuated });
+		});
 	});
 });

@@ -4,6 +4,7 @@ import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/de
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
+import { resolveStoredFormula } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
 import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
@@ -4658,7 +4659,10 @@ export function executeBytecode(
           const varName = poolString(opcodes, ip++, strings, op, "variable-name index");
           const val = vm.getVar(varName);
           if (val !== undefined) {
-            stack.push(val);
+            // A formula stored before its unknowns had values is read with the
+            // values they hold now, so one line never holds a name as a number
+            // in one term and as an unknown in another (#732).
+            stack.push(val.type === ValueType.Symbolic ? resolveStoredFormula(val, varName, (name) => vm.getVar(name)) : val);
           } else if (symbolicTolerant) {
             stack.push(symbolicValue(varSymbolicNode(varName)));
           } else if (varName === ANSWER_NAME) {

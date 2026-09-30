@@ -62,7 +62,12 @@ not the reading, chose the comma.
 | `1.234,567` | refused | `1,234.57` | refused |
 | `12345.678` | `12,345.68` | refused | `12,345.68` |
 | `2.5 fps` | `2.50 frames/s` | refused | `2.50 frames/s` |
-| `2,5` | refused | refused | refused |
+| `2,5` | refused | `2.50` | `2.50` |
+| `1,5000` | refused | `1.50` | `1.50` |
+| `1.500,5` | refused | `1,500.50` | refused |
+| `1 500` | refused | refused | `1,500` |
+| `max(1,5; 2)` | refused | `2` | `2` |
+| `max(1,5, 2)` | `5` | `2` | `2` |
 | `5/2` | `2.50` | `2.50` | `2.50` |
 
 An English engine reads `.` as the decimal point and `,` as a thousands group.
@@ -88,18 +93,66 @@ the same rule, so a German `2.500 fps` is two thousand five hundred frames a
 second, as the bare number is.
 
 A French engine reads a dot as a decimal point, as English does. Its thousands
-group is a space, which a typed number cannot carry (`1 000` is refused) and
-which [pasted text](/syntax/pasted-text/) is read with.
+group is a space: `1 500` is fifteen hundred, and so is `1 500` written with the
+narrow no-break space the engine itself writes between French groups, or with an
+ordinary no-break space. A group after the space is exactly three digits and the
+first group is one to three, so `1 50` and `12345 678` are two numbers side by
+side and refused, as `5 3` is. A German or English engine does not group with a
+space.
 
-German and French both mark the decimal with a comma. Where a comma is followed
-by exactly three digits the engine reads it as that decimal comma, which is why
-`1,500` is one and a half there. A comma followed by one or two digits (`2,5`)
-is not read yet in any pack, so a German or French engine writes a fraction as a
-division (`5/2`) for now. A literal with a second decimal mark after its comma
-(`1,234,567`), or in French a dot decimal beside a comma one (`1.234,567`), has
-no reading in a comma-decimal locale, and is refused rather than cut short at
-the second mark. In German `1.234,567` is a thousands group and a decimal
-comma, and reads as one thousand two hundred and thirty-four and a bit.
+## The decimal comma
+
+German and French both mark the decimal with a comma: two and a half is `2,5`.
+In either engine, and in their regional tags (`de-DE`, `fr-CA`), a comma
+between two digits is that decimal comma, whatever follows it: `2,5`, `1,50`,
+`1,500` and `1,5000` are all read as a decimal, so `1,500` is one and a half,
+never fifteen hundred. It is read in money (`€9,99`), in a quantity (`1,5 km`),
+in a percentage (`12,5%`) and in a list, as a number is anywhere else.
+
+A literal with a second mark after its decimal comma (`1,500,000`), or in French
+a dot decimal beside a comma one (`1.234,567`), has no reading, and is refused
+rather than cut short at the second mark. In German `1.234,567` is a thousands
+group and a decimal comma, and reads as one thousand two hundred and thirty-four
+and a bit.
+
+### Separating a function's arguments
+
+A comma separates a function's arguments in English: `max(1, 2)` is the larger
+of one and two. Where a comma is also the decimal mark, `max(1,5, 2)` could mean
+either the larger of one and a half and two, or the largest of three numbers.
+The engine never guesses between them. In a German or French engine:
+
+- A comma **between two digits** is always the decimal comma, inside a call or
+  a bracket as much as outside one.
+- A `;` separates arguments, as a spreadsheet in those languages does:
+  `max(1,5; 2)` is 2.
+- A comma **with a space after it** still separates arguments, since a decimal
+  comma never has one: `max(1, 2)` and `max(1,5, 2)` are both 2.
+
+| Typed under `de` | Reads as | Answer |
+| --- | --- | --- |
+| `max(1,5; 2)` | the larger of 1.5 and 2 | `2` |
+| `max(1,5, 2)` | the larger of 1.5 and 2 | `2` |
+| `max(1; 2)` | the larger of 1 and 2 | `2` |
+| `max(1,2)` | the largest of one number, 1.2 | `1.20` |
+| `max(1,5,2)` | one literal with two decimal commas | refused |
+| `rgb(255,0,0)` | one literal with two decimal commas | refused |
+| `rgb(255; 0; 0)` | three arguments | `rgb(255, 0, 0)` |
+
+A matrix keeps `;` for its rows, so inside `[...]` the elements of a row are
+separated by a comma and a space, and the rows by `;`: `[1,5; 2,5]` is a column
+of 1.5 and 2.5, and `[1,5, 2,5]` a row of them. A `;` in a call inside a matrix
+separates that call's arguments, and one in a matrix inside a call separates the
+matrix's rows: each belongs to the bracket it is written in.
+
+The boundary: the reading follows the engine's locale only, never a guess made
+line by line. An English engine is unchanged, so there `1,500` is fifteen
+hundred, `max(1,5, 2)` is 5, and `;` is not an argument separator. A tag with no
+pack of its own (`es`, `it`, `nl`) reads as English too, even though the engine
+writes that tag's answers with a decimal comma (see
+[writing results](#writing-results)); an answer written for such a tag cannot yet
+be typed back into it. Outside a call a `;` separates nothing, so
+`1,5 + 2,5; 3` is refused.
 
 ## Region tags
 
@@ -146,8 +199,9 @@ places.
 A bare `12,34,567` stays refused in an English engine: outside the Indian
 convention a group of two digits is not a group, and a refusal is safer than a
 guess. A German or French engine does not read Indian grouping even beside `₹`,
-since it reads the comma as its decimal mark. In every engine a comma inside a
-call or a bracket separates arguments and elements, so `[1,00,000]` is a list of
+since it reads the comma as its decimal mark, so `₹1,00,000` there is a literal
+with two decimal commas and refused. In an English engine a comma inside a call
+or a bracket separates arguments and elements, so `[1,00,000]` is a list of
 three numbers.
 
 ## Writing results
@@ -181,9 +235,8 @@ the host's configuration is seen rather than hidden behind different output.
 
 - **Typed native digits are not read.** An `ar-EG` engine writes `٣٫٥٠`, but
   typing `٣٫٥` is not read as three and a half.
-- **The decimal comma is only partly read.** `2,5` is refused in every pack,
-  and a German or French engine reads a comma as a decimal only before exactly
-  three digits.
+- **Only the German and French packs read a decimal comma.** Every other tag
+  reads as English, including those whose answers the engine writes with one.
 - **Pasted text is read by its own rules.** `numbers in` and `amounts in` read
   a German engine's text in German, and do not refuse what a typed line would:
   `numbers in "preis 9.99"` is 9 and 99 in a German engine. See

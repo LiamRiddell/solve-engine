@@ -295,6 +295,52 @@ function buildCharClassTable(): Uint8Array {
  * @param cc - A UTF-16 code unit, only meaningful for values >= 128.
  * @returns True when the character should be skipped like a space.
  */
+/**
+ * Which kind of bracket an open `(` or `[` is, for the number scanner and the
+ * `;` separator; see `ExpressionLexer.groupingStack`.
+ */
+const enum BracketKind {
+  /** A `(` after an operator or the line start: a comma inside may group thousands. */
+  Grouping = 0,
+  /** A `[`: its commas separate elements and its `;` separates rows. */
+  List = 1,
+  /** A `(` after a name, a unit or a closing bracket: its commas separate arguments. */
+  Call = 2,
+}
+
+/** Whether a character code is an ASCII digit. */
+function isAsciiDigit(cc: number): boolean {
+  return cc >= 48 && cc <= 57;
+}
+
+/** The spaces a locale that groups thousands with a space may write between groups: a space, a no-break space and the narrow no-break space `Intl` writes. */
+function isGroupSpace(cc: number): boolean {
+  return cc === 0x20 || cc === 0xa0 || cc === 0x202f;
+}
+
+/**
+ * Where a space-separated group of exactly three digits starting at `pos`
+ * ends, or -1 when there is none: one group space, three digits, and then
+ * no fourth digit.
+ *
+ * @param input - The line.
+ * @param pos - Just after the digits read so far.
+ * @param len - The end of the line.
+ */
+export function spaceGroupEnd(input: string, pos: number, len: number): number {
+  if (pos + 4 > len || !isGroupSpace(input.charCodeAt(pos))) return -1;
+  for (let i = 1; i <= 3; i++) if (!isAsciiDigit(input.charCodeAt(pos + i))) return -1;
+  if (pos + 4 < len && isAsciiDigit(input.charCodeAt(pos + 4))) return -1;
+  return pos + 4;
+}
+
+/** A space-grouped number's text with its group spaces left out. */
+export function withoutGroupSpaces(text: string): string {
+  let out = "";
+  for (let i = 0; i < text.length; i++) if (!isGroupSpace(text.charCodeAt(i))) out += text[i];
+  return out;
+}
+
 function isUnicodeSpace(cc: number): boolean {
   return (
     cc === 0x0085 ||                    // NEL, next line
@@ -507,7 +553,13 @@ export class ExpressionLexer {
   // consults the innermost entry. Tracked here because the flat token stream
   // carries no nesting otherwise; reset per line, so an unbalanced bracket
   // cannot bleed the decision into the next.
-  private groupingStack: boolean[] = [];
+  //
+  // Each entry says which kind of bracket it is (see {@link BracketKind}): a
+  // grouping `(` is 0, so the entry is falsy exactly where a comma may group
+  // thousands, and a call `(` is told from a `[`, since a `;` inside a call
+  // separates arguments in a comma-decimal locale while one inside a `[`
+  // separates matrix rows.
+  private groupingStack: BracketKind[] = [];
 
   // Keyword map: lowercase identifier → token type (locale keywords only)
   private keywordMap: Map<string, string>;
@@ -548,6 +600,17 @@ export class ExpressionLexer {
    * lexer/LakhGrouping.ts.
    */
   private readonly commaGroups: boolean;
+  /**
+   * Whether this locale marks the decimal with a comma (`de`, `fr`): `1,5` is
+   * one and a half, a comma between two digits is always that decimal comma,
+   * and a `;` inside a call separates its arguments (#740).
+   */
+  private readonly commaDecimal: boolean;
+  /**
+   * Whether this locale groups thousands with a space (`fr`): `1 500` and the
+   * `1\u202F500` the engine writes are fifteen hundred (#740).
+   */
+  private readonly spaceGroups: boolean;
 
   /** Whether Indian grouping is read everywhere, not only beside a rupee marker: an Indian-region locale such as `en-IN`. */
   private readonly lakhsThroughout: boolean;
@@ -622,6 +685,8 @@ export class ExpressionLexer {
     this.localeCode = localeCode;
     this.locale = getLocale(localeCode);
     this.commaGroups = this.locale.display.thousandsSeparator === ',';
+    this.commaDecimal = this.locale.display.decimalSeparator === ',';
+    this.spaceGroups = this.locale.display.thousandsSeparator === ' ';
     this.lakhsThroughout = groupsInLakhs(localeCode);
     this.keywordMap = new Map<string, string>();
     for (const [k, v] of Object.entries(this.locale.keywordMap)) {
@@ -1476,9 +1541,26 @@ export class ExpressionLexer {
       pos++;
     }
 
+    // ── Thousands grouped with a space, where the locale does (#740) ──
+    // `1 500` under `fr`, and the narrow no-break space the engine writes
+    // there. A first group of one to three digits, then groups of exactly
+    // three, each after one space; the spaces are left out of the value.
+    let spaced = false;
+    if (this.spaceGroups && hasIntPart && pos - start <= 3) {
+      let end = spaceGroupEnd(input, pos, len);
+      while (end !== -1) {
+        pos = end;
+        spaced = true;
+        end = spaceGroupEnd(input, pos, len);
+      }
+    }
+
     // ── Thousands separators, coalesce with digits ────────────────────
     const groupsFrom = pos;
     while (hasIntPart && pos < len && (input.charCodeAt(pos) === 44 || input.charCodeAt(pos) === 46)) {
+      // Where the comma marks the decimal it never groups thousands; it is
+      // read as the decimal comma below.
+      if (this.commaDecimal && input.charCodeAt(pos) === 44) break;
       // A comma inside a call or bracket is an argument/element separator, not a
       // thousands group: `rgb(255,255,255)` is three numbers and `[100,200,300]`
       // a three-element vector, not `255255255`/`100200300`. A comma in a bare
@@ -1547,9 +1629,26 @@ export class ExpressionLexer {
       if (lakhEnd !== -1 && (this.lakhsThroughout || rupeeMarked(input, start, lakhEnd, Infinity))) pos = lakhEnd;
     }
 
-    // ── Decimal part (.xxx) ───────────────────────────────────────────
+    // ── Decimal comma (,xxx), where the locale marks the decimal so ────
+    // A comma between two digits is the decimal comma, inside a call or a
+    // bracket as much as outside one, so `max(1,5, 2)` is the larger of one
+    // and a half and two; an argument is separated by `;` or by a comma
+    // with a space after it (#740). A further mark and digits straight after
+    // it (`1,500,000`, `1,5,2`) are kept in the literal, which the parser
+    // then refuses by name, rather than being split into a second number.
     let hasDecimal = false;
-    if (pos < len && input.charCodeAt(pos) === 46) {
+    if (this.commaDecimal && hasIntPart && pos + 1 < len && input.charCodeAt(pos) === 44 && isAsciiDigit(input.charCodeAt(pos + 1))) {
+      hasDecimal = true;
+      pos += 2;
+      while (pos < len && isAsciiDigit(input.charCodeAt(pos))) pos++;
+      while (pos + 1 < len && (input.charCodeAt(pos) === 44 || input.charCodeAt(pos) === 46) && isAsciiDigit(input.charCodeAt(pos + 1))) {
+        pos += 2;
+        while (pos < len && isAsciiDigit(input.charCodeAt(pos))) pos++;
+      }
+    }
+
+    // ── Decimal part (.xxx) ───────────────────────────────────────────
+    if (!hasDecimal && pos < len && input.charCodeAt(pos) === 46) {
       if (pos + 1 < len) {
         const nextCc = input.charCodeAt(pos + 1);
         if (nextCc >= 48 && nextCc <= 57) {
@@ -1611,7 +1710,11 @@ export class ExpressionLexer {
     // ── Emit NUMBER token ──────────────────────────────────────────────
     const text = input.slice(start, pos);
     this.pos = pos;
-    return new LexerToken('NUMBER', TT_NUMBER, text, text, start, 0, this.line, startCol);
+    // The value leaves out the spaces a space-grouped number was written
+    // with, so every reader of it sees `1500`; the text keeps them, so the
+    // token still spans what was typed.
+    const value = spaced ? withoutGroupSpaces(text) : text;
+    return new LexerToken('NUMBER', TT_NUMBER, value, text, start, 0, this.line, startCol);
   }
 
   // ── Inline identifier / keyword tokenizer ──────────────────────────────
@@ -1832,11 +1935,21 @@ export class ExpressionLexer {
     // operator or the line start, keeps thousands so `(1,000)` stays one number.
     // `)`/`]` pop; a stray closer with an empty stack is ignored.
     if (c0 === 91) {  // [
-      this.groupingStack.push(true);
+      this.groupingStack.push(BracketKind.List);
     } else if (c0 === 40) {  // (
-      this.groupingStack.push(this.precededByCallTarget(pos));
+      this.groupingStack.push(this.precededByCallTarget(pos) ? BracketKind.Call : BracketKind.Grouping);
     } else if (c0 === 41 || c0 === 93) {  // ) or ]
       if (this.groupingStack.length > 0) this.groupingStack.pop();
+    } else if (
+      c0 === 59 &&
+      this.commaDecimal &&
+      this.groupingStack.length > 0 &&
+      this.groupingStack[this.groupingStack.length - 1] === BracketKind.Call
+    ) {
+      // A `;` inside a call separates its arguments where the comma marks
+      // the decimal, as a spreadsheet in that locale reads it: `max(1,5; 2)`.
+      // Inside a `[` it still separates matrix rows (#740).
+      return new LexerToken('COMMA', tokenTypeId('COMMA'), ';', ';', pos, 0, this.line, col);
     }
     const opType = OP_MAP[c0];
     const text = input.charAt(pos);

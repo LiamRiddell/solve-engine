@@ -169,6 +169,8 @@ export const CoreErrorCodes = {
   SYMBOLIC_DIVISION_BY_ZERO: "SYMBOLIC_DIVISION_BY_ZERO",
   /** A tree exceeding `SYMBOLIC_MAX_NODES` entering the simplifier. */
   SYMBOLIC_NODE_LIMIT_EXCEEDED: "SYMBOLIC_NODE_LIMIT_EXCEEDED",
+  /** A name holding a formula written before one of its unknowns had a value (`y = x + 1` above `x = $5`), read after that unknown was given money, a quantity in a unit, a date or text, which the formula cannot take. Returned by the read rather than a formula mixing the value with the unknown (#732). */
+  SYMBOLIC_FORMULA_VALUE_UNSUPPORTED: "SYMBOLIC_FORMULA_VALUE_UNSUPPORTED",
   /** A builtin with no symbolic reading (`min`, `random`, the finance block, ...) applied to an expression still containing an unknown. Returned rather than computing against `toNumber()`'s placeholder zero. */
   SYMBOLIC_UNSUPPORTED_FUNCTION: "SYMBOLIC_UNSUPPORTED_FUNCTION",
   /** The rational-root search exceeding `FACTOR_MAX_ROOT_CANDIDATES`. The candidate set is the product of two divisor sets, so a highly-composite coefficient escapes quickly. */

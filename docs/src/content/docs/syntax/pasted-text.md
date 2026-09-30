@@ -76,9 +76,9 @@ including the narrow no-break space that a number copied from a French web page
 carries. An English engine reads `1.234,56` as 1.234 and 56, because that is
 what those characters mean in English.
 
-Pasted text and a typed line do not read numbers the same way. A typed line in a
-German engine does not yet accept a decimal comma: `3,20 + 12,50` is refused
-there, where the same figures in pasted text are read. And a typed `9.99` in a
+Pasted text and a typed line do not read numbers quite the same way. Both read a
+German engine's decimal comma, so a typed `3,20 + 12,50` is 15.70 there, as the
+same figures in pasted text are 3.20 and 12.50. But a typed `9.99` in a
 German engine is refused, because a German thousands group is always three
 digits and anything else after a point is a decimal written the English way,
 which the engine will not guess at; in pasted text the same characters are read

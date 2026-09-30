@@ -33,6 +33,8 @@ export const FinanceErrorCodes = {
 	INFLATION_EXPECTED_FROM_OR_IN: "INFLATION_EXPECTED_FROM_OR_IN",
 	/** `assuming <rate>%` not followed by the word `inflation`. */
 	INFLATION_EXPECTED_INFLATION_WORD: "INFLATION_EXPECTED_INFLATION_WORD",
+	/** `how much per month to reach <target>` followed by neither `in` nor `over` and the time the saving runs for. */
+	SAVINGS_GOAL_SYNTAX: "SAVINGS_GOAL_SYNTAX",
 	/** `compounding <interval>` naming an interval the package does not know. The message lists the ones it does. */
 	UNKNOWN_COMPOUNDING_INTERVAL: "UNKNOWN_COMPOUNDING_INTERVAL",
 } as const;

@@ -8,7 +8,8 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { GOAL_SEEK_FN_NAME } from "../GoalSeekPluginFunctions";
 
 /**
- * `solve line M for <var> = <target>`, goal seek over a line reference.
+ * `solve line M for <var> = <target>`, goal seek over a line reference, with
+ * an optional `between <low> and <high>` naming the range to search.
  *
  * Reads as "find the value of `<var>` that makes line M's result equal
  * `<target>`". The word `solve` has already been fused into a `GOAL_SEEK`
@@ -22,7 +23,8 @@ import { GOAL_SEEK_FN_NAME } from "../GoalSeekPluginFunctions";
  * reads them: the target line number, the variable name as a String (a name,
  * not a value, the same reason the algebra verbs push their unknown as a
  * String), and the target as an ordinary expression so `900`, `1,200` or a
- * small calculation all work. The plugin does the search.
+ * small calculation all work. A stated range adds its two ends as a fourth and
+ * fifth argument. The plugin does the search.
  */
 export class GoalSeekParselet implements PrefixParselet {
 	readonly category = "GoalSeek";
@@ -101,6 +103,25 @@ export class GoalSeekParselet implements PrefixParselet {
 
 		// The target value, an ordinary expression (usually a literal).
 		parser.parseExpression(BindingPower.Lowest, builder);
+
+		// An optional range to search, `between <low> and <high>` (#739). The
+		// low end parses at product strength so the "and" that ends it is not
+		// read as part of it, as `clamp x between a and b` does.
+		if (parser.peek()?.type === "BETWEEN") {
+			parser.consume();
+			parser.parseExpression(BindingPower.Product, builder);
+			if (parser.peek()?.type !== "AND_CONJ") {
+				throw ErrorFactory.parsing(
+					"GOAL_SEEK_SYNTAX",
+					`Goal seek's range reads "between <low> and <high>", for example "solve line 4 for rate = 900 between 0 and 1".`,
+					{ found: parser.peek()?.type ?? "end of input" },
+				);
+			}
+			parser.consume();
+			parser.parseExpression(BindingPower.Lowest, builder);
+			builder.emitPluginCall(GOAL_SEEK_FN_NAME, 5);
+			return;
+		}
 
 		builder.emitPluginCall(GOAL_SEEK_FN_NAME, 3);
 	}

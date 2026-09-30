@@ -206,8 +206,13 @@ describe("a regional tag does not inherit a misreading of a second decimal mark"
 		expect(show("1,234,567", "en-GB")).toBe("= 1,234,567");
 	});
 
-	test("a comma inside a call is still an argument separator", () => {
-		expect(show("max(1,234,567)", "de")).toBe("= 567");
+	test("a comma between digits inside a call is the decimal comma, and ; separates the arguments (#740)", () => {
+		// It used to separate arguments there too, so `max(1,234,567)` was 567.
+		// A comma between two digits is the decimal comma now, and a literal
+		// with two of them is refused as it is outside a call.
+		expect(show("max(1,234,567)", "de")).toMatch(/^INVALID_NUMBER_LITERAL: "1,234,567" is not a number in the de locale/);
+		expect(show("max(1; 234; 567)", "de")).toBe("= 567");
+		expect(show("max(1, 234, 567)", "de")).toBe("= 567");
 	});
 });
 

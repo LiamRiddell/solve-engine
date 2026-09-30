@@ -245,31 +245,22 @@ export function freeVariables(node: SymbolicNode): ReadonlySet<string> {
 	return names;
 }
 
-/** Recursive worker for {@link freeVariables}, kept separate so the public entry point allocates one set rather than one per level. */
-function collectVariables(node: SymbolicNode, into: Set<string>): void {
-	switch (node.kind) {
-		case "const":
-		case "complex":
-			return;
-		case "var":
+/**
+ * The walk behind {@link freeVariables}: iterative, as {@link nodeCount} is, so
+ * a chain as deep as the size guard admits is scanned rather than overflowing
+ * the native stack. Children are pushed right to left so names are met left to
+ * right, in order of first appearance.
+ */
+function collectVariables(root: SymbolicNode, into: Set<string>): void {
+	const pending: SymbolicNode[] = [root];
+	while (pending.length > 0) {
+		const node = pending.pop()!;
+		if (node.kind === "var") {
 			into.add(node.name);
-			return;
-		case "neg":
-			collectVariables(node.operand, into);
-			return;
-		case "pow":
-			collectVariables(node.base, into);
-			collectVariables(node.exponent, into);
-			return;
-		case "call":
-			for (const arg of node.args) collectVariables(arg, into);
-			return;
-		case "add":
-		case "sub":
-		case "mul":
-		case "div":
-			collectVariables(node.left, into);
-			collectVariables(node.right, into);
+			continue;
+		}
+		const children = childrenOf(node);
+		for (let i = children.length - 1; i >= 0; i--) pending.push(children[i]);
 	}
 }
 
@@ -307,6 +298,83 @@ export function substitute(node: SymbolicNode, variable: string, replacement: Sy
 				left: substitute(node.left, variable, replacement),
 				right: substitute(node.right, variable, replacement),
 			};
+	}
+}
+
+/**
+ * Replaces every variable named in `replacements` with its expression, in one
+ * walk.
+ *
+ * The replacements are not themselves rewritten: a replacement that mentions a
+ * variable in the map keeps that variable. The walk is iterative, so a chain
+ * as deep as {@link SYMBOLIC_MAX_NODES} admits is rewritten rather than
+ * running out of native stack.
+ *
+ * @param node - The tree to rewrite.
+ * @param replacements - The expression for each variable to replace. A
+ * variable absent from the map is left as it is.
+ * @returns A new tree, or `node` itself when nothing in it was replaced.
+ */
+export function substituteAll(node: SymbolicNode, replacements: ReadonlyMap<string, SymbolicNode>): SymbolicNode {
+	if (replacements.size === 0) return node;
+	// A post-order walk with an explicit stack: each frame records a node and
+	// how many of its children have been rebuilt, which land on `built`.
+	const frames: { node: SymbolicNode; next: number }[] = [{ node, next: 0 }];
+	const built: SymbolicNode[] = [];
+	while (frames.length > 0) {
+		const frame = frames[frames.length - 1];
+		const children = childrenOf(frame.node);
+		if (frame.next < children.length) {
+			frames.push({ node: children[frame.next++], next: 0 });
+			continue;
+		}
+		frames.pop();
+		const rebuilt = built.splice(built.length - children.length, children.length);
+		built.push(rebuild(frame.node, rebuilt, replacements));
+	}
+	return built[0];
+}
+
+/** The direct children of a node, in the order {@link rebuild} takes them back. */
+function childrenOf(node: SymbolicNode): readonly SymbolicNode[] {
+	switch (node.kind) {
+		case "const":
+		case "complex":
+		case "var":
+			return [];
+		case "neg":
+			return [node.operand];
+		case "pow":
+			return [node.base, node.exponent];
+		case "call":
+			return node.args;
+		case "add":
+		case "sub":
+		case "mul":
+		case "div":
+			return [node.left, node.right];
+	}
+}
+
+/** A node rebuilt over its rewritten children, or itself when none changed. */
+function rebuild(node: SymbolicNode, children: readonly SymbolicNode[], replacements: ReadonlyMap<string, SymbolicNode>): SymbolicNode {
+	switch (node.kind) {
+		case "const":
+		case "complex":
+			return node;
+		case "var":
+			return replacements.get(node.name) ?? node;
+		case "neg":
+			return children[0] === node.operand ? node : { kind: "neg", operand: children[0] };
+		case "pow":
+			return children[0] === node.base && children[1] === node.exponent ? node : { kind: "pow", base: children[0], exponent: children[1] };
+		case "call":
+			return children.every((child, i) => child === node.args[i]) ? node : { kind: "call", name: node.name, args: children };
+		case "add":
+		case "sub":
+		case "mul":
+		case "div":
+			return children[0] === node.left && children[1] === node.right ? node : { kind: node.kind, left: children[0], right: children[1] };
 	}
 }
 
