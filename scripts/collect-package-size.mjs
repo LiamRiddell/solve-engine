@@ -116,6 +116,57 @@ function bundled() {
 }
 
 /**
+ * The two consumers the esbuild figures bundle: `createEngine()` from the root
+ * entry, and a slim engine registering one package from `solve-engine/packages`.
+ */
+const CONSUMERS = {
+	esbuildFullBrotli:
+		'import { createEngine } from "solve-engine";\n' +
+		'console.log(createEngine().evaluateExpression("2 + 2").toNumber());\n',
+	esbuildSlimBrotli:
+		'import { ExpressionEngine } from "solve-engine";\n' +
+		'import { ARITHMETIC_PACKAGE } from "solve-engine/packages";\n' +
+		'console.log(new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE] }).evaluateExpression("2 + 2").toNumber());\n',
+};
+
+/**
+ * What the two consumers above cost under esbuild, minified and compressed with
+ * brotli, the way size-limit measures the root entry under rolldown.
+ *
+ * esbuild is measured on its own because it drops files rather than
+ * statements: it deletes a file whose bindings nothing uses, and keeps any
+ * statement inside a kept file that it cannot prove free of side effects. When
+ * every built-in package shared one chunk of the build, a slim engine under
+ * esbuild was 872 bytes smaller than `createEngine()` (#716), and a figure
+ * measured under rolldown alone could not show it. Obsidian plugins build with
+ * esbuild, so this is the bundler a large share of hosts use.
+ *
+ * `@tanstack/query-core` is left external, as a host's bundle would carry it
+ * once for every library that uses it. esbuild is the one tsup builds the
+ * package with, so its version is pinned by the lockfile and the figure
+ * reproduces to the byte.
+ */
+async function esbuildConsumers() {
+	const { build } = await import("esbuild");
+	const { brotliCompressSync } = await import("node:zlib");
+	const out = {};
+	for (const [field, contents] of Object.entries(CONSUMERS)) {
+		const result = await build({
+			stdin: { contents, resolveDir: ROOT, loader: "js" },
+			bundle: true,
+			format: "esm",
+			platform: "browser",
+			minify: true,
+			write: false,
+			external: ["@tanstack/query-core"],
+			logLevel: "silent",
+		});
+		out[field] = brotliCompressSync(result.outputFiles[0].contents).length;
+	}
+	return out;
+}
+
+/**
  * The first complete JSON value in a command's output.
  *
  * npm writes the tarball name to stderr and the JSON to stdout, but a warning
@@ -213,7 +264,7 @@ function published() {
 	};
 }
 
-const sizes = { ...bundled(), ...published() };
+const sizes = { ...bundled(), ...(await esbuildConsumers()), ...published() };
 const next = `${JSON.stringify(sizes, null, 2)}\n`;
 
 /** The committed copy, or "" when there is not one yet. */
@@ -254,6 +305,8 @@ function readCommitted() {
 const EXACT = [
 	"importOneBrotli",
 	"importEverythingBrotli",
+	"esbuildFullBrotli",
+	"esbuildSlimBrotli",
 	"tarballBytes",
 	"unpackedBytes",
 	"fileCount",

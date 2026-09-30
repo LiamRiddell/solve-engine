@@ -138,8 +138,14 @@ function truncateForTooltip(text: string): string | undefined {
  * concerned, so they are classified by type rather than painted in the brand
  * colour beside the real ones.
  */
+/**
+ * The notepad writes at most this many elements of a list or matrix and counts
+ * the rest, so a 100,000-element list costs what a thousand do to show.
+ */
+const DISPLAY = { matrixResult: { maxElements: 1000 } };
+
 function toValueAnswer(result: unknown): Answer {
-  const text = stripMarker(formatValue(result as never));
+  const text = stripMarker(formatValue(result as never, DISPLAY));
   const v = result as { type?: number; value?: { r: number; g: number; b: number; a: number } };
   // A pending value is a network lookup (weather, currency) that has not
   // returned yet. Show a quiet marker rather than its internal query key, and
@@ -156,7 +162,7 @@ function toValueAnswer(result: unknown): Answer {
   // answer column shows the aligned form (`text` keeps the compact single line
   // for the tooltip and for anything that wants one value per row).
   if (v.type === ValueType.Matrix && v.value) {
-    return { text, kind: "value", matrix: formatMatrixAligned(v.value as never) };
+    return { text, kind: "value", matrix: formatMatrixAligned(v.value as never, DISPLAY) };
   }
   // A chart (a sparkline or a plot) carries its specification on the live Value.
   // The engine emits only the data; this notepad is one host that draws it. A

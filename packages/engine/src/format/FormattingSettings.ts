@@ -68,6 +68,24 @@ export interface FormattingSettings {
   dateResult?: {
     format: DateOutputFormat;
   };
+  /**
+   * How much of a list or matrix is written out. Optional, and absent by
+   * default, so the full text stays what the API and the worker DTO carry.
+   */
+  matrixResult?: {
+    /**
+     * The most elements written before the rest are counted instead. A list
+     * past it shows its first `maxElements` and how many more there are,
+     * `= [0, 10, 20, and 99,997 more]`; a matrix shows the whole rows that fit
+     * and how many rows more, or its shape when not one row fits. The work is
+     * bounded with the text: the elements left out are never formatted (#764).
+     *
+     * A host that displays results sets it (the docs notepad uses 1,000). A
+     * value that is not a whole number of at least 1 is no ceiling; a
+     * fraction is rounded down.
+     */
+    maxElements?: number;
+  };
 }
 
 /** Formatting used when a host supplies none. */
@@ -118,6 +136,7 @@ const SETTINGS_GROUPS = [
   "unitOfMeasurementResult",
   "percentageResult",
   "dateResult",
+  "matrixResult",
 ] as const;
 
 /** Keys that would reach an object's prototype if written, never copied from an override. */

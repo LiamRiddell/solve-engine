@@ -16,6 +16,13 @@
 
 /** Expressions exercising every rule family the built-in packages register. */
 export const NORMALIZER_CORPUS: readonly string[] = [
+	// A check line in each case, and `check` as an ordinary name (#767).
+	"check 2 + 2 == 4",
+	"CHECK 2 + 2 == 4",
+	"Check 10 > 5",
+	"check = 80",
+	"15% of check",
+
 	// Plain arithmetic and grouping, where nothing should fire.
 	"12 + 34 * (56 - 7) / 8",
 	"The quarterly report covers revenue and cost",
