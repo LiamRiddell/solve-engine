@@ -91,14 +91,31 @@ export function errorOnLine(error: EngineError, lineNumber: number): EngineError
  * for a span measured against the document.
  * @param lineLength - The line's length, which no offset in the result passes.
  * @returns Offsets into the line, the line number and the one-based column, or
- * null when there was no span or it holds no usable offsets.
+ * null when there was no span, it holds no usable offsets, or the shift is not
+ * a finite number.
  */
 export function spanInLine(span: SourceSpan | undefined, lineNumber: number, shift: number, lineLength: number): SourceSpan | null {
-	if (span === undefined || !Number.isFinite(span.start) || !Number.isFinite(span.end)) return null;
-	const limit = Math.max(0, lineLength);
-	const start = Math.min(limit, Math.max(0, span.start + shift));
-	const end = Math.min(limit, Math.max(start, span.end + shift));
+	// Written with comparisons rather than `Number.isFinite`, `Math.min` and
+	// `Math.max`. It runs once for every line that fails, which in a note is
+	// every line of prose, and where the engine runs inside a `vm` context (a
+	// Jest environment is one) every read of a global such as `Math` goes
+	// through the context's interceptor: about 1.3 µs a call this way against
+	// 30 ns, and 1.33 times the whole parse of a 200-line prose note in the
+	// benchmark job. For finite arguments the result is the same to the sign
+	// of zero: `start` and `end` are never below +0.
+	if (span === undefined || !isFiniteNumber(span.start) || !isFiniteNumber(span.end) || !isFiniteNumber(shift)) return null;
+	const limit = lineLength > 0 ? lineLength : 0;
+	const from = span.start + shift;
+	const start = from > 0 ? (from < limit ? from : limit) : 0;
+	const to = span.end + shift;
+	const end = to > start ? (to < limit ? to : limit) : start;
 	return { start, end, line: lineNumber, col: start + 1 };
+}
+
+/** Whether `value` is a finite number, as `Number.isFinite` answers, without reading a global. */
+export function isFiniteNumber(value: unknown): value is number {
+	// NaN and the infinities are the numbers for which `x - x` is not 0.
+	return typeof value === "number" && value - value === 0;
 }
 
 /**
