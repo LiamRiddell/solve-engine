@@ -1,0 +1,156 @@
+import { Value, ValueType, boolValue, faultedOperand, type MatrixData } from "@solve-js/vm/Value";
+import { compareUom, incomparableUnitsError, compareBigIntOperands, compareRationalOperands, ipEqual, ipv6Order, colourEqual, colourRefused } from "@solve-js/vm/VMConversion";
+import { unitListCompare } from "@solve-js/vm/MatrixUnits";
+
+/**
+ * The six comparison opcodes past their plain-number fast path.
+ *
+ * Each opcode keeps its two-double compare inline in the dispatch loop, where
+ * nearly every comparison ends; everything else, the faulted operand, the
+ * exact sidecars, the bigint, the quantity, the list, the address and the
+ * colour, is decided here. The four ordering opcodes were four copies of one
+ * chain with a different operator, and EQ and NEQ two copies of another, and
+ * each type check a batch added (#745, #748) was added six times to
+ * `executeBytecode`, which V8 stops optimising past 61,440 bytes of bytecode.
+ * One module-level function per family keeps the loop's case to a call.
+ *
+ * @module Comparisons
+ */
+
+/**
+ * An ordering operator as the opcodes pass it: 0 for `<`, 1 for `<=`, 2 for
+ * `>` and 3 for `>=`. A number rather than an enum, so the call in the
+ * dispatch loop loads a constant and nothing else.
+ */
+export type Order = 0 | 1 | 2 | 3;
+
+/** The cell comparisons a list compare reads, one per operator, built once. */
+const ORDER_CELLS: readonly ((a: number, b: number) => boolean)[] = [
+	(a, b) => a < b,
+	(a, b) => a <= b,
+	(a, b) => a > b,
+	(a, b) => a >= b,
+];
+const EQUAL_CELLS = (a: number, b: number): boolean => a === b;
+const UNEQUAL_CELLS = (a: number, b: number): boolean => a !== b;
+
+/**
+ * Whether an operator holds between two doubles. A NaN on either side holds
+ * for none of them, as the JavaScript operators give.
+ *
+ * @param op - The operator.
+ * @param a - The left number.
+ * @param b - The right number.
+ */
+export function orderHolds(op: Order, a: number, b: number): boolean {
+	switch (op) {
+		case 0: return a < b;
+		case 1: return a <= b;
+		case 2: return a > b;
+		default: return a >= b;
+	}
+}
+
+/**
+ * Whether an operator holds for an order already decided (-1, 0 or 1), as a
+ * bigint, a fraction or an address compare gives it.
+ *
+ * @param op - The operator.
+ * @param order - The order of the left value against the right.
+ */
+export function orderHoldsFor(op: Order, order: -1 | 0 | 1): boolean {
+	return orderHolds(op, order, 0);
+}
+
+/**
+ * `l == r` (or `l != r` when `negate` is set) for any pair the plain-number
+ * fast path passed over. A faulted operand propagates; two IP values compare
+ * on their family, address, prefix and zone (see ipEqual()); an exact fraction
+ * or decimal compares on its exact value; a bigint digit for digit; two pieces
+ * of text as text; two quantities once put in one unit; two lists cell by cell
+ * (a list of answers, so NEQ is not EQ negated there); two colours on their
+ * channels; and a colour or an IP value never equals anything else.
+ *
+ * @param l - The left operand.
+ * @param r - The right operand.
+ * @param negate - True for `!=`.
+ * @returns A boolean Value, a list of them for two lists, or the fault.
+ */
+export function valuesEqual(l: Value, r: Value, negate: boolean): Value {
+	const fault = faultedOperand(l, r);
+	if (fault) return fault;
+	const ip = ipEqual(l, r);
+	if (ip !== null) return boolValue(ip !== negate);
+	if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
+		const cmp = compareRationalOperands(l, r);
+		if (cmp !== null) return boolValue((cmp === 0) !== negate);
+	}
+	let equal: boolean;
+	if (l.type === ValueType.Number && r.type === ValueType.Number) {
+		// A NaN is unequal to everything, itself included, so `!=` is true for it.
+		equal = (l.value as number) === (r.value as number);
+	} else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+		// Comparing through toNumber() rounds a bigint to the nearest double
+		// first, so two giants a single digit apart landed on the same double.
+		const cmp = compareBigIntOperands(l, r);
+		equal = cmp === null ? l.toNumber() === r.toNumber() : cmp === 0;
+	} else if (l.type === ValueType.String && r.type === ValueType.String) {
+		// Through toNumber() every non-numeric string reads as 0, so `"a" == "b"` answered true.
+		equal = (l.value as string) === (r.value as string);
+	} else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
+		const { equal: same, sameMeasure } = compareUom(l, r);
+		equal = sameMeasure && same;
+	} else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
+		return unitListCompare(l.value as MatrixData, r.value as MatrixData, negate ? UNEQUAL_CELLS : EQUAL_CELLS);
+	} else {
+		const colour = colourEqual(l, r);
+		equal = colour ?? l.toNumber() === r.toNumber();
+	}
+	return boolValue(equal !== negate);
+}
+
+/**
+ * `l < r`, `l <= r`, `l > r` or `l >= r` for any pair the plain-number fast
+ * path passed over. A faulted operand propagates; two IPv6 addresses order by
+ * their 128 bits and one against anything else is refused (see ipv6Order()); a
+ * colour has no order and is refused by name (see colourRefused()); an exact
+ * fraction or decimal, a bigint, two quantities put in one unit and two lists
+ * cell by cell each compare on their own terms. Two quantities that share no
+ * measure cannot be ordered, and say so.
+ *
+ * @param l - The left operand.
+ * @param r - The right operand.
+ * @param op - The operator.
+ * @returns A boolean Value, a list of them for two lists, or the refusal.
+ */
+export function valuesOrdered(l: Value, r: Value, op: Order): Value {
+	const fault = faultedOperand(l, r);
+	if (fault) return fault;
+	const ipv6 = ipv6Order(l, r);
+	if (ipv6 !== null) return ipv6 instanceof Value ? ipv6 : boolValue(orderHoldsFor(op, ipv6));
+	if (l.type === ValueType.Colour || r.type === ValueType.Colour) return colourRefused("put in order");
+	if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
+		const cmp = compareRationalOperands(l, r);
+		if (cmp !== null) return boolValue(orderHoldsFor(op, cmp));
+	}
+	if (l.type === ValueType.Number && r.type === ValueType.Number) {
+		return boolValue(orderHolds(op, l.value as number, r.value as number));
+	}
+	if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+		// Digit-exact, for the reason given in valuesEqual().
+		const cmp = compareBigIntOperands(l, r);
+		return boolValue(cmp === null ? orderHolds(op, l.toNumber(), r.toNumber()) : orderHoldsFor(op, cmp));
+	}
+	if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
+		// `equal` is a tolerance, so a pair EQ calls equal is one `<` and `>`
+		// both call false and `<=` and `>=` both call true.
+		const { lv, rv, equal, sameMeasure } = compareUom(l, r);
+		if (!sameMeasure) return incomparableUnitsError(l, r);
+		const strict = op === 0 || op === 2;
+		return boolValue(strict ? !equal && orderHolds(op, lv, rv) : equal || orderHolds(op, lv, rv));
+	}
+	if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
+		return unitListCompare(l.value as MatrixData, r.value as MatrixData, ORDER_CELLS[op]);
+	}
+	return boolValue(orderHolds(op, l.toNumber(), r.toNumber()));
+}

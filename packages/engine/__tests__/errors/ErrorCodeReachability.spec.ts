@@ -63,6 +63,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	NOT_NEEDS_BOOLEAN: "not 5",
 	CLAMP_EXPECTED_BETWEEN_OR_FROM: "clamp 5 3",
 	COLLECTION_TOO_LARGE: "map(10*x, 0:2000000000)",
+	COLOUR_ARITHMETIC: "#ff0000 + 2",
 	COLOUR_BAD_ARGUMENTS: "hsl(0)",
 	COLOUR_EXPECTED_COLOUR: "mix(1, 2, 3)",
 	COLOUR_INVALID: "color(\"#...\")",

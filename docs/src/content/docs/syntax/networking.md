@@ -46,6 +46,29 @@ last address of 192.168.1.10/24 // 192.168.1.255
 - **as int** is the address as the single 32-bit number it really is, handy when
   a tool wants the integer form.
 
+### Comparing addresses and blocks
+
+`==` asks whether two addresses or blocks are the same, and `!=` whether they
+differ. Two blocks are the same only when both the address and the prefix
+match: `192.168.1.0/24` holds 256 addresses and `192.168.1.0/25` only the first
+128, so they are different blocks even though they start at the same address.
+For the same reason a bare address and the one-address block `/32` around it
+are written differently and compare as different. An address never equals a
+plain number, even the number `as int` gives for it; compare `as int` with
+`as int` when the integer is what matters:
+
+```solve
+192.168.1.0/24 == 192.168.1.0/25 // false
+192.168.1.0/24 == 192.168.1.0/24 // true
+192.168.1.0/24 != 192.168.1.0/25 // true
+192.168.1.1 == 192.168.1.1/32 // false
+192.168.1.1 == 3232235777 // false
+192.168.1.1 as int == 3232235777 // true
+```
+
+IPv4 and IPv6 follow the same rule, so `2001:db8::/32 == 2001:db8::/48` is
+false as well.
+
 ## IPv6 addresses
 
 IPv6 is the newer, longer kind of address, made because the four-number IPv4
