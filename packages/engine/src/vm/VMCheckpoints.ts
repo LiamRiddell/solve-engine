@@ -98,6 +98,12 @@ export class VMCheckpointer {
 	/** {@link variableIndex}, for the functions bag. */
 	private functionIndex = new Map<string, VMCheckpoint[]>();
 
+	/**
+	 * The line whose prefix the VM holds for every name the chain records, or
+	 * null when that is not known. See {@link syncTo}.
+	 */
+	private vmLine: number | null = null;
+
 	constructor(vm: VM) {
 		this.vm = vm;
 	}
@@ -248,6 +254,7 @@ export class VMCheckpointer {
 		// relies on, so a change that broke it would fail there rather than
 		// quietly restoring the wrong state here.
 		const targetIndex = this.nearestCheckpointIndex(lineNumber);
+		this.vmLine = lineNumber;
 
 		this.vm.reset();
 		for (let i = 0; i <= targetIndex; i++) {
@@ -357,6 +364,9 @@ export class VMCheckpointer {
 	applyCheckpointAt(lineNumber: number): boolean {
 		const checkpoint = this.getCheckpointAt(lineNumber);
 		if (!checkpoint) return false;
+		// The caller is re-running lines of its own around this, so which
+		// prefix the VM holds is no longer this chain's to say.
+		this.vmLine = null;
 		for (const key of Object.keys(checkpoint.variables)) {
 			this.vm.setVar(key, checkpoint.variables[key]);
 		}
@@ -422,6 +432,8 @@ export class VMCheckpointer {
 		kept.sort((a, b) => a.lineNumber - b.lineNumber);
 		for (let i = 0; i < kept.length; i++) kept[i].parent = i > 0 ? kept[i - 1] : null;
 		this.checkpoints = kept;
+		// The position the VM was synced to named a line that may have moved.
+		this.vmLine = null;
 		// Rebuilt rather than patched: the positions moved, a deleted line's
 		// entry went, and the sort above is the one order both have to share.
 		// Linear in the recorded bindings, the same as the walk above it.
@@ -598,6 +610,137 @@ export class VMCheckpointer {
 		this.checkpoints = [];
 		this.variableIndex = new Map();
 		this.functionIndex = new Map();
+		this.vmLine = null;
+	}
+
+	// ── Keeping the VM at a line ──────────────────────────────────────
+
+	/**
+	 * Put the VM into the state the document has at the end of `lineNumber`,
+	 * for every name the chain records, by moving from the line it was last
+	 * put at rather than rebuilding it.
+	 *
+	 * The evaluator runs a line against the VM, and the VM holds whatever the
+	 * lines that ran last wrote. A pass that skips the clean lines above the
+	 * viewport, or runs only the viewport, therefore handed a line the values
+	 * of lines below it: `x * 2` above `x = 5` answered 10 from the second
+	 * pass on, and `x + 100` between `:x = 1` and `:x = 99` answered 199 once
+	 * the viewport started below line 1, where a pass from scratch answers
+	 * `x` is undefined and 101.
+	 *
+	 * Moving down applies the entries passed on the way, in document order;
+	 * moving up sets each name an entry passed on the way wrote back to what
+	 * the lines above `lineNumber` left it, or removes it. Either costs the
+	 * entries between the two lines, so an edit or a scroll costs the distance
+	 * it moves rather than the length of the document. When the line is not
+	 * known (the first call, after {@link renumber}, or after another caller
+	 * applied entries of its own) every name the chain records is set from it
+	 * instead. A name the chain does not record, a host's own for example, is
+	 * left as it is, and so is anything else the VM holds (a stored equation).
+	 *
+	 * @param lineNumber - The 1-based line, 0 for the state before line 1.
+	 */
+	syncTo(lineNumber: number): void {
+		// A line that is not a number is no line: nothing moves, and the next
+		// call sets every name.
+		if (Number.isNaN(lineNumber)) {
+			this.vmLine = null;
+			return;
+		}
+		const from = this.vmLine;
+		if (from === lineNumber) return;
+		if (from === null) {
+			this.setAllFromChainAt(lineNumber);
+		} else if (lineNumber > from) {
+			// Down: every entry after `from`, up to and including `lineNumber`.
+			const last = this.nearestCheckpointIndex(lineNumber);
+			for (let i = this.nearestCheckpointIndex(from) + 1; i <= last; i++) this.applyOwnBindings(this.checkpoints[i]);
+		} else {
+			// Up: each name an entry after `lineNumber` wrote, back to its prefix.
+			const variables = new Set<string>();
+			const functions = new Set<string>();
+			const last = this.nearestCheckpointIndex(from);
+			for (let i = this.nearestCheckpointIndex(lineNumber) + 1; i <= last; i++) {
+				const checkpoint = this.checkpoints[i];
+				for (const name of Object.keys(checkpoint.variables)) variables.add(name);
+				for (const name of Object.keys(checkpoint.functions)) functions.add(name);
+			}
+			for (const name of variables) this.setVariableFromChainAt(name, lineNumber);
+			for (const name of functions) this.setFunctionFromChainAt(name, lineNumber);
+		}
+		this.vmLine = lineNumber;
+	}
+
+	/**
+	 * Record that `lineNumber` has just run on a VM {@link syncTo} had put at
+	 * the line before it, and recorded what it wrote, so the VM now holds the
+	 * state at the end of `lineNumber`. Any other order leaves the line
+	 * unknown, and the next {@link syncTo} sets every name.
+	 *
+	 * @param lineNumber - The 1-based line that ran.
+	 */
+	noteLineRan(lineNumber: number): void {
+		this.vmLine = this.vmLine === lineNumber - 1 ? lineNumber : null;
+	}
+
+	/**
+	 * Put `names` back to what the chain holds for them at the line the VM is
+	 * at, after something outside the chain changed them (the evaluator
+	 * clearing running totals at the start of a pass). Nothing to do while
+	 * that line is not known: the next {@link syncTo} sets every name.
+	 *
+	 * @param names - The names changed.
+	 */
+	resync(names: Iterable<string>): void {
+		const at = this.vmLine;
+		if (at === null) return;
+		for (const name of names) this.setVariableFromChainAt(name, at);
+	}
+
+	/**
+	 * Forget which line the VM is at, after something outside the chain changed
+	 * it wholesale (another document ran on the same engine). The next
+	 * {@link syncTo} sets every name the chain records.
+	 */
+	desync(): void {
+		this.vmLine = null;
+	}
+
+	/**
+	 * The line {@link syncTo} last put the VM at, or null when that is not
+	 * known. A diagnostic for tests.
+	 */
+	get syncedLine(): number | null {
+		return this.vmLine;
+	}
+
+	/** Apply one entry's own bindings, as {@link restoreTo} does for each entry it replays. */
+	private applyOwnBindings(checkpoint: VMCheckpoint): void {
+		for (const key of Object.keys(checkpoint.variables)) this.vm.setVar(key, checkpoint.variables[key]);
+		for (const key of Object.keys(checkpoint.functions)) {
+			const fn = checkpoint.functions[key];
+			this.vm.defineUserFunction(fn.name, fn.params, fn.program);
+		}
+	}
+
+	/** Set every name the chain records to what it holds at the end of `lineNumber`. */
+	private setAllFromChainAt(lineNumber: number): void {
+		for (const name of this.variableIndex.keys()) this.setVariableFromChainAt(name, lineNumber);
+		for (const name of this.functionIndex.keys()) this.setFunctionFromChainAt(name, lineNumber);
+	}
+
+	/** Set one variable to what the chain holds for it at the end of `lineNumber`, or remove it. */
+	private setVariableFromChainAt(name: string, lineNumber: number): void {
+		const value = lastWriterAtOrBefore(this.variableIndex.get(name), lineNumber)?.variables[name];
+		if (value === undefined) this.vm.deleteVar(name);
+		else this.vm.setVar(name, value);
+	}
+
+	/** {@link setVariableFromChainAt}, for a function. */
+	private setFunctionFromChainAt(name: string, lineNumber: number): void {
+		const fn = lastWriterAtOrBefore(this.functionIndex.get(name), lineNumber)?.functions[name];
+		if (fn === undefined) this.vm.deleteUserFunction(name);
+		else this.vm.defineUserFunction(fn.name, fn.params, fn.program);
 	}
 
 	/** Number of checkpoints stored. */

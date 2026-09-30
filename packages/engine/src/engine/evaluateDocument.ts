@@ -79,6 +79,9 @@ export function evaluateDocument(
 ): ParsingResult {
 	// Every seam this pass reaches goes through the evaluator's contract (#761).
 	const host: EvaluatorHost = engine;
+	// The same ceiling parseDocument keeps, refused before anything is built,
+	// so the two document passes refuse the same documents with the same error.
+	host.assertDocumentSize(input);
 	const previousDocumentModel = host.getDocumentModel();
 	// Taken before the evaluator below is constructed, because constructing one
 	// seizes this unconditionally (ThreeTierEvaluator wires its own checkpointer

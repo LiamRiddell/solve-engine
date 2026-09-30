@@ -128,10 +128,12 @@ describe("what still counts as a definition", () => {
 		// read `v1` from the definition on line 5; editing that line into a
 		// seek over line 4 left `v1` in the VM, because the seek claimed to
 		// write it, and line 4 went on answering 14 where a pass over the same
-		// text has never had a `v1` to read.
+		// text has never had a `v1` to read. Line 4 no longer reads the line
+		// below it at all, as a pass from line 1 does not.
 		const lines = ["total above", ":v2 = 20", "6 sprints in weeks", "v1 + 7", ":v1 = 7"];
 		const { doc, evaluator } = editorFor(lines);
-		expect(shown(doc, 4)).toBe("14");
+		expect(answersOf(doc, 5)).toEqual(settled(lines));
+		expect(shown(doc, 4)).toContain("Undefined variable: v1");
 
 		doc.editLine(5, "solve line 4 for v1 = 27");
 		for (let pass = 0; pass < 6; pass++) evaluator.evaluate({ startLine: 1, endLine: 5 });

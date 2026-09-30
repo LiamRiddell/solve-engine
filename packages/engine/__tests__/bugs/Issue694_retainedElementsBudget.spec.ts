@@ -225,15 +225,16 @@ describe("the incremental path agrees with a fresh pass", () => {
 	});
 
 	test("a definition above the viewport, run out of view after an edit, is counted once", () => {
-		// Line 3, edited while out of view, runs in Tier 3, which marks it clean
-		// as it goes; counting its old record on top of its new answer once
-		// refused line 4 here, where a fresh pass keeps it.
+		// Line 3, edited while out of view, runs above the viewport and is
+		// marked clean as it goes; counting its old record on top of its new
+		// answer once refused line 4 here, where a fresh pass keeps it. (It ran
+		// in Tier 3 before a dirty line above the viewport ran in full.)
 		const lines = ["7", `:a = ${HEAVY}`, `:b = ${HEAVY}`, `:c = ${HEAVY}`];
 		withEvaluator(lines, 350, (evaluator, doc, engine) => {
 			evaluator.evaluate(all(doc));
 			doc.editLine(3, ":b = map(x + 2, 0:99)");
 			const pass = evaluator.evaluate({ startLine: 4, endLine: 4 });
-			expect(pass.lines.find((l) => l.lineNumber === 3)?.tier).toBe(EvalTier.Tier3);
+			expect(pass.lines.find((l) => l.lineNumber === 3)?.tier).toBe(EvalTier.Tier1);
 			const line4 = pass.lines.find((l) => l.lineNumber === 4)!;
 			expect(show(line4.result, line4.error)).toBe(batch(text(doc), 350)[3]);
 			expect(line4.result?.type).toBe(ValueType.Matrix);
