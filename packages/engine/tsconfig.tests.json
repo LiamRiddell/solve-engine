@@ -16,7 +16,12 @@
 			"test/*": ["./__tests__/*"],
 			"@codemirror/language": ["./__tests__/__mocks__/codemirror-language.ts"],
 			"@lezer/common": ["./__tests__/__mocks__/lezer-common.ts"],
-			"obsidian": ["./__tests__/__mocks__/obsidian.ts"]
+			"obsidian": ["./__tests__/__mocks__/obsidian.ts"],
+			// The command line (packages/cli) imports the engine by its published
+			// name, types only; its spec reads them from source, as the command's
+			// own type check does, so this check needs no build first.
+			"solve-engine": ["./src/api/index.ts"],
+			"solve-engine/engine": ["./src/engine/index.ts"]
 		}
 	},
 	"include": ["__tests__/**/*.ts", "tools/**/*.ts"],

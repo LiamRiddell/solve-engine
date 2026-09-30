@@ -7,10 +7,11 @@
  * that arrives through a transitive bump is invisible in a diff, and a
  * consumer's legal review is the wrong place to discover it.
  *
- * Walks `packages/engine/package.json`'s `dependencies` transitively through
- * the installed tree, hoisted or nested, reading each package's own manifest
- * the way Node resolves it. Development dependencies are out of scope: they
- * never ship.
+ * Walks the `dependencies` of every package meant to ship (the engine, the
+ * `solve` command in packages/cli and the MCP server in packages/mcp, whose
+ * SDK brings a tree of its own) transitively through the installed tree,
+ * hoisted or nested, reading each package's own manifest the way Node
+ * resolves it. Development dependencies are out of scope: they never ship.
  *
  * Usage:
  *   node scripts/check-licenses.mjs
@@ -91,8 +92,10 @@ function visit(name, from) {
 	for (const dep of Object.keys(manifest.dependencies ?? {})) visit(dep, path.dirname(file));
 }
 
-const engine = JSON.parse(fs.readFileSync(path.join(ENGINE, "package.json"), "utf8"));
-for (const dep of Object.keys(engine.dependencies ?? {})) visit(dep, ENGINE);
+for (const dir of [ENGINE, path.join(ROOT, "packages/cli"), path.join(ROOT, "packages/mcp")]) {
+	const manifest = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
+	for (const dep of Object.keys(manifest.dependencies ?? {})) visit(dep, dir);
+}
 
 if (problems.length > 0) {
 	console.error(

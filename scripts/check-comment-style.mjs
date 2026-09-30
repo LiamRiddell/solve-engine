@@ -10,7 +10,7 @@
  *
  * Usage:
  *   node scripts/check-comment-style.mjs <path...>     check these files
- *   node scripts/check-comment-style.mjs --all         check all engine source
+ *   node scripts/check-comment-style.mjs --all         check the engine's, the command line's and the MCP server's source
  *   node scripts/check-comment-style.mjs --count       report, do not fail
  */
 
@@ -77,7 +77,7 @@ function workflowFiles() {
 }
 
 const files = all
-	? [...walk("packages/engine/src"), ...workflowFiles()]
+	? [...walk("packages/engine/src"), ...walk("packages/cli/src"), ...walk("packages/mcp/src"), ...workflowFiles()]
 	: explicit.filter((f) => fs.existsSync(f) && /\.(ts|tsx|mjs|cjs|js|ya?ml)$/.test(f));
 
 let violations = 0;

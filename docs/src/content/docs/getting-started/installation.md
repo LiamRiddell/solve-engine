@@ -99,3 +99,11 @@ weather work out of the box against free, keyless endpoints. Stocks, crypto and
 the knowledge package are opt-in and require you to supply the fetching function
 yourself, which means the engine never holds an API key. See
 [async and live data](/guide/async-and-live-data/).
+
+## From a shell, with no code
+
+To evaluate an expression or a whole note from a terminal or a CI job, without
+writing a host around the engine, use the `solve` command:
+`solve "5 km in miles"` prints `3.11 miles`, and `solve check notes.md` exits
+with a failure status when one of the note's check lines stops holding. It is a
+package of its own; [the command line](/guide/command-line/) covers it.

@@ -7780,6 +7780,19 @@ export class ExpressionEngine {
 		// It also belongs here on its own terms. This method is documented as
 		// the call that releases per-document state, and cached query results
 		// are per-document state.
+		//
+		// Emptying the cache is not enough for a fetch still in flight: when it
+		// settles, the query arms its collection timer again in its own
+		// `finally`, on a query no cache holds any more, and a failed one arms
+		// a retry first. So each query's fetch is cancelled (no retry follows)
+		// and its collection time set to zero, and whatever it arms when it
+		// settles fires at once instead of ten minutes later. A host that
+		// clears at a deadline (the solve command, the MCP server after each
+		// call) is then left holding no timer (#774).
+		for (const query of this.queryClient.getQueryCache().getAll()) {
+			query.gcTime = 0;
+			query.cancel({ silent: true }).catch(() => {});
+		}
 		this.queryClient.clear();
 
 		// The active client is a module-level hand-off for synchronous VM
