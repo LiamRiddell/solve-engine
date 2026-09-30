@@ -65,11 +65,18 @@ describe("Document Parse Benchmarks", () => {
   // of the document after it, which at 1,000 lines is still a small number
   // and at 10,000 was two thirds of the parse. A document of that size is
   // within maxDocumentLines and is what a long-running notepad becomes.
+  //
+  // The names say `distinct` because the corpus changed under them (#715):
+  // every line is now its own text, so a cold pass compiles all of them where
+  // the old corpus repeated a few dozen. The comparison pairs cases by name,
+  // and pairing these with the old corpus's timings reported a threefold
+  // regression that the engine did not have (run on the old corpus, this tree
+  // and its merge base agreed within noise). New names start a new series.
   const SIZES = [
-    { name: "doc_50_lines", lines: 50, iters: 200 },
-    { name: "doc_250_lines", lines: 250, iters: FULL_BUDGET },
-    { name: "doc_1000_lines", lines: 1000, iters: FULL_BUDGET },
-    { name: "doc_10000_lines", lines: 10000, iters: FULL_BUDGET },
+    { name: "doc_50_distinct_lines", lines: 50, iters: 200 },
+    { name: "doc_250_distinct_lines", lines: 250, iters: FULL_BUDGET },
+    { name: "doc_1000_distinct_lines", lines: 1000, iters: FULL_BUDGET },
+    { name: "doc_10000_distinct_lines", lines: 10000, iters: FULL_BUDGET },
   ];
 
   for (const size of SIZES) {
