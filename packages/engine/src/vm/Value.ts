@@ -442,9 +442,11 @@ function jsonSafe(x: unknown): unknown {
 	if (typeof x === "bigint") return x.toString();
 	if (Array.isArray(x)) return x.map(jsonSafe);
 	if (x !== null && typeof x === "object") {
-		const out: Record<string, unknown> = {};
-		for (const [k, v] of Object.entries(x)) out[k] = jsonSafe(v);
-		return out;
+		// Built with fromEntries, which defines each key as an own property. An
+		// assignment `out[k] = ...` would read a `__proto__` key as a request to
+		// replace the new object's prototype, dropping the key and handing the
+		// object the payload's own value as its prototype.
+		return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, jsonSafe(v)]));
 	}
 	return x;
 }
