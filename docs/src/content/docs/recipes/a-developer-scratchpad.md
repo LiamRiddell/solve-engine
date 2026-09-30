@@ -1,6 +1,6 @@
 ---
 title: "A developer scratchpad"
-description: The sums a programmer reaches for between commits, in one note: transfer times and data sizes, Unix timestamps, hashes, number bases and bit masks.
+description: "The sums a programmer reaches for between commits, in one note: transfer times and data sizes, Unix timestamps, hashes, number bases and bit masks."
 ---
 
 Most programming days have a handful of small calculations in them: how long a
