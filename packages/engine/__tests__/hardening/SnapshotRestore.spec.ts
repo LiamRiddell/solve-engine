@@ -26,7 +26,7 @@
 import { describe, expect, test, afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import {
-	serializeValue,
+	snapshotValue,
 	deserializeValue,
 	type EngineSnapshot,
 } from "@solve-js/engine/EngineSnapshot";
@@ -239,7 +239,7 @@ describe("every supported value kind survives the round trip", () => {
 		// corruption, so the serializer names them. Tested at the value level so
 		// the assertion does not depend on the engine's own division semantics.
 		for (const n of [Infinity, -Infinity, NaN, 0, -1.5, 1e308, Number.MAX_SAFE_INTEGER]) {
-			const serialized = serializeValue(new Value(ValueType.Number, n), "test");
+			const serialized = snapshotValue(new Value(ValueType.Number, n), "test");
 			const throughJson = JSON.parse(JSON.stringify(serialized));
 			const restored = deserializeValue(throughJson);
 			if (Number.isNaN(n)) {
@@ -495,7 +495,7 @@ describe("symbolic (algebra) values are deferred with a clear error", () => {
 		const symbolic = new Value(ValueType.Symbolic, { kind: "var", name: "x" } as unknown as MatrixData);
 		let code: string | undefined;
 		try {
-			serializeValue(symbolic, 'variable "s"');
+			snapshotValue(symbolic, 'variable "s"');
 		} catch (e) {
 			code = (e as { code?: string }).code;
 		}

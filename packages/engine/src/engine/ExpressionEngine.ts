@@ -45,7 +45,7 @@ import {
     SNAPSHOT_VERSION,
     SnapshotErrorCodes,
     assertRestorable,
-    serializeValue,
+    snapshotValue,
     deserializeValue,
     serializeBytecode,
     serializeUserFunction,
@@ -7320,7 +7320,7 @@ export class ExpressionEngine {
      * - **Package-contributed state.** Core state only for v1; a package opt-in
      *   is a follow-up.
      * - **Values the format cannot hold yet.** A symbolic (algebra) result, a
-     *   colour, a bill split, a chart and an IP subnet: {@link serializeValue}
+     *   colour, a bill split, a chart and an IP subnet: {@link snapshotValue}
      *   refuses each with {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE},
      *   and this method catches the refusal and leaves that variable or cached
      *   line out rather than failing the whole snapshot. After `fromJSON` the
@@ -7384,7 +7384,7 @@ export class ExpressionEngine {
             if (value.type === ValueType.Pending) continue; // in-flight async, not restorable
             if (latestWriter.get(name)?.async) continue; // most recently written by an async line
             try {
-                variables[name] = serializeValue(value, `variable "${name}"`);
+                variables[name] = snapshotValue(value, `variable "${name}"`);
             } catch (e) {
                 // A value kind this v1 format defers (a symbolic result, a
                 // colour, a split, a chart, an IP subnet) is skipped rather than
@@ -7414,7 +7414,7 @@ export class ExpressionEngine {
             if (!namesEveryPluginCall(entry.bytecode, namer)) continue; // calls an unregistered index
             let result: SerializedValue;
             try {
-                result = serializeValue(entry.result, `line ${line}`);
+                result = snapshotValue(entry.result, `line ${line}`);
             } catch (e) {
                 // A symbolic (algebra) result is the one value kind this v1 format
                 // defers. Skip the cached line rather than aborting the whole

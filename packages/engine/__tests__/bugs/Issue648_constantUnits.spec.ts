@@ -5,7 +5,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { numberValue, uomValue, ValueType } from "@solve-js/vm/Value";
 import { unspelledUnitRefused, quantityOperandRefused } from "@solve-js/vm/VMConversion";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { serializeValue, deserializeValue } from "@solve-js/engine/EngineSnapshot";
+import { snapshotValue, deserializeValue } from "@solve-js/engine/EngineSnapshot";
 import { BUILTIN_PACKAGES } from "@solve-js/packages";
 
 /**
@@ -159,10 +159,10 @@ describe("a snapshot keeps the constant's unit", () => {
 	test("the sidecar is written as uu and read back", () => {
 		const value = numberValue(6.62607015e-34);
 		value.unspelledUnit = "J·s";
-		const serialized = serializeValue(value);
+		const serialized = snapshotValue(value);
 		expect(serialized).toMatchObject({ t: ValueType.Number, uu: "J·s" });
 		expect(deserializeValue(serialized).unspelledUnit).toBe("J·s");
-		expect(serializeValue(numberValue(2))).not.toHaveProperty("uu");
+		expect(snapshotValue(numberValue(2))).not.toHaveProperty("uu");
 	});
 
 	test.each([5, "", null, { unit: "J·s" }])("a hand-edited uu of %j is refused as malformed", (uu) => {
