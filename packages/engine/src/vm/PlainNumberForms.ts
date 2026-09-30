@@ -41,6 +41,23 @@ export function notPlainNumberKind(v: Value): string | undefined {
 }
 
 /**
+ * `int("...")`: the whole number a piece of text spells, its fraction cut off
+ * toward zero as `int` cuts a number's (`int("2.7")` is 2, `int("-2.7")` is
+ * -2). Text that does not spell a number whole is refused with
+ * `TEXT_NOT_A_NUMBER`, where `toNumber()` read it through `parseFloat`: `int("abc")`
+ * answered 0 and `int("12abc")` answered 12.
+ *
+ * @param text - The text to read.
+ * @returns The whole number, or the refusal as an error Value.
+ */
+export function intOfText(text: string): Value {
+	const trimmed = text.trim();
+	if (NUMBER_TEXT.test(trimmed)) return numberValue(Math.trunc(Number(trimmed.replace(/,/g, ""))));
+	const quoted = text.length > QUOTED_TEXT_LIMIT ? `${text.slice(0, QUOTED_TEXT_LIMIT)}...` : text;
+	return errorValue("TEXT_NOT_A_NUMBER", `"${quoted}" is not a number: int reads text that is a number and nothing else.`);
+}
+
+/**
  * `float(x)`: the plain number `x` is.
  *
  * A number is returned as it is, exact digits and all; a percentage is its

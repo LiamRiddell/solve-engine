@@ -1200,6 +1200,14 @@ wcagLevel(#ffffff, #cccccc) // Fail
 #ff0000 == rgb(255, 0, 0) // true
 ```
 
+```
+#ff0000 + 2 // A colour cannot be added: it is three channels (red, green and blue), not one number. To use one channel as a number, read it out first, as in red(#3366cc).
+sqrt(#ff0000) // A colour cannot be given to sqrt: it is three channels (red, green and blue), not one number. To use one channel as a number, read it out first, as in red(#3366cc).
+#ff0000 < 3 // A colour cannot be put in order: it is three channels (red, green and blue), not one number. To use one channel as a number, read it out first, as in red(#3366cc).
+red(#3366cc) + 1 // 52
+lighten(#3366cc, 20%) // #85a3e0
+```
+
 ## complex
 
 https://liamriddell.github.io/solve-engine/syntax/complex/
@@ -2875,6 +2883,15 @@ last address of 192.168.1.10/24 // 192.168.1.255
 ```
 
 ```
+192.168.1.0/24 == 192.168.1.0/25 // false
+192.168.1.0/24 == 192.168.1.0/24 // true
+192.168.1.0/24 != 192.168.1.0/25 // true
+192.168.1.1 == 192.168.1.1/32 // false
+192.168.1.1 == 3232235777 // false
+192.168.1.1 as int == 3232235777 // true
+```
+
+```
 2001:0DB8:0000:0000:0000:ff00:0042:8329 // 2001:db8::ff00:42:8329
 fe80:0:0:0:0:0:0:1 // fe80::1
 2001:db8:0:0:1:0:0:1 // 2001:db8::1:0:0:1
@@ -2981,6 +2998,12 @@ hex(-255) // -0xFF
 255.7 as hex // 0xFF
 ```
 
+```
+(2^100 + 1) in binary as hex // 0x10000000000000000000000001
+(2^100 + 1) in hex in octal // 0o2000000000000000000000000000000001
+(2^100 + 1) in hex as number // 1,267,650,600,228,229,401,496,703,205,377
+```
+
 ## number-functions
 
 https://liamriddell.github.io/solve-engine/syntax/number-functions/
@@ -3004,6 +3027,13 @@ lcm of 4 and 6 // 12
 ```
 max(1 km, 500 m) // 1.00 km
 max(25/12/2026, 1/1/2027) // Friday, January 1, 2027
+```
+
+```
+sqrt("abc") // sqrt takes a number, not text. To use a number held as text, convert it first with "as number".
+round("3.5") // round takes a number, not text. To use a number held as text, convert it first with "as number".
+sqrt("16" as number) // 4
+int("42.9") // 42
 ```
 
 ```

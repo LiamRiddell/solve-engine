@@ -80,3 +80,15 @@ since there is no useful way to write a fractional hex digit.
 hex(-255) // -0xFF
 255.7 as hex // 0xFF
 ```
+
+A whole number too large for an ordinary number to hold exactly (past about
+nine thousand million million, 2^53) keeps every digit when it is written in
+another base, and when that base is converted on again. A chain of conversions
+reads the digits the last one wrote, not a rounded copy, so the last digit of
+2^100 + 1 survives a trip through binary into hex and back to a number:
+
+```solve
+(2^100 + 1) in binary as hex // 0x10000000000000000000000001
+(2^100 + 1) in hex in octal // 0o2000000000000000000000000000000001
+(2^100 + 1) in hex as number // 1,267,650,600,228,229,401,496,703,205,377
+```

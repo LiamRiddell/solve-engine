@@ -53,6 +53,21 @@ hypot(3 m, 400 cm) // 5.00 m
 fact(3 m) // ERROR: fact takes a plain number, not a length
 ```
 
+Text in quotes is words, not a number, even when the words are digits, so a
+function given text refuses it by name rather than reading it as zero or as its
+leading digits. `as number` turns text that is a number into one, and `int`
+reads such text itself, cutting any fraction off:
+
+```solve
+sqrt("abc") // sqrt takes a number, not text. To use a number held as text, convert it first with "as number".
+round("3.5") // round takes a number, not text. To use a number held as text, convert it first with "as number".
+sqrt("16" as number) // 4
+int("42.9") // 42
+```
+
+A colour or an IPv6 address has no one number either, and is refused the same
+way (see [colours](/syntax/colours/) and [networking](/syntax/networking/)).
+
 `root(n, x)` is the nth root of x. A negative number has a real root of odd
 degree, since -2 cubed is -8, and none of even degree, which is refused by name
 as `(-1)^0.5` is.

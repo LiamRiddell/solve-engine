@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 528 codes, grouped below by the part
+ship. The engine and its built-in packages ship 529 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -303,9 +303,10 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 
 | Code | Arrives | When it arises |
 | --- | --- | --- |
-| `TEXT_ARITHMETIC` | as a value | Text used in arithmetic with a number. The message points at `as number` for text that holds a number. |
+| `TEXT_ARITHMETIC` | as a value | Text used in arithmetic with a number, or given to a numeric function (`sqrt("abc")`). The message points at `as number` for text that holds a number. |
+| `COLOUR_ARITHMETIC` | as a value | A colour in arithmetic, a numeric function, an order or a conversion to a form of a number (`#ff0000 + 2`, `sqrt(#ff0000)`, `#ff0000 < 3`). A colour is three channels, not one number; the message points at reading a channel out, as in `red(#3366cc)`. |
 | `IPV6_ARITHMETIC` | as a value | An IPv6 address in arithmetic, a numeric function, a comparison with a number or a conversion with no whole-number reading (`fe80::1 + 2`). Its 128 bits are past what a number holds exactly; the message points at `as int`. |
-| `TEXT_NOT_A_NUMBER` | as a value | `as number` given text that is not a number. |
+| `TEXT_NOT_A_NUMBER` | as a value | `as number` or `int` given text that is not a number. |
 | `REMAINDER_UNDEFINED` | as a value | A remainder with no value: `5 mod 0`, or the remainder of an infinite number. |
 | `POWER_NO_REAL_VALUE` | as a value | A negative number to a fractional power with no real value, as in `(-1)^0.5`, or a negative number's root of even degree. |
 | `FUNCTION_DOMAIN` | as a value | A function called outside the numbers it is defined for, such as `ln(0)`. The message names the domain. |
