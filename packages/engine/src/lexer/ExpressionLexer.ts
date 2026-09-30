@@ -6,6 +6,7 @@ import type { TokenLookup } from '@solve-js/lexer/TokenClassRegistry';
 import { DEGREE_SIGN, scanGeoAngle } from '@solve-js/lexer/GeoAngleLiteral';
 import { isPipeRow, isSeparatorRowText } from '@solve-js/lexer/TableBlocks';
 import { lakhGroupEnd, rupeeMarked } from '@solve-js/lexer/LakhGrouping';
+import { groupsCurrencyInCall } from '@solve-js/lexer/CurrencyGrouping';
 
 // Bootstrap all token types at module load
 registerAllTokenTypes();
@@ -1485,10 +1486,14 @@ export class ExpressionLexer {
       // top-level comma (`1,000,000`). The innermost bracket's context decides;
       // the `.` grouping form is context-free and unaffected. See
       // {@link groupingStack}.
+      // The one exception is an amount with a currency sign before it,
+      // `compoundInterest($1,000, 5%, 3)`, whose comma is the grouping the
+      // reader wrote (#830); see lexer/CurrencyGrouping.ts.
       if (
         input.charCodeAt(pos) === 44 &&
         this.groupingStack.length > 0 &&
-        this.groupingStack[this.groupingStack.length - 1]
+        this.groupingStack[this.groupingStack.length - 1] &&
+        !groupsCurrencyInCall(input, start, pos)
       ) {
         break;
       }

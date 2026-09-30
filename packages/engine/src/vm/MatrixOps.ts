@@ -147,7 +147,7 @@ export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
 	if (l.cols !== r.rows) {
 		return errorValue(
 			"DIMENSION_MISMATCH",
-			`Cannot multiply a ${l.rows}x${l.cols} matrix by a ${r.rows}x${r.cols} matrix — inner dimensions must match (${l.cols} !== ${r.rows}).`,
+			`Cannot multiply a ${l.rows}x${l.cols} matrix by a ${r.rows}x${r.cols} matrix: the first has ${l.cols} ${l.cols === 1 ? "column" : "columns"} and the second ${r.rows} ${r.rows === 1 ? "row" : "rows"}, and a product needs the two to match.`,
 		);
 	}
 
@@ -173,6 +173,61 @@ export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
 		}
 	}
 	return matrixValue(resultRows, resultCols, data);
+}
+
+/**
+ * The number of components a matrix has when it is a vector (one row or one
+ * column), or null when it is neither.
+ *
+ * @param m - The matrix.
+ */
+export function vectorLength(m: MatrixData): number | null {
+	return m.rows === 1 || m.cols === 1 ? m.rows * m.cols : null;
+}
+
+/**
+ * The dot product of two vectors: the sum of the products of their matching
+ * components, a single number. `dot([1,2,3], [4,5,6])` is 1*4 + 2*5 + 3*6, 32.
+ *
+ * A row and a column read alike, since a vector's components are the same
+ * whichever way it is written. Two vectors of different lengths have no dot
+ * product, and a matrix that is not a vector is not one of its operands (the
+ * matrix product is `*`); each is refused with `DIMENSION_MISMATCH`, naming
+ * the shapes. A symbolic component keeps the sum symbolic.
+ *
+ * @param l - The first vector.
+ * @param r - The second vector.
+ * @returns The dot product, or the refusal as an error Value.
+ */
+export function dotProduct(l: MatrixData, r: MatrixData): Value {
+	const lLength = vectorLength(l);
+	const rLength = vectorLength(r);
+	if (lLength === null || rLength === null) {
+		const offender = lLength === null ? l : r;
+		return errorValue(
+			"DIMENSION_MISMATCH",
+			`dot takes two vectors, and a ${offender.rows}x${offender.cols} matrix is not one. For a matrix product, write "*".`,
+		);
+	}
+	if (lLength !== rLength) {
+		return errorValue(
+			"DIMENSION_MISMATCH",
+			`dot needs two vectors of the same length, but one has ${lLength} ${lLength === 1 ? "component" : "components"} and the other ${rLength}.`,
+		);
+	}
+	// Column-major storage of a single row or a single column is its
+	// components in order, so both read the same way.
+	if (l.hasSymbolic || r.hasSymbolic) {
+		let acc: SymbolicNode = constNode(0);
+		for (let k = 0; k < lLength; k++) {
+			const term: SymbolicNode = { kind: "mul", left: entryToSymbolic(l.data[k]), right: entryToSymbolic(r.data[k]) };
+			acc = simplifySymbolic({ kind: "add", left: acc, right: term });
+		}
+		return matrixEntryToValue(symbolicToEntry(acc));
+	}
+	let sum = 0;
+	for (let k = 0; k < lLength; k++) sum += Number(l.data[k]) * Number(r.data[k]);
+	return numberValue(sum);
 }
 
 /**

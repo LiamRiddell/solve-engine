@@ -187,12 +187,10 @@ describe("Arithmetic Parselets", () => {
     expect(parseAndExecute("2 power of 3")).toBe(8);
   });
 
-  test("keyword exponent: 'exponent'", () => {
-    expect(parseAndExecute("2 exponent 3")).toBe(8);
-  });
-
-  test("keyword exponent: 'prime'", () => {
-    expect(parseAndExecute("2 prime 3")).toBe(8);
+  // `exponent`, `prime` and `mul` were retired as aliases for `^` and `*`, so
+  // each is a name and none reads as an operator (#829).
+  test.each(["2 exponent 3", "2 prime 3", "2 mul 3"])("retired operator word: %s is not an operator", (line) => {
+    expect(() => parseAndExecute(line)).toThrow();
   });
 
   test("keyword modulo: 'mod'", () => {

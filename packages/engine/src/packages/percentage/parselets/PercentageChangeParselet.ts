@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { isKnownUnit } from "@solve-js/lexer/units";
+import { readsAsRadians, emitRadiansTag } from "@solve-js/parser/InverseTrigAngle";
 
 /**
  * `100 to 150`, the percentage change between two numbers.
@@ -68,6 +69,8 @@ export class PercentageChangeParselet implements InfixParselet {
       )
     ) {
       parser.consume();
+      // `asin(0.5) to degrees`: the radians the call answers in, converted (#829).
+      if (readsAsRadians(left, nextToken.value)) emitRadiansTag(builder);
       builder.emitOpcode(OpCode.PUSH_STRING);
       builder.emitString(nextToken.value);
       builder.emitOpcode(OpCode.UOM_CONVERT_IN);

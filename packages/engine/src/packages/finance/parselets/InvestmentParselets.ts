@@ -175,10 +175,14 @@ export class PresentValueParselet implements PrefixParselet {
 /**
  * `<invested> invested <returned> returned`, the return on the investment.
  *
- * `$500 invested $1,500 returned` is 2x, not 3x: ROI measures the profit
- * against the cost, so doubling your money is a 1x return and tripling it is
- * 2x. Worth stating because "3x" is what the money multiple would be, and the
- * two get confused; `$1,500 / $500` gives that instead.
+ * `$500 invested $1,500 returned` is 200.00%, not 300%: ROI measures the
+ * profit against the cost, so doubling your money is a 100% return and
+ * tripling it is 200%. Worth stating because 3 is what the money multiple
+ * would be, and the two get confused; `$1,500 / $500` gives that instead.
+ *
+ * The answer is a percentage, as `annual return on` and `compoundInterestRate`
+ * answer, so the three return forms give one kind of answer (#830). It used to
+ * be the bare fraction, 2.
  *
  * Infix on `invested`, so the amount invested is the left operand.
  */

@@ -22,10 +22,13 @@ export const enLocale: ILocale = {
     plus: "PLUS", add: "PLUS", and: "AND_CONJ", with: "PLUS",
     minus: "MINUS", subtract: "MINUS", remove: "MINUS", take: "MINUS",
     without: "MINUS",
-    times: "STAR", multiply: "STAR", mul: "STAR",
+    // `mul`, `exponent` and `prime` were once aliases for `*` and `^` here. A
+    // keyword cannot be a name, not even with a colon, and `prime` claimed the
+    // word a reader uses to ask whether a number is prime, so they were
+    // retired rather than kept as operators nobody guessed (#829).
+    times: "STAR", multiply: "STAR",
     divide: "SLASH",
     modulo: "MOD", mod: "MOD",
-    exponent: "CARET", prime: "CARET",
     xor: "BIT_XOR",
     of: "OF",
     now: "NOW", today: "TODAY", tomorrow: "TOMORROW", yesterday: "YESTERDAY",

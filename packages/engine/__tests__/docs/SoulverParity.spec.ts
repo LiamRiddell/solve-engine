@@ -242,9 +242,9 @@ const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
 	["3 million + 10%", "3.3M", "3,300,000"],
 	["5 billion", "5G", "5,000,000,000"],
 	["2.5 bn", "2.5G", "2,500,000,000"],
-	// The right number. Soulver renders a return as a multiplier; this keeps
-	// it numeric so it stays composable.
-	["$500 invested $1,500 returned", "2x", "2"],
+	// The right number. Soulver renders a return as a multiplier; this gives
+	// it as a percentage, as every return form here answers (#830).
+	["$500 invested $1,500 returned", "2x", "200.00%"],
 	// Right duration, written out in full rather than abbreviated.
 	["5.5 minutes as timespan", "5 min 30 s", "5 minutes 30 seconds"],
 	// A compound quantity is summed into its smallest unit and rendered as

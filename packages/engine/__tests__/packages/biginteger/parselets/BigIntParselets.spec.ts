@@ -116,8 +116,9 @@ describe("BigInt Parselets", () => {
     expect(r.toNumber()).toBe(8);
   });
 
-  test("bigint exponent keyword: 2n prime 3n = 8 (returns Number)", () => {
-    const r = parseAndExecute("2n prime 3n");
+  // `prime` is no longer a spelling of `^` (#829); the sign is.
+  test("bigint exponent: 2n ^ 3n = 8", () => {
+    const r = parseAndExecute("2n ^ 3n");
     expect(r.toNumber()).toBe(8);
   });
 

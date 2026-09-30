@@ -134,6 +134,27 @@ exact value such as the sine of 45°, a half of the square root of two, is the
 nearest double to it, shown to the usual places. Any other angle is computed as
 before.
 
+### From a ratio back to an angle
+
+The inverse functions go the other way: `asin`, `acos` and `atan` take a ratio
+of sides and give the angle it belongs to, and `atan2(y, x)` gives the angle of
+a point from the origin. Like the functions they undo, they answer in radians.
+Converting that answer to degrees converts it, so `asin(0.5) in degrees` is 30
+degrees, the same angle `asind(0.5)` gives as a plain number:
+
+```solve
+asin(0.5) // 0.52
+asin(0.5) in degrees // 30.00 degrees
+atan2(1, 1) in degrees // 45.00 degrees
+asind(0.5) // 30.00
+```
+
+The boundary: the conversion knows the number is an angle because the line
+starts with the call. A name that holds the answer is an ordinary number, and a
+plain number converted to a unit is given that unit, so `a = asin(0.5)` followed
+by `a in degrees` is 0.52 degrees. Write `asind`, or `radtodeg(a)`, for that
+case.
+
 ## Outside a function's domain
 
 Some functions only have a real answer for part of the number line: a logarithm

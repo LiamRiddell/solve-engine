@@ -113,6 +113,30 @@ AUD` is written `$12.00`, which reads as US dollars; `12 NOK` is written `12.00
 kr`, which reads as Swedish kronor; `12 CNY` is written `¥12.00`, which reads
 as yen. Keep the code (`12 AUD`) where the currency matters.
 
+## Amounts inside a call
+
+Inside the brackets of a function call, or of a list, a comma separates one
+value from the next: `rgb(255,255,255)` is three numbers, and `max(1,000, 2)` is
+the largest of 1, 0 and 2. An amount of money is the exception. A comma after an
+amount with its currency sign in front, followed by exactly three digits and
+then the end of the amount (a comma, a decimal point, a closing bracket or a
+space), groups the thousands as it does anywhere else, since nobody writes a
+list as `$1` then `000`:
+
+```solve
+compoundInterest($1,000, 5%, 3) // $1,157.63
+max($1,000, $2) // $1,000.00
+max($1,000.50, $2) // $1,000.50
+max(1,000, 2) // 2
+```
+
+The boundary is the ambiguity the rule cannot resolve. `max($1,234)` is read as
+the one amount $1,234; to mean $1 and 234, put a space after the comma, as
+`max($1, 234)`. A plain number keeps the separator reading, so write
+`max(1000, 2)` for a thousand. An amount with its currency after it (`1,000 USD`)
+inside a call is not read as grouped either: write the sign in front, or no
+comma.
+
 ## Indian grouping
 
 In India a hundred thousand is one lakh, written `1,00,000`, and ten million is
