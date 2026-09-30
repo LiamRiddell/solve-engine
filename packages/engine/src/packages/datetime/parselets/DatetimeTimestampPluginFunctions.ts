@@ -1,5 +1,6 @@
 import { Value, ValueType, numberValue, stringValue, boolValue, uomValue, datetimeValue, errorValue, type DatetimeGrain } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { valueKindName } from "@solve-js/vm/VMConversion";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
 import { isWeekend } from "@solve-js/vm/BusinessDays";
 import { weekOf } from "@solve-js/calendar/WeekShape";
@@ -89,7 +90,7 @@ function asEpochMs(value: Value, fieldName: string): number | Value {
   if (value.type === ValueType.Datetime) return value.toNumber();
   return errorValue(
     "DATE_FIELD_EXPECTED_DATE",
-    `"${fieldName}" expects a date, got ${ValueType[value.type] ?? "an unsupported value"}`
+    `"${fieldName}" expects a date, but got ${valueKindName(value)}.`
   );
 }
 

@@ -28,6 +28,25 @@ const ORDINAL = /^(\d+)(st|nd|rd|th)$/i;
 const ORDINAL_WORDS: ReadonlyMap<string, number> = new Map([["first", 1], ["second", 2], ["third", 3], ["fourth", 4], ["fifth", 5]]);
 
 /**
+ * The source text a run of tokens was written as: each token's own text, with
+ * the spaces that stood between them in the line (read from their offsets), so
+ * `2nd  Tuesday` keeps its two spaces and `2nd` stays one word.
+ *
+ * @param run - Consecutive tokens from one line.
+ * @returns The text they cover.
+ */
+export function sourceTextOf(run: readonly Token[]): string {
+	let text = "";
+	let end: number | undefined;
+	for (const token of run) {
+		if (end !== undefined && token.offset > end) text += " ".repeat(Math.min(token.offset - end, 64));
+		text += token.text ?? token.value;
+		end = token.sourceEnd ?? token.offset + (token.text ?? token.value).length;
+	}
+	return text;
+}
+
+/**
  * Fuses the `<ordinal> <weekday>` head of `2nd Tuesday of March 2026` into a
  * single `NTH_WEEKDAY` token, so {@link NthWeekdayParselet} sees one token
  * carrying the ordinal and the weekday and reads the `of <month>` after it.
@@ -112,12 +131,15 @@ export function nthWeekdayNormalizerRule(priority = 66): NormalizerRule {
 			// for NextLastParselet (or as the non-date they are).
 			if (tokens[pos + ordinalTokens + 1]?.type !== "OF") return null;
 
+			// The value carries the ordinal and weekday for the parselet; the text
+			// is what the reader wrote, which a message quoting the token shows.
+			// It was the value, so a refusal quoted "2:2" for "2nd tuesday".
 			const value = `${ordinal}:${dow}`;
 			const fused = new LexerToken(
 				NTH_WEEKDAY_TYPE,
 				NTH_WEEKDAY_TYPE_ID,
 				value,
-				value,
+				sourceTextOf(tokens.slice(pos, pos + ordinalTokens + 1)),
 				first.offset,
 				0,
 				first.line,

@@ -26,6 +26,15 @@ The minutes may follow a point instead of a colon, as British timetables write
 them, so `3.30pm` is `3:30pm`. Only two digits after the point are minutes:
 `3.5pm` could mean half past or five past, so it is not read as a time at all.
 
+Either side of a colon is a whole number of hours or minutes, so a decimal
+beside a colon is not a time, and the line says so rather than reading the
+whole part alone:
+
+```solve-doc
+1:30 // 1:30:00 AM
+1.5:3 // ERROR: "1.5:3" is not a valid time
+```
+
 A clock time is read as that time today. When adding or taking away a length of
 time carries it past midnight, the answer says how many days it has moved, the
 way the time-zone forms do:

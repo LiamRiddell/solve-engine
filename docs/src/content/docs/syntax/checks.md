@@ -65,9 +65,74 @@ check 5 m ≈ 5.01 m within 1 cm // ✓ (differs by 0.01 m)
 check 1/3 ≈ 0.33 within 1% // check failed: 0.333333 differs from 0.33 by 1.01%, more than 1%
 ```
 
-Without `within`, `≈` allows no margin of its own: `check 1/3 ≈ 0.33` fails,
-because a third is not 0.33. Say how close is close enough whenever the two sides
-are worked out differently.
+Without a `within`, `≈` reads the right-hand side as written to the decimal
+places it has: the check asks whether the left side is that figure to those
+places. Sixty miles an hour is 96.56064 km/h, so it is 96.56 km/h to two places
+and not 96.5 to one. A whole number on the right allows no rounding, so `5.4 ≈ 5`
+fails, and a figure worked out to every digit, such as `pi`, is held to the
+engine's own rounding. Say how close is close enough with `within` whenever the
+margin you mean is wider than the last written place.
+
+```solve
+check 60 mph ≈ 96.56 km/h // ✓ (differs by 0.000398 mph)
+check 60 mph ≈ 96.5 km/h // check failed: 60 mph is not equal to 96.5 km/h
+check 1/3 ≈ 0.333 // ✓ (differs by 0.000333)
+check 5.4 ≈ 5 // check failed: 5.4 is not equal to 5
+```
+
+## Several things at once
+
+One check can state more than one thing. A chain of comparisons, such as
+`0 < :a < 10`, says that a value lies between two others: it is read as every
+link at once (`0 < :a` and `:a < 10`), the way it is written in mathematics,
+and the middle value is worked out once for both links. Comparisons joined
+with `and` (or `&&`) are one check of all of them. Either way the check passes
+when everything it states holds, and a failure names the first comparison that
+does not:
+
+```solve-doc
+:a = 3
+:b = 4
+check 0 < :a < 10 // ✓
+check :a > 0 and :b > 0 // ✓
+check 1 == 1 == 1 // ✓
+check :a > 0 and :b > 10 // ERROR: check failed: 4 is not more than 10
+```
+
+A `within` margin belongs to the comparison it is written after, so each part
+of a joined check can have its own, and a passing check says how far apart each
+approximate part was:
+
+```solve
+check 22/7 ≈ pi within 0.1% and 5 m ≈ 5.01 m within 1 cm // ✓ (differs by 0.04% and by 0.01 m)
+```
+
+A check states what must hold, so it is not joined with `or`, which would let
+a broken part pass unnoticed. To check that one of two things holds, compare
+the yes-or-no answer itself (see the next section). Anything else written after
+a check's comparison, such as a `|`, is refused rather than applied to the
+check's tick:
+
+```solve-doc
+check 1 == 1 or 1 == 2 // ERROR: a check states things that must all hold, so it joins them with "and", not "or". To check that one of two things holds, compare the answer, as in "check (:a > 0 or :b > 0) == true"
+check (1 == 1 or 1 == 2) == true // ✓
+```
+
+A comparison outside a check is unchanged: `1 < 2 < 3` still reads from the
+left, as `(1 < 2) < 3`, and the word `and` between two numbers still adds them
+(`5 and 3` is 8).
+
+## Yes or no answers
+
+A comparison answers true or false, and two such answers compare as equal or
+not, as two pieces of text do. They have no order, so `<` between them is
+refused, and `true` is not the number 1.
+
+```solve
+check !(1 > 2) == true // ✓
+check (2 > 1) == (3 > 2) // ✓
+check true == false // check failed: true is not equal to false
+```
 
 ## Checks among the other lines
 

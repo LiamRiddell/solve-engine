@@ -138,7 +138,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | --- | --- | --- |
 | `SYMBOLIC_RATIONAL_OVERFLOW` | thrown | A coefficient grew past `RATIONAL_MAX_BITS`, e.g. repeated exact elimination multiplying denominators together. |
 | `SYMBOLIC_NONFINITE_OPERAND` | either | `NaN` or `±Infinity` reaching a symbolic expression, neither of which has an exact rational value. |
-| `SYMBOLIC_DIVISION_BY_ZERO` | thrown | An exact symbolic division by zero. The zero is exact, so a very small number is not mistaken for one. |
+| `SYMBOLIC_DIVISION_BY_ZERO` | either | An exact symbolic division by zero, such as `expand((x+1)/0)`: refused where the quotient is written, as a value, and thrown from the rational arithmetic beneath. The zero is exact, so a very small number is not mistaken for one. |
 | `SYMBOLIC_NODE_LIMIT_EXCEEDED` | thrown | A tree exceeding `SYMBOLIC_MAX_NODES` entering the simplifier. |
 | `SYMBOLIC_FORMULA_VALUE_UNSUPPORTED` | as a value | A name holding a formula written before one of its unknowns had a value (`y = x + 1` above `x = $5`), read after that unknown was given money, a quantity in a unit, a date or text, which the formula cannot take. Returned by the read rather than a formula mixing the value with the unknown (#732). |
 | `SYMBOLIC_UNSUPPORTED_FUNCTION` | as a value | A builtin with no symbolic reading (`min`, `random`, the finance block, ...) applied to an expression still containing an unknown. Returned rather than computing against `toNumber()`'s placeholder zero. |

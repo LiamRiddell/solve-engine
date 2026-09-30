@@ -197,8 +197,9 @@ describe("an inverse trigonometric call converted to an angle is read as radians
 	test("what is not an inverse trigonometric call keeps the ordinary reading", () => {
 		expect(show("0.5 in degrees")).toBe("0.50 degrees");
 		expect(show("asin(0.5)")).toBe("0.52");
-		// A unit that is not an angle gives the plain number that unit, as `0.52 in km` does.
-		expect(show("asin(0.5) in km")).toBe("0.52 km");
+		// The call alone is an angle whatever the target, so a unit that is not
+		// an angle is refused rather than given to it (FoundBug_subtractFromAndAngleTargets).
+		expect(show("asin(0.5) in km")).toBe("an angle cannot be converted to a length");
 		// A name holding the answer is a plain number: the boundary.
 		expect(doc("a = asin(0.5)\na in degrees")).toEqual(["0.52", "0.52 degrees"]);
 	});

@@ -165,7 +165,7 @@ export const CoreErrorCodes = {
   SYMBOLIC_RATIONAL_OVERFLOW: "SYMBOLIC_RATIONAL_OVERFLOW",
   /** `NaN` or `±Infinity` reaching a symbolic expression, neither of which has an exact rational value. */
   SYMBOLIC_NONFINITE_OPERAND: "SYMBOLIC_NONFINITE_OPERAND",
-  /** An exact symbolic division by zero. The zero is exact, so a very small number is not mistaken for one. */
+  /** An exact symbolic division by zero, such as `expand((x+1)/0)`: refused where the quotient is written, as a value, and thrown from the rational arithmetic beneath. The zero is exact, so a very small number is not mistaken for one. */
   SYMBOLIC_DIVISION_BY_ZERO: "SYMBOLIC_DIVISION_BY_ZERO",
   /** A tree exceeding `SYMBOLIC_MAX_NODES` entering the simplifier. */
   SYMBOLIC_NODE_LIMIT_EXCEEDED: "SYMBOLIC_NODE_LIMIT_EXCEEDED",

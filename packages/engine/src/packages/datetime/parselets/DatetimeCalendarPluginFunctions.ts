@@ -1,5 +1,6 @@
 import { Value, ValueType, stringValue, uomValue, datetimeValue, errorValue } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { valueKindName } from "@solve-js/vm/VMConversion";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
 import {
 	nthWeekdayOfMonth as nthWeekdayOfMonthCalc,
@@ -25,7 +26,7 @@ function asEpochMs(value: Value, form: string): number | Value {
 	if (value.type === ValueType.Datetime) return value.toNumber();
 	return errorValue(
 		"DATE_EXPECTED",
-		`"${form}" expects a date, got ${ValueType[value.type] ?? "an unsupported value"}`
+		`"${form}" expects a date, but got ${valueKindName(value)}.`
 	);
 }
 

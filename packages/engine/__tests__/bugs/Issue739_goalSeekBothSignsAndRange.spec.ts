@@ -149,7 +149,8 @@ describe("the issue's adversarial shapes", () => {
 
 	test("a repayment on a negative deposit is a gap, and the positive answer is found", () => {
 		expect(incremental([":deposit = 100000", ":rate = 4%", "monthly repayment on deposit over 25 years at rate", "solve line 3 for deposit = 900"]).slice(-1)[0]).toBe("170,507.23");
-		expect(incremental([":deposit = 100000", ":rate = 4%", "monthly repayment on deposit over 25 years at rate", "solve line 3 for rate = 600"]).slice(-1)[0]).toBe("0.05");
+		// A rate held as a percentage is solved as one (it was the bare 0.05); see FoundBug_goalSeekLoanRefusals.
+		expect(incremental([":deposit = 100000", ":rate = 4%", "monthly repayment on deposit over 25 years at rate", "solve line 3 for rate = 600"]).slice(-1)[0]).toBe("5.26%");
 	});
 
 	test("a target reached at zero", () => {

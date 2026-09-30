@@ -265,6 +265,40 @@ function collectVariables(root: SymbolicNode, into: Set<string>): void {
 }
 
 /**
+ * Whether a tree divides by an exact zero anywhere: a quotient whose
+ * denominator is the constant 0, or the constant 0 raised to a negative power
+ * (which is the same division, `0^-1` being `1/0`).
+ *
+ * The simplifier leaves such a quotient unfolded rather than throwing from the
+ * middle of its walk, so the caller that builds an expression for the reader
+ * asks this and refuses it: a later step that treated the quotient as ordinary
+ * algebra answered `expand((x+1)/0)` as 1, by cancelling the numerator against
+ * a greatest common divisor with zero. Only an exact zero counts, so a very
+ * small number is not mistaken for one. Iterative, as {@link nodeCount} is.
+ *
+ * @param root - The tree to scan, simplified or not.
+ * @returns `true` when some part of it divides by zero.
+ */
+export function dividesByZero(root: SymbolicNode): boolean {
+	const pending: SymbolicNode[] = [root];
+	while (pending.length > 0) {
+		const node = pending.pop()!;
+		if (node.kind === "div" && node.right.kind === "const" && node.right.value.n === 0n) return true;
+		if (
+			node.kind === "pow" &&
+			node.base.kind === "const" &&
+			node.base.value.n === 0n &&
+			node.exponent.kind === "const" &&
+			node.exponent.value.n < 0n
+		) {
+			return true;
+		}
+		for (const child of childrenOf(node)) pending.push(child);
+	}
+	return false;
+}
+
+/**
  * Replaces every occurrence of a variable with an expression.
  *
  * @param node - The tree to rewrite.

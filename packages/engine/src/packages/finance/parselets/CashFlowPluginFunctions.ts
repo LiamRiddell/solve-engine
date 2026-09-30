@@ -13,6 +13,7 @@ import {
 } from "@solve-js/vm/Value";
 import { type DecimalData, decimalFromInteger, decimalToFixed, decimalToNumber, decimalToString } from "@solve-js/decimal";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
+import { valueKindName } from "@solve-js/vm/VMConversion";
 import { decimalOfNumber, internalRateOfReturn, netPresentValue, paybackPeriod } from "../CashFlowMath";
 
 /** A series read off the arguments: exact amounts and the one currency they share, if any. */
@@ -110,13 +111,9 @@ function tooFew(name: string, count: number, usage: string): Value {
 
 /** A short name for a value that is not a cash flow, for the refusal. */
 function describe(value: Value): string {
-	switch (value.type) {
-		case ValueType.Percentage: return "a percentage";
-		case ValueType.Uom: return `an amount in ${value.unit}`;
-		case ValueType.String: return "text";
-		case ValueType.Boolean: return "true or false";
-		default: return `a ${ValueType[value.type].toLowerCase()}`;
-	}
+	// The shared names, so an expression in unknowns is "an unknown" rather
+	// than the internal "a symbolic".
+	return valueKindName(value);
 }
 
 /** A rate as a percentage with two decimals, for the messages. */

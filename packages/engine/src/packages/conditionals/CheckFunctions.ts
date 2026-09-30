@@ -145,6 +145,45 @@ export function rateInLeftUnit(left: Value, right: Value): number | null {
 }
 
 /**
+ * How many decimal places a number is written with in its shortest form, the
+ * form a reader types and the engine prints back: 2 for 96.56, 0 for 42, 7 for
+ * 1e-7. Read from the double's own shortest decimal, so a figure the reader
+ * typed as `96.56` counts two places however it was reached.
+ *
+ * @param n - Any number.
+ * @returns The places after the point, 0 for a whole number or a value that is not finite.
+ */
+export function writtenDecimalPlaces(n: number): number {
+	if (!Number.isFinite(n)) return 0;
+	const match = /^-?\d+(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(n));
+	if (match === null) return 0;
+	const places = (match[1]?.length ?? 0) - Number(match[2] ?? 0);
+	return Math.max(0, places);
+}
+
+/**
+ * The margin `≈` allows when no `within` names one and the right side is
+ * written to a number of decimal places: half a unit in its last place,
+ * converted into the left side's unit. `check 60 mph ≈ 96.56 km/h` asks
+ * whether 60 mph is 96.56 km/h to the two places written, which it is
+ * (96.56064). A whole number on the right gives no margin here, so `check 5.4
+ * ≈ 5` is not passed by rounding, and a right side worked out to every digit
+ * (`pi`, `1/3`) gives a margin far below any real difference.
+ *
+ * @param right - The right side of the check, in its own unit.
+ * @param rightInLeftUnit - The same side read in the left side's unit.
+ * @returns The margin in the left side's unit, 0 when the right is a whole number.
+ */
+export function writtenPrecisionMargin(right: Value, rightInLeftUnit: number): number {
+	if (right.type !== ValueType.Number && right.type !== ValueType.Uom) return 0;
+	const written = right.toNumber();
+	const places = writtenDecimalPlaces(written);
+	if (places === 0 || written === 0) return 0;
+	const half = 0.5 * 10 ** -places;
+	return Math.abs(half * (rightInLeftUnit / written));
+}
+
+/**
  * `checkComparison(left, right, op, tolerance?)`: "✓" when the comparison
  * holds, a CHECK_FAILED error naming both sides when it does not.
  */
@@ -158,6 +197,17 @@ export function checkComparison(args: Value[]): Value {
 		}
 		const same = left.type === right.type && left.value === right.value;
 		if (same === (op === "==")) return stringValue("✓");
+		return errorValue("CHECK_FAILED", `check failed: ${shown(left)} is ${same ? "equal" : "not equal"} to ${shown(right)}`);
+	}
+	// Two answers to a yes-or-no question compare as equal or not, as text
+	// does: `check !(1 > 2) == true` said "true and true cannot be compared".
+	// A boolean has no order, so only == and != mean anything between them.
+	if (left.type === ValueType.Boolean && right.type === ValueType.Boolean) {
+		if (op !== "==" && op !== "!=" && op !== "≈") {
+			return errorValue("CHECK_INCOMPARABLE", `check: true and false can only be compared with == or !=, not ${op}`);
+		}
+		const same = left.value === right.value;
+		if (same === (op !== "!=")) return stringValue("✓");
 		return errorValue("CHECK_FAILED", `check failed: ${shown(left)} is ${same ? "equal" : "not equal"} to ${shown(right)}`);
 	}
 	if (!numeric(left) || !numeric(right)) {
@@ -203,7 +253,7 @@ export function checkComparison(args: Value[]): Value {
 			return errorValue("CHECK_INCOMPARABLE", `check: "within" needs a number, a quantity or a percentage, not ${shown(tolerance)}`);
 		}
 	} else if (op === "≈") {
-		margin = APPROX_TOLERANCE * scale;
+		margin = Math.max(APPROX_TOLERANCE * scale, writtenPrecisionMargin(right, rv));
 	}
 	// An exact side is compared exactly, unless the check asked for a margin.
 	const order = approximate ? null : exactOrder(left, right);

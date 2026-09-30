@@ -42,6 +42,18 @@ A function of a number folds to its value: `sqrt(4)` becomes `2` and `sqrt(2)`
 its decimal `1.41`. A function of an unknown is left as written, so `sqrt(x)`
 stays `sqrt(x)` rather than inventing a value for the unknown.
 
+An expression that divides by zero has no value, whatever its unknowns are, so
+it is refused where it is written rather than carried into the algebra. Expanding
+it, differentiating it or solving an equation over it would otherwise work on a
+quantity that does not exist. Only an exact zero counts: a very small number is
+an ordinary divisor.
+
+```solve
+expand((x+1)/0) // This expression divides by zero, so it has no value, whatever its unknowns are.
+der(x/0, x) // This expression divides by zero, so it has no value, whatever its unknowns are.
+expand((x*0)^-1) // This expression divides by zero, so it has no value, whatever its unknowns are.
+```
+
 ## The bounded simplifier
 
 Simplification is deliberately limited. It folds constants, applies additive and

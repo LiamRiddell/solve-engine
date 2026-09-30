@@ -1,11 +1,11 @@
 import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, isTimecodeUnit, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
-import { convertUnit, getMeasure, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
+import { convertUnit, convertRate, getMeasure, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { lookupUnit } from "@solve-js/uom/UnitConversion";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { decimalAdd, decimalSubtract, decimalMultiply, decimalDivide, decimalIsZero, decimalToNumber, decimalFromNumberIfExact, decimalCompare, type DecimalData } from "@solve-js/decimal";
 import { sameShape } from "@solve-js/vm/MatrixOps";
-import { type SymbolicNode, type Rational, simplifySymbolic, rational, rationalAdd, rationalSub, rationalMul, rationalDiv, rationalToNumber, rationalCompare, isRationalZero } from "@solve-js/symbolic";
-import { valueToSymbolic } from "@solve-js/vm/SymbolicOps";
+import { type SymbolicNode, type Rational, simplifySymbolic, rational, rationalAdd, rationalSub, rationalMul, rationalDiv, rationalToNumber, rationalCompare, isRationalZero, dividesByZero } from "@solve-js/symbolic";
+import { valueToSymbolic, symbolicDivisionByZero } from "@solve-js/vm/SymbolicOps";
 import { rationalOfExactDecimal, exactDecimalDivide, compareExactDecimals } from "@solve-js/vm/ExactDecimals";
 import { exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { ErrorFactory, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
@@ -67,6 +67,17 @@ export function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: st
                 return { lv: l.toNumber(), rv: rvConverted, unit: l.unit, sameMeasure: true };
             }
         }
+        // Two rates of one kind (two speeds, two densities, two prices per
+        // kilogram) have no single measure in the tables either, but one
+        // converts into the other: `10 m/s + 36 km/h` is 20 m/s. The same
+        // conversion `in` makes, so an addition, a comparison and a total
+        // agree with it; two rates that do not convert stay apart.
+        if (!isCurrency) {
+            const asRate = convertRate(r.toNumber(), r.unit!, l.unit!);
+            if (asRate !== null) {
+                return { lv: l.toNumber(), rv: asRate, unit: l.unit, sameMeasure: true };
+            }
+        }
         return { lv: l.toNumber(), rv: r.toNumber(), unit: undefined, sameMeasure: false };
     }
     if (l.type === ValueType.Uom) {
@@ -111,6 +122,40 @@ const NON_NUMERIC_KINDS: Partial<Record<ValueType, string>> = {
  */
 export function nonNumericKind(v: Value): string | undefined {
     return NON_NUMERIC_KINDS[v.type];
+}
+
+/**
+ * How a reader would name any value, for a refusal that says what it was given
+ * instead ("expects two dates, but got a number and a number"): the words of
+ * {@link nonNumericKind}, and for the numeric kinds "a number", "an amount in
+ * m", "a percentage" or "true or false". It replaces the internal type names
+ * (`Number`, `Uom`) such refusals used to print, which the reader never wrote.
+ *
+ * @param v - The value to name.
+ * @returns A short phrase with its article, never an internal name.
+ */
+export function valueKindName(v: Value): string {
+    const kind = NON_NUMERIC_KINDS[v.type];
+    if (kind !== undefined) return kind;
+    switch (v.type) {
+        case ValueType.Number:
+        case ValueType.Hex:
+            return "a number";
+        case ValueType.BigInt:
+            return "a whole number";
+        case ValueType.Percentage:
+            return "a percentage";
+        case ValueType.Uom:
+            return v.unit === undefined ? "a number" : `an amount in ${v.unit}`;
+        case ValueType.Boolean:
+            return "true or false";
+        case ValueType.Pending:
+            return "a value still loading";
+        case ValueType.Error:
+            return "an error";
+        default:
+            return "a value of another kind";
+    }
 }
 
 /**
@@ -1379,8 +1424,11 @@ export function binaryOp(
                 "A symbolic expression cannot combine with a value that has no exact number (NaN or infinity).",
             );
         }
-        const node: SymbolicNode = { kind: symbolicOp, left, right };
-        return symbolicValue(simplifySymbolic(node));
+        const simplified = simplifySymbolic({ kind: symbolicOp, left, right } satisfies SymbolicNode);
+        // A quotient by an exact zero is refused here, where it is written, so
+        // no later verb reads it as algebra (see dividesByZero).
+        if (dividesByZero(simplified)) return symbolicDivisionByZero();
+        return symbolicValue(simplified);
     }
 
     // Fast path: both operands are plain numbers, skip all type checks.

@@ -291,10 +291,10 @@ The rest, in words:
   :name` is refused, as a what-if is, since other notes read globals. A scenario
   cannot be read inside another scenario's or a what-if's re-run, and a line
   holding one is not a sweep's or a what-if's target.
-- The re-run reads the note the way the batch pass does, top to bottom. A
-  [goal seek](/syntax/goal-seek/) inside the span answers there with that pass's
-  refusal, so a what-if whose line depends on a goal seek line reports the
-  refusal rather than a number.
+- The re-run reads the note the way the batch pass does, top to bottom, working
+  each line out once. A [goal seek](/syntax/goal-seek/) inside the span cannot
+  re-run its target there, so a what-if whose line depends on a goal seek line
+  reports that the goal seek cannot run inside a what-if, rather than a number.
 - Goal seek is the reverse question, the input that makes a line reach a target,
   and it still needs its variable on the target line itself.
 - A sweep steps numbers, percentages, quantities and dates. A date sweep steps
