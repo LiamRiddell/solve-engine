@@ -9,8 +9,8 @@ car and the route once, at the top, means changing either updates all three.
 
 ```solve-doc
 :distance = 300 miles
-:economy = 35 mpg
-cost to drive distance at economy at £1.50/litre // £48.67
+:economy = 35 mpg imperial
+cost to drive distance at economy at £1.50/litre // £58.45
 distance at 60 mph // 5.00 h
 split prev between 3 // 1.67 h each
 ```
@@ -21,9 +21,13 @@ split prev between 3 // 1.67 h each
 so a change at the top reaches every line that uses it. See
 [variables](/syntax/variables/).
 
-**`35 mpg`** is fuel economy: how far the car goes on a given amount of fuel.
-`7 l/100km` says the same thing the other way round, as an amount of fuel for a
-fixed distance, and either works here.
+**`35 mpg imperial`** is fuel economy: how far the car goes on a given amount of
+fuel. This is a British car priced in pounds per litre, so its figure is miles
+per imperial gallon, the gallon UK brochures quote. A bare `35 mpg` is miles per
+US gallon, a smaller gallon, and would put the bill at £48.67, about a sixth
+short. `7 l/100km` says the same thing the other way round, as an amount of fuel
+for a fixed distance, and either works here. See
+[fuel economy](/syntax/fuel-economy/).
 
 **`cost to drive ... at ... at £1.50/litre`** is the fuel bill. The price carries
 its own volume, so a pump quoting gallons works with a distance in kilometres,
@@ -43,23 +47,24 @@ Splitting the money rather than the hours is the same form pointed one line
 higher, which is easier to see written out:
 
 ```solve-doc
-:fuel = cost to drive 300 miles at 35 mpg at £1.50/litre
-fuel // £48.67
-split fuel between 3 // £16.22 each
+:fuel = cost to drive 300 miles at 35 mpg imperial at £1.50/litre
+fuel // £58.45
+split fuel between 3 // £19.48 each
 ```
 
 ## Why the pump price is on the line
 
 Nothing here reaches the network for a fuel price. A pump price is local and
 changes daily, so the engine asks for it rather than guessing, and a figure you
-typed is one you can check. The same reasoning applies to the car: `35 mpg` is
-what your car actually does, which is not what its brochure said.
+typed is one you can check. The same reasoning applies to the car: `35 mpg
+imperial` is what your car actually does, which is not what its brochure said.
 
 ## A different car, a different country
 
 Because the car and the route are named at the top, comparing two cars is a
 matter of changing one line. The economy can be written either way round, and
-the pump price in whatever unit the pump used:
+the pump price in whatever unit the pump used. The last line is an American car
+at an American pump, so its `35 mpg` is the US gallon the pump is priced in:
 
 ```solve-doc
 :distance = 500 km

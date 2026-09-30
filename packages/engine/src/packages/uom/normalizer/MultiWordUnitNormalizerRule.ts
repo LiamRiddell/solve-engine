@@ -2,10 +2,12 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+import { MULTI_WORD_EXTENDED_UNITS } from "@solve-js/uom/ExtendedUnits";
 
 /**
  * The unit table's spellings of more than one word, keyed by their first word:
- * `nautical mile`, `square feet`, `light-years`, `US fluid ounces`. Each is kept
+ * `nautical mile`, `square feet`, `light-years`, `US fluid ounces`, and the
+ * extended table's qualified spellings (`metric cup`, `mpg imperial`). Each is kept
  * as its words and the separator after each word, a space or a hyphen, so a
  * match can be checked against the source exactly. Built once, on first use.
  */
@@ -35,6 +37,12 @@ function spellingsByFirstWord(): Map<string, Array<{ spelling: string; words: st
 		if (/^[a-z]{3,}$/.test(last) && !last.endsWith("s") && UNIT_TABLE[plural] === undefined) {
 			add(spelling, [...words.slice(0, -1), last + "s"], separators);
 		}
+	}
+	// The engine's own qualified spellings (`metric cup`, `typographic point`,
+	// `mpg imperial`), each listed with its plural where it has one, so no
+	// plural is invented for them.
+	for (const spelling of MULTI_WORD_EXTENDED_UNITS) {
+		add(spelling, spelling.split(" "), [...spelling.matchAll(/ /g)].map((m) => m[0]));
 	}
 	// Longest first, so `US fluid ounce` wins over a shorter spelling that is
 	// its prefix.

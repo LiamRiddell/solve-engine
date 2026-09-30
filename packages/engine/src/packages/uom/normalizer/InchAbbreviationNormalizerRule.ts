@@ -1,5 +1,6 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { densityPhraseAt } from "@solve-js/packages/web/normalizer/PixelDensityNormalizerRule";
 
 /**
  * The token types that, following `in`, leave no conversion for it to be the
@@ -27,6 +28,9 @@ const NOTHING_TO_CONVERT_INTO: ReadonlySet<string> = new Set([
 	"COMMA",
 	"RBRACKET",
 	"RBRACE",
+	// A density the web package has already fused (`at 300 dpi`); the raw
+	// phrase, before that rule reaches it, is checked separately below.
+	"PIXEL_DENSITY",
 ]);
 
 /**
@@ -80,7 +84,9 @@ export function inchAbbreviationNormalizerRule(priority = 74): NormalizerRule {
 
 			// The end of the line leaves nothing to convert into either.
 			const next = tokens[pos + 2];
-			if (next !== undefined && !NOTHING_TO_CONVERT_INTO.has(next.type)) return null;
+			// So does a stated density, `8 in at 300 dpi` (#749): the rules run
+			// position by position, so at the number the `at` is still unfused.
+			if (next !== undefined && !NOTHING_TO_CONVERT_INTO.has(next.type) && densityPhraseAt(tokens, pos + 2) === null) return null;
 
 			return {
 				consumed: 2,

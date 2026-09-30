@@ -37,6 +37,25 @@ export interface ExtendedUnitDef {
   toBase: number;
 }
 
+/**
+ * One mile per imperial gallon, in kilometres per litre: 1.609344 km over
+ * 4.54609 litres, both exact by definition.
+ */
+export const MILES_PER_IMPERIAL_GALLON_IN_KM_PER_LITRE = 1.609344 / 4.54609;
+
+/**
+ * The spellings of miles per imperial gallon (issue #736). A bare `mpg` stays
+ * miles per US gallon, the documented convention, so the imperial figure is
+ * always written with its qualifier, before or after: `35 mpg imperial`,
+ * `35 mpg uk`, `35 UK mpg`. Each is two words, joined into one unit by the
+ * multi-word unit rule, and each displays as it was written.
+ *
+ * `uk` is admitted in both cases because a brochure is not consistent about
+ * it; `imperial` is lower case only, as every other `imperial` spelling in the
+ * unit table is.
+ */
+export const IMPERIAL_MPG_SPELLINGS: readonly string[] = ["mpg imperial", "imperial mpg", "mpg uk", "mpg UK", "UK mpg"];
+
 /** Units beyond the base set, added to whatever the locale already recognises. */
 export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   // ── Speed (base: mps, meters per second) ──────────────────────────────
@@ -138,6 +157,12 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   // to a km/l or l/km rate for conversion.
   mpg: { measure: "fuelEconomy", toBase: 1.609344 / 3.785411784 }, // 1 mi/US-gal in km/l
   kmpl: { measure: "fuelEconomy", toBase: 1 },
+  // Miles per imperial gallon, the figure a UK brochure quotes (issue #736).
+  // Spelled with a qualifier because a bare `mpg` is the US gallon, and the
+  // multi-word unit rule joins the words. See IMPERIAL_MPG_SPELLINGS.
+  ...Object.fromEntries(
+    IMPERIAL_MPG_SPELLINGS.map((spelling) => [spelling, { measure: "fuelEconomy", toBase: MILES_PER_IMPERIAL_GALLON_IN_KM_PER_LITRE }]),
+  ),
 
   // ── Fuel consumption: volume per distance (base: l/km) ────────────────
   l100km: { measure: "fuelConsumption", toBase: 0.01 }, // 1 l/100km = 0.01 l/km
@@ -180,4 +205,37 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   centner: { measure: "mass", toBase: 100000 },
   centners: { measure: "mass", toBase: 100000 },
 
+  // ── Volume: the cups a recipe from outside the US means (issue #752) ──
+  //
+  // Stated in cubic metres, the base the generated volume ratios use. A bare
+  // `cup` is the table's US customary cup and stays so: changing it would move
+  // every recipe answer already written. These are the qualified spellings,
+  // joined by the multi-word unit rule the way `imperial pint` is. The metric
+  // cup is 250 ml (Australia, New Zealand, Canada); the imperial cup is half an
+  // imperial pint, 284.130625 ml; and `US cup` names the default explicitly,
+  // at the table's own `cup` ratio.
+  "metric cup": { measure: "volume", toBase: 0.00025 },
+  "metric cups": { measure: "volume", toBase: 0.00025 },
+  "imperial cup": { measure: "volume", toBase: 0.000284130625 },
+  "imperial cups": { measure: "volume", toBase: 0.000284130625 },
+  "US cup": { measure: "volume", toBase: 0.0002365882365 },
+  "US cups": { measure: "volume", toBase: 0.0002365882365 },
+
+  // ── Length: the typographic point (issue #749) ───────────────────────
+  //
+  // The unit type is sized in, a 72nd of an inch exactly (the desktop
+  // publishing point). `pt` is the pint and `point` is ordinary English
+  // ("scored 12 points"), so neither can be claimed after a number; the
+  // qualified two-word spelling can. The table's own `point` (a conversion
+  // target only) is upstream's rounded 0.0003528 m; this is the exact value.
+  "typographic point": { measure: "length", toBase: 0.0254 / 72 },
+  "typographic points": { measure: "length", toBase: 0.0254 / 72 },
 };
+
+/**
+ * The extended spellings of more than one word (`metric cup`, `mpg imperial`),
+ * which the lexer cannot read as one token and the multi-word unit rule joins.
+ * Derived from {@link EXTENDED_UNITS}, so a new entry is joined without being
+ * listed twice.
+ */
+export const MULTI_WORD_EXTENDED_UNITS: readonly string[] = Object.keys(EXTENDED_UNITS).filter((spelling) => spelling.includes(" "));

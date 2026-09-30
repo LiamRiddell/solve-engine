@@ -1,13 +1,14 @@
 ---
 title: "Screen and image sizes"
-description: The shape of a width and a height, and the other side of a resize.
+description: The shape of a width and a height, the other side of a resize, and how large an image prints.
 ---
 
 > **Package:** `WEB_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
 
 A screen or an image is a width and a height, written the way they are sold and
-saved: `1920x1080`, `4000x3000`. Two questions come up about a pair like that.
-What shape is it, and what does it become at a different size.
+saved: `1920x1080`, `4000x3000`. Three questions come up about a pair like that.
+What shape is it, what does it become at a different size, and how large does it
+print.
 
 ## The shape of a pair
 
@@ -59,6 +60,53 @@ rather than a fraction of a pixel that nothing can store.
 ```solve
 resize 1000x333 to 500 wide // 500 x 167
 ```
+
+## How large it prints
+
+A pixel has no physical size of its own. How large an image comes out on paper
+depends on the **density** it is printed at: how many dots the printer packs into
+each inch, written `dpi` (dots per inch) or `ppi` (pixels per inch). A
+4000-pixel-wide photo at 300 dots per inch is 4000 ÷ 300, or 13.33 inches, across.
+`at <n> dpi` states the density and does that division.
+
+```solve
+4000px at 300 dpi // 13.33 in
+4000px at 300 dpi in mm // 338.67 mm
+3000 px at 300 ppi in cm // 25.40 cm
+```
+
+It works the other way round too, which answers how many pixels a print of a
+given size needs: a length becomes pixels at that density.
+
+```solve
+8 in at 300 dpi // 2,400.00 px
+210 mm at 300 dpi // 2,480.31 px
+```
+
+A density is the only bridge between pixels and physical length, which is why
+`96 px in inches` is refused (see [CSS units](/syntax/css-units/)): without a
+stated density there is no answer to give. The density binds to the size beside
+it, like `at 20px base` does, so a sum is bracketed first:
+
+```solve
+(4000px + 200px) at 300 dpi // 14.00 in
+```
+
+A density of zero or below is refused by name, and so is a size that is neither
+pixels nor a length:
+
+```solve
+4000px at 0 dpi // a density is a finite number of dots per inch above zero, and 0 is not
+4 kg at 300 dpi // a density relates pixels and a printed length, and "kg" is neither
+```
+
+The boundary: only a density written on the line converts. A screen's own
+density (a phone's pixels per inch, a device pixel ratio) is not known to the
+engine and is not guessed, and the density is a number, not a name: `at d dpi`
+asks for a number. `dpi` stays an ordinary name everywhere else, so `dpi = 300`
+is a variable, and `at` keeps its other meanings (`30 hours at $30/hour`,
+`01:02:03:04 at 30 fps`) because the phrase is read as a density only when a
+number and `dpi` or `ppi` follow it.
 
 ## When it cannot answer
 

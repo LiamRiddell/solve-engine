@@ -52,14 +52,42 @@ A temperature between two marks is read as the nearer one, within ten degrees, w
 
 ## Which cup
 
-A `cup` is the US customary cup, 236.59 millilitres, the one American recipes
-and most online converters mean. The metric cup (250 millilitres, used in
-Australia and elsewhere) and the old imperial cup are not spelled yet, so a
-recipe written in either is best converted through its millilitres.
+A cup is not one size. A recipe measures by the cup of the country it was
+written in, and the three in common use differ by about a fifth from smallest to
+largest, which is enough to spoil a cake.
+
+- The **US cup**, 236.59 millilitres, is the one American recipes and most online
+  converters mean. A bare `cup` is this one, and `US cup` names it explicitly.
+- The **metric cup**, 250 millilitres, is the one recipes from Australia, New
+  Zealand and Canada use. Write it `metric cup`.
+- The **imperial cup**, half an imperial pint (284.13 millilitres), is the one an
+  older British recipe means. Write it `imperial cup`.
 
 ```solve
 1 cup in ml // 236.59 ml
+1 US cup in ml // 236.59 ml
+1 metric cup in ml // 250.00 ml
+1 imperial cup in ml // 284.13 ml
 ```
+
+Each takes a plural, a mixed number and an ingredient like any other volume, so a
+recipe's quantities convert as written:
+
+```solve
+2 metric cups flour in grams // 265.00 grams
+1 1/2 metric cups in ml // 375.00 ml
+300g butter in metric cups // 1.25 metric cups
+2 imperial cups in imperial pints // 1.00 imperial pints
+```
+
+The two words are read as one unit only together, and only in that case: `US`
+is upper case (`us` is an English word), and `metric` or `imperial` on its own
+is still an ordinary word, or a name you have defined.
+
+The boundary: a bare `cup` stays the US cup, because changing it would move
+every recipe answer already written. The engine does not choose a cup from your
+locale, and the metric tablespoon and teaspoon (the same question one size down)
+are not spelled; `tbsp` and `tsp` are the US spoons.
 
 ## Mixed numbers
 
