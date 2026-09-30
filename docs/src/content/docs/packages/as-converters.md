@@ -20,32 +20,46 @@ The optional `context` is the same per-line execution context a
 receives. A converter that reads a date takes the engine's calendar backend
 from it, `calendarOf(context)` from `solve-engine/engine`, so `<date> as
 weekday` answers as the engine's own date arithmetic would; a converter that
-needs nothing from it leaves it out, as `roman` does below. That is the whole
-contract. Here is a package that adds a `roman` target:
+needs nothing from it leaves it out, as `tally` does below. That is the whole
+contract. Here is a package that adds a `tally` target, which writes a small
+count as tally marks in groups of five:
 
 ```ts
 import type { IEnginePackage } from "solve-engine";
 import { stringValue, type Value } from "solve-engine/vm";
 
-export const romanPackage: IEnginePackage = {
-  name: "roman",
+export const tallyPackage: IEnginePackage = {
+  name: "tally-marks",
   asConverters: {
-    roman: (value: Value) => stringValue(toRomanNumeral(value.toNumber())),
+    tally: (value: Value) => {
+      const n = value.toNumber();
+      // Tally marks are for small whole counts; anything else passes through.
+      if (!Number.isInteger(n) || n < 0 || n > 100) return value;
+      return stringValue("|".repeat(n).replace(/(\|{5})(?=\|)/g, "$1 "));
+    },
   },
 };
 ```
 
-`10 as roman` now reads `X`. No lexer change is needed: the `as` parselet accepts
-any bare word after `as` and reads its text, so the name is claimed the moment you
-register it.
+`7 as tally` now reads `||||| ||`. No lexer change is needed: the `as` parselet
+accepts any bare word after `as` and reads its text, so the name is claimed the
+moment you register it.
+
+Pick a name no built-in package registers. The converter registry is shared by
+every engine in the process, so a package that registered `roman`, which the
+built-in numerals package already answers (`10 as roman` reads `X`), would
+replace the built-in converter for every engine, not only its own, with a
+warning that the later registration wins. Replacing a built-in on purpose is
+possible, and is then a decision to name as one in your package's own
+documentation.
 
 ## `in` reaches it too
 
-A reader who writes `10 in roman` means the same thing, and gets it: before the
+A reader who writes `7 in tally` means the same thing, and gets it: before the
 line is parsed, `in` followed by the name of a registered converter is rewritten
 to `as`, the way `255 in hex` has always reached the built-in `hex`. Without that,
 `in` is unit conversion, which took the word as a unit and labelled the number
-with it (`10.00 roman`); a word that is neither a unit nor a converter is now
+with it (`7.00 tally`); a word that is neither a unit nor a converter is now
 refused there by name.
 
 Two limits keep the rewrite from shadowing anything:
@@ -57,15 +71,15 @@ Two limits keep the rewrite from shadowing anything:
 - **Only an ordinary word.** A name the lexer reads as a unit keeps its unit
   meaning after `in`: the datetime package's `month` converter does not take
   `5 hours in month` away from unit conversion. Pick a name that is not a unit,
-  as `roman` is not.
+  as `tally` is not.
 
 The rewrite asks the same registry `as` asks, so `in` reaches exactly the
 converters `as` does.
 
 ## Names and their case
 
-A name is matched without regard to case, so `255 as ROMAN` and `as Roman` reach
-`roman`, with one exception: a name you register with capitals is also kept
+A name is matched without regard to case, so `7 as TALLY` and `as Tally` reach
+`tally`, with one exception: a name you register with capitals is also kept
 exactly as you spelled it, and the target the reader typed is tried in that
 spelling first. That is what lets a unit's prefix, which is carried by its case,
 survive the lookup. The derived units register `mW` (the milliwatt) and `MW` (the
@@ -93,8 +107,8 @@ a conversion that reaches the network (a live rate, say), use an
 ## Be lenient about the input
 
 The engine checks for a faulted operand before it calls you, so you never see an
-error value. But you may see a value of a type you did not expect: `10 as roman`
-is a number, `"x" as roman` is a string. Prefer returning the value unchanged over
+error value. But you may see a value of a type you did not expect: `7 as tally`
+is a number, `"x" as tally` is a string. Prefer returning the value unchanged over
 throwing, the way the colour package's format converters pass a non-colour
 straight through. A converter that throws takes the line down; one that declines
 leaves the reader's other lines working.

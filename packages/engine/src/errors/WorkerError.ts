@@ -31,6 +31,8 @@ export const WorkerErrorCodes = {
 	WORKER_NOT_INITIALISED: "WORKER_NOT_INITIALISED",
 	/** An init named a package the runtime could not resolve. */
 	WORKER_UNKNOWN_PACKAGE: "WORKER_UNKNOWN_PACKAGE",
+	/** A call's arguments could not be copied across the boundary (a function, a symbol, an object `postMessage` refuses). Rejected main-side, before anything is sent. */
+	WORKER_ARGUMENT_NOT_CLONEABLE: "WORKER_ARGUMENT_NOT_CLONEABLE",
 } as const;
 
 /**
@@ -125,5 +127,18 @@ export function workerTransportError(detail: string): EngineError {
 		WorkerErrorCodes.WORKER_TRANSPORT_FAILED,
 		`The worker transport failed: ${detail}`,
 		{ detail },
+	);
+}
+
+/**
+ * The error a request rejects with when its arguments cannot cross the
+ * boundary: `postMessage` refused to copy them (a function, a symbol, a
+ * host object), so nothing was sent.
+ */
+export function workerArgumentError(method: string, detail: string): EngineError {
+	return ErrorFactory.validation(
+		WorkerErrorCodes.WORKER_ARGUMENT_NOT_CLONEABLE,
+		`The arguments to the worker request "${method}" cannot be copied to the worker (${detail}). Pass numbers, text and plain objects of them.`,
+		{ method, detail },
 	);
 }

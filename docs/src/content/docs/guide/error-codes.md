@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 508 codes, grouped below by the part
+ship. The engine and its built-in packages ship 511 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -412,6 +412,8 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | Code | Arrives | When it arises |
 | --- | --- | --- |
 | `ASYNC_RESOLVER_FAILED` | as a value | A live value that failed to fetch several times in a row, reported rather than retried again. Editing the line tries again. |
+| `SETTLE_TIMEOUT` | thrown | `await engine.settle({ timeoutMs })` reached its deadline with live values still being fetched. Rejected rather than resolved, so a caller is never handed a Pending line as if it were settled; the context carries how many were in flight. Recoverable: the lines stay Pending and settle when their fetches land. |
+| `SETTLE_TIMEOUT_INVALID` | thrown | `engine.settle` was given a `timeoutMs` that is not a finite number of zero or more (a negative, `NaN`, an infinity, text). Rejected, since it is the host's argument that is wrong. |
 
 **Per-pass budgets**
 
@@ -505,6 +507,7 @@ In the package as `ERROR_CODE_CATALOGUES.WorkerErrorCodes`.
 | `WORKER_UNKNOWN_METHOD` | thrown | A request named a method the runtime does not expose. |
 | `WORKER_NOT_INITIALISED` | thrown | A request arrived before the runtime finished building its engine. |
 | `WORKER_UNKNOWN_PACKAGE` | thrown | An init named a package the runtime could not resolve. |
+| `WORKER_ARGUMENT_NOT_CLONEABLE` | thrown | A call's arguments could not be copied across the boundary (a function, a symbol, an object `postMessage` refuses). Rejected main-side, before anything is sent. |
 
 ## Category tags
 

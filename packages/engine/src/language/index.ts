@@ -28,3 +28,4 @@ export {
 } from "./TokenCategoryMap";
 export { tokenClassName, createTokenClassName, DEFAULT_TOKEN_CLASS_PREFIX } from "./tokenClassName";
 export { completionItemToOption } from "./adapters/codemirror";
+export type { CompletionOption, CompletionTargetView } from "./adapters/codemirror";

@@ -284,6 +284,50 @@ engine.onAsyncError(({ queryKey, packageId, error }) => {
 });
 ```
 
+### Every host call, off the thread
+
+The worker client is not limited to evaluating. `parseDocument` is the batch
+pass, which cannot re-run a line and so refuses goal seek; a host that moved its
+evaluation to a worker used to lose goal seek, and kept a second engine on the
+main thread for everything else. The client now proxies the calls a document's
+features rely on, each answering a clone-safe object (a DTO, data with no
+functions or class instances in it, so it survives `postMessage` and `JSON`):
+
+| Call | Mirrors | Answers |
+| --- | --- | --- |
+| `evaluateDocument(text)` | the `evaluateDocument` helper | the document through the incremental pass, goal seek included |
+| `whatIf(text, overrides)` | `engine.whatIf` | the document re-run with inputs changed |
+| `explainLine(expression)` | `engine.explainLine` | the steps and the result |
+| `traceLine(text, line, { maxDepth, maxLines })` | `engine.traceLine` | the line's inputs, each traced the same way |
+| `settle({ timeoutMs })` | `engine.settle` | once no live value is in flight |
+| `getSemanticTokens`, `getCompletions` | `LanguageService` | highlighting and completions |
+| `findReferences`, `getDefinition`, `rename`, `shiftLineReferences` | `LanguageService` | positions and edits, refusals included |
+
+```ts
+const doc = await engine.evaluateDocument(
+  ":deposit = 100000\n:rate = 4%\nmonthly repayment on deposit over 25 years at rate\nsolve line 3 for deposit = 900",
+);
+doc.lines[3].result?.text; // "= 170,507.23"
+```
+
+Through the worker, `evaluateDocument` agrees with the main thread's value for
+value, and `parseDocument` still refuses goal seek with `GOAL_SEEK_NO_DOCUMENT`,
+as the batch pass does in process.
+
+A what-if's overrides cross as a finite number or as text the worker evaluates
+on its own (`{ price: "$120" }`); a `Value` cannot keep its type across
+`postMessage`, so send its text. An argument `postMessage` cannot copy at all (a
+function, a symbol) is refused before anything is sent, with
+`WORKER_ARGUMENT_NOT_CLONEABLE`, rather than surfacing as a raw `DataCloneError`.
+A trace reads the document given; when it is the text the worker evaluated last,
+it reads those answers rather than evaluating again.
+
+The boundary: an `AbortSignal` rejects the caller's promise at once, but a goal
+seek already running in the worker runs to the end, since the worker handles one
+message at a time; its answer is then dropped. Packages still cross as names, and
+the worker's language service reads the worker's own engine, so a package the
+worker entry does not bake in is not highlighted there either.
+
 Nothing about the synchronous API changes. `solve-engine/worker` is a separate,
 side-effect-free entry point, so a host that never imports it pays nothing.
 

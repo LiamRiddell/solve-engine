@@ -14,6 +14,7 @@ import { toHexString, formatColour } from "@solve-js/packages/colour/ColourMath"
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import { formatSymbolic } from "@solve-js/symbolic";
 import type { ParsedLine, InlineSolvePosition, ParsingResult } from "@solve-js/types/ParsingResult";
+import type { Explanation, LineTrace } from "@solve-js/explain/Explanation";
 import type { SourceSpan } from "@solve-js/errors/EngineError";
 import type {
 	SerializedWorkerValue,
@@ -21,6 +22,8 @@ import type {
 	SerializedParsedLine,
 	SerializedInlineSolve,
 	SerializedParsingResult,
+	SerializedExplanation,
+	SerializedLineTrace,
 } from "./dto";
 
 /**
@@ -202,4 +205,46 @@ export function serializeParsingResult(result: ParsingResult, settings?: Formatt
 	if (result.diagnostics !== undefined) dto.diagnostics = result.diagnostics;
 	if (result.checks !== undefined) dto.checks = { ...result.checks };
 	return dto;
+}
+
+/**
+ * Project a derivation (`ExpressionEngine.explainLine`) onto its DTO, each
+ * step's value and the result serialised.
+ */
+export function serializeExplanation(explanation: Explanation, settings?: FormattingSettings): SerializedExplanation {
+	return {
+		expression: explanation.expression,
+		steps: explanation.steps.map((step) => ({ description: step.description, value: serializeValue(step.value, settings) })),
+		result: serializeValue(explanation.result, settings),
+	};
+}
+
+/**
+ * Project a line trace (`ExpressionEngine.traceLine`) onto its DTO, following
+ * every input. The engine already bounds a trace's depth and size (`maxDepth`,
+ * `maxLines`); the walk here is a loop over an explicit stack all the same, so
+ * no trace can exhaust the call stack on the way across.
+ */
+export function serializeLineTrace(trace: LineTrace, settings?: FormattingSettings): SerializedLineTrace {
+	const project = (node: LineTrace): SerializedLineTrace => ({
+		line: node.line,
+		name: node.name,
+		value: serializeMaybe(node.value, settings),
+		via: [...node.via],
+		inputs: [],
+		cycle: node.cycle,
+		forward: node.forward,
+		truncated: node.truncated,
+	});
+	const root = project(trace);
+	const stack: Array<[LineTrace, SerializedLineTrace]> = [[trace, root]];
+	while (stack.length > 0) {
+		const [node, out] = stack.pop()!;
+		for (const input of node.inputs) {
+			const child = project(input);
+			out.inputs.push(child);
+			stack.push([input, child]);
+		}
+	}
+	return root;
 }

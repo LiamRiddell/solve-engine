@@ -29,6 +29,13 @@ export interface CompletionItem {
 	category: TokenCategory;
 	/** e.g. a unit's measure ("length"), or the category name for keywords/functions. */
 	detail?: string;
+	/**
+	 * How many characters before the cursor the label replaces, present only
+	 * when that is more than the word under the cursor: a phrase matched across
+	 * the words already typed (`net pres` offering `net present value of`) sets
+	 * it to the length of `net pres`. Absent, the label replaces the last word.
+	 */
+	replaceLength?: number;
 }
 
 /**
@@ -43,6 +50,16 @@ interface IndexedCompletionCandidate {
 
 /** Completion results are capped, a document-wide candidate pool has no reason to return more than this. */
 const MAX_COMPLETIONS = 50;
+
+/**
+ * How many typed words a phrase completion looks back over. The longest
+ * built-in phrase is five words, so a longer run of words cannot all be the
+ * start of one.
+ */
+const MAX_PHRASE_WORDS = 6;
+
+/** The trailing run of words before the cursor, one space or more between them, for matching a phrase across them. */
+const TRAILING_WORDS = /(?:[A-Za-z0-9_]+ +){0,5}[A-Za-z0-9_]+$/;
 
 /** Tier ordering for completion results: user-authored variables first, then grammar, then units. */
 const CATEGORY_TIER: Partial<Record<TokenCategory, number>> = {
@@ -483,12 +500,21 @@ export class LanguageService {
 	 * completions almost always. This is the safest, fastest option that
 	 * still delivers real value.
 	 *
-	 * Candidates come from three sources: keywords (which already include
-	 * function names. See `ExpressionLexer.getKeywords()`'s doc comment)
-	 * and units, both static per engine configuration and cached lazily;
-	 * package-contributed items (`IEnginePackage.completionItems`), same
-	 * cache; and variable names, read fresh from `variableNameSource()` on
-	 * every call since those change on every edit.
+	 * Candidates come from these sources. Static per engine configuration,
+	 * and cached lazily: lexer keywords that have a highlight category (which
+	 * include function names, see `ExpressionLexer.getKeywords()`), the call
+	 * words packages declare with `callFusions` (`sha256`), registered phrases
+	 * (`average of`, `net present value of`), units, and package-contributed
+	 * items (`IEnginePackage.completionItems`). Read fresh on every call,
+	 * since they change on every edit: variable names from
+	 * `variableNameSource()`, and the units the document defines
+	 * (`engine.userUnitNames()`).
+	 *
+	 * A phrase is matched by its opening words, from the word under the cursor
+	 * or across the words typed before it (`net pres`), and such a match
+	 * carries `replaceLength`. It is not continued part-way through: after
+	 * `net present` the service offers what starts with `present`, not the
+	 * rest of the phrase from the grammar.
 	 */
 	getCompletions(lineText: string, cursorOffset: number): CompletionItem[] {
 		const prefixMatch = /[A-Za-z0-9_]+$/.exec(lineText.slice(0, cursorOffset));
@@ -507,12 +533,46 @@ export class LanguageService {
 			}
 		}
 
+		// Units the document defines (`1 sprint = 2 weeks`) change with every
+		// edit, like variables, so they are read fresh and scanned the same way.
+		for (const name of this.engine.userUnitNames()) {
+			if (name.toLowerCase().startsWith(prefix)) {
+				matches.push({ label: name, category: "unit", detail: "defined in this document" });
+			}
+		}
+
 		// Static candidates only ever match if they share the prefix's first
 		// character, so consult that bucket alone.
-		const bucket = this.getStaticCompletionIndex().get(prefix[0]);
+		const index = this.getStaticCompletionIndex();
+		const bucket = index.get(prefix[0]);
 		if (bucket) {
 			for (const candidate of bucket) {
 				if (candidate.lowerLabel.startsWith(prefix)) matches.push(candidate.item);
+			}
+		}
+
+		// A phrase can also be matched across the words already typed: `net
+		// pres` is the start of `net present value of`. Each longer run of
+		// trailing words is tried against the phrases in its own first
+		// character's bucket, and only phrases (labels with a space) can match.
+		const words = TRAILING_WORDS.exec(lineText.slice(0, cursorOffset));
+		if (words !== null && words[0].length > prefixMatch[0].length) {
+			const typed = words[0];
+			let start = 0;
+			for (let n = 0; n < MAX_PHRASE_WORDS && start < typed.length - prefixMatch[0].length; n++) {
+				const tail = typed.slice(start).toLowerCase().replace(/ +/g, " ");
+				const phraseBucket = index.get(tail[0]);
+				if (phraseBucket) {
+					for (const candidate of phraseBucket) {
+						if (candidate.lowerLabel.includes(" ") && candidate.lowerLabel.startsWith(tail)) {
+							matches.push({ ...candidate.item, replaceLength: typed.length - start });
+						}
+					}
+				}
+				const nextSpace = typed.indexOf(" ", start);
+				if (nextSpace < 0) break;
+				start = nextSpace;
+				while (typed[start] === " ") start++;
 			}
 		}
 
@@ -530,15 +590,36 @@ export class LanguageService {
 		if (this.staticCompletionCandidates) return this.staticCompletionCandidates;
 
 		const items: CompletionItem[] = [];
+		// One entry per label and category: a word can reach the list by two
+		// routes (a function a package defines is also a call word, say). The
+		// first route wins, so the package's own items go first: they carry the
+		// most detail, a signature rather than "function call".
+		const seen = new Set<string>();
+		const add = (item: CompletionItem): void => {
+			const key = `${item.category}\u0000${item.label.toLowerCase()}`;
+			if (seen.has(key)) return;
+			seen.add(key);
+			items.push(item);
+		};
+		for (const item of this.engine!.getPackageCompletionItems()) add(item);
 		for (const [word, tokenType] of Object.entries(this.engine!.getLexer().getKeywords())) {
 			const category = getTokenCategory(tokenType);
 			if (!category) continue;
-			items.push({ label: word, category });
+			add({ label: word, category });
+		}
+		// The declarative call words (`sha256(`, `slugify(`) are fused by the
+		// normaliser rather than lexed as keywords, so they are listed apart.
+		for (const word of this.engine!.getCallWords()) {
+			add({ label: word, category: "function", detail: "function call" });
+		}
+		// Registered phrases, the aggregates among them (`average of`, `net
+		// present value of`, `weather in`), offered whole by their opening words.
+		for (const [phrase, tokenType] of Object.entries(this.engine!.getNormalizer().getPhrases())) {
+			add({ label: phrase, category: getTokenCategory(tokenType) ?? "keyword", detail: "phrase" });
 		}
 		for (const unit of knownUnits) {
-			items.push({ label: unit, category: "unit", detail: getMeasure(unit) });
+			add({ label: unit, category: "unit", detail: getMeasure(unit) });
 		}
-		items.push(...this.engine!.getPackageCompletionItems());
 
 		this.staticCompletionCandidates = items;
 		return items;

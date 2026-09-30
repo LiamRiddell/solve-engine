@@ -36,10 +36,20 @@ than wrongly.
 
 ## Offering completions
 
-`completionItems` is the list an editor offers as the reader types. A single-word
-keyword you add through [lexer vocabulary](/packages/units-and-keywords/) already
-appears in completions on its own, so this field is for candidates that are **not**
-keywords: a vocabulary of names, for instance.
+`completionItems` is the list an editor offers as the reader types. Much of a
+package's vocabulary is offered without it:
+
+- a **lexer keyword** (added through [lexer vocabulary](/packages/units-and-keywords/)),
+  provided its token type has a `tokenCategories` entry. A keyword with no
+  category is still lexed and parsed, but it is never offered, since a completion
+  carries its token's category;
+- a **call word** (`callFusions`), offered as a function: `sha` offers `sha256`;
+- a **phrase** (`phrases`), offered whole by its opening words: `averag` offers
+  `average of`, and `net pres` offers `net present value of` across the words
+  already typed.
+
+So this field is for candidates that are none of those: a vocabulary of names,
+for instance.
 
 ```ts
 completionItems: [
@@ -53,10 +63,43 @@ it. It is a plain, static list rather than a callback: completions are meant to 
 cheap, so build the list once when you construct the package, not per keystroke. A
 long vocabulary is fine; a computed one is what to avoid.
 
+When a word reaches the list by two routes, a function your package defines that
+is also a call word, your `completionItems` entry is the one kept, so its
+`detail` (a signature, say) is what the editor shows.
+
+A phrase matched across the words already typed carries `replaceLength`, the
+number of characters before the cursor the label replaces (8 for `net pres`). An
+editor that replaces only the word under the cursor would otherwise write `net
+net present value of`.
+
 ## Where they surface
 
 Both flow through the `LanguageService`. `getSemanticTokens` reads your categories
 to colour a line, and `getCompletions` merges your items with the built-in
-keywords and units and the document's own variables. An editor integration calls
-those two methods and never needs to know which package a colour or a suggestion
-came from.
+keywords, call words, phrases and units, and with the document's own variables and
+the units it defines (`1 sprint = 2 weeks` makes `spr` offer `sprint`). An editor
+integration calls those two methods and never needs to know which package a
+colour or a suggestion came from.
+
+## Highlighting what the normaliser fuses
+
+By default a line is highlighted from the lexer's tokens alone, so a word the
+normaliser turns into something else later is coloured as what it was lexed as.
+A call word is the common case: `sha256("abc")` highlights `sha256` as a
+variable, because the lexer reads an ordinary word, and only the normaliser makes
+it a call. Pass `normalizeForHighlighting: true` when building the service and the
+line is normalised before it is coloured, so `sha256` is a `function` and a
+phrase or a fused date reads as one span:
+
+```ts
+import { LanguageService } from "solve-engine/language";
+
+const service = new LanguageService(engine, { normalizeForHighlighting: true });
+service.getSemanticTokens('sha256("abc")', 1)[0].category; // "function"
+```
+
+It is off by default because it is work on every keystroke. On the language
+service benchmark a short line took about 0.003 ms to highlight and about
+0.007 ms normalised, and a long one about 0.027 ms and 0.094 ms: roughly two to
+three and a half times the cost, still far inside a keystroke. A cached line
+costs the same either way, since only a changed line is highlighted again.

@@ -446,12 +446,15 @@ const HOST_API: Readonly<Record<string, string>> = {
 	TRACE_NO_DOCUMENT: "engine.traceLine, called with no document to read",
 	TRACE_NO_SUCH_LINE: "engine.traceLine, asked for a line the document does not have",
 	WHAT_IF_OVERRIDE_INVALID: "engine.whatIf, given an override that is not a name and a value",
+	SETTLE_TIMEOUT: "engine.settle, reaching its deadline with a fetch still in flight",
+	SETTLE_TIMEOUT_INVALID: "engine.settle, given a timeoutMs that is not a finite number of zero or more",
 	WORKER_CANCELLED: "the worker client, when the host aborts a request",
 	WORKER_NOT_INITIALISED: "the worker runtime, given a request before its init",
 	WORKER_TERMINATED: "the worker client, when the host terminates the worker",
 	WORKER_TRANSPORT_FAILED: "the worker client, when the transport fails",
 	WORKER_UNKNOWN_METHOD: "the worker runtime, given a request by a method it does not have",
 	WORKER_UNKNOWN_PACKAGE: "the worker runtime, given an init naming a package it cannot resolve",
+	WORKER_ARGUMENT_NOT_CLONEABLE: "the worker client, given a call argument postMessage cannot copy",
 };
 
 /** Raised while a package registers, or by a package the built-in set does not include. */
