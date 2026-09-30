@@ -108,10 +108,14 @@ $1,000 invested $500 returned // -50.00%
 ```
 
 A return of 0 is breaking even, and a negative one a loss. Nothing invested has
-no return to measure, so it is refused:
+no return to measure, so it is refused, and so is an amount that is not a finite
+number (a division by zero upstream, say), which would otherwise come out as a
+percentage of infinity over infinity:
 
 ```solve
 $0 invested $100 returned // roi: nothing was invested, so there is no return on it
+(1/0) invested $1,500 returned // roi: the amount invested is not a finite number, so there is no return on it
+$1,000 invested (1/0) returned // roi: the amount returned is not a finite number, so there is no return to give
 ```
 
 ## The return by the year

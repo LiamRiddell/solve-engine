@@ -681,6 +681,47 @@ describe("goal seek across entry points", () => {
     expect(refused[4].toLowerCase()).toContain("document");
     expectNeedsDocument("solve line 1 for k = 5");
   });
+
+  // Both signs, a sample that is not finite as a gap, every crossing, and a
+  // stated range (#739). The incremental pass solves each; the batch pass and
+  // the single line refuse, as every goal seek is refused there.
+  test("both signs and a stated range, through the incremental pass only (#739)", () => {
+    const negative = ["x = 1", "x + sin(x)", "solve line 2 for x = -2"];
+    expect(incremental(negative)[2]).toBe("-1.11");
+    const power = ["x = 1", "2^x", "solve line 2 for x = 4", "solve line 2 for x = 0.25"];
+    expect(incremental(power).slice(2)).toEqual(["2", "-2"]);
+    const both = ["x = 1", "x^2", "solve line 2 for x = 4", "solve line 2 for x = 4 between 0 and 10"];
+    expect(incremental(both).slice(2)).toEqual(["[-2, 2]", "2"]);
+    for (const doc of [negative, power, both]) {
+      expect(batch(doc).slice(0, 2)).toEqual(incremental(doc).slice(0, 2));
+      for (const line of batch(doc).slice(2)) expect(line.toLowerCase()).toContain("document");
+    }
+    expectNeedsDocument("solve line 2 for x = 4 between 0 and 10");
+  });
+});
+
+describe("a formula stored before its unknown had a value, across entry points (#732)", () => {
+  // `y = x + 1` above `x = 5` stores the formula; a line below both reads it
+  // with the value x now has. Both document passes agree value for value. A
+  // single line has no later definition to read, so it keeps the formula.
+  test("both document passes read the formula with the later value", () => {
+    const doc = ["y = x + 1", "x = 5", "y + x", "z = y * 2", "z"];
+    expect(batch(doc)).toEqual(["x+1", "5", "11", "12", "12"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("a value the formula cannot take is refused by name in both passes", () => {
+    const doc = ["y = x + 1", "x = $5", "y + x"];
+    expect(batch(doc)[2]).toBe("ERROR: y was written as a formula in x before x had a value, and x now holds money, which the formula cannot take. Define x above the line that defines y.");
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("the single-expression path keeps the formula, with no later line to read", () => {
+    const { threw, type, message } = single("y = x + 1");
+    expect(threw).toBe(false);
+    expect(type).toBe(ValueType.Symbolic);
+    expect(message).toBe("x+1");
+  });
 });
 
 describe("bare assignments across entry points (#555)", () => {

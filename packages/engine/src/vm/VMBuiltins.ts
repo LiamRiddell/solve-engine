@@ -1775,6 +1775,15 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (invested === 0) {
             return errorValue("INVALID_RATE", "roi: nothing was invested, so there is no return on it");
         }
+        // An infinite amount put in is infinity over infinity, which was
+        // answered as NaN%, and an infinite amount out answered Infinity%;
+        // neither has a return to give.
+        if (!Number.isFinite(invested) && !Number.isNaN(invested)) {
+            return errorValue("INVALID_RATE", "roi: the amount invested is not a finite number, so there is no return on it");
+        }
+        if (!Number.isFinite(returned) && !Number.isNaN(returned)) {
+            return errorValue("INVALID_RATE", "roi: the amount returned is not a finite number, so there is no return to give");
+        }
         // The gain as a share of what went in, so a percentage: a return of
         // 0.50 read as a bare number was easy to take for fifty pence (#830).
         return percentageValue((returned - invested) / invested);
@@ -1790,6 +1799,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (typeof years !== "number") return years;
         if (invested <= 0) {
             return errorValue("INVALID_RATE", "annual return: the amount invested must be positive");
+        }
+        if (invested === Infinity || returned === Infinity) {
+            return errorValue("INVALID_RATE", "annual return: an amount is not a finite number, so there is no annual rate");
         }
         if (years <= 0) {
             return errorValue("INVALID_RATE", "annual return: the period must be longer than zero");
