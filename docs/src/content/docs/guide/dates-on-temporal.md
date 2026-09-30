@@ -114,6 +114,28 @@ dateCalendarInZone("Europe/Atlantis");
 // throws: dateCalendarInZone("Europe/Atlantis") is not a time zone this runtime knows.
 ```
 
+A name with a space around it is refused too, and the message says so, since a
+pasted `"Asia/Tokyo "` looks right when it is quoted.
+
+`dateCalendarInZone` also takes a clock, a function answering the current moment
+in epoch milliseconds (the milliseconds since the start of 1970). `today` and
+`now` read it, so pinning it pins the date a document is computed on, which is
+what a test or a reproducible run needs, without replacing `Date.now` for the
+whole process:
+
+```ts
+const pinned = createEngine({ calendar: dateCalendarInZone("UTC", { now: () => Date.UTC(2020, 0, 1) }) });
+pinned.formatValue(pinned.evaluateExpression("today")); // "= Wednesday, January 1, 2020"
+```
+
+The clock is the host's own code, so the backend checks it. A clock that is not
+a function is refused when the backend is built, and a reading that is not a
+moment in time (`NaN`, an infinity, a number past the range `Date` holds) or a
+clock that throws is refused on the line that read it, both with a coded
+`DATE_CLOCK_INVALID` error; the rest of the document goes on, since a line that
+does not read the clock does not need it. The `Temporal` backend's `now` option
+below is checked the same way.
+
 There is deliberately no `date.zone` configuration field beside it. The zone
 belongs to the calendar backend, which already owns what "local" means; a second
 place to say it is how the two come to disagree.
@@ -179,23 +201,36 @@ Installing it globally (`temporal-polyfill/global`) works too, after which
 
 ### Displaying dates and running in a worker
 
-Two things sit outside the engine and are told about the backend separately.
-`formatValue` is a free function with no engine in hand, so it reads the
-backend from its settings: pass the same one, and a date displays in the zone
-it was computed in.
+A date is an instant, and which day it shows as depends on the zone it is read
+in, so the formatter has to be told the zone the engine computed in.
+`engine.formatValue` is told already: it writes a value with the engine's own
+backend (and its locale's numbers), so a date displays in the zone it was
+computed in.
+
+```ts
+engine.formatValue(engine.evaluateExpression("today"));
+```
+
+The free `formatValue` has no engine in hand, so it reads the backend from its
+settings, and a settings object may name that one key alone:
 
 ```ts
 import { formatValue } from "solve-engine/format";
-import { DEFAULT_FORMATTING_SETTINGS } from "solve-engine/format";
 
-formatValue(engine.evaluateExpression("today"), { ...DEFAULT_FORMATTING_SETTINGS, calendar });
+formatValue(engine.evaluateExpression("today"), { calendar });
 ```
 
-A worker cannot receive it from the main thread: a backend is an object of
-functions, and functions do not cross a `postMessage` boundary. A host running
-the engine behind `solve-engine/worker` bakes the backend into its worker entry,
-the way it bakes in a custom package, and the runtime applies it to the
-formatting the main side sends:
+Without it, the free formatter reads the process's zone, which is right for an
+engine given no calendar and wrong for one given another zone: an engine in
+`Pacific/Kiritimati` computes `next friday` as Friday there, which is still
+Thursday in London for most of the day.
+
+A worker cannot receive the backend from the main thread: a backend is an
+object of functions, and functions do not cross a `postMessage` boundary. A
+host running the engine behind `solve-engine/worker` bakes the backend into its
+worker entry, the way it bakes in a custom package. The runtime writes every
+result with its engine's own settings, as `engine.formatValue` does, with the
+formatting the main side sends merged over them:
 
 ```ts
 import { startWorkerRuntime } from "solve-engine/worker";
@@ -230,7 +265,10 @@ fault seen once rather than a `RangeError` inside every date.
 The backend also takes a `now` option, a function answering the current
 instant in epoch milliseconds, for a test that needs a fixed date. It exists
 because fake-timer libraries replace `Date.now`, which the `Date` backend reads,
-but not `Temporal.Now`.
+but not `Temporal.Now`. It is checked as `dateCalendarInZone`'s clock is: not a
+function is refused when the backend is built, and a reading that is no moment
+in time, or a clock that throws, is refused on the line that read it, both with
+`DATE_CLOCK_INVALID`, so a host moving between the backends meets one contract.
 
 ## What does not change: every result
 
@@ -239,9 +277,10 @@ whichever backend an engine computes with, and this is a constraint the
 backend is built to rather than a hope: `Temporal` and `Date` disagree by design
 about an instant past the range `Date` represents (a `RangeError` against
 `NaN`), a fractional millisecond (a throw against truncation), a day past the
-end of a month (a clamp against a roll into the next month) and a year from 0
-to 99 (read literally against read as the 1900s), and the backend reproduces
-`Date`'s reading of each. A month step still clamps to the end of the month, a
+end of a month (a clamp against a roll into the next month), and the backend
+reproduces `Date`'s reading of each. A year from 0 to 99, which the `Date`
+constructor reads as the 1900s, is read as written on both backends, so
+`3 April 0026` is 26 AD whichever computes it. A month step still clamps to the end of the month, a
 working-day count still skips the same weekends, a named-zone conversion still
 answers the same wall-clock time:
 

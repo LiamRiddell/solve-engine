@@ -466,7 +466,11 @@ working days between 01/01/2024 and 31/01/2024 // 23
 
 **[Displaying dates](/syntax/displaying-dates/)**: whether a date is spelled out
 or written in numbers is a setting in the host application, not something a line
-writes, so it has no line here.
+writes. A date before year 1 is written with its era.
+
+```solve
+11 March 2026 - 3000 years // Saturday, March 11, 975 BC
+```
 
 **[Time](/syntax/time/)**: clock times, durations, and the span between two
 times, with frame rates and timecode. A clock time on its own is that time

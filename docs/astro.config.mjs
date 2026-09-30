@@ -522,6 +522,9 @@ export default defineConfig({
                 { slug: "guide/async-data-sources" },
                 { slug: "guide/performance" },
                 { slug: "guide/security" },
+                // Last: pinning every outside input is what a host reaches for
+                // once the rest is wired, for tests, snapshots and reports.
+                { slug: "guide/determinism" },
               ],
             },
             {

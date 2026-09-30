@@ -14,7 +14,7 @@
 import { DEFAULT_CONFIG, type EngineConfigOverride } from "@solve-js/constants/Configuration";
 import { resolveDateOrderPolicy } from "@solve-js/packages/datetime/DateReading";
 import type { UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
-import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
+import type { FormattingOverrides } from "@solve-js/format/FormattingSettings";
 import type { EngineError } from "@solve-js/errors";
 import {
 	deserializeEngineError,
@@ -53,8 +53,8 @@ export interface WorkerEngineOptions {
 	 * name.
 	 */
 	packages?: string[];
-	/** Formatting settings the worker uses when it renders a DTO's display text. */
-	formatting?: FormattingSettings;
+	/** Formatting the worker writes a DTO's display text with, merged group by group over the worker engine's own settings (its calendar and its locale's numbers). A calendar backend cannot cross the boundary; give it to the worker runtime instead. */
+	formatting?: FormattingOverrides;
 }
 
 /** Per-call options common to every proxied method. */

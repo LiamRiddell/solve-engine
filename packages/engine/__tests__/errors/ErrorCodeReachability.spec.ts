@@ -418,6 +418,7 @@ const HOST_API: Readonly<Record<string, string>> = {
 	CONFIG_PATH_NOT_FOUND: "the configuration manager's get and set, given a path that does not exist",
 	CONFIG_PROPERTY_NOT_FOUND: "the configuration manager's get and set, given a property that does not exist",
 	CONFIG_SECTION_NOT_FOUND: "the configuration manager's get and set, given a section that does not exist",
+	DATE_CLOCK_INVALID: "a calendar backend's now option, a host clock that is not a function or answers no moment in time",
 	DATE_INPUT_LOCALE_INVALID: "the date.inputLocale setting, given something that is not a locale tag",
 	DATE_ZONE_UNKNOWN: "dateCalendarInZone, given a zone the runtime cannot compute in",
 	DEFINE_FUNCTION_ARGUMENT_TYPE: "a host's own function from defineFunction, which no built-in line calls",
