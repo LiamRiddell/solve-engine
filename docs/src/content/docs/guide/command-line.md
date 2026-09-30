@@ -10,7 +10,7 @@ evaluates one expression, or a whole document of notes, and prints the answers.
 Nothing needs to be written around it, where using the engine from code means
 writing a host that builds an engine, evaluates, formats and cleans up.
 
-It is also how a document can guard itself in CI. A [check](/syntax/conditionals/#checks)
+It is also how a document can guard itself in CI. A [check](/syntax/checks/)
 is a line that states something the note should keep true, and `solve check`
 exits with a failure status when one of them stops holding, so a pull request
 that breaks a budget template, a pricing sheet or a lab calculation fails its
