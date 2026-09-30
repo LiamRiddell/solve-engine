@@ -1,4 +1,6 @@
 import { Value, ValueType, numberValue, errorValue, symbolicValue } from "@solve-js/vm/Value";
+import { valueInUnit } from "@solve-js/vm/MoneyExact";
+import { canConvert, convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import {
 	type SymbolicNode,
@@ -73,7 +75,8 @@ export const GOAL_SEEK_FN_NAME = "goalseek";
  * @param context - Per-line execution context. Supplies the re-evaluation
  * primitive and the iteration cap; without a document the handler returns a
  * structured error rather than guessing, since there is no line to solve.
- * @returns The solved input as a Number, or a structured error Value when there
+ * @returns The solved input, in the unit the unknown has in the note (a Number
+ * for a plain unknown), or a structured error Value when there
  * is no solution in range, the search does not converge, or the target line
  * cannot be probed.
  */
@@ -99,7 +102,13 @@ export function goalSeekHandler(args: Value[], context?: LineExecutionContext): 
 	if (targetArg.type !== ValueType.Number && targetArg.type !== ValueType.Uom) {
 		return errorValue("GOAL_SEEK_TARGET_NOT_NUMERIC", `Goal seek's target must be a number, as in "solve line ${targetLine} for ${varName} = 900".`);
 	}
-	const target = targetArg.toNumber();
+	// The line is solved in its own unit, so a target written in another unit
+	// of the same measure is read in that one first: 3,000 m against a line in
+	// kilometres is 3 (#835). The line's answer as the note stands says which
+	// unit that is.
+	const lineUnit = unitOf(context?.getLineResult?.(targetLine));
+	const target = targetInLineUnit(targetArg, lineUnit, targetLine);
+	if (target instanceof Value) return target;
 	if (!Number.isFinite(target)) {
 		return errorValue("GOAL_SEEK_TARGET_NOT_NUMERIC", "Goal seek's target is not a finite number.");
 	}
@@ -122,6 +131,10 @@ export function goalSeekHandler(args: Value[], context?: LineExecutionContext): 
 		return errorValue("GOAL_SEEK_VARIABLE_NOT_USED", `Line ${targetLine} does not use ${varName}, so changing ${varName} cannot move its result toward ${target}.`);
 	}
 
+	// The unknown keeps the unit the note gives it: a price in pounds is solved
+	// as an amount of pounds, and its answer is one (#835).
+	const unknownUnit = unitOf(context?.getVariable?.(varName));
+
 	// ── Closed-form fast path ──
 	// Bind the variable to itself and read the line back symbolically. A closed
 	// form comes back as an expression the algebra solver inverts exactly; a
@@ -130,12 +143,81 @@ export function goalSeekHandler(args: Value[], context?: LineExecutionContext): 
 	const symbolic = probe(targetLine, varName, symbolicValue(varNode(varName)), true);
 	if (symbolic.type === ValueType.Symbolic) {
 		const exact = solveClosedForm(symbolic.value as SymbolicNode, target, varName);
-		if (exact !== null) return numberValue(exact);
+		if (exact !== null) return inUnknownUnit(exact, unknownUnit);
 	}
 
 	// ── Bounded numeric search ──
 	const maxIterations = context.goalSeekMaxIterations ?? FALLBACK_MAX_ITERATIONS;
-	return bisect(probe, targetLine, varName, target, maxIterations);
+	const solved = bisect(probe, targetLine, varName, target, maxIterations, unknownUnit, lineUnit);
+	return solved.type === ValueType.Number ? inUnknownUnit(solved.toNumber(), unknownUnit) : solved;
+}
+
+/**
+ * The unit a value carries, or undefined for a plain number or no value.
+ *
+ * @param v - The value, which may be absent.
+ */
+export function unitOf(v: Value | undefined): string | undefined {
+	return v?.type === ValueType.Uom && typeof v.unit === "string" && v.unit !== "" ? v.unit : undefined;
+}
+
+/**
+ * The goal-seek answer in the unit its unknown is in: an amount of money stays
+ * exact to the cent, a quantity is a quantity, and a plain unknown a number.
+ *
+ * @param n - The solved magnitude.
+ * @param unit - The unknown's unit, or undefined when it is a plain number.
+ */
+export function inUnknownUnit(n: number, unit: string | undefined): Value {
+	return unit === undefined ? numberValue(n) : valueInUnit(numberValue(n), unit);
+}
+
+/** Whether a unit is a currency, which only an exchange rate converts. */
+function isCurrency(unit: string): boolean {
+	return getMeasure(unit) === "currency";
+}
+
+/**
+ * The target as a number in the target line's unit, or the refusal when the
+ * two cannot be compared.
+ *
+ * A plain target, or a line with no unit, is read as written. A target in the
+ * line's unit is its magnitude, and one in another unit of the same measure is
+ * converted (`3,000 m` against a line in kilometres is 3). A target that
+ * measures something else, or is money in another currency, is refused with
+ * `GOAL_SEEK_TARGET_UNIT_MISMATCH` rather than compared by magnitude, which
+ * would solve for the wrong number.
+ *
+ * @param target - The target as the goal-seek line wrote it.
+ * @param lineUnit - The unit the target line answers in, or undefined.
+ * @param targetLine - The target line's number, for the message.
+ */
+export function targetInLineUnit(target: Value, lineUnit: string | undefined, targetLine: number): number | Value {
+	const targetUnit = unitOf(target);
+	if (targetUnit === undefined || lineUnit === undefined || targetUnit === lineUnit) return target.toNumber();
+	if (!isCurrency(targetUnit) && !isCurrency(lineUnit) && canConvert(targetUnit, lineUnit)) {
+		return convertUnit(target.toNumber(), targetUnit, lineUnit);
+	}
+	return errorValue(
+		"GOAL_SEEK_TARGET_UNIT_MISMATCH",
+		`Line ${targetLine} answers in ${lineUnit} and the target is in ${targetUnit}, so the two cannot be compared. Write the target in ${lineUnit}.`,
+	);
+}
+
+/**
+ * A probe's answer as a number in the line's unit, converting a quantity that
+ * came back in another unit of the same measure.
+ *
+ * @param result - The probe's answer, already known to be a number or a quantity.
+ * @param lineUnit - The unit the target was read in, or undefined.
+ */
+function magnitudeInLineUnit(result: Value, lineUnit: string | undefined): number {
+	const resultUnit = unitOf(result);
+	if (resultUnit === undefined || lineUnit === undefined || resultUnit === lineUnit) return result.toNumber();
+	if (!isCurrency(resultUnit) && !isCurrency(lineUnit) && canConvert(resultUnit, lineUnit)) {
+		return convertUnit(result.toNumber(), resultUnit, lineUnit);
+	}
+	return result.toNumber();
 }
 
 /**
@@ -204,6 +286,10 @@ type Sample = { value: number } | { error: Value };
  * @param variable - The unknown being varied.
  * @param target - The value the line should reach.
  * @param maxIterations - The hard ceiling on bisection steps.
+ * @param unknownUnit - The unit each candidate is given, so the line computes
+ * with it as it does with the note's own value; undefined for a plain number.
+ * @param lineUnit - The unit the target was read in, which each answer is
+ * read in too.
  * @returns The solved input as a Number, or a structured error Value.
  */
 function bisect(
@@ -212,14 +298,16 @@ function bisect(
 	variable: string,
 	target: number,
 	maxIterations: number,
+	unknownUnit?: string,
+	lineUnit?: string,
 ): Value {
 	const sample = (candidate: number): Sample => {
-		const result = probe(targetLine, variable, numberValue(candidate), false);
+		const result = probe(targetLine, variable, inUnknownUnit(candidate, unknownUnit), false);
 		if (result.type === ValueType.Error) return { error: result };
 		if (result.type !== ValueType.Number && result.type !== ValueType.Uom) {
 			return { error: errorValue("GOAL_SEEK_TARGET_NOT_NUMERIC", `Line ${targetLine} did not produce a number when ${variable} was set to ${candidate}, so goal seek cannot compare it to the target.`) };
 		}
-		const numeric = result.toNumber();
+		const numeric = magnitudeInLineUnit(result, lineUnit);
 		if (!Number.isFinite(numeric)) return { error: errorValue("GOAL_SEEK_NON_FINITE", `Line ${targetLine}'s result is not finite when ${variable} is ${candidate}.`) };
 		return { value: numeric };
 	};

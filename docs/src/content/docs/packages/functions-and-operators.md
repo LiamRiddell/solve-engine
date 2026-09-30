@@ -100,6 +100,14 @@ need it. A handler that reads or steps a date takes the backend with
 a test passes none) and `calendarOf` answers the built-in `Date` backend in that
 case.
 
+A handler that needs to know what a name holds in the note as it stands, rather
+than an argument, reads `context.getVariable(name)`: the Value the document
+gives that name, or `undefined` when no line has set it. Goal seek uses it to
+learn the unit its unknown is in, so an answer for a price in pounds is an
+amount of pounds. Like the other cross-line fields it is absent where there is
+no document (the single-expression entry point, and the batch pass), so check
+for it before calling, and treat what it returns as read-only.
+
 A handler may return a `Promise<Value>` for data it has to fetch. The line goes
 pending, and when the promise settles the engine announces the line
 (`lines-updated`) and re-evaluates it, calling the handler once more. A handler

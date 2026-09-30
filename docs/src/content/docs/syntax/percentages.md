@@ -165,6 +165,23 @@ the engine refuses both rather than pick one:
 Between two dates, `to` gives the span from one to the other instead; see
 [date arithmetic](/syntax/date-arithmetic/).
 
+### A change as a multiplier
+
+`as multiplier` writes a change as how many times something grows: a rise of
+50% is 1.5 times the start, and a plain number is taken as the multiple itself.
+It takes a plain number or a percentage and nothing else, since text has no
+number to grow by and a quantity's unit would be lost without a word:
+
+```solve
+50% as multiplier // 1.5x
+(100 to 150) as multiplier // 1.5x
+0.5 as multiplier // 0.5x
+```
+
+```solve-doc
+5 km as multiplier // ERROR: A multiplier is a plain number or a percentage, as in "0.5 as multiplier" or "50% as multiplier", not a length.
+```
+
 ## Solving for the base
 
 When you know the percentage and the result but not the original: what 5% of

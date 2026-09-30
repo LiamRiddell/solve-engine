@@ -93,10 +93,12 @@ describe("present value", () => {
 });
 
 describe("return on investment", () => {
-	test("`$500 invested $1,500 returned` is 2x", () => {
+	test("`$500 invested $1,500 returned` is a 200% return", () => {
 		// The profit against the cost, not the money multiple. Tripling your
-		// money is a 2x return; `$1,500 / $500` is the 3x figure.
+		// money is a 200% return; `$1,500 / $500` is the 3x figure. The answer
+		// is a percentage, as the annual return is (#830).
 		expect(num("$500 invested $1,500 returned")).toBeCloseTo(2, 10);
+		expect(evaluate("$500 invested $1,500 returned").type).toBe(ValueType.Percentage);
 	});
 
 	test("breaking even is a zero return", () => {

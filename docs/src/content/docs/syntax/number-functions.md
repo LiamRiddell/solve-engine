@@ -201,6 +201,20 @@ degtorad(180) // 3.14
 radtodeg(pi) // 180
 ```
 
+Converting an inverse function's answer to degrees converts it, so `asin(0.5)
+in degrees` is 30 degrees, the same angle `asind(0.5)` gives as a plain number:
+
+```solve
+asin(0.5) in degrees // 30.00 degrees
+atan2(1, 1) in degrees // 45.00 degrees
+```
+
+The boundary: the conversion knows the number is an angle because the line
+starts with the call. A name that holds the answer is an ordinary number, and a
+plain number converted to a unit is given that unit, so `a = asin(0.5)` followed
+by `a in degrees` is 0.52 degrees. Write `asind`, or `radtodeg(a)`, for that
+case.
+
 ## Hyperbolic functions
 
 The hyperbolic functions `sinh`, `cosh` and `tanh` are the counterparts of sine,

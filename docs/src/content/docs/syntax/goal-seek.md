@@ -31,6 +31,31 @@ monthly repayment on deposit over 25 years at rate   // 527.84
 solve line 3 for deposit = 900                        // 170,507.23
 ```
 
+The answer is in the unit the variable has in the note. A price in pounds is
+solved as an amount of pounds, and a distance in kilometres as a distance. A
+target written in another unit of the same measure is read in the target line's
+unit first, so 3,000 m against a line in kilometres is 3 km:
+
+```solve-doc
+:price = £200            // £200.00
+:qty = 3                 // 3
+price * qty              // £600.00
+solve line 3 for price = £1,500   // £500.00
+solve line 3 for qty = £1,500     // 7.50
+```
+
+```solve-doc
+:d = 5 km                          // 5.00 km
+d * 2                              // 10.00 km
+solve line 2 for d = 3000 m        // 1.50 km
+solve line 2 for d = 3 kg          // ERROR: Line 2 answers in km and the target is in kg, so the two cannot be compared. Write the target in km.
+```
+
+The boundary: a variable that is a plain number stays one, whatever the
+target's unit, since a count of items that makes a total in pounds is still a
+count (`qty` above is 7.50, not £7.50). A target in another currency is refused
+rather than converted at a rate, as a target in another measure is.
+
 There are two mechanisms, chosen automatically. When the target line is closed
 form in the variable, the answer is inverted exactly, the same algebra the
 [`solve(...)`](/syntax/solving-equations/) verb uses. Otherwise (a finance formula, say)

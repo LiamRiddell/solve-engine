@@ -134,7 +134,9 @@ describe("Matrix inverse", () => {
 });
 
 describe("Matrix dot()", () => {
-  test("dot(a, b) matches a * b for two matrices", () => {
+  // A row times a column is the one matrix product that is also a dot
+  // product, and the two agree on its number (#828).
+  test("dot(a, b) matches a * b for a row and a column", () => {
     const e = engine();
     e.evaluateLine(1, ":a = [1,2,3]");
     e.evaluateLine(2, ":b = [1;2;3]");

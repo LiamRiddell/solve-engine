@@ -664,6 +664,9 @@ export class PrecedenceParser {
       }
 
       case PrecedenceParser.PLUS_ID: {
+        // The word `add` goes to its parselet, which reads `add A to B` as a
+        // sum (#829); the symbol `+` stays here, on the hot path.
+        if (token.text.length === 3 && token.text.toLowerCase() === "add") break;
         this.parseExpression(BindingPower.Prefix, builder);
         builder.emitOpcode(OpCode.POS);
         return;

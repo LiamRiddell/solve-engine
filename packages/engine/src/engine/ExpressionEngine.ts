@@ -1214,6 +1214,9 @@ export class ExpressionEngine {
                       return state.reads;
                   }
                 : undefined,
+            // The document's own value for a name, which a goal seek reads for
+            // the unit its unknown is in (#835).
+            getVariable: doc ? (name: string) => this.vm.getVar(name) : undefined,
             evaluateLineWithBinding: doc
                 ? (n: number, variable: string, bound: Value, symbolicTolerant: boolean) => {
                       // The same edge as `getLineReads` above, for the same reason.

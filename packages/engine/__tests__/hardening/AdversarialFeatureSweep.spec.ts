@@ -95,6 +95,21 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	],
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
 	solving: ["solve(x^2 = X, x)", "integral(x, x, 0, X)"],
+	// The forms #828, #829, #830 and #835 changed.
+	vectorsAndWords: [
+		"vec2(X, 1)",
+		"vec3(X, 1, 2)",
+		"dot([X, 1], [2, 3])",
+		"float(X)",
+		"X as multiplier",
+		"add X to 10",
+		"X is prime",
+		"asin(X) in degrees",
+		"larger of X and 4 and 12",
+		"smaller of 10 and X and 12",
+		"compoundInterest($1,000, X, 3)",
+		"$1,000 invested X returned",
+	],
 	dates: ["1 Jan 2026 + X days", "1 Jan 2026 + X", "1 Jan 2026 to X", "X to 1 Jan 2026", "X * 9:00", "round(9:00) + X", "(9:30 - 8:30) + X minutes", "X as iso8601"],
 	// A signed offset after a date or in a conversion (#730).
 	utcOffsets: ["2026-04-03T15:00 in UTC-X", "2026-04-03T15:00 in GMT+X", "2026-04-03 in UTC+X:30", "3pm London in UTC-X", "now in UTC+X"],
@@ -145,6 +160,7 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "X\n5\ntotal above\naverage above" },
 	{ form: "X\ninputs of line 1" },
 	{ form: "x = 1\ny = x * 3\nsolve line 2 for x = X", agree: false },
+	{ form: ":price = £200\nprice * 3\nsolve line 2 for price = £X", agree: false },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {
@@ -170,6 +186,9 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"35 mpg X",
 		"4000px at X dpi",
 		"X at 300 dpi",
+		"X is prime",
+		"add X to 10",
+		"larger of X and 4 and 12",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {
 		expectPrototypeUntouched(() => {
