@@ -270,9 +270,13 @@ function rank(name) {
 	return at === -1 ? ENGINE_ORDER.length : at;
 }
 
-/** A cell of a markdown table: its pipes escaped, so the text cannot end the cell. */
+/**
+ * A cell of a markdown table: its backslashes and then its pipes escaped, so
+ * the text cannot end the cell. The backslashes go first, or a `\|` already
+ * in the text would become an escaped backslash and a bare pipe.
+ */
 function cell(text) {
-	return text.replace(/\|/g, "\\|");
+	return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 /**

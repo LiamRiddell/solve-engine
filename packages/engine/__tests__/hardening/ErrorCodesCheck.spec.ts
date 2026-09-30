@@ -158,6 +158,18 @@ describe("the catalogue and the page stay in step", () => {
 		expect(page).toContain("| `BOTH_WAYS` | either | Raised both ways. |");
 	});
 
+	test("a pipe or a backslash in a doc comment stays inside its cell", () => {
+		// The backslash is escaped before the pipe, or an `\|` already in the
+		// text would come out as an escaped backslash and a bare pipe, which
+		// ends the cell early.
+		const root = written({
+			"errors/ErrorCode.ts": catalogue("CoreErrorCodes", [["PIPED", "Reads a|b and a\\|b."]]),
+			"vm/VM.ts": 'errorValue("PIPED", m);\n',
+		});
+		const page = fs.readFileSync(path.join(root, PAGE), "utf8");
+		expect(page).toContain("| `PIPED` | as a value | Reads a\\|b and a\\\\\\|b. |");
+	});
+
 	test("a package's catalogue is grouped under its package", () => {
 		const root = written({
 			"errors/ErrorCode.ts": CORE,
