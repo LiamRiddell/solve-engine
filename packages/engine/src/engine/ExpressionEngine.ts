@@ -1229,6 +1229,9 @@ export class ExpressionEngine {
             // walking; without it a range could not tell a blank line inside
             // the document from a line past its end (#562).
             getLineCount: doc ? () => doc.lineCount : scan ? () => scan.length : undefined,
+            // A what-if's scenario is a batch pass of its own, so a form that
+            // re-runs a line can say that is why it cannot here.
+            inWhatIf: this.whatIfDepth > 0 ? true : undefined,
             getLineResult: readLineResult,
             // The edge without the read; see the field's own doc comment.
             noteLineRead: doc
@@ -1534,8 +1537,12 @@ export class ExpressionEngine {
         symbolicTolerant: boolean,
     ): Value {
         const doc = this.documentModel;
+        // Reached only through a line context built over a document, so the
+        // goal-seek line is in one: the engine's model has been put back since
+        // (a borrowed incremental pass that ended). It used to say "the
+        // single-expression entry point", which the line is not.
         if (!doc) {
-            return errorValue("GOAL_SEEK_NO_DOCUMENT", "Goal seek needs a document to solve against, which the single-expression entry point does not have.");
+            return errorValue("GOAL_SEEK_NO_DOCUMENT", "Goal seek needs the document its line is in, and this line is no longer being evaluated as part of one. It is solved when the whole document is evaluated.");
         }
         if (this.goalSeekDepth >= ExpressionEngine.GOAL_SEEK_MAX_NESTING_DEPTH) {
             return errorValue("GOAL_SEEK_NESTED", `A goal-seek line cannot target another goal-seek line, since each already re-runs its target many times.`);

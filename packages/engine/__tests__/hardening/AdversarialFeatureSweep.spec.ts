@@ -142,6 +142,20 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	negation: ["not (X > 0)", "!(X > 0)", "not X", "!X", "if not X > 0 then 1 else 2"],
 	wordLabels: ["Rent $X", "Petrol X l", "Flight to Paris X EUR", "Chapter X", "take home $X"],
 	multiWordNames: ["hourly rate = X", "take home = X", "tax on = X"],
+	// The forms the found-bug batch changed: a difference in words, two rates
+	// added, an approximate check to its written places, two booleans checked,
+	// an inverse trigonometric call to a unit that is not an angle, a quotient
+	// by zero in the algebra, and a rate solved for as a percentage.
+	foundBugs: [
+		"subtract X from 10",
+		"take 3 from X",
+		"10 m/s + X km/h",
+		"check X ≈ 96.56",
+		"check (X > 0) == true",
+		"asin(X) in km",
+		"expand((x+1)/X)",
+		"X:30",
+	],
 };
 
 describe("every form stays honest over the numeric edges", () => {

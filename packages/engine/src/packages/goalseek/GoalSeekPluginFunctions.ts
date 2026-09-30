@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, errorValue, symbolicValue, matrixValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, percentageValue, errorValue, symbolicValue, matrixValue } from "@solve-js/vm/Value";
 import { valueInUnit } from "@solve-js/vm/MoneyExact";
 import { canConvert, convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { formatValue } from "@solve-js/format/FormatEngine";
@@ -87,6 +87,28 @@ const STOPS_THE_SEARCH: ReadonlySet<string> = new Set([
 export const GOAL_SEEK_FN_NAME = "goalseek";
 
 /**
+ * Why a goal seek cannot run on this pass, in the terms of where the line is.
+ * Three places reach here without the re-run primitive, and each is named: a
+ * what-if's scenario (the goal seek is on a line a what-if in the document
+ * re-runs), the batch pass, and the single-expression entry point
+ * (`evaluateLine`, at any line number, since it is handed no document). The
+ * what-if's scenario is a batch pass of its own, and was told so, which named
+ * a pass the reader had not asked for.
+ *
+ * @param context - The line's execution context, which may be absent.
+ * @returns The refusal's message.
+ */
+export function goalSeekNoRerunMessage(context: Pick<LineExecutionContext, "getLineCount" | "inWhatIf"> | undefined): string {
+	if (context?.inWhatIf) {
+		return "Goal seek cannot run inside a what-if: the what-if works each line of its scenario out once, and a goal seek re-runs another line many times. Solve the line outside the what-if.";
+	}
+	if (context?.getLineCount) {
+		return "Goal seek re-runs another line, which the batch pass (parseDocument) cannot do: it evaluates each line once. evaluateDocument and a live editor can solve it.";
+	}
+	return "Goal seek only works inside a document, since it re-runs another line. The single-expression entry point has no document to solve against.";
+}
+
+/**
  * Solve for the variable that makes a line equal a target.
  *
  * @param args - Three or five values, in the order the parselet pushes them:
@@ -104,16 +126,9 @@ export function goalSeekHandler(args: Value[], context?: LineExecutionContext): 
 	const probe = context?.evaluateLineWithBinding;
 	const getLineReads = context?.getLineReads;
 	if (!probe || !getLineReads) {
-		// Two callers reach here, and the message says which (#617): the batch
-		// pass has a document (it can count its lines) but evaluates each line
-		// once, and the single-expression entry point has no document at all.
-		// It used to give both the second sentence, which was wrong for the first.
-		return errorValue(
-			"GOAL_SEEK_NO_DOCUMENT",
-			context?.getLineCount
-				? "Goal seek re-runs another line, which the batch pass (parseDocument) cannot do: it evaluates each line once. evaluateDocument and a live editor can solve it."
-				: "Goal seek only works inside a document, since it re-runs another line. The single-expression entry point has no document to solve against.",
-		);
+		// Several callers reach here, and the message says which (#617); see
+		// goalSeekNoRerunMessage.
+		return errorValue("GOAL_SEEK_NO_DOCUMENT", goalSeekNoRerunMessage(context));
 	}
 
 	const targetLine = args[0].toNumber();
@@ -153,7 +168,7 @@ export function goalSeekHandler(args: Value[], context?: LineExecutionContext): 
 
 	// The unknown keeps the unit the note gives it: a price in pounds is solved
 	// as an amount of pounds, and its answer is one (#835).
-	const unknownUnit = unitOf(context?.getVariable?.(varName));
+	const unknownUnit = unknownUnitOf(context?.getVariable?.(varName));
 	const stated = args.length >= 5 ? readGoalSeekRange(args[3], args[4], unknownUnit) : undefined;
 	if (stated instanceof Value) return stated;
 
@@ -227,7 +242,29 @@ export function unitOf(v: Value | undefined): string | undefined {
  * @param unit - The unknown's unit, or undefined when it is a plain number.
  */
 export function inUnknownUnit(n: number, unit: string | undefined): Value {
+	if (unit === PERCENT_UNKNOWN) return percentageValue(n);
 	return unit === undefined ? numberValue(n) : valueInUnit(numberValue(n), unit);
+}
+
+/**
+ * The mark {@link unknownUnitOf} gives an unknown the note holds as a
+ * percentage. Not a unit of the tables (a percentage is a fraction, 0.05 for
+ * 5%), so it is only ever compared against, never converted.
+ */
+export const PERCENT_UNKNOWN = "%";
+
+/**
+ * The unit an unknown is solved in: the unit of the value the note gives it,
+ * or {@link PERCENT_UNKNOWN} for a percentage, so a rate solved for is shown as
+ * the percentage it was written as (`5.00%`) rather than the bare fraction
+ * (0.05) the search works in.
+ *
+ * @param v - The unknown's value in the note, which may be absent.
+ * @returns The unit, the percentage mark, or undefined for a plain number.
+ */
+export function unknownUnitOf(v: Value | undefined): string | undefined {
+	if (v?.type === ValueType.Percentage) return PERCENT_UNKNOWN;
+	return unitOf(v);
 }
 
 /** Whether a unit is a currency, which only an exchange rate converts. */
@@ -295,12 +332,14 @@ export function readGoalSeekRange(lowValue: Value, highValue: Value, unknownUnit
 	const ends: number[] = [];
 	for (const end of [lowValue, highValue]) {
 		if (end.type === ValueType.Error || end.type === ValueType.Pending) return end;
-		if (end.type !== ValueType.Number && end.type !== ValueType.Uom) {
+		// A percentage end is the fraction it stands for, as the unknown's own value is.
+		const percentEnd = end.type === ValueType.Percentage && unknownUnit === PERCENT_UNKNOWN;
+		if (!percentEnd && end.type !== ValueType.Number && end.type !== ValueType.Uom) {
 			return errorValue("GOAL_SEEK_RANGE_INVALID", `Goal seek's range needs two numbers, as in "between 0 and 100".`);
 		}
 		const endUnit = unitOf(end);
 		let magnitude = end.toNumber();
-		if (endUnit !== undefined && unknownUnit !== undefined && endUnit !== unknownUnit) {
+		if (!percentEnd && endUnit !== undefined && unknownUnit !== undefined && endUnit !== unknownUnit) {
 			if (isCurrency(endUnit) || isCurrency(unknownUnit) || !canConvert(endUnit, unknownUnit)) {
 				return errorValue("GOAL_SEEK_RANGE_INVALID", `The unknown is in ${unknownUnit} and the range is in ${endUnit}, so the range cannot be read. Write the range in ${unknownUnit}.`);
 			}

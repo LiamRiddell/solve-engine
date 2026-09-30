@@ -41,6 +41,18 @@ function hourAndMinute(text: string): { hour: number; minute: number } | null {
   return { hour: Number(spelled[1]), minute: spelled[2] === undefined ? 0 : Number(spelled[2]) };
 }
 
+/**
+ * Whether a number token is written as the digits of one half of a clock
+ * time (`9`, `09`, `30`): one or two plain digits, with no point, sign or
+ * exponent. `1.5` in `1.5:3` is not, so that line is not a time.
+ *
+ * @param token - The hour or minute token.
+ * @returns `true` for one or two digits as written.
+ */
+export function isClockDigits(token: Pick<Token, "text" | "value">): boolean {
+  return /^\d{1,2}$/.test(token.text || token.value);
+}
+
 function isAmPmToken(token: { type: string; value: string } | undefined): token is { type: string; value: string } {
   return !!token && token.type === "IDENT" && /^(am|pm)$/i.test(token.value);
 }
@@ -111,6 +123,11 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
 
       // Pattern: NUMBER COLON NUMBER [am|pm]
       if (colonShape) {
+        // Both halves of a clock time are whole numbers as written. `parseInt`
+        // read the whole part of a decimal, so `1.5:3` answered the time 1:03;
+        // a decimal on either side is not a time, and is left for what else
+        // the line can be.
+        if (!isClockDigits(hourToken) || !isClockDigits(minuteToken)) return null;
         const minute = parseInt(minuteToken.value, 10);
         const ampmToken = tokens[pos + 3];
         const hasAmPm = isAmPmToken(ampmToken);

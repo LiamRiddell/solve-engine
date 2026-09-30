@@ -372,14 +372,16 @@ describe("the OSRS example as a realistic subject", () => {
 		expect(report.compatible).toBe(true);
 	});
 
-	test("its keywords shadow the prose word 'price', which the kit catches", () => {
-		// A real finding: the OSRS example claims `price` as a keyword, and
-		// `price` is an everyday word, so the default prose check flags it. This
-		// is exactly the trigger-word mistake the kit exists to surface.
-		const error = captureFailure(() => expectPackage(OSRS_PACKAGE).notToShadow());
+	test("it no longer shadows the prose word 'price', the finding the kit made", () => {
+		// The kit flagged this for real: the OSRS example claimed `price` as a
+		// keyword, which made a reader's `price * qty` an item lookup. It claims
+		// only `osrs` and `ge` now, so the default prose check passes.
+		expect(() => expectPackage(OSRS_PACKAGE).notToShadow()).not.toThrow();
+		expect(() => expectPackage(OSRS_PACKAGE).notToShadow(["price", "the", "of", "and", "in"])).not.toThrow();
+		// A package that does claim the word is still caught.
+		const claimsPrice = { ...OSRS_PACKAGE, name: "claims-price", lexerVocabulary: { keywords: { price: "OSRS_KEYWORD" } } };
+		const error = captureFailure(() => expectPackage(claimsPrice).notToShadow());
 		expect(error.code).toBe("PACKAGE_SHADOWS_PROSE");
 		expect(error.message).toContain('"price"');
-		// Against a list of words the package does not claim, it is clean.
-		expect(() => expectPackage(OSRS_PACKAGE).notToShadow(["the", "of", "and", "in"])).not.toThrow();
 	});
 });

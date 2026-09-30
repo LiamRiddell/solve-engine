@@ -208,10 +208,10 @@ The rest, in words:
 - The line asked about is a line number, `line 4`. `prev`, a span of lines, and
   named scenarios kept for reuse (`line 5 in bull`) are not part of this form;
   scenarios are the natural next step on the same re-run.
-- The re-run reads the note the way the batch pass does, top to bottom. A
-  [goal seek](/syntax/goal-seek/) inside the span answers there with that pass's
-  refusal, so a what-if whose line depends on a goal seek line reports the
-  refusal rather than a number.
+- The re-run reads the note the way the batch pass does, top to bottom, working
+  each line out once. A [goal seek](/syntax/goal-seek/) inside the span cannot
+  re-run its target there, so a what-if whose line depends on a goal seek line
+  reports that the goal seek cannot run inside a what-if, rather than a number.
 - Goal seek is the reverse question, the input that makes a line reach a target,
   and it still needs its variable on the target line itself.
 - A sweep steps numbers, percentages and quantities. It does not step dates or

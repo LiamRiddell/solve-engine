@@ -2,7 +2,7 @@ import { Value, ValueType, numberValue, boolValue, hexValue, uomValue, errorValu
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, describeQuantity } from "@solve-js/vm/VMConversion";
+import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, describeQuantity, valueKindName } from "@solve-js/vm/VMConversion";
 import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact, valueInUnit, moneyForCount } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixPower, symbolicToEntry, rowMajorToColumnMajor, dotProduct } from "@solve-js/vm/MatrixOps";
@@ -35,7 +35,7 @@ import { inflationAmountRefused } from "@solve-js/packages/finance/data/Inflatio
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } from "@solve-js/vm/QuantityPowers";
-import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan } from "@solve-js/vm/FinanceFormulas";
+import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan, loanTermsRefused } from "@solve-js/vm/FinanceFormulas";
 import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
 import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactDecimalToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
@@ -886,7 +886,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
       // A quantity base answers what `^` answers for it: `pow(3 m, 2)` is 9 m2.
       if (args[0].type === ValueType.Uom && args[0].unit !== undefined) {
         const numericExponent = args[1].type === ValueType.Number || args[1].type === ValueType.BigInt;
-        return numericExponent ? raiseQuantity(args[0], args[1].toNumber()) : unitPowerUnsupported(args[0].unit, ValueType[args[1].type].toLowerCase());
+        return numericExponent ? raiseQuantity(args[0], args[1].toNumber()) : unitPowerUnsupported(args[0].unit, valueKindName(args[1]));
       }
       // The spelled-out form of `^` answers what `^` answers, edge cases
       // included, and a whole-number result past the safe range exactly as
@@ -1219,10 +1219,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         const periodsPerYear = args[3].toNumber();
-        if (principal <= 0) return errorValue("INVALID_RANGE", `loanRepayment: principal must be positive`);
-        if (years <= 0) return errorValue("INVALID_RANGE", `loanRepayment: years must be positive`);
-        if (rate < 0) return errorValue("INVALID_RATE", `loanRepayment: rate must not be negative`);
-        if (periodsPerYear < 0) return errorValue("INVALID_RANGE", `loanRepayment: periodsPerYear must not be negative`);
+        const refused = loanTermsRefused(principal, years, rate, periodsPerYear);
+        if (refused) return refused;
         const { totalRepayment } = amortizeLoan(principal, rate, years);
         const result = periodsPerYear === 0 ? totalRepayment : totalRepayment / (years * periodsPerYear);
         return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
@@ -1236,10 +1234,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         const periodsPerYear = args[3].toNumber();
-        if (principal <= 0) return errorValue("INVALID_RANGE", `loanInterest: principal must be positive`);
-        if (years <= 0) return errorValue("INVALID_RANGE", `loanInterest: years must be positive`);
-        if (rate < 0) return errorValue("INVALID_RATE", `loanInterest: rate must not be negative`);
-        if (periodsPerYear < 0) return errorValue("INVALID_RANGE", `loanInterest: periodsPerYear must not be negative`);
+        const refused = loanTermsRefused(principal, years, rate, periodsPerYear);
+        if (refused) return refused;
         const { totalInterest } = amortizeLoan(principal, rate, years);
         const result = periodsPerYear === 0 ? totalInterest : totalInterest / (years * periodsPerYear);
         return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
@@ -1252,9 +1248,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const rate = args[1].toNumber();
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
-        if (principal <= 0) return errorValue("INVALID_RANGE", `monthlyPayment: principal must be positive`);
-        if (years <= 0) return errorValue("INVALID_RANGE", `monthlyPayment: years must be positive`);
-        if (rate < 0) return errorValue("INVALID_RATE", `monthlyPayment: rate must not be negative`);
+        const refused = loanTermsRefused(principal, years, rate);
+        if (refused) return refused;
         const { monthlyPayment } = amortizeLoan(principal, rate, years);
         return args[0].type === ValueType.Uom ? uomValue(monthlyPayment, args[0].unit!) : numberValue(monthlyPayment);
     },

@@ -32,6 +32,7 @@ import {
 	callNode,
 	simplifySymbolic,
 	freeVariables,
+	dividesByZero,
 	rational,
 	rationalFromNumber,
 	rationalToNumber,
@@ -74,6 +75,12 @@ export const SYMBOLIC_BUILTIN_NAMES: Readonly<Record<number, string>> = {
 
 /** Builtin index for `pow(base, exponent)`, which becomes a `pow` node rather than a `call` node. */
 const POW_BUILTIN_INDEX = 31;
+/**
+ * `inv`, which the `^-1` suffix also calls. Over an expression in unknowns it
+ * is the reciprocal, `x^-1`, as it is for a plain number; it used to be
+ * refused under the name "builtin 65".
+ */
+const INV_BUILTIN_INDEX = 65;
 /** `log` and `ln`, the natural logarithm under its two names (#667). */
 const LOG_BUILTIN_INDEX = 5;
 const LN_BUILTIN_INDEX = 113;
@@ -125,15 +132,35 @@ export function valueToSymbolic(v: Value): SymbolicNode | null {
  */
 export function symbolicToValue(node: SymbolicNode): Value {
 	const simplified = simplifySymbolic(node);
+	if (dividesByZero(simplified)) return symbolicDivisionByZero();
 	if (simplified.kind === "const") return numberValue(rationalToNumber(simplified.value));
 	return symbolicValue(simplified);
 }
 
+/**
+ * The refusal for an expression that divides by zero, in place of the
+ * confident answers the algebra gave it: `expand((x+1)/0)` was 1, `der(x/0, x)`
+ * was 0 and `solve(x/0 = 1, x)` held for every value. A quotient by zero has
+ * no value for any x, so no step of the algebra may treat it as one.
+ *
+ * @returns An error Value with the code `SYMBOLIC_DIVISION_BY_ZERO`.
+ */
+export function symbolicDivisionByZero(): Value {
+	return errorValue(
+		"SYMBOLIC_DIVISION_BY_ZERO",
+		"This expression divides by zero, so it has no value, whatever its unknowns are.",
+	);
+}
+
 /** The error returned whenever a symbolic operand reaches something with no symbolic meaning, in place of the old silent zero. */
-function unsupported(what: string): Value {
+function unsupported(what: string | undefined): Value {
+	// A builtin with no symbolic name is described rather than shown by its
+	// internal index, which the reader never typed ("builtin 65").
 	return errorValue(
 		"SYMBOLIC_UNSUPPORTED_FUNCTION",
-		`"${what}" cannot be applied to an expression that still contains an unknown.`,
+		what === undefined
+			? "This function cannot be applied to an expression that still contains an unknown."
+			: `"${what}" cannot be applied to an expression that still contains an unknown.`,
 	);
 }
 
@@ -187,12 +214,15 @@ export function symbolicBuiltin(index: number, args: readonly Value[]): Value {
 		const faulted = faultedOperand(arg);
 		if (faulted) return faulted;
 		const node = valueToSymbolic(arg);
-		if (node === null) return unsupported(SYMBOLIC_BUILTIN_NAMES[index] ?? `builtin ${index}`);
+		if (node === null) return unsupported(SYMBOLIC_BUILTIN_NAMES[index]);
 		nodes.push(node);
 	}
 
 	if (index === POW_BUILTIN_INDEX && nodes.length === 2) {
 		return symbolicToValue(powNode(nodes[0], nodes[1]));
+	}
+	if (index === INV_BUILTIN_INDEX && nodes.length === 1) {
+		return symbolicToValue(powNode(nodes[0], constNode(-1)));
 	}
 	// `log x base n` over a symbolic argument is the change of base the algebra
 	// knows, `log(x) / log(n)` (#667).
@@ -201,7 +231,7 @@ export function symbolicBuiltin(index: number, args: readonly Value[]): Value {
 	}
 
 	const name = SYMBOLIC_BUILTIN_NAMES[index];
-	if (name === undefined) return unsupported(`builtin ${index}`);
+	if (name === undefined) return unsupported(undefined);
 	return symbolicToValue(callNode(name, nodes));
 }
 

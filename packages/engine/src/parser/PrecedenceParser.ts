@@ -658,6 +658,9 @@ export class PrecedenceParser {
 
       // ── Unary operators ───────────────────────────────────────────────────
       case PrecedenceParser.MINUS_ID: {
+        // A word (`subtract`, `take`, `remove`) goes to its parselet, which
+        // reads `subtract A from B` as a difference; the symbol stays here.
+        if (token.text.length > 1 && /^[a-z]+$/i.test(token.text)) break;
         this.parseExpression(BindingPower.Prefix, builder);
         builder.emitOpcode(OpCode.NEG);
         return;

@@ -4,7 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
-import { readsAsRadians, emitRadiansTag } from "@solve-js/parser/InverseTrigAngle";
+import { readsAsRadians, emitRadiansTag, leftIsWholeCall } from "@solve-js/parser/InverseTrigAngle";
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
 import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN } from "@solve-js/uom/HistoricalCurrency";
 import { tryReadUtcOffset } from "@solve-js/calendar/UtcOffset";
@@ -31,6 +31,8 @@ export class InParselet implements InfixParselet {
 	readonly bindingPower = 35;
 
 	parse(parser: Parser, left: Token, _token: Token, builder: BytecodeBuilder): void {
+		// Read before the target is consumed, while the keyword is the last token read.
+		const wholeCall = leftIsWholeCall(parser, left);
 		const targetToken = parser.peek();
 		// `<ip> in <cidr>`: a subnet-membership test, not a unit conversion. The
 		// right side is a fused IP/CIDR literal, which only exists when the IP
@@ -109,7 +111,7 @@ export class InParselet implements InfixParselet {
 			}
 
 			// `asin(0.5) in degrees`: the radians the call answers in, converted (#829).
-			if (readsAsRadians(left, targetUnit)) emitRadiansTag(builder);
+			if (readsAsRadians(left, targetUnit, wholeCall)) emitRadiansTag(builder);
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(targetUnit);
 			builder.emitOpcode(OpCode.UOM_CONVERT_IN);

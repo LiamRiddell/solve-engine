@@ -127,6 +127,29 @@ check 22/7 ≈ pi within 0.1% // ✓ (differs by 0.04%)
 check 5 m ≈ 5.01 m within 1 cm // ✓ (differs by 0.01 m)
 ```
 
+Without a `within`, `≈` reads the right-hand side as written to the decimal
+places it has: the check asks whether the left side is that figure to those
+places. Sixty miles an hour is 96.56064 km/h, so it is 96.56 km/h to two places
+and not 96.5 to one. A whole number on the right allows no rounding, so `5.4 ≈ 5`
+fails, and a figure worked out to every digit, such as `pi`, is held to the
+engine's own rounding.
+
+```solve
+check 60 mph ≈ 96.56 km/h // ✓ (differs by 0.000398 mph)
+check 60 mph ≈ 96.5 km/h // check failed: 60 mph is not equal to 96.5 km/h
+check 1/3 ≈ 0.333 // ✓ (differs by 0.000333)
+check 5.4 ≈ 5 // check failed: 5.4 is not equal to 5
+```
+
+Two yes-or-no answers compare as equal or not, as two pieces of text do. They
+have no order, so `<` between them is refused, and `true` is not the number 1.
+
+```solve
+check !(1 > 2) == true // ✓
+check (2 > 1) == (3 > 2) // ✓
+check true == false // check failed: true is not equal to false
+```
+
 A check line is a statement about the numbers around it, not one of them, so a
 `total above` beneath it steps over it, passed or failed. A program embedding the
 engine gets a count of passed and failed checks on the parse result (`checks`), so

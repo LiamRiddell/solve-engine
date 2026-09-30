@@ -561,6 +561,11 @@ function simplifyNodeAt(node: SymbolicNode): SymbolicNode {
 			if (left.kind === "const" && right.kind === "const" && !isRationalZero(right.value)) {
 				return constNode(rationalDiv(left.value, right.value));
 			}
+			// Nothing cancels against a zero denominator either: the greatest
+			// common divisor of a polynomial and zero is the polynomial, so the
+			// cancellation below turned `(x+1)/0` into 1. The quotient stays
+			// as written, and `dividesByZero` is how a caller finds it.
+			if (right.kind === "const" && isRationalZero(right.value)) return { kind: "div", left, right };
 			const foldedDiv = foldComplexBinary("div", left, right);
 			if (foldedDiv !== null) return foldedDiv;
 			if (right.kind === "const" && isRationalOne(right.value)) return left;
@@ -602,6 +607,9 @@ function simplifyNodeAt(node: SymbolicNode): SymbolicNode {
 			if (exponent.kind === "const") {
 				if (isRationalZero(exponent.value)) return constNode(RATIONAL_ONE);
 				if (isRationalOne(exponent.value)) return base;
+				// Zero to a negative power is a division by zero, left unfolded
+				// for the same reason `1/0` is (see the "div" case above).
+				if (base.kind === "const" && isRationalZero(base.value) && exponent.value.n < 0n) return { kind: "pow", base, exponent };
 				if (base.kind === "const" && isRationalInteger(exponent.value)) {
 					return constNode(rationalPow(base.value, exponent.value.n));
 				}

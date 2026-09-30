@@ -75,6 +75,28 @@ to the whole quotient rather than to the number just before it.
 120 km / 2 hours in kph // 60.00 kph
 ```
 
+## Adding and comparing rates
+
+Two rates of the same kind are one quantity written in two units, so they add,
+subtract and compare the way two lengths do. The right-hand rate is read in the
+left-hand one's unit first, by the same conversion `in` makes, and the answer is
+in the left-hand unit. A total of rates works the same way.
+
+```solve
+10 m/s + 36 km/h // 20.00 m/s
+10 km/h + 5 mph // 18.05 km/h
+10 m/s > 30 km/h // true
+total of 10 m/s, 36 km/h // 20.00 m/s
+```
+
+The boundary: two rates of different kinds do not combine, since a speed and a
+flow of mass per second are not one quantity. Two prices per hour in different
+currencies are not converted at an exchange rate here either.
+
+```solve
+10 m/s + 5 kg/s // Cannot combine incompatible units: m/s and kg/s
+```
+
 ## Cancelling a rate
 
 A rate multiplied by what it is per leaves the other half: a speed for a time is
