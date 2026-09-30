@@ -131,6 +131,13 @@ const abortControllers = new Map<string, AbortController>();
 const tabDocuments = new Map<string, string>();
 
 /**
+ * Whether each tab's live lookups may reach the network, as its last message
+ * said. A tab opened from a shared link starts with it off (see share.ts), and
+ * a background refresh of that tab must not turn it on.
+ */
+const tabNetwork = new Map<string, boolean>();
+
+/**
  * AbortController for the current cross-tab BACKGROUND refresh, keyed by
  * tabId — separate from `abortControllers` above (which track interactive,
  * keystroke-driven sessions). If several global writes fire in quick
@@ -282,7 +289,7 @@ function refreshTab(tabId: string, text: string): void {
         evaluatingTabId = tabId;
         let result, stream;
         try {
-            ({ result, stream } = runEngineWithStreaming(text, refreshController.signal));
+            ({ result, stream } = runEngineWithStreaming(text, refreshController.signal, { networkEnabled: tabNetwork.get(tabId) ?? true }));
         } finally {
             evaluatingTabId = previousEvaluatingTabId;
         }
@@ -331,7 +338,7 @@ function refreshTab(tabId: string, text: string): void {
  *
  * @param e - The `MessageEvent` from the main thread.
  */
-self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: string; stream?: boolean; abort?: boolean; close?: boolean }>) => {
+self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: string; stream?: boolean; abort?: boolean; close?: boolean; networkEnabled?: boolean }>) => {
     // A real postMessage always carries a browser-populated origin the
     // sender cannot spoof, so this only ever rejects a genuine mismatch. It
     // is skipped, not enforced, when either side is unset, which covers the
@@ -340,7 +347,7 @@ self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: strin
     // opening anything a real message could exploit.
     if (e.origin && self.location && e.origin !== self.location.origin) return;
 
-    const { id, tabId, expression, stream, abort, close } = e.data;
+    const { id, tabId, expression, stream, abort, close, networkEnabled } = e.data;
 
     // ── Handle explicit abort message (e.g., user cleared expression) ──
     if (abort) {
@@ -362,6 +369,7 @@ self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: strin
         refreshAbortControllers.get(tabId)?.abort();
         refreshAbortControllers.delete(tabId);
         tabDocuments.delete(tabId);
+        tabNetwork.delete(tabId);
         pendingRefreshTabs.delete(tabId);
         return;
     }
@@ -377,6 +385,8 @@ self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: strin
     // Track this tab's current text for the cross-tab global-variable
     // refresh above, regardless of one-shot vs streaming mode.
     tabDocuments.set(tabId, expression);
+    // Anything but an explicit false keeps live data on, as it always was.
+    tabNetwork.set(tabId, networkEnabled !== false);
 
     // A fresh user action — allow cross-tab propagation a full generation
     // budget again, even if a previous cascade exhausted it.
@@ -392,7 +402,7 @@ self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: strin
             evaluatingTabId = tabId;
             let result, eventStream;
             try {
-                ({ result, stream: eventStream } = runEngineWithStreaming(expression, abortController.signal));
+                ({ result, stream: eventStream } = runEngineWithStreaming(expression, abortController.signal, { networkEnabled: networkEnabled !== false }));
             } finally {
                 evaluatingTabId = previousEvaluatingTabId;
             }
@@ -435,7 +445,7 @@ self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: strin
             evaluatingTabId = tabId;
             let result;
             try {
-                result = runEngine(expression);
+                result = runEngine(expression, { networkEnabled: networkEnabled !== false });
             } finally {
                 evaluatingTabId = previousEvaluatingTabId;
             }

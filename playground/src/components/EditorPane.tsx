@@ -10,7 +10,7 @@ import {
   type ViewUpdate,
   type DecorationSet,
 } from "@codemirror/view"
-import { EditorState, StateField, RangeSetBuilder, RangeSet, StateEffect } from "@codemirror/state"
+import { EditorState, StateField, RangeSetBuilder, RangeSet, StateEffect, Annotation, type Transaction } from "@codemirror/state"
 import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete"
 import { basicSetup } from "codemirror"
 import { markdown } from "@codemirror/lang-markdown"
@@ -23,6 +23,7 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins"
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage"
 import type { LineResult } from "@bridge/engine"
 import { prepareEvaluationInput } from "@bridge/engineShared"
+import { describeLineShift } from "@bridge/hostCalls"
 import * as engineService from "@/stores/engine"
 import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { useEditorStore } from "@/stores/editor"
@@ -558,6 +559,45 @@ function createHighlightPlugin(languageService: LanguageService) {
 }
 
 /** Creates the CodeMirror EditorView for one tab, including its own highlighting engine/language service. */
+/** Marks the edit that keeps `line N` references in place, so it is not itself read as a line move. */
+const lineShiftEdit = Annotation.define<boolean>()
+
+/**
+ * The `line N` references an edit moved, as the edits that put them back:
+ * when the edit inserted or deleted whole lines, the language service says
+ * which references now point at the wrong line (a spreadsheet keeps a
+ * reference on its row the same way). Empty for an edit that moved no line,
+ * one made of several separate changes, or the correction itself.
+ */
+function referenceCorrections(tr: Transaction, service: LanguageService): { from: number; to: number; insert: string }[] {
+  if (!tr.docChanged || tr.annotation(lineShiftEdit)) return []
+  const ranges: { fromA: number; toA: number; inserted: string }[] = []
+  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => ranges.push({ fromA, toA, inserted: inserted.toString() }))
+  if (ranges.length !== 1) return []
+  const [{ fromA, toA, inserted }] = ranges
+  const before = tr.startState.doc
+  const fromLine = before.lineAt(fromA)
+  const toLine = before.lineAt(toA)
+  const shift = describeLineShift({
+    oldLineCount: before.lines,
+    newLineCount: tr.state.doc.lines,
+    fromLine: fromLine.number,
+    fromAtLineStart: fromA === fromLine.from,
+    toAtLineStart: toA === toLine.from,
+    insertedEndsWithNewline: inserted.endsWith("\n"),
+  })
+  if (shift === null) return []
+  const doc = tr.state.doc
+  const result = service.shiftLineReferences(doc.toString(), shift)
+  if (!result.ok) return []
+  return result.edits
+    .filter((e) => e.line >= 1 && e.line <= doc.lines)
+    .map((e) => {
+      const line = doc.line(e.line)
+      return { from: line.from + e.from, to: line.from + e.to, insert: e.text }
+    })
+}
+
 function createTabEditor(tabId: string, container: HTMLElement, initialDoc: string): TabEditor {
   // OSRS is an example package, not a built-in — registered explicitly
   // alongside BUILTIN_PACKAGES so "osrs"/game-item tokens still highlight
@@ -579,6 +619,8 @@ function createTabEditor(tabId: string, container: HTMLElement, initialDoc: stri
     if (!word || (word.from === word.to && !context.explicit)) return null
 
     const line = context.state.doc.lineAt(context.pos)
+    // The line up to the cursor, so a phrase matched across the words typed
+    // (`net pres`) reads only what is before it.
     const items = languageService.getCompletions(line.text, context.pos - line.from)
     if (items.length === 0) return null
 
@@ -599,6 +641,15 @@ function createTabEditor(tabId: string, container: HTMLElement, initialDoc: stri
         autocompletion({ override: [solveCompletionSource] }),
         placeholder("Enter an expression…  e.g. 10 + 5 * 2"),
         EditorView.updateListener.of((update) => {
+          if (update.docChanged && useUiStore.getState().keepLineReferences) {
+            const corrections = update.transactions.flatMap((tr) => referenceCorrections(tr, languageService))
+            // Dispatched after this update finishes, since CodeMirror refuses
+            // a dispatch from inside one; the annotation keeps the correction
+            // from being read as another line move.
+            if (corrections.length > 0) {
+              queueMicrotask(() => update.view.dispatch({ changes: corrections, annotations: lineShiftEdit.of(true) }))
+            }
+          }
           if (update.docChanged) {
             // The document text must reach the engine unmodified (never
             // .trim()'d) so every line's reported lineNumber stays aligned
@@ -610,7 +661,7 @@ function createTabEditor(tabId: string, container: HTMLElement, initialDoc: stri
           if (update.selectionSet && tabId === useTabsStore.getState().activeTabId) {
             const pos = update.state.selection.main.head
             const line = update.state.doc.lineAt(pos)
-            useEditorStore.getState().updateCursorLine(line.number)
+            useEditorStore.getState().updateCursorLine(line.number, pos - line.from)
           }
         }),
         keymap.of([
@@ -765,6 +816,26 @@ function insertExample(expression: string): void {
   editor.view.dispatch({ changes: { from: 0, to: editor.view.state.doc.length, insert: expression } })
 }
 
+/** Replace the active tab's document with `text`, keeping the cursor where it was when it still fits. */
+function replaceDocument(text: string): void {
+  const editor = tabEditorsSingleton.get(useTabsStore.getState().activeTabId)
+  if (!editor) return
+  const head = Math.min(editor.view.state.selection.main.head, text.length)
+  editor.view.dispatch({ changes: { from: 0, to: editor.view.state.doc.length, insert: text }, selection: { anchor: head } })
+}
+
+/** Put the active tab's cursor at a one-based line and a zero-based character, and bring it into view. */
+function moveCursor(lineNumber: number, character: number): void {
+  const editor = tabEditorsSingleton.get(useTabsStore.getState().activeTabId)
+  if (!editor) return
+  const doc = editor.view.state.doc
+  if (lineNumber < 1 || lineNumber > doc.lines) return
+  const line = doc.line(lineNumber)
+  const anchor = line.from + Math.max(0, Math.min(character, line.length))
+  editor.view.dispatch({ selection: { anchor }, scrollIntoView: true })
+  editor.view.focus()
+}
+
 // Module-level map — CodeMirror EditorViews are imperative, DOM-attached
 // objects that outlive React's render cycle; they're keyed by tabId and
 // managed via effects below, not React state. Mirrors the Vue version's
@@ -801,7 +872,7 @@ export function EditorPane() {
 
   // Register this pane's imperative API for other components (ExamplesMenu) to call.
   useEffect(() => {
-    useEditorStore.getState().setEditorRef({ insertExample })
+    useEditorStore.getState().setEditorRef({ insertExample, replaceDocument, moveCursor })
     return () => useEditorStore.getState().setEditorRef(null)
   }, [])
 
