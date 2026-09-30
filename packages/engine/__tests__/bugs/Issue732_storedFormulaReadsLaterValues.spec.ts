@@ -6,7 +6,7 @@ import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { Value, ValueType, numberValue, stringValue, symbolicValue, uomValue, errorValue, datetimeValue, percentageValue } from "@solve-js/vm/Value";
-import { resolveStoredFormula, formulaCannotTake, STORED_FORMULA_MAX_DEPTH } from "@solve-js/vm/StoredFormula";
+import { resolveStoredFormula, resolveStoredFormulaIn, formulaCannotTake, STORED_FORMULA_MAX_DEPTH } from "@solve-js/vm/StoredFormula";
 import { type SymbolicNode, constNode, varNode, rational, substituteAll, freeVariables, nodeCount } from "@solve-js/symbolic";
 import type { ParsingResult } from "@solve-js/types/ParsingResult";
 
@@ -361,5 +361,15 @@ describe("adversarial", () => {
 
 	test("CRLF and a trailing newline read the same", () => {
 		expect(batch(["y = x + 1\r", "x = 5\r", "y + x\r", ""]).slice(0, 3)).toEqual(["x+1", "5", "11"]);
+	});
+});
+
+describe("resolveStoredFormulaIn reads the unknowns from what holds the variables", () => {
+	test("the same answer as a lookup, and a hostile name misses", () => {
+		const stored = symbolicValue({ kind: "add", left: varNode("x"), right: constNode(1) } as SymbolicNode);
+		const vars = { getVar: (name: string) => (name === "x" ? numberValue(5) : undefined) };
+		expect(resolveStoredFormulaIn(stored, "y", vars).toNumber()).toBe(resolveStoredFormula(stored, "y", (n) => vars.getVar(n)).toNumber());
+		expect(resolveStoredFormulaIn(numberValue(3), "y", vars).toNumber()).toBe(3);
+		expect(resolveStoredFormulaIn(stored, "__proto__", { getVar: () => undefined })).toBe(stored);
 	});
 });

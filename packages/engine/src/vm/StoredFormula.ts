@@ -141,3 +141,19 @@ export function formulaCannotTake(owner: string, free: string, bound: Value): Va
 		`${owner} was written as a formula in ${free} before ${free} had a value, and ${free} now holds ${kind}, which the formula cannot take. Define ${free} above the line that defines ${owner}.`,
 	);
 }
+
+/**
+ * {@link resolveStoredFormula}, reading each unknown from a VM's variables.
+ *
+ * The lookup is built here rather than where the VM calls it: a closure over
+ * the VM inside `executeBytecode` makes V8 keep the VM in a context slot for the
+ * whole dispatch loop, which added some 5,000 bytes to its bytecode, close to
+ * the size at which V8 stops optimising it (see `lint:dispatch-size`).
+ *
+ * @param stored - The value the name holds.
+ * @param name - The name being read.
+ * @param vars - What holds the note's variables: the VM.
+ */
+export function resolveStoredFormulaIn(stored: Value, name: string, vars: { getVar(name: string): Value | undefined }): Value {
+	return resolveStoredFormula(stored, name, (unknown) => vars.getVar(unknown));
+}
