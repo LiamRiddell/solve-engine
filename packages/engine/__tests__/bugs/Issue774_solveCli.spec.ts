@@ -875,15 +875,18 @@ describe("#774 live values and exiting", () => {
 		await later(20);
 		expect(timers()).toBeLessThanOrEqual(before);
 
-		// The control: the same lookup on an engine nobody clears leaves the
-		// cache's collection timer armed, which is what held Node open.
+		// The control: the same lookup on an engine nobody clears keeps its
+		// query in the cache, whose collection timer is what held Node open.
+		// Read from the engine's own cache rather than the process's timer
+		// count, which a timer left by an earlier suite in the same process can
+		// move either way while this one runs.
 		const kept = createEngine({ extraPackages: [probePackage(slowLength(5))] });
 		kept.getBatcher().onLineResult = () => {};
 		kept.evaluateExpression("lookup abcde");
 		await kept.settle();
-		await later(20);
-		expect(timers()).toBeGreaterThan(before);
+		expect(kept.queryClient.getQueryCache().getAll().length).toBeGreaterThan(0);
 		kept.clear();
+		expect(kept.queryClient.getQueryCache().getAll()).toHaveLength(0);
 		await later(20);
 		expect(timers()).toBeLessThanOrEqual(before);
 	});
