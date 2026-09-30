@@ -121,7 +121,9 @@ as floating point on purpose. There, Solve uses floating point, as it always has
   them after the point, which is the precision of IEEE 754's decimal128 format and
   about twice what floating point holds. A longer answer is given in floating
   point. Compound growth over thirty years, `1.05 ^ 30`, is 61 digits long, so it
-  is floating point, and shows the same `4.32` either way.
+  is floating point, and shows the same `4.32` either way. An amount of money
+  has the same ceiling and is rounded to it rather than dropped, so it keeps its
+  cent (see [money precision](/syntax/money-precision/#how-many-digits-an-amount-keeps)).
 - **Other kinds of value.** A quantity with a unit other than money, a
   measurement with an [uncertainty](/syntax/uncertainty/), a
   [statistic](/syntax/statistics/) such as a median, and the entries of a

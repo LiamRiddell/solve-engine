@@ -357,8 +357,20 @@ export interface LineExecutionContext {
      * `docs-internal/plans/CROSS_SCOPE_CELLS.md`.
      */
     scope?: ScopeId;
-    /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range), distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
-    getLineResult?: (lineNumber: number) => Value | undefined;
+    /**
+     * Look up another line's cached result by 1-based line number. `undefined`
+     * means not evaluated yet, out of range, or below this line: a note is
+     * read from the top, so a line further down is never read, on any pass.
+     * No Value is `undefined`-like, so the two cannot be confused.
+     *
+     * On the incremental path a read records that this line depends on that
+     * position. Pass `declared` as true for a read an edge the form already
+     * took covers (a member of a tag asked for through
+     * {@link getTaggedLines}, a line inside a span given to
+     * {@link noteFigureSpanRead}), so the graph records nothing more; a form
+     * that reads a thousand members then costs one edge, not a thousand.
+     */
+    getLineResult?: (lineNumber: number, declared?: boolean) => Value | undefined;
     /**
      * Say that this line is about to read `lineNumber`, before reading it.
      *
@@ -373,6 +385,20 @@ export interface LineExecutionContext {
      */
     noteLineRead?: (lineNumber: number) => void;
     /**
+     * Say that this line reads the figures on lines `first` to `last`, before
+     * reading any of them: every line in the span except a summary line (a
+     * `total above`, a section or tag total), which a span of figures passes
+     * over, as a section total does.
+     *
+     * One edge however long the span, where {@link noteLineRead} per member
+     * is one per line (#733). The graph asks the document which lines in the
+     * span are summaries when it follows the edge back, so two totals of one
+     * section are not taken to read each other. Absent where there is no
+     * document; a form falls back to {@link noteLineRead} then, or skips the
+     * declaration where that is absent too.
+     */
+    noteFigureSpanRead?: (first: number, last: number) => void;
+    /**
      * The 1-based positions of the lines carrying `#tag`, ascending, or
      * `undefined` when this path keeps no index and the caller should walk the
      * document itself.
@@ -380,8 +406,26 @@ export interface LineExecutionContext {
      * `total of #tag` used to look at every line of the document, so a notepad
      * of tagged amounts and totals cost aggregates x lines per pass. Both
      * document paths maintain an index instead, and answer from it here.
+     *
+     * Asking is also what tells the dependency graph that this line reads
+     * every line carrying the tag, as one edge on the tag rather than one per
+     * member (#733), so a form that asks here needs no `noteLineRead` for the
+     * members. A line joining or leaving the group later is covered by the
+     * same edge.
      */
     getTaggedLines?: (tag: string) => readonly number[] | undefined;
+    /**
+     * Every category tag the document's lines carry, lower-cased, each with the
+     * 1-based positions of its lines ascending, or `undefined` when this path
+     * keeps no index and the caller should walk the document itself.
+     *
+     * What `total by tag` reads its groups from (#734). The answer is the same
+     * object for as long as the document's text is unchanged, within a pass
+     * and across passes, so a form may key work of its own on it. Asking tells
+     * the dependency graph that this line reads every tagged line, as one
+     * edge, the way {@link getTaggedLines} does for one tag.
+     */
+    getTagGroups?: () => ReadonlyMap<string, readonly number[]> | undefined;
     /**
      * Whether line `lineNumber` has no figure to read: a blank line, a `#`
      * heading, or a line the classifier skips (a comment, a blockquote, table

@@ -98,11 +98,11 @@ describe("a line reference after a structural edit", () => {
 	});
 
 	test("a reader shifted onto itself reports the self-reference", () => {
-		// The shape the fuzzer shrank to. `line 2 + 4` at position 1 is an
-		// ordinary reference; the insert leaves it at position 2, referring to
-		// itself, holding the answer it had from when it did not.
+		// The shape the fuzzer shrank to. `line 2 + 4` at position 1 is a
+		// forward reference, refused on every pass; the insert leaves it at
+		// position 2, referring to itself.
 		const { doc, evaluator } = editorFor(["line 2 + 4", "10"]);
-		expect(shown(doc, 1)).toBe("14");
+		expect(shown(doc, 1)).toContain("has not been evaluated yet");
 
 		evaluator.applyTransaction([{ startLine: 1, deleteCount: 0, insertLines: ["5"] }]);
 		for (let pass = 0; pass < 3; pass++) evaluator.evaluate({ startLine: 1, endLine: 3 });

@@ -13,6 +13,7 @@
  * `EngineError` rather than a lost promise.
  */
 
+import { splitLines } from "@solve-js/utilities/Strings";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
@@ -127,7 +128,7 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 	const retainLines = (message: RequestMessage): Map<number, string> => {
 		const map = new Map<number, string>();
 		if (message.method === "parseDocument") {
-			(message.args[0] as string).split("\n").forEach((text, index) => map.set(index + 1, text));
+			splitLines(message.args[0] as string).forEach((text, index) => map.set(index + 1, text));
 		} else if (message.method === "evaluateLines") {
 			(message.args[0] as string[]).forEach((text, index) => map.set(index + 1, text));
 		} else {

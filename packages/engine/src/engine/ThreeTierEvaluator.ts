@@ -906,7 +906,7 @@ export class ThreeTierEvaluator {
 	 * nothing and walks nothing.
 	 *
 	 * What membership does is decided where a line runs: see
-	 * {@link evaluateSingleLine} and `ExpressionEngine.setLineOnCycle`. Earlier
+	 * {@link evaluateSingleLine}. Earlier
 	 * versions reset a member's answer here instead, at the end of the pass,
 	 * and that was one line too late: the number the member computed had
 	 * already been read by the lines below it during the pass. Deciding how the
@@ -1220,12 +1220,11 @@ export class ThreeTierEvaluator {
 		if (state.dirty) this.forgetPositionsOfEditedText(state, lineNumber);
 		// A line on a cycle runs the way a single fresh pass runs it: the names
 		// it reads hold what the lines above left, and a line below it is not
-		// yet evaluated. That is the answer `parseDocument` gives such a line,
-		// and it is stable, where a number found in the VM from the previous
-		// pass is the start of a chase. See `ExpressionEngine.setLineOnCycle`.
-		const onCycle = this.cycleMemberIds.has(state.lineId);
-		this.engine.setLineOnCycle(onCycle);
-		if (onCycle) {
+		// yet evaluated (every line refuses a forward read; see the context's
+		// `getLineResult`). That is the answer `parseDocument` gives such a
+		// line, and it is stable, where a number found in the VM from the
+		// previous pass is the start of a chase.
+		if (this.cycleMemberIds.has(state.lineId)) {
 			for (const read of state.reads) {
 				if (!isPrefixedEdgeKey(read)) this.engine.restoreToPrefix(read, lineNumber);
 			}
@@ -1398,7 +1397,7 @@ export class ThreeTierEvaluator {
 	private mustRerunWithoutProgram(state: LineState, lineNumber: number): boolean {
 		if (!hasExpressionWithoutProgram(state)) return false;
 		if (state.writes.length > 0 || state.reads.length > 0) return true;
-		if (this.dag.positionsReadBy(lineNumber).length > 0) return true;
+		if (this.dag.readsAnyPosition(lineNumber)) return true;
 		return withTagEdges(state.text, [], []).reads.length > 0;
 	}
 

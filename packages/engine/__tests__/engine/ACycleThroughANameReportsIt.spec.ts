@@ -189,8 +189,11 @@ describe("the boundary", () => {
 		expect(settled(text)).toEqual(["Undefined variable: v2", "Line 1 has an error", "31"]);
 	});
 
-	test("a plain forward reference still resolves", () => {
-		expect(settled(["line 2 + 1", "7"])).toEqual(["8", "7"]);
+	test("a plain forward line reference is refused on every pass, and a colon name above its use still resolves", () => {
+		// A note is read from the top, so line 2 has not been evaluated from
+		// where line 1 stands; the batch pass refuses it, and the incremental
+		// path used to answer 8 from its second pass on.
+		expect(settled(["line 2 + 1", "7"])).toEqual(["Line 2 has not been evaluated yet (forward reference, or out of range)", "7"]);
 		expect(settled(["x + 1", ":x = 5"])).toEqual(["6", "5"]);
 	});
 });
@@ -233,6 +236,9 @@ describe("a member that stops reading a line", () => {
 		const start = ["total of #food", "1", "line 1 + 1 #food", "1", "7 #food", "9"];
 		const steps = session(start, [["edit", 5, "line 6 + line 1"], ["edit", 3, "4 #food"]]);
 		for (const step of steps) expect(step.editor).toEqual(step.settled);
-		expect(steps[1].editor).toEqual(["4", "1", "4", "1", "13", "9"]);
+		// No cycle is left. Line 1 reads its members below it and line 5
+		// reads line 6, both forward references, which are refused on every
+		// pass, as the batch pass refuses them.
+		expect(steps[1].editor).toEqual(["Line 3 has not been evaluated yet", "1", "4", "1", "Line 6 has not been evaluated yet (forward reference, or out of range)", "9"]);
 	});
 });

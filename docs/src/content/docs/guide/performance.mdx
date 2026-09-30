@@ -137,6 +137,16 @@ name nothing defines, evaluated from a timer callback or an event handler
 rather than after an `await`, cost about 22 microseconds against under one for
 `2 + 5`, and costs about 7 now (#714).
 
+What an evaluator keeps between passes is linear in the note too. It records
+which lines read which, so an edit or a live value reaches every line that
+depends on it, and a running total used to record one entry for every line it
+read: a ledger with `total above` after each entry held the square of its
+length, and 3,000 such lines through `evaluateDocument` kept over 500 MB. A
+span is one entry now, a tag total one entry on its tag and a section total
+one on its block, and the same note keeps under 10 MB (#733). `total by tag`
+is worked out once for all the breakdown lines that ask it of the same figures,
+so 500 of them cost about what one does (#734).
+
 ## Off the main thread
 
 The caches keep a re-parse cheaper than a first parse. They do not move the

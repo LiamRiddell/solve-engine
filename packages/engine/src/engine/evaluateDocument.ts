@@ -31,6 +31,7 @@ import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
+import { lineBreakLengthAt } from "@solve-js/utilities/Strings";
 import { findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
 import { summariseChecks } from "@solve-js/engine/CheckSummary";
 import { Value, ValueType } from "@solve-js/vm/Value";
@@ -108,12 +109,14 @@ export function evaluateDocument(
 
 		for (let n = 1; n <= lineCount; n++) {
 			const state = doc.getLineAt(n)!;
-			// The model splits on "\n" alone, so a CRLF line keeps its "\r".
-			// parseDocument's text and end offset stop before it, and so do these.
-			const text = state.text.endsWith("\r") ? state.text.slice(0, -1) : state.text;
+			// The model holds a line without its break, which is the text and
+			// end offset parseDocument reports. The break's own length (two
+			// for CRLF, one for a lone CR or LF) is read from the input, so the
+			// next line starts where parseDocument starts it.
+			const text = state.text;
 			const startPosition = offset;
 			const endPosition = offset + text.length;
-			offset = startPosition + state.text.length + 1; // + the newline that separated this line from the next
+			offset = endPosition + lineBreakLengthAt(input, endPosition);
 
 			const hasInlineSolves = state.inlineSolveCount > 0;
 			let inlineSolves: InlineSolvePosition[] = [];

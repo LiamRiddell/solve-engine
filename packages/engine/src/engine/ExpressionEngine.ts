@@ -3,7 +3,7 @@
 import { declaredFunctionName } from "@solve-js/api/defineFunction";
 import { VM, type EquationDef, type ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { matrixMultiply, inverse } from "@solve-js/vm/MatrixOps";
-import { DependencyGraph, isPrefixedEdgeKey } from "@solve-js/vm/DependencyGraph";
+import { DependencyGraph, EVERY_TAG, isPrefixedEdgeKey } from "@solve-js/vm/DependencyGraph";
 import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { ScopeManager } from "@solve-js/vm/ScopeManager";
 import { Lexer } from "@solve-js/lexer/Lexer";
@@ -65,9 +65,10 @@ import { endsFigureBlock, hasNoFigure } from "@solve-js/lexer/BlockBoundary";
 import { QueryClient } from "@tanstack/query-core";
 import { createQueryClient, setActiveQueryClient, getActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { memberTagsOf, withTagEdges } from "@solve-js/packages/tags/TagScanner";
+import { isSummaryLine } from "@solve-js/packages/lines/SectionReader";
 import { ErrorFactory, EngineError, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
 import type { SourceSpan } from "@solve-js/errors/EngineError";
-import { countLines } from "@solve-js/utilities/Strings";
+import { countLines, splitLines } from "@solve-js/utilities/Strings";
 import {
 	ResolverRegistry,
 	type AsyncCheckResult,
@@ -1115,12 +1116,21 @@ export class ExpressionEngine {
         // Without a document no closure below records an edge, so no graph is
         // built for one.
         const dag = this.scratch !== null && doc ? (this.scratch.dag ??= new DependencyGraph()) : this.dag;
+        // A tag edge and a span of figures name a group of lines rather than
+        // each line; the graph reads which lines they reach from the model
+        // when it follows one back.
+        if (doc) {
+            dag.setDocumentView({
+                memberTags: (n) => memberTagsOf(doc.getLineAt(n)?.text ?? ""),
+                isSummary: (n) => isSummaryLine(doc.getLineAt(n)?.text ?? ""),
+            });
+        }
         // Assigned before anything can call the closure below, which reads the
         // line number the pass is currently on rather than the one this context
         // was built for: one context serves a whole pass by mutation.
         let context: LineExecutionContext;
         const readLineResult = doc
-            ? (n: number) => {
+            ? (n: number, declared?: boolean) => {
                   // A line cannot read itself. Refused here rather than left to
                   // the graph, which drops the self-edge as meaningless and
                   // would then hand back the line's own previous result.
@@ -1135,10 +1145,21 @@ export class ExpressionEngine {
                   // something else. It answered from that value, where a pass
                   // over the same text reports the self-reference.
                   if (n === context.lineIndex) return undefined;
-                  dag.registerLinePositionDependency(context.lineIndex, n);
-                  // A line on a cycle reads the way a single fresh pass reads: a
-                  // line below it has not been evaluated. See {@link setLineOnCycle}.
-                  if (n > context.lineIndex && this.lineOnCycle) return undefined;
+                  // A read the form already declared, as a tag or a span of
+                  // figures, is covered by that edge, and recording the
+                  // position as well is the per-member cost #733 removes.
+                  if (declared !== true) dag.registerLinePositionDependency(context.lineIndex, n);
+                  // A line below this one has not been evaluated, which is what
+                  // the batch pass answers and what the first incremental pass
+                  // answers: it reads from the top. From the second pass on the
+                  // line below held the answer the previous pass left it, and
+                  // `line 2 + 1` above `7` answered 8 where a fresh pass refused
+                  // it. So a forward read is refused on every pass, which is
+                  // also what makes a line on a cycle report the cycle rather
+                  // than chase a number; the edge is still recorded above,
+                  // since a cycle runs through it. A line explained on its own
+                  // runs at no position (-1) and stands below the whole note.
+                  if (context.lineIndex >= 1 && n > context.lineIndex) return undefined;
                   return doc.getLineAt(n)?.result ?? undefined;
               }
             : parsed
@@ -1169,6 +1190,12 @@ export class ExpressionEngine {
             noteLineRead: doc
                 ? (n: number) => {
                       if (n !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, n);
+                  }
+                : undefined,
+            // A whole span of figures as one edge; see the field's own doc comment.
+            noteFigureSpanRead: doc
+                ? (first: number, last: number) => {
+                      dag.registerLineFigureSpan(context.lineIndex, first, last);
                   }
                 : undefined,
             isLineBoundary: doc
@@ -1208,7 +1235,9 @@ export class ExpressionEngine {
                       // recorded against the target, whose context the probe
                       // runs under.
                       if (n !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, n);
-                      if (n > context.lineIndex && this.lineOnCycle) return undefined;
+                      // A target below the seek is not ready, on every pass, for
+                      // the reason `line N` refuses one below.
+                      if (context.lineIndex >= 1 && n > context.lineIndex) return undefined;
                       const state = doc.getLineAt(n);
                       // A line with no compiled bytecode has nothing to solve
                       // against yet (forward reference, out of range, or
@@ -1283,10 +1312,28 @@ export class ExpressionEngine {
             // document model, maintained as lines change; the batch path has no
             // model, so it builds one over the scan for the length of the pass.
             // See `LineExecutionContext.getTaggedLines`.
+            //
+            // On the incremental path asking records the read, as one edge on
+            // the tag rather than one per member (#733): the graph follows it
+            // back to the lines through the tags each carries now, which it
+            // learns from the model through `setTagMembership` below.
             getTaggedLines: doc
-                ? (tag: string) => doc.linesCarryingTag(tag)
+                ? (tag: string) => {
+                      dag.registerLineTagDependency(context.lineIndex, tag);
+                      return doc.linesCarryingTag(tag);
+                  }
                 : scan
                   ? (tag: string) => this.batchLinesCarryingTag(scan, tag)
+                  : undefined,
+            // Every group at once, for `total by tag`, from the same index,
+            // and one edge on every tag (#734).
+            getTagGroups: doc
+                ? () => {
+                      dag.registerLineTagDependency(context.lineIndex, EVERY_TAG);
+                      return doc.tagGroups();
+                  }
+                : scan
+                  ? () => this.batchTagGroups(scan)
                   : undefined,
             // The `inputs of line N` form. Both document paths read the same
             // text and the same answers, so the trace agrees through both. An
@@ -1751,7 +1798,7 @@ export class ExpressionEngine {
      */
     whatIf(input: string, overrides: WhatIfOverrides): ParsingResult {
         this.assertDocumentSize(input);
-        const texts = input.split("\n");
+        const texts = splitLines(input);
         const tokenize = (text: string) => this.tokensOrNone(text);
         const globalLine = firstGlobalWrite(texts, tokenize);
         if (globalLine !== -1) {
@@ -2031,9 +2078,6 @@ export class ExpressionEngine {
     //#endregion
 
     //#region Constructor
-    /** Whether the line being evaluated sits on a cycle; see {@link setLineOnCycle}. */
-    private lineOnCycle = false;
-
     constructor(options: EngineOptions = {}) {
         const { locale = "en", diagnostics = false, config, packages, calendar } = options;
         this.localeCode = locale;
@@ -2429,30 +2473,6 @@ export class ExpressionEngine {
         if (this.passWork + lineRuns > limit) return passWorkRefusal(form, limit);
         this.passWork += lineRuns;
         return null;
-    }
-
-    /**
-     * Tell the engine whether the line about to run sits on a cycle.
-     *
-     * A line that depends on itself, through positions or names or both, has
-     * no answer of its own: each value it could hold is computed from that same
-     * value a pass earlier. A single fresh pass reports that, because some
-     * member reads a line below it that has not run, and the error travels all
-     * the way round. The incremental path carries the VM between passes, so a
-     * member could find a number to start from, and the pair then chased it.
-     *
-     * While this is set, a positional read of a line below the one running
-     * answers as an unevaluated line does, which is what makes a member report
-     * the cycle rather than the number it read last pass. The evaluator sets it
-     * per line from the cycle membership it keeps, and puts the names such a
-     * line reads back to the prefix before it runs, for the same reason. A line
-     * not on a cycle keeps the incremental path's tolerance of a plain forward
-     * reference, which resolves by running the document again.
-     *
-     * @param onCycle - Whether the line about to run is on a cycle.
-     */
-    setLineOnCycle(onCycle: boolean): void {
-        this.lineOnCycle = onCycle;
     }
 
     /**
@@ -3557,7 +3577,7 @@ export class ExpressionEngine {
         this.resetAccumulators();
         // The document's own random seed, in force before any line runs, so it
         // applies wherever the seed line sits. See applyDocumentRandomSeed.
-        this.applyDocumentRandomSeed(input.split("\n"));
+        this.applyDocumentRandomSeed(splitLines(input));
         // Scan the entire document in a single pass, bypasses the old
         // split('\n') → evaluateLines() → join('\n') → scanDocument()
         // roundtrip. scanDocument() classifies and tokenizes all lines
@@ -3654,6 +3674,20 @@ export class ExpressionEngine {
      * @returns Its lines' 1-based positions, ascending; empty when none carry it.
      */
     private batchLinesCarryingTag(scan: ScanLineResult[], tag: string): readonly number[] {
+        // Ascending by construction: the scan is walked in document order.
+        return this.batchTagGroups(scan).get(tag.toLowerCase()) ?? [];
+    }
+
+    /**
+     * Every tag the batch pass's lines carry, lower-cased, with its lines
+     * ascending: the index {@link batchLinesCarryingTag} answers from, built
+     * over the scan on first use and kept for the pass, so it is the same
+     * object for every line of it. See `LineExecutionContext.getTagGroups`.
+     *
+     * @param scan - The pass's scanned lines, indexed from 0 for line 1.
+     * @returns The groups; empty when no line carries a tag.
+     */
+    private batchTagGroups(scan: ScanLineResult[]): ReadonlyMap<string, readonly number[]> {
         let index = this.batchTagIndex;
         if (index === null) {
             index = new Map();
@@ -3663,13 +3697,15 @@ export class ExpressionEngine {
                 for (const name of memberTagsOf(text)) {
                     const lines = index.get(name);
                     if (lines === undefined) index.set(name, [i + 1]);
-                    else lines.push(i + 1);
+                    // `#food #Food` on one line is one membership, as the
+                    // document model's index counts it; listing the line twice
+                    // counted it twice in the batch pass alone.
+                    else if (lines[lines.length - 1] !== i + 1) lines.push(i + 1);
                 }
             }
             this.batchTagIndex = index;
         }
-        // Ascending by construction: the scan is walked in document order.
-        return index.get(tag.toLowerCase()) ?? [];
+        return index;
     }
 
     /**
@@ -7195,12 +7231,9 @@ export class ExpressionEngine {
         // bytecode's hasAsync. Either way its result is point-in-time and must
         // be re-fetched rather than restored, so the line and any variable it
         // defines are excluded below.
-        const dagSnapshot = this.dag.getSnapshot();
-        const asyncLines = new Set<number>();
-        for (const key of Object.keys(dagSnapshot.dataSourceDeps)) {
-            const line = Number(key);
-            if (!Number.isNaN(line)) asyncLines.add(line);
-        }
+        // Asked for directly rather than read off a whole graph snapshot, which
+        // spells out every positional edge and is sized by them (#733).
+        const asyncLines = new Set<number>(this.dag.linesReadingADataSource());
 
         // Only the LAST definition of a variable decides its current value, so a
         // variable is excluded only when its most-recent writer line is async.
