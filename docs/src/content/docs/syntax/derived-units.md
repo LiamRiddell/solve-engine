@@ -119,6 +119,18 @@ as written, just as `in` does:
 1 W as pW // 1,000,000,000,000.00 pW
 ```
 
+The spellings `as` reads, from pico (a trillionth) to peta (a thousand million
+million):
+
+| unit | spellings |
+| --- | --- |
+| newton | `pN`, `nN`, `µN`, `mN`, `N`, `kN`, `MN`, `GN`, `TN`, `PN` |
+| joule | `pJ`, `nJ`, `µJ`, `mJ`, `J`, `kJ`, `MJ`, `GJ`, `TJ`, `PJ` |
+| watt | `pW`, `nW`, `µW`, `mW`, `W`, `kW`, `MW`, `GW`, `TW`, `PW` |
+| watt-hour | `pWh`, `nWh`, `µWh`, `mWh`, `Wh`, `kWh`, `MWh`, `GWh`, `TWh`, `PWh` |
+| pascal | `pPa`, `nPa`, `µPa`, `mPa`, `Pa`, `kPa`, `MPa`, `GPa`, `TPa`, `PPa` |
+| volt | `mV`, `V`, `kV` |
+
 A spelling in the wrong case is refused rather than read as one of the two it
 could be. `as mw` names no unit, since it could be the milliwatt or the megawatt,
 and `as MV` is not the millivolt, whose prefix is the lower-case `m`. A letter
