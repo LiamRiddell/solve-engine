@@ -245,6 +245,12 @@ jobs:
       # Needs the build above, which is why it lives in this job.
       - run: npm run lint:units
 
+      # Every word and phrase the engine reads appears on a syntax page. About
+      # twenty working names and 77 phrases were on none (#722, #831), which
+      # nothing noticed because a page is proven only for what it shows. It
+      # reads the vocabulary from the built engine, so it lives here too.
+      - run: npm run lint:keywords
+
   consumer:
     name: Installs from the tarball on Node ${{ matrix.node }}
     runs-on: ubuntu-24.04

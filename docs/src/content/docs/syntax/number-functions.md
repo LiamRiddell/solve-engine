@@ -20,6 +20,16 @@ max(3, 7) // 7
 gcd(12, 18) // 6
 ```
 
+The greatest common divisor, `gcd`, is the largest whole number that divides two
+numbers exactly, and the least common multiple, `lcm`, the smallest number both
+divide into: the first simplifies a fraction, the second finds when two cycles
+line up again. Each can be asked in words too.
+
+```solve
+gcd of 12 and 18 // 6
+lcm of 4 and 6 // 12
+```
+
 `min` and `max` read quantities in a shared unit, so the longer distance wins
 whichever unit each is written in. Given only dates, they give the earliest or
 the latest date. A value with no numeric reading, such as a piece of text, is
@@ -50,6 +60,29 @@ as `(-1)^0.5` is.
 ```solve-doc
 root(3, -8) // -2
 root(2, -4) // ERROR: root(2, -4) has no real value: a negative number has a real root only of odd degree, as in root(3, -8).
+```
+
+## Powers and exponentials
+
+A power multiplies a number by itself a given number of times: 2 to the power 10
+is ten 2s multiplied together. `^` writes it, and `pow(x, y)` is the same thing
+as a function, the spelling spreadsheets and programming languages use. `exp(x)`
+is e to the power x, the curve behind continuous growth and decay.
+
+```solve
+pow(2, 10) // 1,024
+2^10 // 1,024
+exp(1) // 2.72
+```
+
+`expm1(x)` is `exp(x) - 1`, and `log1p(x)` is `ln(1 + x)`. Each is worked out
+directly rather than by adding or taking away the 1, which loses digits when x
+is very small (a daily interest rate, say), so a program that needs the small
+difference exactly reaches for these two.
+
+```solve
+expm1(1) // 1.72
+log1p(1) // 0.69
 ```
 
 ## Logarithms
@@ -133,6 +166,61 @@ The boundary: exactness covers the multiples of 30° and 45°. An irrational
 exact value such as the sine of 45°, a half of the square root of two, is the
 nearest double to it, shown to the usual places. Any other angle is computed as
 before.
+
+## Inverse trigonometry
+
+The inverse functions go the other way, from a ratio back to the angle that
+gives it. `asin`, `acos` and `atan` answer in radians; `asind`, `acosd` and
+`atand` answer in degrees. `arcsin`, `arccos` and `arctan` are the longer names
+some calculators print on the keys, and mean the same as the first three.
+
+```solve
+asin(1) // 1.57
+arcsin(1) // 1.57
+acosd(0.5) // 60.00
+atand(1) // 45
+```
+
+`atan2(y, x)` is the angle of the point (x, y), measured from the positive x axis
+in radians. Unlike `atan(y / x)` it knows which quarter of the plane the point is
+in, since (1, 1) and (-1, -1) have the same ratio but point opposite ways, which
+is why navigation and graphics code uses it. The two sides are read in a shared
+unit, so a length and a mass are refused.
+
+```solve
+atan2(1, 1) // 0.79
+atan2(-1, -1) // -2.36
+atan2(1 m, 2 kg) // length and mass cannot be compared
+```
+
+`degtorad` and `radtodeg` convert a bare number between the two measures of an
+angle: 180 degrees is π radians.
+
+```solve
+degtorad(180) // 3.14
+radtodeg(pi) // 180
+```
+
+## Hyperbolic functions
+
+The hyperbolic functions `sinh`, `cosh` and `tanh` are the counterparts of sine,
+cosine and tangent for a hyperbola rather than a circle. They describe the curve
+a hanging chain makes, and `tanh` squashes any number into the range from -1 to
+1, which is why neural networks use it. `asinh`, `acosh` and `atanh` are their
+inverses. Each takes a plain number.
+
+```solve
+sinh(1) // 1.18
+cosh(1) // 1.54
+tanh(1) // 0.76
+asinh(1) // 0.88
+acosh(2) // 1.32
+atanh(0.5) // 0.55
+```
+
+`acosh` has a real answer only from 1 upwards, and `atanh` only strictly
+between -1 and 1; outside those ranges each is refused, as the next section
+explains.
 
 ## Outside a function's domain
 

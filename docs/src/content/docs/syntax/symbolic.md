@@ -3,7 +3,11 @@ title: Symbolic
 description: Keeping an unknown as an unknown, and solving a linear system.
 ---
 
-Ending a line with an arrow evaluates it in a mode where a name with no value
+> **Built in.** The arrow belongs to the engine rather than to a package, so plain arithmetic on unknowns works whichever packages are registered. Some examples on this page read a form a package supplies: a name the lexer also reads as a unit (`b`) needs `VARIABLES_PACKAGE`, a function call such as `sqrt(x)` needs `FUNCTION_PACKAGE`, and a matrix needs `MATRIX_PACKAGE`. `createEngine()` registers all three.
+
+Symbolic arithmetic works with letters that have no value yet, the way algebra
+on paper does: `x + x` is `2x` whatever `x` turns out to be. Ending a line with
+an arrow evaluates it in a mode where a name with no value
 stays symbolic instead of becoming an error.
 
 ```solve

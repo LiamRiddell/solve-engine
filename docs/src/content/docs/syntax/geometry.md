@@ -12,6 +12,11 @@ applied for you, no need to remember whether it was `πr²` or `2πr`.
 
 ## Flat shapes
 
+A flat shape lies on a surface, like a floor plan or a sheet of paper, so it has
+an area (how much surface it covers) and a perimeter (the distance around its
+edge; for a circle, the circumference). Write the measure, the shape, and the
+dimension that fixes its size, such as a circle's radius or a square's side.
+
 ```solve
 area of circle radius 5 // 78.54
 circumference of circle radius 5 // 31.42
@@ -33,6 +38,10 @@ two measurements apart. It also means the dimension words (`width`, `height`,
 `radius`, ...) stay ordinary words you can still use as names elsewhere.
 
 ## Solid shapes
+
+A solid shape takes up space, like a ball or a tin, so it has a volume (how much
+it holds) and a surface area (how much material would wrap it). The dimensions
+are written the same way, with a comma between two.
 
 ```solve
 volume of sphere radius 3 // 113.10

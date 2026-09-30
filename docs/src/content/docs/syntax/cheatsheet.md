@@ -342,6 +342,15 @@ monthly repayment on 200000 over 25 years at 4% // 1,055.67
 what is $500 in 1990 worth in 2010 // $834.35
 ```
 
+**[Investments](/syntax/investments/)**: what a sum grows to at a rate, what a
+future sum is worth today, and the return on what was invested.
+
+```solve
+$1,000 after 3 years at 7% // $1,225.04
+present value of $1,225.04 after 3 years at 7% // $1,000.00
+$500 invested $1,500 returned // 2
+```
+
 **[Savings goals](/syntax/savings-goals/)**: how long it takes to reach a
 target, or how much to put by each month.
 
@@ -420,6 +429,14 @@ month, the way many holidays and meetings are set.
 
 ```solve
 last Friday of November 2026 // Friday, November 27, 2026
+```
+
+**[Weekdays & week numbers](/syntax/weekdays-and-week-numbers/)**: the day of
+the week, the month, or the ISO week number a date falls in.
+
+```solve
+what day is it on 2026-12-25 // Friday
+week number of 2026-12-25 // 52
 ```
 
 **[Age](/syntax/age/)**: whole years from a birth date, today or on a day you

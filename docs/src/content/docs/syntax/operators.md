@@ -81,6 +81,15 @@ Most operators have a word form, which is often how a line reads more naturally.
 3 multiplied by 4 // 12
 ```
 
+Multiplication and powers have the longer spellings people say aloud as well:
+`times by` and `multiply by` are `*`, and `to the power of` is `^`.
+
+```solve
+6 times by 7 // 42
+6 multiply by 7 // 42
+2 to the power of 10 // 1,024
+```
+
 `with` adds and `without` subtracts, which reads well for a running total.
 
 ```solve

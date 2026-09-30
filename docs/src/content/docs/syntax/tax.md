@@ -20,7 +20,25 @@ tax in 120 at 20% // 20
 `tax on` gives the tax, not the bill. The bill is `100 + 20%`, which reads as a
 twenty percent increase. Going the other way, `tax off` takes a tax-inclusive
 total back to the pre-tax amount and `tax in` (also `tax of`, `tax from`) pulls
-out the tax already inside it. `vat` is accepted everywhere `tax` is.
+out the tax already inside it. `vat`, the value added tax most of Europe
+charges, is accepted everywhere `tax` is.
+
+```solve
+vat on £100 at 20% // £20.00
+vat off £120 at 20% // £100.00
+vat in £120 at 20% // £20.00
+vat of £120 at 20% // £20.00
+vat from £120 at 20% // £20.00
+```
+
+The function forms are `taxAdd(amount, rate)`, the total once tax is added, and
+`taxRemove(total, rate)`, the amount before it, for a line built from values
+elsewhere in the note.
+
+```solve
+taxAdd(100, 20%) // 120
+taxRemove(120, 20%) // 100
+```
 
 On money the tax is exact, rounding the half-cent the same way the rest of the
 currency arithmetic does rather than the way a drifted double would, and that

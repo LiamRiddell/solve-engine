@@ -117,6 +117,11 @@ subtracts three and `balance *= 1 + 0.05` multiplies by 1.05.
 
 ## Functions
 
+A function is a formula with a name and a blank to fill in, written once and
+used as often as needed. Write the name, the blank (the parameter) in brackets,
+`=`, and the formula; then give the name a value in brackets and it works the
+formula out with that value in the blank.
+
 ```solve
 f(x) = 2*x + 1
 f(5) // 11

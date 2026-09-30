@@ -12,6 +12,12 @@ shown back in whichever base you want.
 
 ## Writing a number in another base
 
+A number in another base is written with a prefix that names the base: `0x` for
+hexadecimal (the digits 0 to 9 and then A to F), `0b` for binary (only 0 and 1)
+and `0o` for octal (0 to 7). Programmers meet these in colour codes, memory
+addresses and file permissions; the engine reads each as the ordinary number it
+stands for.
+
 ```solve
 0xFF // 255
 0b1010 // 10
