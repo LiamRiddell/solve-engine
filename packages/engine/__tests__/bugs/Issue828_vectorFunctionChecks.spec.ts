@@ -114,7 +114,7 @@ describe("dot is the dot product of two vectors", () => {
 		expect(show("[1,2;3,4] * [5,6;7,8]")).toBe("[19, 22; 43, 50]");
 		expect(show("[1,2,3] * [4;5;6]")).toBe("[32]");
 		const refusal = show("[1,2,3] * [4,5,6]");
-		expect(refusal).toBe("Cannot multiply a 1x3 matrix by a 1x3 matrix: the first has 3 columns and the second 1 row, and a product needs the two to match.");
+		expect(refusal).toBe("Cannot multiply a 1x3 matrix by a 1x3 matrix: the first has 3 columns and the second 1 row, and the two must match.");
 		expect(refusal).not.toMatch(/—|!==/);
 	});
 });
