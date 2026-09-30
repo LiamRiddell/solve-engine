@@ -480,8 +480,14 @@ export const CoreErrorCodes = {
   COLLECTION_TOO_LARGE: "COLLECTION_TOO_LARGE",
   /** A list cell that is not a number or a quantity: a list inside a list, text, a date. */
   MATRIX_CELL_NON_NUMERIC: "MATRIX_CELL_NON_NUMERIC",
-  /** A list whose cells are quantities of different measures, or of one measure in units the list cannot hold together. */
+  /** A list whose cells are quantities of different measures (`[1 km, 2 kg]`), or money in two currencies with no rate between them: a list holds one unit. */
   MATRIX_CELL_UNITS_DIFFER: "MATRIX_CELL_UNITS_DIFFER",
+  /** A list with a unit given a cell that has no amount in it: a true or false, a percentage or a formula beside a quantity (`[true, 1 km]`). */
+  MATRIX_CELL_NO_UNIT: "MATRIX_CELL_NO_UNIT",
+  /** A list with a unit in an operation its cells cannot take one by one: multiplied by another quantity, a number divided by it, or a percentage added. */
+  MATRIX_UNIT_OPERATION_UNSUPPORTED: "MATRIX_UNIT_OPERATION_UNSUPPORTED",
+  /** Matrix algebra on a list with a unit (`det([1 km, 2 km; 3 km, 4 km])`): a determinant, an inverse, a matrix product or power, or a dot product. */
+  MATRIX_UNIT_ALGEBRA: "MATRIX_UNIT_ALGEBRA",
   /** Two matrices of shapes that do not fit the operation: added with different shapes, or multiplied where the columns of the first are not the rows of the second. */
   DIMENSION_MISMATCH: "DIMENSION_MISMATCH",
   /** `[...]` indexing or slicing applied to something that is not a matrix. */

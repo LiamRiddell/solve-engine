@@ -2,7 +2,9 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { Value, ValueType, uomValue, numberValue, errorValue } from "@solve-js/vm/Value";
 import { PayrollPrefixParselet, PayrollPostfixParselet, PayrollRateParselet } from "./parselets/PayrollParselets";
 import { afterRateNormalizerRule } from "./normalizer/AfterRateNormalizerRule";
+import { payrollCaseNormalizerRule } from "./normalizer/PayrollCaseNormalizerRule";
 import { takeHome, hourlyRate } from "./PayrollMath";
+import { readPayrollCase, isPayrollCaseRefusal } from "./PayrollCase";
 import { DEFAULT_TAX_YEAR } from "./data/HmrcBands";
 
 /** Error codes this package answers with. Each names something a person can correct. */
@@ -11,6 +13,12 @@ export const PayrollErrorCodes = {
 	PAYROLL_EXPECTED_GBP: "PAYROLL_EXPECTED_GBP",
 	/** A stated tax rate was not a rate a take-home can be worked out from. */
 	PAYROLL_EXPECTED_RATE: "PAYROLL_EXPECTED_RATE",
+	/** `with student loan` with no plan, or a plan that does not exist (`with plan 3 student loan`). */
+	PAYROLL_UNKNOWN_LOAN_PLAN: "PAYROLL_UNKNOWN_LOAN_PLAN",
+	/** Two places, two pensions, a plan named twice, or two undergraduate plans on one take-home line. */
+	PAYROLL_CONFLICTING_CASE: "PAYROLL_CONFLICTING_CASE",
+	/** `with 150% pension`: a pension contribution that is not a percentage between 0 and 100. */
+	PAYROLL_EXPECTED_PENSION_RATE: "PAYROLL_EXPECTED_PENSION_RATE",
 } as const;
 
 /** Apply a gross-to-figure computation, keeping the input's currency (or a bare number). */
@@ -29,7 +37,7 @@ function money(input: Value, compute: (gross: number) => number): Value {
  * answered. The refusal names the form that does work, because the person
  * asking has a real question and it is one the engine can take.
  */
-function bandedMoney(input: Value, compute: (gross: number) => number): Value {
+function bandedMoney(input: Value, compute: (gross: number) => number, refusal?: Value): Value {
 	if (input.type !== ValueType.Uom || input.unit === undefined) {
 		return errorValue(
 			PayrollErrorCodes.PAYROLL_EXPECTED_GBP,
@@ -42,7 +50,24 @@ function bandedMoney(input: Value, compute: (gross: number) => number): Value {
 			`these are HMRC's bands, which say nothing about ${input.unit}: state a rate instead, as in "50,000 after 20% tax"`,
 		);
 	}
+	if (refusal !== undefined) return refusal;
 	return money(input, compute);
+}
+
+/**
+ * The banded take-home for a line's case clauses (`in Scotland`, `with plan 2
+ * student loan`, `with 5% pension`), or the refusal a clause earns. The pound
+ * gate runs first, so a dollar salary is refused for its currency whatever
+ * clauses follow it.
+ */
+function bandedTakeHome(args: Value[], monthly: boolean): Value {
+	const clauses = args.length > 1 ? String(args[1].value ?? "") : "";
+	const read = readPayrollCase(clauses, DEFAULT_TAX_YEAR);
+	if (isPayrollCaseRefusal(read)) return bandedMoney(args[0], () => 0, errorValue(read.code, read.message));
+	return bandedMoney(args[0], (g) => {
+		const yearly = takeHome(g, DEFAULT_TAX_YEAR, read);
+		return monthly ? yearly / 12 : yearly;
+	});
 }
 
 /** Take-home at a rate the line states, which is national about nothing. */
@@ -79,9 +104,14 @@ function rateMoney(input: Value, rate: Value, monthly: boolean): Value {
  * for whichever year `DEFAULT_TAX_YEAR` names, which is the latest the package
  * ships a table for (see `data/HmrcBands.ts`): the personal-allowance taper over
  * £100,000, the 20/40/45% income-tax bands, and employee NI at 8% then 2%.
- * Scotland sets its own bands and is not covered, the same boundary the sales-tax
- * rule draws: a rate that is not shipped is not assumed. On by default and
- * removable.
+ *
+ * Case clauses after the form (issue #747) change whose take-home it is: `in
+ * Scotland` charges Scotland's six income tax bands (National Insurance is
+ * UK-wide), `with plan 2 student loan` and the other plans take a student loan
+ * repayment, and `with 5% pension` takes a pension contribution before income
+ * tax (a net pay arrangement). A different tax code and self-employment stay
+ * out, the same boundary the sales-tax rule draws: what is not shipped is not
+ * assumed. On by default and removable.
  */
 export const PAYROLL_PACKAGE: IEnginePackage = {
 	name: "solve-payroll",
@@ -104,10 +134,10 @@ export const PAYROLL_PACKAGE: IEnginePackage = {
 		AFTER_TAX_MONTHLY: new PayrollPostfixParselet("payrollTakeHomeMonthly"),
 		AFTER_RATE: new PayrollRateParselet("payrollTakeHomeAtRate"),
 	},
-	normalizerRules: [afterRateNormalizerRule()],
+	normalizerRules: [afterRateNormalizerRule(), payrollCaseNormalizerRule()],
 	pluginFunctions: {
-		payrollTakeHome: (args: Value[]): Value => bandedMoney(args[0], (g) => takeHome(g, DEFAULT_TAX_YEAR)),
-		payrollTakeHomeMonthly: (args: Value[]): Value => bandedMoney(args[0], (g) => takeHome(g, DEFAULT_TAX_YEAR) / 12),
+		payrollTakeHome: (args: Value[]): Value => bandedTakeHome(args, false),
+		payrollTakeHomeMonthly: (args: Value[]): Value => bandedTakeHome(args, true),
 		// No bands, so no country, so no gate: an hourly rate is a division.
 		payrollHourly: (args: Value[]): Value => money(args[0], hourlyRate),
 		payrollTakeHomeAtRate: (args: Value[]): Value => rateMoney(args[0], args[1], false),
@@ -118,5 +148,6 @@ export const PAYROLL_PACKAGE: IEnginePackage = {
 		AFTER_TAX: "operator",
 		AFTER_TAX_MONTHLY: "operator",
 		AFTER_RATE: "operator",
+		PAYROLL_CASE: "keyword",
 	},
 };

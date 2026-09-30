@@ -62,9 +62,13 @@ export function readCompoundingInterval(parser: Parser): number {
 		// Naming the accepted set beats "unexpected token": the whole point of
 		// this phrase is that it is written in words, so a typo is the likely
 		// failure and the fix should be visible in the message.
+		// The word the reader wrote is the one named, and a tail with no
+		// interval says so rather than showing a placeholder (#746).
+		const word = compounded ? "compounded" : "compounding";
+		const accepted = Object.keys(PERIODS_PER_YEAR).join(", ");
 		throw ErrorFactory.parsing(
 			"UNKNOWN_COMPOUNDING_INTERVAL",
-			`compounding ${name || "?"}: expected one of ${Object.keys(PERIODS_PER_YEAR).join(", ")}`,
+			name === "" ? `${word} needs an interval after it: expected one of ${accepted}` : `${word} ${name}: expected one of ${accepted}`,
 		);
 	}
 	parser.consume();

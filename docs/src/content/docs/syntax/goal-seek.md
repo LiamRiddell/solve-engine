@@ -105,9 +105,8 @@ solve line 2 for x = 4 between 5 and 10  // ERROR: No value of x between 5 and 1
 
 A range is also how to search further out than the default, which runs from
 minus a billion to a billion. Its ends are plain numbers, or in the unknown's own
-unit or another unit of the same measure. A list does not carry a unit, so when
-an unknown in a unit has several answers, each is named in the refusal instead,
-and a range picks one:
+unit or another unit of the same measure. When an unknown in a unit has several
+answers, each is named in the refusal, and a range picks one:
 
 ```solve-doc
 :p = 5 km                                        // 5.00 km

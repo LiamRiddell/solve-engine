@@ -974,6 +974,48 @@ describe("what-if and sweeps across entry points", () => {
   });
 });
 
+describe("named scenarios and date sweeps across entry points (#744)", () => {
+  const shop = ["price = $100", "qty = 3", "price * qty", "scenario bull with price = $120, qty = 5", "line 3 under bull"];
+  const dates = ["start = 2026-01-01", "finish = 2026-12-31", "working days between start and finish", "line 3 for start from 2026-01-01 to 2026-04-01 step 1 month"];
+
+  test("both document passes read the scenario and step the dates, and agree value for value", () => {
+    const fromBatch = batch(shop);
+    expect(fromBatch.slice(3)).toEqual(["bull: price = $120.00, qty = 5", "$600.00"]);
+    expect(incremental(shop)).toEqual(fromBatch);
+    expect(batch(dates)[3]).toBe("[261, 239, 219, 197]");
+    expect(incremental(dates)).toEqual(batch(dates));
+  });
+
+  test("an edit to the declaration reaches the reader in a live editor", () => {
+    const { shown, edited } = editThenEvaluate(shop, [[4, "scenario bull with price = $150, qty = 5"]]);
+    expect(shown[4]).toBe("$750.00");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("an inserted line moves the scenario's target with the line it meant", () => {
+    const service = new LanguageService(newTrackedEngine());
+    const changed = ["", ...shop];
+    const result = service.shiftLineReferences(changed.join("\n"), { kind: "insert", line: 1, count: 1 });
+    if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+    const after = applyTextEdits(changed.join("\n"), result.edits).split("\n");
+    expect(after[5]).toBe("line 4 under bull");
+    expect(batch(after)[5]).toBe("$600.00");
+  });
+
+  test("a refusal is the same named error through both passes", () => {
+    const refused = [...shop.slice(0, 3), "line 3 under nope", "line 3 for price from 2026-01-01 to 2026-02-01 step 1 day"];
+    const fromBatch = batch(refused);
+    expect(fromBatch[3]).toMatch(/^ERROR: No line above this one declares a scenario named nope/);
+    expect(fromBatch[4]).toMatch(/^ERROR: /);
+    expect(incremental(refused)).toEqual(fromBatch);
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument("line 3 under bull");
+    expectNeedsDocument("line 3 for start from 2026-01-01 to 2026-04-01 step 1 month");
+  });
+});
+
 describe("inputs of line N across entry points", () => {
   // Issue #522. The trace is built from each line's text and answer, which
   // both document passes hold alike, so the two agree value for value.

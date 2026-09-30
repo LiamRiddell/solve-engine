@@ -279,6 +279,36 @@ to the pass through `context.spendWork(lineRuns, form)`, as the built-in what-if
 and sweep do: it returns the refusal when the note's budget
 (`vm.maxLineRunsPerPass`) would be crossed, and null once the work is counted.
 
+### Reading a line under a named scenario
+
+A note can keep named sets of inputs (`scenario bull with growth = 8%`, see
+[named scenarios](/syntax/what-if/#named-scenarios)). `context.readScenario(name,
+lineNumber)` answers what line `lineNumber` says under the scenario `name`, the
+same question `line 4 under bull` asks. It finds the declaration among the lines
+above the asking line and runs it as the what-if it stands for, so it takes care
+of the re-run, the checks and the budget itself: the handler passes its answer
+on.
+
+```ts
+import { errorValue, type Value, type LineExecutionContext } from "solve-engine/vm";
+
+// bullCase(4): line 4 under the note's "bull" scenario.
+function bullCaseHandler(args: Value[], context?: LineExecutionContext): Value {
+  if (!context?.readScenario) {
+    return errorValue("NEEDS_DOCUMENT", "bullCase only works inside a document.");
+  }
+  return context.readScenario("bull", args[0].toNumber());
+}
+```
+
+- `readScenario` is absent where there is no document, as `rerunLines` is.
+- It answers the line's value, or an error Value: no scenario of that name above
+  the asking line (`SCENARIO_UNKNOWN`), two of them (`SCENARIO_DUPLICATE`), or
+  any refusal the what-if gives (an input no line uses, a nested re-run, a
+  `global :name` in the span).
+- Every line above the asking line is read, so an edit to any of them re-runs
+  the handler's line.
+
 ## Operators, not just functions
 
 An **infix** parselet handles a token that **joins** a value already parsed to the
