@@ -14,7 +14,9 @@ import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js
 import { CoreErrorCodes, DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions, resolveAsConverter, datetimeArgumentRefused } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, datetimeArgumentRefused } from "@solve-js/vm/VMBuiltins";
+import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
+import type { QueryClient } from "@tanstack/query-core";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
 import { multiplierRefused } from "@solve-js/vm/PlainNumberForms";
 import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
@@ -348,6 +350,16 @@ export interface LineExecutionContext {
      * resolves either case.
      */
     week?: WeekShape;
+    /**
+     * The query cache of the engine running this line, where its asynchronous
+     * resolvers keep what they fetched. A plugin function that reads a
+     * resolved value back (`createQueryResolver`'s, the historical currency
+     * conversion's) reads it from here, so it reads its own engine's cache
+     * however many engines share the process (#710). Absent on a context no
+     * engine built; such a handler falls back to the deprecated
+     * `getActiveQueryClient()`.
+     */
+    queryClient?: QueryClient;
     /**
      * The random source this line draws from, a number in [0, 1) per call, the
      * way `calendar` is the clock. `roll`, `random()`, `pick`, `shuffle`,
@@ -3228,6 +3240,11 @@ function callPlugin(
     context: LineExecutionContext | undefined,
 ): Value | Extract<EvalResult, { type: 'pending' }> {
     const calls = vm.context.pluginCalls;
+    // The deprecated module-level slot a handler may still read the query
+    // cache from is set to this engine's here, at the one point every plugin
+    // call passes, so it names the right cache whichever engine ran last and
+    // however runs nest (#710). A handler should read `context.queryClient`.
+    if (vm.context.queryClient !== null) setActiveQueryClient(vm.context.queryClient);
     let key: string | undefined;
     let result: Value | Promise<Value>;
     if (calls.isAsync(fnIdx)) {
@@ -4833,7 +4850,7 @@ export function executeBytecode(
           const converterFault = faultedOperand(value);
           if (converterFault) { stack.push(converterFault); break; }
           carry = value.sources;
-          const converter = resolveAsConverter(name);
+          const converter = vm.context.asConverters.resolve(name);
           if (!converter) {
             stack.push(errorValue("UNKNOWN_AS_CONVERTER", `Unknown converter "as ${name}"`));
           } else {

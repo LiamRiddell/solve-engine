@@ -43,6 +43,11 @@ your unit (`10 gp to X`) only works if a conversion is defined for it; until the
 it carries as a quantity tagged with your unit, which is usually what a game
 currency or a domain unit wants.
 
+A spelling here is a new unit with no meaning of its own. To give a word the
+meaning of a unit the engine already has, so that `2 Meile in km` converts and
+`5 km in Meile` answers in it, declare it in `unitAliases` instead: see
+[Words for units](/packages/unit-aliases/).
+
 ## Adding a keyword
 
 A keyword maps a word to a token type of your choosing:

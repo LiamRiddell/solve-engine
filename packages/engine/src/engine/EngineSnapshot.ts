@@ -149,7 +149,10 @@ export type SerializedValue = SerializedValueSidecars & (
 	| { t: ValueType.String; v: string; cn?: CalendarName }
 	| { t: ValueType.Datetime; v: SerializedNumber; g?: DatetimeGrain; z?: string; ta?: SerializedNumber }
 	| { t: ValueType.Percentage; v: SerializedNumber }
-	| { t: ValueType.Uom; v: SerializedNumber; unit: string; exact?: SerializedDecimal }
+	// `ul`: the name a quantity is shown under (Value.unitLabel, #762), so a
+	// restored `x = 5 km in Meile` still reads `3.11 Meile`. Optional, so no
+	// version bump.
+	| { t: ValueType.Uom; v: SerializedNumber; unit: string; exact?: SerializedDecimal; ul?: { name: string; per: number } }
 	| { t: ValueType.Matrix; rows: number; cols: number; data: (SerializedNumber | boolean)[] }
 	| { t: ValueType.Range; min: SerializedNumber; max: SerializedNumber }
 	| { t: ValueType.Boolean; v: boolean }
@@ -378,6 +381,7 @@ function serializeValueBody(value: Value, where: string): SerializedValue {
 		case ValueType.Uom: {
 			const out: Extract<SerializedValue, { t: ValueType.Uom }> = { t: ValueType.Uom, v: encodeNumber(value.value as number), unit: value.unit ?? "" };
 			if (value.exact !== undefined) out.exact = serializeDecimal(value.exact);
+			if (value.unitLabel !== undefined) out.ul = { name: value.unitLabel.name, per: value.unitLabel.per };
 			return out;
 		}
 		case ValueType.Matrix: {
@@ -450,6 +454,7 @@ function deserializeValueBody(sv: SerializedValue): Value {
 		case ValueType.Uom: {
 			const v = new Value(ValueType.Uom, decodeNumber(sv.v), sv.unit);
 			if (sv.exact !== undefined) v.exact = deserializeDecimal(sv.exact);
+			if (sv.ul !== undefined) v.unitLabel = { name: sv.ul.name, per: sv.ul.per };
 			return v;
 		}
 		case ValueType.Matrix: {
@@ -891,6 +896,13 @@ function assertValueShape(sv: unknown, where: string): void {
 			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
 			if (typeof sv.unit !== "string") malformed(`${where}.unit`, "a unit name", sv.unit);
 			if (sv.exact !== undefined) assertDecimalShape(sv.exact, `${where}.exact`);
+			if (sv.ul !== undefined) {
+				const ul: unknown = sv.ul;
+				const label = typeof ul === "object" && ul !== null ? (ul as { name?: unknown; per?: unknown }) : null;
+				if (label === null || typeof label.name !== "string" || label.name.length === 0 || typeof label.per !== "number" || !Number.isFinite(label.per) || label.per <= 0) {
+					malformed(`${where}.ul`, "a unit label (a name and a positive count)", ul);
+				}
+			}
 			return;
 		case ValueType.Matrix: {
 			const { rows, cols, data } = sv;

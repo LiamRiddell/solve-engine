@@ -221,6 +221,17 @@ export enum ValueType {
 // Values, no per-value release overhead, no GC pressure during 60fps scrolling.
 
 /**
+ * The name a quantity is written under, and how many of its unit make one of
+ * that name. See {@link Value.unitLabel}.
+ */
+export interface UnitLabel {
+	/** The word the reader wrote (`Meile`, `sprints`). */
+	readonly name: string;
+	/** How many of the value's own unit one of `name` is: 1 for an alias, 2 for a sprint of two weeks. Always positive and finite. */
+	readonly per: number;
+}
+
+/**
  * Bump-allocator arena for zero-allocation Value reuse during scroll.
  *
  * Instead of allocating new Value objects per instruction, pre-allocates a
@@ -669,6 +680,20 @@ export class Value {
 	 * {@link clone}. Cleared by {@link recycle} alongside the other sidecars.
 	 */
 	public calendarName?: CalendarName;
+	/**
+	 * The name a quantity is shown under when the reader wrote a word for its
+	 * unit that is not the unit's own: a package's alias (`Meile` for the mile)
+	 * or a unit the document defined (`sprints`, two weeks each). The quantity
+	 * itself stays in {@link unit}, so it converts and adds as that unit does;
+	 * only the written answer changes, to `value / per` followed by `name`
+	 * (#762).
+	 *
+	 * Set on the quantity a literal (`2 Meile`) or a conversion (`5 km in
+	 * Meile`, `84 days in sprints`) produces. Arithmetic does not carry it,
+	 * since a computed value is a new quantity; a variable holding a labelled
+	 * value does, through {@link clone}. Cleared by {@link recycle}.
+	 */
+	public unitLabel?: UnitLabel;
 
 	constructor(
 		type: ValueType,
@@ -725,6 +750,8 @@ export class Value {
 		this.unspelledUnit = undefined;
 		// A reused Value that once held `Tuesday` must not render other text as a weekday.
 		this.calendarName = undefined;
+		// Nor lend a quantity it once was the name it was shown under.
+		this.unitLabel = undefined;
 	}
 
 	/**
@@ -782,6 +809,7 @@ export class Value {
 		if (this.frozen !== undefined) out.frozen = this.frozen;
 		if (this.unspelledUnit !== undefined) out.unspelledUnit = this.unspelledUnit;
 		if (this.calendarName !== undefined) out.calendarName = { kind: this.calendarName.kind, index: this.calendarName.index };
+		if (this.unitLabel !== undefined) out.unitLabel = { name: this.unitLabel.name, per: this.unitLabel.per };
 		return out;
 	}
 

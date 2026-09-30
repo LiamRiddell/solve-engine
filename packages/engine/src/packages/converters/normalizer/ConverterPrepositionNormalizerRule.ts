@@ -1,6 +1,5 @@
-import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
+import type { NormalizerRule, NormalizerMatch, NormalizerEnvironment } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
-import { matchAsConverter } from "@solve-js/vm/VMBuiltins";
 
 /**
  * Rewrites `in <converter>` and `to <converter>` into `as <converter>`.
@@ -49,9 +48,13 @@ const FUNC_TYPED_CONVERTERS = new Set(["hex", "bin"]);
  * and the megawatt) is left for unit conversion, which reads a unit in its
  * own case and refuses it by name, where the rewrite read `in MV` as
  * millivolts (issue #824).
+ *
+ * The registry is the engine's own, from the normaliser's environment, so a
+ * converter another engine in the process registered is not read here (#710).
+ * A normaliser with no engine behind it has no converters to read.
  */
-function isPackageConverter(word: string): boolean {
-	const match = matchAsConverter(word);
+export function isPackageConverter(word: string, environment?: NormalizerEnvironment): boolean {
+	const match = environment?.asConverters?.match(word);
 	return match === "exact" || match === "folded";
 }
 
@@ -70,14 +73,14 @@ export function converterPrepositionNormalizerRule(priority = 67): NormalizerRul
 		// Derived from this rule's own opening guards; see RuleSlot on why an
 		// over-broad slot is safe and an over-narrow one is not.
 		shape: [{ types: ["IN", "TO"] }, { types: ["CONVERTER_NAME", "FUNC", "IDENT"] }],
-		match(tokens, pos): NormalizerMatch | null {
+		match(tokens, pos, environment): NormalizerMatch | null {
 			const preposition = tokens[pos];
 			if (preposition?.type !== "IN" && preposition?.type !== "TO") return null;
 			const target = tokens[pos + 1];
 			const isConverterTarget =
 				target?.type === "CONVERTER_NAME" ||
 				(target?.type === "FUNC" && FUNC_TYPED_CONVERTERS.has(target.value.toLowerCase())) ||
-				(target?.type === "IDENT" && preposition.type === "IN" && isPackageConverter(target.value));
+				(target?.type === "IDENT" && preposition.type === "IN" && isPackageConverter(target.value, environment));
 			if (!isConverterTarget) return null;
 
 			// Only the preposition is replaced; the converter name is left for

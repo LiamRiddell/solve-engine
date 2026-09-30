@@ -1,4 +1,5 @@
-import { ExpressionEngine, type PassSpend } from "@solve-js/engine/ExpressionEngine";
+import type { PassSpend } from "@solve-js/engine/ExpressionEngine";
+import type { EvaluatorHost } from "@solve-js/engine/EvaluatorHost";
 import {
 	DocumentModel,
 	LineChange,
@@ -176,7 +177,8 @@ function hasExpressionWithoutProgram(state: LineState): boolean {
  */
 export class ThreeTierEvaluator {
 	private doc: DocumentModel;
-	private engine: ExpressionEngine;
+	/** The engine, held as the seams the evaluator needs and no more; see {@link EvaluatorHost}. */
+	private engine: EvaluatorHost;
 	private dag: DependencyGraph;
 	private checkpointer: VMCheckpointer | null;
 	private compilationWorker: CompilationWorkerManager | null = null;
@@ -250,7 +252,7 @@ export class ThreeTierEvaluator {
 	 */
 	constructor(
 		doc: DocumentModel,
-		engine: ExpressionEngine,
+		engine: EvaluatorHost,
 		checkpointer?: VMCheckpointer
 	) {
 		this.doc = doc;
