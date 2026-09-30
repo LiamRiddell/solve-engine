@@ -10,7 +10,8 @@ import { defineFunction, type IEnginePackage } from "solve-engine";
 import type { PrefixParselet, Parser, BytecodeBuilder } from "solve-engine/parser";
 import { BindingPower } from "solve-engine/parser";
 import type { Token } from "solve-engine/lexer";
-import { errorValue, stringValue, uomValue, ValueType, type Value } from "solve-engine/vm";
+import { createQueryResolver } from "solve-engine/resolvers";
+import { errorValue, pluginFunctionIndexFor, stringValue, uomValue, ValueType, type LineExecutionContext, type Value } from "solve-engine/vm";
 
 /** The engine versions this package is built and tested against: every 2.x. */
 export const ENGINE_RANGE = "^2.0.0";
@@ -42,14 +43,27 @@ export const tipFunction: IEnginePackage = {
 export interface StarterOptions {
 	/**
 	 * The millimetres of rain today in `place`. The package never reaches a
-	 * network itself; the host (or a test) says how. A rejection is shown as
-	 * `STARTER_RAINFALL_FAILED`, never as a number.
+	 * network itself; the host (or a test) says how. It is handed the signal
+	 * the engine aborts when the reader moves on or the timeout passes, to give
+	 * to `fetch`. A rejection is shown as `STARTER_RAINFALL_FAILED`, never as a
+	 * number.
 	 */
-	fetchRainfall: (place: string) => Promise<number>;
+	fetchRainfall: (place: string, signal: AbortSignal) => Promise<number>;
+	/**
+	 * How often, in milliseconds, a figure on screen fetches again on its own
+	 * while a note is open. Left out, a figure refreshes only when its line is
+	 * evaluated again after it has been kept for five minutes. It has effect
+	 * only for a host that switched background refresh on
+	 * (`backgroundRefresh.enabled`).
+	 */
+	refreshEveryMs?: number;
 }
 
 /** The longest place name the lookup sends on, so a pasted paragraph is refused rather than posted. */
 export const MAX_PLACE_LENGTH = 80;
+
+/** This package's name, which the engine also files its plugin functions under. */
+export const STARTER_PACKAGE_NAME = "package-starter";
 
 /**
  * Why `place` is not sent on, or null when it may be. A place is a short
@@ -100,40 +114,35 @@ class RainfallParselet implements PrefixParselet {
  * settles to millimetres once the host's `fetchRainfall` answers.
  */
 export function createStarterPackage(options: StarterOptions): IEnginePackage {
-	// What each place's fetch settled to, and the fetches still on their way.
-	// Once a promise settles the engine calls the function once more, and an
-	// answer given then, from this cache, is the one it keeps; without it the
-	// second call would ask the service again. A fetch still on its way is
-	// shared the same way, so a line evaluated twice before the answer lands
-	// asks once. Maps, so a place named like `constructor` is an ordinary key.
-	// A figure that must refresh while a note is open belongs in an async
-	// resolver with a refresh cadence instead (see the async data source guide).
-	const settled = new Map<string, Value>();
-	const inFlight = new Map<string, Promise<Value>>();
-	const fetchOnce = (place: string): Value | Promise<Value> => {
-		const key = place.toLowerCase();
-		const known = settled.get(key);
-		if (known !== undefined) return known;
-		let pending = inFlight.get(key);
-		if (pending === undefined) {
-			pending = options
-				.fetchRainfall(place)
-				.then(
-					(mm) => (Number.isFinite(mm) && mm >= 0 ? uomValue(mm, "mm") : errorValue("STARTER_RAINFALL_FAILED", `the rainfall service answered ${String(mm)}, which is not a rainfall`)),
-					(error: unknown) => errorValue("STARTER_RAINFALL_FAILED", `the rainfall for ${place} could not be fetched: ${error instanceof Error ? error.message : String(error)}`),
-				)
-				.then((value) => {
-					settled.set(key, value);
-					return value;
-				})
-				.finally(() => inFlight.delete(key));
-			inFlight.set(key, pending);
-		}
-		return pending;
-	};
+	// `createQueryResolver` is the engine's helper for a lookup of one quoted
+	// query. It starts the fetch before the line runs (so the line is Pending,
+	// never a made-up number), keeps each answer in the engine's own cache (so
+	// a place is fetched once, and shared by every line that asks for it),
+	// runs at most six fetches at once, and gives up on a service that has not
+	// answered in ten seconds. It watches for the plugin call by the index the
+	// engine files `rainfall` under: the package name and the function name.
+	const { resolver, pluginFunction } = createQueryResolver({
+		namespace: "starter",
+		pluginFunctionIndex: pluginFunctionIndexFor(`${STARTER_PACKAGE_NAME}:rainfall`),
+		provider: "rainfall service",
+		refetchIntervalMs: options.refreshEveryMs,
+		fetchQuery: async (query, signal) => {
+			// Every query passes through here before the host sees it, so this is
+			// where a hostile place is stopped: the host's fetch is never called.
+			const problem = placeProblem(query);
+			if (problem !== null) return errorValue("STARTER_BAD_PLACE", problem);
+			const mm = await options.fetchRainfall(query.trim(), signal);
+			// Thrown rather than returned, so the failure is kept only for the
+			// short failure cooldown and a later evaluation asks again.
+			if (!Number.isFinite(mm) || mm < 0) throw new Error(`the service answered ${String(mm)}, which is not a rainfall`);
+			return uomValue(mm, "mm");
+		},
+		onError: (query, error) =>
+			errorValue("STARTER_RAINFALL_FAILED", `the rainfall for ${query} could not be fetched: ${error instanceof Error ? error.message : String(error)}`),
+	});
 
 	return {
-		name: "package-starter",
+		name: STARTER_PACKAGE_NAME,
 		engineVersion: ENGINE_RANGE,
 
 		// A two-word phrase claims neither word on its own: `tea` and `break`
@@ -150,15 +159,25 @@ export function createStarterPackage(options: StarterOptions): IEnginePackage {
 
 		pluginFunctions: {
 			teaBreak: () => uomValue(15, "minutes"),
-			rainfall: (args: Value[]) => {
+			rainfall: (args: Value[], context?: LineExecutionContext) => {
+				// Checked here as well as in the fetch, for an argument the resolver
+				// never saw (a number, say), answered at once.
 				const place = args[0]?.type === ValueType.String ? (args[0].value as string) : undefined;
 				const problem = placeProblem(place);
 				if (problem !== null) return errorValue("STARTER_BAD_PLACE", problem);
-				// A promise tells the engine the answer is on its way: the line is
-				// Pending until it settles, and the value is kept for the next run.
-				return fetchOnce(place!.trim());
+				// The resolver's half: the answer its fetch put in the engine's cache.
+				const answer = pluginFunction(args, context);
+				// The resolver starts a fetch for a place written in quotes in the
+				// line, before the line runs. A place held in a variable is known only
+				// as the line runs, too late for that, so it is refused by name.
+				if (answer.type === ValueType.Error && answer.value === "STARTER_NOT_PREFLIGHTED") {
+					return errorValue("STARTER_PLACE_NOT_QUOTED", `rainfall takes the place written in quotes in the line, such as rainfall("${place!.trim()}")`);
+				}
+				return answer;
 			},
 		},
+
+		asyncResolvers: [resolver],
 
 		asConverters: { tally: toTally },
 

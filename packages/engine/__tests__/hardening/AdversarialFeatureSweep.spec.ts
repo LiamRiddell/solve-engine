@@ -199,6 +199,14 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"5 mph + X knots",
 		"X + 9007199254740993",
 		"X / 0",
+		// The third: a decimal literal past 2^53, a take-home in a check, and a
+		// sum or product of a range or a list on its own.
+		"X + 9007199254740993.5",
+		"check £X after tax > £30,000",
+		"£50,000 after tax == £X",
+		"sum(X:3)",
+		"prod(1:X)",
+		"sum([X, 2])",
 	],
 };
 
