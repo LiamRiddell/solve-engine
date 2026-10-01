@@ -33,3 +33,46 @@ export function expectsValueAt(tokens: readonly Token[], pos: number): boolean {
 	const before = tokens[pos - 1];
 	return before === undefined || VALUE_STARTS_AFTER.has(before.type);
 }
+
+/**
+ * The tokens that end a value, so a `+` or `-` after one is binary. A unary
+ * minus (`-P1DT1H`, `2 * -1 month 1 day`) has an operator or nothing before it.
+ */
+const VALUE_ENDS: ReadonlySet<string> = new Set([
+	"NUMBER", "BIGINT", "IDENT", "UNIT", "RPAREN", "RBRACKET", "STRING",
+	"DATETIME_LITERAL", "NOW", "TODAY", "TOMORROW", "YESTERDAY", "CLOCK_TIME", "ISO_DURATION",
+]);
+
+/**
+ * The tokens that may follow a length spread through a sum: the end of the
+ * line, or an operator that binds no tighter than `+`, so `a + 1 month 1 day`
+ * read as `a + 1 month + 1 day` means what `a + (1 month 1 day)` would mean.
+ * Anything tighter (`* 2`, `in days`) leaves the length whole.
+ */
+const LOOSE_AFTER: ReadonlySet<string> = new Set([
+	"PLUS", "MINUS", "RPAREN", "RBRACKET", "COMMA", "SEMICOLON", "NEWLINE", "EOF",
+	"GT", "LT", "GTE", "LTE", "EQUALITY", "NEQ",
+]);
+
+/**
+ * Whether a length of several parts, spanning `consumed` tokens from `pos`, is
+ * the right side of an addition or subtraction that its parts can be spread
+ * through: a binary `+` or `-` before it, and nothing that binds tighter after
+ * it. When it is, `d + 1 month 1 day` can be read `d + 1 month + 1 day`, each
+ * part in turn, which is what a date needs: the month moves the month field
+ * (clamped to the month's last day) before the day moves the day field.
+ *
+ * @param tokens - The line's tokens.
+ * @param pos - The index of the length's first token.
+ * @param consumed - How many tokens the length spans.
+ * @returns The operator token to repeat between the parts, or null when the
+ *   length is to stay one quantity.
+ */
+export function spreadOperatorBefore(tokens: readonly Token[], pos: number, consumed: number): Token | null {
+	const before = tokens[pos - 1];
+	if (before === undefined || (before.type !== "PLUS" && before.type !== "MINUS")) return null;
+	const operand = tokens[pos - 2];
+	if (operand === undefined || !VALUE_ENDS.has(operand.type)) return null;
+	const after = tokens[pos + consumed];
+	return after === undefined || LOOSE_AFTER.has(after.type) ? before : null;
+}

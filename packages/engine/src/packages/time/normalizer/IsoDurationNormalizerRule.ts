@@ -1,6 +1,7 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { spreadOperatorBefore } from "@solve-js/normalizer/ValuePosition";
 import { TimeFormErrorCodes } from "../TimeFormErrorCodes";
 import { readIsoDuration, type IsoDurationPart } from "../IsoDuration";
 
@@ -9,28 +10,6 @@ export const ISO_DURATION_TYPE = "ISO_DURATION";
 
 /** The token a duration-shaped identifier that breaks the grammar becomes, carrying the reason on {@link Token.fault}. */
 export const ISO_DURATION_UNREADABLE_TYPE = "ISO_DURATION_UNREADABLE";
-
-/**
- * The tokens after which a duration's parts can be spread through the
- * addition or subtraction before it: anything that ends a value, so the `+`
- * or `-` before the duration is binary. A unary minus (`-P1DT1H`, `2 * -P1D`)
- * has an operator or nothing before it and takes the bracketed sum instead.
- */
-const VALUE_ENDS: ReadonlySet<string> = new Set([
-	"NUMBER", "BIGINT", "IDENT", "UNIT", "RPAREN", "RBRACKET", "STRING",
-	"DATETIME_LITERAL", "NOW", "TODAY", "TOMORROW", "YESTERDAY", "CLOCK_TIME", "ISO_DURATION",
-]);
-
-/**
- * The tokens that may follow a spread duration: the end of the line, or an
- * operator that binds no tighter than `+`, so `a + P1M1D` read as `a + 1 month
- * + 1 day` means what `a + (P1M1D)` means. Anything tighter (`* 2`, `in days`)
- * takes the bracketed sum.
- */
-const LOOSE_AFTER: ReadonlySet<string> = new Set([
-	"PLUS", "MINUS", "RPAREN", "RBRACKET", "COMMA", "SEMICOLON", "NEWLINE", "EOF",
-	"GT", "LT", "GTE", "LTE", "EQUALITY", "NEQ",
-]);
 
 /**
  * The identifier's text, joined with what the lexer split off it.
@@ -159,15 +138,10 @@ export function isoDurationNormalizerRule(priority = 78): NormalizerRule {
 			const parts = reading.parts;
 			if (parts.length === 1) return { consumed: run.consumed, replacement: [part(parts[0])], ruleName: RULE };
 
-			const before = tokens[pos - 1];
-			const operand = tokens[pos - 2];
-			const after = tokens[pos + run.consumed];
-			const spread = (before?.type === "PLUS" || before?.type === "MINUS")
-				&& operand !== undefined && VALUE_ENDS.has(operand.type)
-				&& (after === undefined || LOOSE_AFTER.has(after.type));
+			const before = spreadOperatorBefore(tokens, pos, run.consumed);
 
 			const replacement: Token[] = [];
-			if (spread) {
+			if (before !== null) {
 				// Largest first, each joined by the operator already before the
 				// duration: `a - P1DT1H` is `a - 1 day - 1 hour`.
 				parts.forEach((p, i) => {
