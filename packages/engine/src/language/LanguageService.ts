@@ -1,10 +1,9 @@
 import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import { builtinTokenCategory } from "@solve-js/language/TokenCategoryMap";
-import { compareCompletionItems, mergeRankedCompletions } from "@solve-js/language/completionRanking";
+import { compareCompletionItems, mergeRankedCandidates, mergeRankedCompletions, type IndexedCompletionCandidate } from "@solve-js/language/completionRanking";
+import { rankedBuiltinUnitBucket } from "@solve-js/language/builtinUnitCompletions";
 import type { Token } from "@solve-js/lexer/Token";
-import { knownUnits } from "@solve-js/lexer/units";
-import { getMeasure } from "@solve-js/uom/UomConverter";
 import {
 	DocumentReferences,
 	type DocumentPosition,
@@ -37,16 +36,6 @@ export interface CompletionItem {
 	 * it to the length of `net pres`. Absent, the label replaces the last word.
 	 */
 	replaceLength?: number;
-}
-
-/**
- * A completion candidate with its lowercased label precomputed.
- *
- * Internal to the prefix index; callers only ever see the {@link CompletionItem}.
- */
-interface IndexedCompletionCandidate {
-	item: CompletionItem;
-	lowerLabel: string;
 }
 
 /** Completion results are capped, a document-wide candidate pool has no reason to return more than this. */
@@ -236,14 +225,22 @@ export class LanguageService {
 	// visible" cache should prioritize.
 	private cache = new Map<number, CacheEntry>();
 
-	// Keyword/unit/package-contributed completion candidates don't depend
+	// Keyword/phrase/package-contributed completion candidates don't depend
 	// on any particular line, built lazily on first getCompletions() call
 	// and reused after that, since a package registration is the only thing
 	// that could ever change this list mid-session (see invalidateCache()).
 	// Variable-name candidates are NOT part of this, they're read fresh on
 	// every call from variableNameSource(), since those genuinely change on
-	// every edit.
+	// every edit. The built-in units are not part of it either: no engine can
+	// change them, so they are made once per process and shared (see
+	// builtinUnitCompletions.ts) and merged in per first character.
 	private staticCompletionCandidates: CompletionItem[] | null = null;
+
+	// The lowercased labels of this engine's own candidates in the `unit`
+	// category. A built-in unit with one of these labels is left out, as it
+	// was when every unit went through the same one-per-label check as the
+	// engine's own candidates: the engine's entry came first and won.
+	private ownUnitLabels = new Set<string>();
 
 	// The same candidates, bucketed by their lowercased first character with the
 	// lowercased label precomputed. getCompletions() runs on every keystroke and
@@ -256,12 +253,22 @@ export class LanguageService {
 	// benchmarks regressed roughly 2.9x until this was added.
 	private staticCompletionIndex: Map<string, IndexedCompletionCandidate[]> | null = null;
 
-	// The first characters whose bucket in the current index has been put in
-	// result order (see rankedStaticBucket). Sorting a bucket on first use
-	// rather than all of them when the index is built keeps the first
-	// completion as cheap as it was: it pays for one bucket, not every one.
-	// Replaced whenever the index is rebuilt.
-	private rankedStaticBuckets = new Set<string>();
+	// Each first character's candidates in result order, this engine's own
+	// merged with the shared built-in units (see rankedStaticBucket). Made on
+	// first use rather than all of them when the index is built, so the first
+	// completion pays for one bucket, not every one. Cleared whenever the index
+	// is rebuilt.
+	private rankedStaticBuckets = new Map<string, readonly IndexedCompletionCandidate[]>();
+
+	// The same, narrowed to the candidates whose lowercased label starts with a
+	// two-character start, for a prefix of two characters or more (see
+	// rankedStaticPair). A first-character bucket holds dozens of candidates
+	// (`s` has 78) where a two-character start holds a few, so a longer prefix
+	// tests a few labels per keystroke instead of the whole bucket. At most one
+	// entry per two-character start a reader has typed, and the prefix pattern
+	// allows 37 characters, so it cannot grow past 1,369 entries. Cleared with
+	// the buckets.
+	private rankedStaticPairs = new Map<string, readonly IndexedCompletionCandidate[]>();
 
 	// Built on the first reference query, so a host that only highlights and
 	// completes never constructs it.
@@ -555,14 +562,13 @@ export class LanguageService {
 		}
 
 		// Static candidates only ever match if they share the prefix's first
-		// character, so consult that bucket alone. It is already in result
-		// order, so the matches come out in result order too.
+		// character (its first two, for a longer prefix), so consult that
+		// bucket alone. It is already in result order, so the matches come out
+		// in result order too.
 		const staticMatches: CompletionItem[] = [];
-		const bucket = this.rankedStaticBucket(prefix[0]);
-		if (bucket) {
-			for (const candidate of bucket) {
-				if (candidate.lowerLabel.startsWith(prefix)) staticMatches.push(candidate.item);
-			}
+		const bucket = prefix.length >= 2 ? this.rankedStaticPair(prefix.slice(0, 2)) : this.rankedStaticBucket(prefix);
+		for (const candidate of bucket) {
+			if (candidate.lowerLabel.startsWith(prefix)) staticMatches.push(candidate.item);
 		}
 		const phraseMatches: CompletionItem[] = [];
 
@@ -570,6 +576,8 @@ export class LanguageService {
 		// pres` is the start of `net present value of`. Each longer run of
 		// trailing words is tried against the phrases in its own first
 		// character's bucket, and only phrases (labels with a space) can match.
+		// The engine's own index is enough: a built-in unit is one token, so
+		// none has a space in it.
 		const words = TRAILING_WORDS.exec(lineText.slice(0, cursorOffset));
 		if (words !== null && words[0].length > prefixMatch[0].length) {
 			const typed = words[0];
@@ -601,21 +609,28 @@ export class LanguageService {
 		return mergeRankedCompletions([documentNames, staticMatches, phraseMatches], MAX_COMPLETIONS);
 	}
 
-	/** Lazily builds and caches the keyword/unit/package-item candidate list. See `staticCompletionCandidates`. */
+	/**
+	 * Lazily builds and caches this engine's own candidate list: its packages'
+	 * items, keywords, call words and phrases. The built-in units are shared
+	 * across engines instead. See `staticCompletionCandidates`.
+	 */
 	private getStaticCompletionCandidates(): CompletionItem[] {
 		if (this.staticCompletionCandidates) return this.staticCompletionCandidates;
 
 		const items: CompletionItem[] = [];
+		const ownUnitLabels = new Set<string>();
 		// One entry per label and category: a word can reach the list by two
 		// routes (a function a package defines is also a call word, say). The
 		// first route wins, so the package's own items go first: they carry the
 		// most detail, a signature rather than "function call".
 		const seen = new Set<string>();
 		const add = (item: CompletionItem): void => {
-			const key = `${item.category}\u0000${item.label.toLowerCase()}`;
+			const lowerLabel = item.label.toLowerCase();
+			const key = `${item.category}\u0000${lowerLabel}`;
 			if (seen.has(key)) return;
 			seen.add(key);
 			items.push(item);
+			if (item.category === "unit") ownUnitLabels.add(lowerLabel);
 		};
 		for (const item of this.engine!.getPackageCompletionItems()) add(item);
 		for (const [word, tokenType] of Object.entries(this.engine!.getLexer().getKeywords())) {
@@ -633,17 +648,15 @@ export class LanguageService {
 		for (const [phrase, tokenType] of Object.entries(this.engine!.getNormalizer().getPhrases())) {
 			add({ label: phrase, category: this.getTokenCategory(tokenType) ?? "keyword", detail: "phrase" });
 		}
-		for (const unit of knownUnits) {
-			add({ label: unit, category: "unit", detail: getMeasure(unit) });
-		}
 
 		this.staticCompletionCandidates = items;
+		this.ownUnitLabels = ownUnitLabels;
 		return items;
 	}
 
 	/**
-	 * The static candidates bucketed by lowercased first character, built once
-	 * from {@link getStaticCompletionCandidates} and invalidated alongside it.
+	 * This engine's own candidates bucketed by lowercased first character, built
+	 * once from {@link getStaticCompletionCandidates} and invalidated alongside it.
 	 */
 	private getStaticCompletionIndex(): Map<string, IndexedCompletionCandidate[]> {
 		if (this.staticCompletionIndex) return this.staticCompletionIndex;
@@ -664,25 +677,54 @@ export class LanguageService {
 		}
 
 		this.staticCompletionIndex = index;
-		this.rankedStaticBuckets = new Set<string>();
+		this.rankedStaticBuckets = new Map<string, readonly IndexedCompletionCandidate[]>();
+		this.rankedStaticPairs = new Map<string, readonly IndexedCompletionCandidate[]>();
 		return index;
 	}
 
 	/**
 	 * The static candidates whose label starts with `firstCharacter`, in result
-	 * order: sorted the first time a prefix asks for them and kept that way, so
-	 * a keystroke reads its matches off in order instead of sorting them. The
-	 * sort is stable, so two candidates that tie keep the order they were
-	 * gathered in. Undefined when no candidate starts with it.
+	 * order: this engine's own, sorted in place the first time a prefix asks for
+	 * them, merged with the shared built-in units, which come after them in
+	 * gathering order. Kept that way, so a keystroke reads its matches off in
+	 * order instead of sorting them. Two candidates that tie keep the order
+	 * they were gathered in, as one stable sort of the whole list would.
+	 * Empty when no candidate starts with it.
 	 *
 	 * @param firstCharacter - The lowercased first character of the prefix.
 	 */
-	private rankedStaticBucket(firstCharacter: string): readonly IndexedCompletionCandidate[] | undefined {
-		const bucket = this.getStaticCompletionIndex().get(firstCharacter);
-		if (bucket === undefined || this.rankedStaticBuckets.has(firstCharacter)) return bucket;
-		bucket.sort((a, b) => compareCompletionItems(a.item, b.item));
-		this.rankedStaticBuckets.add(firstCharacter);
-		return bucket;
+	private rankedStaticBucket(firstCharacter: string): readonly IndexedCompletionCandidate[] {
+		const index = this.getStaticCompletionIndex();
+		const ranked = this.rankedStaticBuckets.get(firstCharacter);
+		if (ranked !== undefined) return ranked;
+		const own = index.get(firstCharacter);
+		// Sorted in place, so the cross-word phrase scan reads this bucket in
+		// the same order whichever path reached it first.
+		own?.sort((a, b) => compareCompletionItems(a.item, b.item));
+		let units = rankedBuiltinUnitBucket(firstCharacter);
+		if (this.ownUnitLabels.size > 0) units = units.filter((unit) => !this.ownUnitLabels.has(unit.lowerLabel));
+		const merged = own === undefined ? units : units.length === 0 ? own : mergeRankedCandidates(own, units);
+		this.rankedStaticBuckets.set(firstCharacter, merged);
+		return merged;
+	}
+
+	/**
+	 * The static candidates whose lowercased label starts with `start`, in
+	 * result order: the first character's bucket (see
+	 * {@link rankedStaticBucket}) narrowed once and kept, so a prefix of two
+	 * characters or more tests only these labels. Narrowing keeps the bucket's
+	 * order. Empty when no candidate starts with it.
+	 *
+	 * @param start - The first two characters of the prefix, lowercased.
+	 */
+	private rankedStaticPair(start: string): readonly IndexedCompletionCandidate[] {
+		// Read first, so a rebuilt index has cleared the narrowed lists too.
+		this.getStaticCompletionIndex();
+		const narrowed = this.rankedStaticPairs.get(start);
+		if (narrowed !== undefined) return narrowed;
+		const pair = this.rankedStaticBucket(start[0]).filter((candidate) => candidate.lowerLabel.startsWith(start));
+		this.rankedStaticPairs.set(start, pair);
+		return pair;
 	}
 
 	// ── Reference-aware editing ─────────────────────────────────────────────
@@ -840,5 +882,8 @@ export class LanguageService {
 		this.cache.clear();
 		this.staticCompletionCandidates = null;
 		this.staticCompletionIndex = null;
+		this.ownUnitLabels = new Set<string>();
+		this.rankedStaticBuckets = new Map<string, readonly IndexedCompletionCandidate[]>();
+		this.rankedStaticPairs = new Map<string, readonly IndexedCompletionCandidate[]>();
 	}
 }
