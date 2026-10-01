@@ -67,6 +67,8 @@ export const CoreErrorCodes = {
   FUNCTION_BODY_MUST_BE_SYNCHRONOUS: "FUNCTION_BODY_MUST_BE_SYNCHRONOUS",
   /** A function definition whose body reads other lines (`f(x) = x + prev`, `x + line 1`, a total above, a tag or a table column). Refused when it is defined, since a body runs wherever it is called, with no document lines to read; the value is passed in as an argument instead. */
   FUNCTION_BODY_READS_LINES: "FUNCTION_BODY_READS_LINES",
+  /** A held expression that reads other lines (`map(x + prev, 1:3)`, `sum(x + line 1, 1:3)`, `plot x + prev from 0 to 1`, `der(x^2 + prev, x)`). Refused when the line is read, since the expression is worked out away from the line, with no lines to read; the message says to name the line's value first (`p = prev`) and use the name. */
+  HELD_EXPRESSION_READS_LINES: "HELD_EXPRESSION_READS_LINES",
   /** One line defining more functions than a compiled program can index. A safety limit, of the same kind as `TOO_MANY_NUMERIC_CONSTANTS`. */
   TOO_MANY_FUNCTION_DEFINITIONS: "TOO_MANY_FUNCTION_DEFINITIONS",
   /** One line with more `map` or `reduce` bodies than a compiled program can index. A safety limit, of the same kind as `TOO_MANY_FUNCTION_DEFINITIONS`. */
@@ -498,6 +500,12 @@ export const CoreErrorCodes = {
   DESCENDING_RANGE: "DESCENDING_RANGE",
   /** A number in a call written like a grouped range bound whose group is not three digits (`sum(1,0000:1)`, `sum(1,00:1)`): refused by the lexer, since it is neither one bound nor plainly two arguments. The message says a space after the comma gives two. */
   RANGE_BOUND_GROUP_MALFORMED: "RANGE_BOUND_GROUP_MALFORMED",
+  /** A whole-number colon pair no clock reads, written as the first of several arguments to `sum`, `total`, `prod`, `map` or `reduce` (`sum(100:200, 50)`): a range is read only as the last argument. Refused by the normaliser; the message says where the range goes. */
+  RANGE_BEFORE_ANOTHER_ARGUMENT: "RANGE_BEFORE_ANOTHER_ARGUMENT",
+  /** A list rounded (`to 2 dp`, `to 3 sf`, `round`, `ceil`, `floor`) that holds a cell with no number to round: a true or false, or a formula with an unknown. */
+  LIST_ROUNDING_NON_NUMERIC: "LIST_ROUNDING_NON_NUMERIC",
+  /** A list of several numbers written as one: in scientific notation, as a fraction or a percentage, or in hex, binary or octal (`[1234, 5678] as sci`). Each value is converted on its own. */
+  LIST_CONVERSION_UNSUPPORTED: "LIST_CONVERSION_UNSUPPORTED",
   /** A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. */
   COLLECTION_TOO_LARGE: "COLLECTION_TOO_LARGE",
   /** A list cell that is not a number or a quantity: a list inside a list, text, a date. */

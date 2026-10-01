@@ -169,6 +169,30 @@ describe("ans and prev inside a stored equation across entry points", () => {
   });
 });
 
+describe("a line read inside a held expression across entry points", () => {
+  // A map, sum, plot or algebra verb works its expression out away from the
+  // line, so a line read inside one is refused for that, the same in every
+  // path, and naming the value first is the way to write it
+  // (FoundBug_heldExpressionReadsLines).
+  const refusal = "map's expression reads other lines of the document, and it is worked out away from the line, where there are no lines to read: give the line's value a name first, as in p = prev, and use p in the expression";
+  const doc = ["5", "map(x + prev, 1:3)", "p = 5", "map(x + p, 1:3)"];
+
+  test("both document passes refuse it by name and answer the named form, and agree", () => {
+    expect(batch(doc)).toEqual(["5", `ERROR: ${refusal}`, "5", "[6, 7, 8]"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an edit that names the value answers it, and a fresh batch pass agrees", () => {
+    const { shown, edited } = editThenEvaluate(["5", "map(x + prev, 1:3)"], [[2, "map(x + 5, 1:3)"]]);
+    expect(shown).toEqual(["5", "[6, 7, 8]"]);
+    expect(batch(edited)).toEqual(shown);
+  });
+
+  test("the single-line path refuses it in the same words, as it refuses any line it cannot read", () => {
+    expect(single("map(x + prev, 1:3)")).toEqual({ threw: true, type: null, message: refusal });
+  });
+});
+
 describe("category tags across entry points", () => {
   const totalDoc = ["40 #grocery", "20 #grocery", "total of #grocery"];
 

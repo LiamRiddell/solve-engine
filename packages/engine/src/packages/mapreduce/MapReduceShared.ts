@@ -6,6 +6,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { builtinNameToIndex } from "@solve-js/packages/function/parselets/FunctionCallParselet";
 import type { Token } from "@solve-js/lexer/Token";
 import { textOf } from "@solve-js/engine/ColonLabel";
+import { heldExpressionReadsLines } from "@solve-js/parser/HeldExpression";
 
 /**
  * A resolved `map`/`reduce` transform, the first argument to either call.
@@ -38,7 +39,7 @@ export type TransformSpec =
  * rare thing to want (why not just use the array directly?), and not
  * something any spec example shows.
  */
-export function parseTransform(parser: Parser, builder: BytecodeBuilder): TransformSpec {
+export function parseTransform(parser: Parser, builder: BytecodeBuilder, verb: "map" | "reduce"): TransformSpec {
   const next = parser.peek();
   const afterNext = parser.peekAt(1);
   if (next && (next.type === "IDENT" || next.type === "UNIT" || next.type === "FUNC") && afterNext?.type === "COMMA") {
@@ -60,6 +61,9 @@ export function parseTransform(parser: Parser, builder: BytecodeBuilder): Transf
   parser.parseExpression(BindingPower.Lowest, transformBuilder);
   parser.setBuilder(builder);
   const program = transformBuilder.build();
+  // A line read (`prev`, `line 1`) is refused for what it is; see heldExpressionReadsLines.
+  const readsLines = heldExpressionReadsLines(program, transformBuilder, verb);
+  if (readsLines !== null) throw readsLines;
   if (program.hasAsync) {
     throw ErrorFactory.parsing(
       "MAP_REDUCE_TRANSFORM_MUST_BE_SYNCHRONOUS",

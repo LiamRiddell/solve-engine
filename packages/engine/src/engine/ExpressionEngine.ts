@@ -134,7 +134,8 @@ import type { ObservedCall } from "@solve-js/vm/VM";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { trailingTokenWording } from "@solve-js/parser/ParseMessages";
 import { wordLabelEnd } from "@solve-js/engine/WordLabel";
-import { colonLabelFault, openBracketsAt, ternaryAtQuestion } from "@solve-js/engine/ColonLabel";
+import { colonLabelFault, labelledRetryError, openBracketsAt, ternaryAtQuestion } from "@solve-js/engine/ColonLabel";
+import { opensWithCall } from "@solve-js/engine/EquationShape";
 import { MultiWordNameTable, multiWordDefinitionRule, multiWordNameRule, multiWordNameRefusal } from "@solve-js/packages/variables/MultiWordNames";
 import { isTopLevel, namesSomething, severalUnknownsRefusal, typedText, undefinedFactorMessage } from "@solve-js/engine/SeveralUnknowns";
 import { documentErrors, errorOnLine, inlineExpressionOffset, lineFailureOf, recordLineFailure } from "@solve-js/engine/LineDiagnostics";
@@ -4716,6 +4717,10 @@ export class ExpressionEngine {
             // bracket is never one: `Total: total(1000:1002)` keeps its range,
             // and the label is the colon after `Total`. See openBracketsAt.
             const openBrackets = allowLabelFallback ? openBracketsAt(tokens) : [];
+            // The error the expression after the rightmost label raised when
+            // it was retried; see labelledRetryError for when it is the one
+            // reported.
+            let labelledError: EngineError | undefined;
             for (let i = allowLabelFallback ? tokens.length - 1 : 0; i >= 1; i--) {
                 if (tokens[i].type !== "COLON") continue;
                 if (i + 1 >= tokens.length) continue;
@@ -4795,9 +4800,11 @@ export class ExpressionEngine {
                     this.parseExpression(builder, tokens.slice(i + 1), hasParens, false);
                     this.parsedLabelEnd = i + 1;
                     return;
-                } catch {
-                    // This colon's fragment didn't parse cleanly either
-                    // try the next one to the left before giving up.
+                } catch (retryError) {
+                    // This colon's fragment didn't parse cleanly either; try
+                    // the next one to the left before giving up, keeping the
+                    // first (rightmost) fragment's own error.
+                    labelledError ??= normalizeUnknownError(retryError);
                 }
             }
 
@@ -4828,6 +4835,13 @@ export class ExpressionEngine {
                     throw ErrorFactory.parsing(choice.code, choice.message, { tokenType: leftover.type, tokenValue: leftover.value });
                 }
             }
+
+            // A line that stopped at a label's colon is `<label>: <expression>`,
+            // and the expression's own error says what is wrong with it:
+            // `Total: average(10:12)` is refused for its clock time, not for
+            // the colon after `Total`.
+            const labelled = labelledRetryError(leftover, afterLeftover, labelledError);
+            if (labelled !== undefined) throw labelled;
 
             // The message quotes what the reader typed. A fused token's value is
             // the engine's own reading of it: a clock time's is its minutes
@@ -5370,7 +5384,7 @@ export class ExpressionEngine {
      * @returns A confirmation value when stored, or `null` to decline.
      */
     private tryStoreScalarEquation(normalizedTokens: Token[], eqIdx: number, lineNumber: number, effects: EffectMode = "apply"): Value | null {
-        if (normalizedTokens[1]?.type === 'LPAREN') return null;
+        if (opensWithCall(normalizedTokens)) return null;
         if (eqIdx === 0 || eqIdx === normalizedTokens.length - 1) return null;
 
         const lhsTokens = normalizedTokens.slice(0, eqIdx);
@@ -8093,6 +8107,12 @@ export class ExpressionEngine {
 		// definition was recognised before this was reached.
 		const eq = tokens.findIndex((t) => t.type === 'EQUALS');
 		if (eq <= 0 || eq === last) return false;
+		// A line opening with a call, `f(x) = x + prev`, is no equation to
+		// store: compiling hands it to the parser alone (tryStoreScalarEquation
+		// declines it), where a definition is read, and the parse above has
+		// already failed. A definition the parser refused (a body that reads
+		// lines or reaches live data) is no code, as compiling it says.
+		if (opensWithCall(tokens)) return false;
 		// A would-be name holding a word the engine reads is refused as it
 		// compiles (#743), so it is not code here either.
 		if (multiWordNameRefusal(tokens, eq) !== null) return false;
@@ -8101,7 +8121,7 @@ export class ExpressionEngine {
 		// Nor is an equation with several unknowns, refused the same way: the
 		// shape trySymbolicGrammar() hands to tryStoreScalarEquation(), with
 		// other than one unknown.
-		const equationShaped = this.parseFactorChain(lhs) === null && tokens[1]?.type !== 'LPAREN' && !lhs.some((t) => t.type === 'COLON');
+		const equationShaped = this.parseFactorChain(lhs) === null && !lhs.some((t) => t.type === 'COLON');
 		return !(equationShaped && this.equationUnknowns(lhs, rhs).length !== 1 && this.severalUnknowns(tokens, eq, lhs, rhs) !== null);
 	}
 

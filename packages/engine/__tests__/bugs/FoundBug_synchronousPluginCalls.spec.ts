@@ -173,7 +173,10 @@ describe("the lines that exposed it", () => {
 		for (const line of ["f(x) = x + prev", "f(x) = x + line 1"]) {
 			expect(outcome(line)).toMatch(/^FUNCTION_BODY_READS_LINES: /);
 		}
-		expect(outcome("map(x + prev, 1:3)")).toBe("MAP_REDUCE_TRANSFORM_MUST_BE_SYNCHRONOUS: map/reduce transform expressions must be synchronous (no weather/stocks/currency calls).");
+		// So has a held expression that reads them (FoundBug_heldExpressionReadsLines.spec.ts),
+		// and live data in one keeps the synchronous refusal.
+		expect(outcome("map(x + prev, 1:3)")).toMatch(/^HELD_EXPRESSION_READS_LINES: /);
+		expect(outcome("map(x + weather in London, 1:3)")).toBe("MAP_REDUCE_TRANSFORM_MUST_BE_SYNCHRONOUS: map/reduce transform expressions must be synchronous (no weather/stocks/currency calls).");
 	});
 
 	test("through the three entry points", () => {
