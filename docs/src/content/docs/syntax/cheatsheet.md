@@ -272,7 +272,7 @@ rather than an error, and `=>` at the end of a line asks for the simplified
 expression.
 
 ```solve
-1+2+b+3+b => // 2b+6
+1+2+x+3+x => // 2x+6
 ```
 
 ## Statistics

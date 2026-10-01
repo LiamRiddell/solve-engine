@@ -8,6 +8,8 @@
  * pattern for the same kind of display-only conversion.
  */
 
+import { numberText } from "@solve-js/utilities/Number";
+
 /**
  * Convert a total frame count (at a given fps) into `HH:MM:SS:FF` display
  * notation.
@@ -66,7 +68,7 @@ export function framesToTimecodeString(totalFrames: number, fps: number): string
 export function timecodeText(totalFrames: number, fps: number): string {
   const rate = `${String(fps)} fps`;
   const whole = Number.isInteger(totalFrames) && Math.abs(totalFrames) <= Number.MAX_SAFE_INTEGER;
-  if (!whole) return `${String(totalFrames)} frames at ${rate}`;
+  if (!whole) return `${numberText(totalFrames)} frames at ${rate}`;
   // Negative zero is zero frames: `-0` has no minus sign to show.
   if (totalFrames < 0) return `-${framesToTimecodeString(-totalFrames, fps)} at ${rate}`;
   return `${framesToTimecodeString(totalFrames, fps)} at ${rate}`;

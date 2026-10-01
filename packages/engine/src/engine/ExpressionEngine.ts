@@ -1017,6 +1017,8 @@ export class ExpressionEngine {
         for (const variable of this.equationOwners.scalar.keys()) this.vm.deleteScalarEquation(variable);
         this.equationOwners.matrix.clear();
         this.equationOwners.scalar.clear();
+        this.equationLines.matrix.clear();
+        this.equationLines.scalar.clear();
     }
 
     /**
@@ -2218,6 +2220,16 @@ export class ExpressionEngine {
         matrix: new Map<string, number>(),
         scalar: new Map<string, number>(),
     };
+    /**
+     * The 1-based line number each equation was stored on, by kind and unknown,
+     * or -1 outside a document. Read by {@link equationLine} where there is no
+     * document model to ask for the owner line's current position (a batch
+     * pass, which has no edits to move it).
+     */
+    private readonly equationLines = {
+        matrix: new Map<string, number>(),
+        scalar: new Map<string, number>(),
+    };
     /** TanStack Query client, injected into resolvers for cache reads/writes. */
     readonly queryClient: QueryClient;
     // Bytecode cache, avoids re-parsing identical expressions.
@@ -3163,6 +3175,7 @@ export class ExpressionEngine {
             for (const [variable, owner] of matrix) {
                 if (owner !== lineId) continue;
                 matrix.delete(variable);
+                this.equationLines.matrix.delete(variable);
                 this.vm.deleteEquation(variable);
             }
         }
@@ -3170,6 +3183,7 @@ export class ExpressionEngine {
             for (const [variable, owner] of scalar) {
                 if (owner !== lineId) continue;
                 scalar.delete(variable);
+                this.equationLines.scalar.delete(variable);
                 this.vm.deleteScalarEquation(variable);
             }
         }
@@ -3184,6 +3198,67 @@ export class ExpressionEngine {
      */
     private noteEquationOwner(kind: "matrix" | "scalar", variable: string, lineNumber: number): void {
         this.equationOwners[kind].set(variable, this.documentModel?.getLineAt(lineNumber)?.lineId ?? -1);
+        this.equationLines[kind].set(variable, lineNumber);
+    }
+
+    /**
+     * The line a stored equation's sides are read from when it is solved: the
+     * line that stored it, wherever that line is now.
+     *
+     * The sides are programs run at solve time, and a reference relative to a
+     * line (`ans`, `prev`, `total above`) reads from the line it is run as. Run
+     * as the line asking (`x =>`), `5`, `x + ans = 7`, `x =>` read `ans` as the
+     * equation line's own confirmation, which has no value, and was refused;
+     * the reader meant the 5 above the equation, where they wrote `ans`. On the
+     * incremental path the owner line's current position is asked of the
+     * document model, so a line inserted above the equation moves it with
+     * the equation; on a batch pass, or when the owner is not in the
+     * document, it is the line number it was stored on.
+     *
+     * @param kind - Which of the VM's two equation stores it is in.
+     * @param variable - The equation's unknown.
+     * @param askingLine - The line asking, used when the equation has no
+     * recorded line (one a host registered on the VM directly).
+     * @returns The 1-based line to run the sides as, or -1 outside a document.
+     */
+    private equationLine(kind: "matrix" | "scalar", variable: string, askingLine: number): number {
+        const owner = this.equationOwners[kind].get(variable);
+        if (owner !== undefined && owner >= 0 && this.documentModel !== null) {
+            const position = this.documentModel.getLinePosition(owner);
+            if (position > 0) return position;
+        }
+        return this.equationLines[kind].get(variable) ?? askingLine;
+    }
+
+    /**
+     * The refusal for an equation that reads another line (`x + ans = 7`) typed
+     * where there is no document to read, or `null`.
+     *
+     * Outside a document such an equation could be stored, but never solved:
+     * `ans` has no line above to read, so `x =>` could only refuse. The line is
+     * refused where it is typed instead, with the same structured error `ans`
+     * gives on its own, rather than confirming an equation no later line can
+     * answer. Inside a document this costs nothing: the sides are only run when
+     * the line has no document to read, and then once each.
+     *
+     * @param sides - The equation's compiled sides.
+     * @param lineNumber - The line storing it.
+     * @returns The `LINE_REF_NO_DOCUMENT` error a side gave, or `null`.
+     */
+    private equationNeedsDocument(sides: readonly BytecodeProgram[], lineNumber: number): Value | null {
+        if (this.makeLineContext(lineNumber).getLineResult !== undefined) return null;
+        for (const side of sides) {
+            let value: Value;
+            try {
+                value = this.executeSymbolicTolerant(side, lineNumber);
+            } catch {
+                // A side that cannot run here (a live value, say) is refused, if
+                // at all, when it is solved, as it always was.
+                continue;
+            }
+            if (value.type === ValueType.Error && value.value === "LINE_REF_NO_DOCUMENT") return value;
+        }
+        return null;
     }
 
     /**
@@ -5216,7 +5291,7 @@ export class ExpressionEngine {
                 // was stored, so a check has nothing left to compile.
                 if (effects === "check" && (equation || scalar)) return { value: CHECKED_NOT_RUN, assigned: null };
                 if (equation) {
-                    const solved = this.solveEquation(equation, lineNumber);
+                    const solved = this.solveEquation(equation, this.equationLine("matrix", name, lineNumber));
                     // A product chain of names is stored as a matrix equation
                     // on sight, since whether the factors are matrices is only
                     // knowable at solve time. When they turn out not to be,
@@ -5229,7 +5304,7 @@ export class ExpressionEngine {
                     if (!isNotMatrix || !scalar) return { value: solved, assigned: null };
                 }
                 if (scalar) {
-                    return { value: this.solveScalarEquation(scalar, lineNumber), assigned: null };
+                    return { value: this.solveScalarEquation(scalar, this.equationLine("scalar", name, lineNumber)), assigned: null };
                 }
             }
             return { value: this.simplifySymbolically(beforeTokens, lineNumber, effects), assigned: null };
@@ -5321,7 +5396,11 @@ export class ExpressionEngine {
             this.compileAdHoc(normalizedTokens.slice(0, eqIdx));
             return { value: CHECKED_NOT_RUN, assigned: null };
         }
-        this.vm.defineEquation(freeVar, factorNames, this.compileAdHoc(rhsTokens), typedText(normalizedTokens));
+        const productRhs = this.compileAdHoc(rhsTokens);
+        const productLhs = this.compileAdHoc(normalizedTokens.slice(0, eqIdx));
+        const productNoDocument = this.equationNeedsDocument([productLhs, productRhs], lineNumber);
+        if (productNoDocument !== null) return { value: productNoDocument, assigned: null };
+        this.vm.defineEquation(freeVar, factorNames, productRhs, typedText(normalizedTokens));
         this.noteEquationOwner("matrix", freeVar, lineNumber);
         // Also stored as a scalar equation, so that `a*n = 10` with a numeric
         // `a` still has an answer. Which of the two kinds applies depends on
@@ -5329,7 +5408,7 @@ export class ExpressionEngine {
         // time; storing both costs one extra compile of a line the user is
         // about to ask about anyway. The matrix kind is always tried first, so
         // this cannot change what an existing document does.
-        this.vm.defineScalarEquation(freeVar, this.compileAdHoc(normalizedTokens.slice(0, eqIdx)), this.compileAdHoc(rhsTokens));
+        this.vm.defineScalarEquation(freeVar, productLhs, productRhs);
         this.noteEquationOwner("scalar", freeVar, lineNumber);
         return { value: lineMessage(`${freeVar} stored as an equation: solve with "${freeVar} =>"`), assigned: null };
     }
@@ -5392,6 +5471,8 @@ export class ExpressionEngine {
         const lhsProgram = this.compileAdHoc(lhsTokens);
         const rhsProgram = this.compileAdHoc(rhsTokens);
         if (effects === "check") return CHECKED_NOT_RUN;
+        const noDocument = this.equationNeedsDocument([lhsProgram, rhsProgram], lineNumber);
+        if (noDocument !== null) return noDocument;
         this.vm.defineScalarEquation(variable, lhsProgram, rhsProgram);
         this.noteEquationOwner("scalar", variable, lineNumber);
         return lineMessage(`${variable} stored as an equation: solve with "${variable} =>"`);
@@ -8263,6 +8344,8 @@ export class ExpressionEngine {
          // The reset above emptied both equation stores; their owners go too.
          this.equationOwners.matrix.clear();
          this.equationOwners.scalar.clear();
+         this.equationLines.matrix.clear();
+         this.equationLines.scalar.clear();
          this.accumulatorNames.clear();
          this.lastTelemetry = null;
          this.lineContext = null;

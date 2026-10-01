@@ -1,6 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, dateOutOfRange, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData, type DisplayBase } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
+import { nonFiniteText, numberText } from "@solve-js/utilities/Number";
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, unknownNameIn, symbolicPercentChange, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
@@ -2068,8 +2069,8 @@ function remainder(l: Value, r: Value): Value {
     return errorValue(
         "REMAINDER_UNDEFINED",
         b === 0
-            ? `${a} mod 0 has no value: nothing is left over from a division by zero, because it never ends.`
-            : `${a} mod ${b} has no value: an infinite number has no remainder.`,
+            ? `${numberText(a)} mod 0 has no value: nothing is left over from a division by zero, because it never ends.`
+            : `${numberText(a)} mod ${numberText(b)} has no value: an infinite number has no remainder.`,
     );
 }
 
@@ -2439,8 +2440,8 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
  * an unreadably large denominator.
  */
 function toFractionString(n: number): string {
-    if (Number.isNaN(n)) return "NaN";
-    if (!isFinite(n)) return n > 0 ? "Infinity" : "-Infinity";
+    const nonFinite = nonFiniteText(n);
+    if (nonFinite !== undefined) return nonFinite;
     const negative = n < 0;
     const abs = Math.abs(n);
     const whole = Math.floor(abs);
@@ -2513,15 +2514,20 @@ function fractionString(v: Value): string {
 function toMultiplierString(value: Value): string {
     const n = value.toNumber();
     const multiple = value.type === ValueType.Percentage ? 1 + n : n;
-    return `${Math.round(multiple * 1e6) / 1e6}x`;
+    // Rounding to six places multiplies by a million first, which overflows
+    // past about 1.8e302; such a multiple has no places to round anyway.
+    const rounded = Math.round(multiple * 1e6) / 1e6;
+    return `${numberText(Number.isFinite(rounded) ? rounded : multiple)}x`;
 }
 
 /** Scientific notation with trailing mantissa zeros trimmed ("1.50e+6" -> "1.5e+6"). */
 function toScientificString(n: number): string {
     // An infinity or a NaN has no mantissa and no exponent, so splitting on
     // "e" gave back one piece and the second was undefined: "0/0 as sci"
-    // rendered the string "NaNeundefined".
-    if (!Number.isFinite(n)) return String(n);
+    // rendered the string "NaNeundefined". It is written as the engine
+    // writes it, `∞` rather than JavaScript's `Infinity`.
+    const nonFinite = nonFiniteText(n);
+    if (nonFinite !== undefined) return nonFinite;
     if (n === 0) return "0e+0";
     const [mantissa, exponent] = n.toExponential().split("e");
     const trimmed = mantissa.includes(".") ? mantissa.replace(/0+$/, "").replace(/\.$/, "") : mantissa;
@@ -2846,7 +2852,7 @@ function rangeLiteral(stack: Value[]): void {
     const min = minVal.value as number;
     const max = maxVal.value as number;
     if (!Number.isInteger(min) || !Number.isInteger(max)) {
-      stack.push(errorValue("NON_INTEGER_RANGE_BOUND", `A range's bounds must be whole numbers, got "${min}:${max}".`));
+      stack.push(errorValue("NON_INTEGER_RANGE_BOUND", `A range's bounds must be whole numbers, got "${numberText(min)}:${numberText(max)}".`));
       return;
     }
     if (min > max) {

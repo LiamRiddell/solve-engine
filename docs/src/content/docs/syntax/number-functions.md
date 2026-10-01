@@ -293,5 +293,5 @@ missing one; `0/0`, which has no single answer, is refused (see
 [operators](/syntax/operators/)).
 
 ```solve-doc
-sin(1/0) // ERROR: sin(Infinity) has no real value: sin is only defined for finite angles.
+sin(1/0) // ERROR: sin(∞) has no real value: sin is only defined for finite angles.
 ```

@@ -5,7 +5,7 @@ import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { formatIpv6 } from "@solve-js/packages/ip/Ipv6Math";
 import { decimalCompare, decimalDivide, decimalFromInteger, decimalRound, decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
-import { autoFormatIntegerOrFloat, compactParts, fixedDecimalText, shortestText, tooSmallToPrintText } from "@solve-js/utilities/Number";
+import { autoFormatIntegerOrFloat, compactParts, fixedDecimalText, nonFiniteText, shortestText, tooSmallToPrintText } from "@solve-js/utilities/Number";
 import { localCalendarName, localClockTime, localCurrencyPlacement, localDayShift, localZoneDifference, localisesWords, withLocalUnitName } from "./LocaleWords";
 import { clockInZone, dayShiftWords, zoneDifferenceMinutes, zoneDifferenceText } from "@solve-js/vm/ZoneAnswers";
 import { getMeasure } from "@solve-js/uom/UomConverter";
@@ -208,7 +208,7 @@ function formatHex(value: number | bigint, settings: FormattingSettings, base?: 
   // An infinity or a NaN has no digits in any base, and asking for them
   // produced `0xINFINITY`, a literal that reads back as nothing at all. Render
   // the value itself, which is what every other non-finite result shows.
-  if (typeof value === "number" && !Number.isFinite(value)) return `= ${value}`;
+  if (typeof value === "number" && !Number.isFinite(value)) return `= ${nonFiniteText(value)}`;
 
   // Truncate and take the sign off before converting. `Number.toString(radix)`
   // does neither: it renders -255 as "-ff", which lands the minus inside the
@@ -521,6 +521,10 @@ function formatZoneDifference(value: Value, settings: FormattingSettings): strin
  * to no whole second is written without a sign, whichever side of zero it fell.
  */
 export function formatMsDuration(ms: number): string {
+  // An infinite span has no hours and minutes; the clock below would read
+  // `Infinity:NaN:NaN`.
+  const infinite = nonFiniteText(ms);
+  if (infinite !== undefined) return infinite;
   const totalSeconds = Math.round(Math.abs(ms) / 1000);
   // The sign is the rounded span's: `now - now` reads the clock twice and can
   // land a millisecond below zero, which rounds to no time at all, not `-0:00`.

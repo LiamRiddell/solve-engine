@@ -67,6 +67,27 @@ x => // 1.5707963268
 solve(x + 10% = 220, x) // 200
 ```
 
+`ans` and `prev` in an equation are the answer on the line above the
+equation, where they were written, not the line above the arrow that later
+asks for the unknown. The equation is solved with that value however many
+lines come between, and changing the line above the equation changes the
+answer.
+
+```solve-doc
+5 // 5
+x + ans = 7 // x stored as an equation: solve with "x =>"
+100 // 100
+x => // 2
+```
+
+An equation that reads the line above has nothing to read when it is
+evaluated on its own, outside a note, so there it is refused where it is
+written rather than stored to fail later:
+
+```solve
+x + ans = 7 // A line reference needs a document to read, and an expression evaluated on its own has none
+```
+
 A product of names (`a*x = b`) is stored on sight, because whether its factors
 are matrices is only known when it is solved (see
 [solving a linear system](/syntax/symbolic/#solving-a-linear-system)). If a
@@ -114,10 +135,12 @@ do not each read as an expression keeps the error it had.
 ## Exact answers, including irrational ones
 
 An irrational root is given as a square root rather than a decimal, in lowest
-form.
+form. A decimal you type is exact as written, so its root is a square root too.
 
 ```solve
 solve(x^2-2=0, x) // [-sqrt(2), sqrt(2)]
+solve(3x^2 = 1, x) // [-sqrt(3)/3, sqrt(3)/3]
+solve(x^2 = 3.14159, x) // [-0.001*sqrt(3141590), 0.001*sqrt(3141590)]
 ```
 
 Roots that are not rational and not expressible this way are approximated, and
@@ -174,6 +197,27 @@ irreducibilis*, and its roots are reported as decimals.
 ```solve
 solve(x^3-3x+1=0, x) // [-1.88, 0.35, 1.53]
 ```
+
+An equation over an irrational constant is solved the same way. Pi and e are
+irrational: no fraction equals either, so the engine holds each as the
+sixteen-digit decimal nearest to it. The exact form of a root of `x^2 = pi`
+would be the square root of that sixteen-digit fraction, exact only for the
+rounded constant and unreadable, so the roots are found numerically and shown
+as decimals, as the cubic above is. They are the same roots `sqrt(pi)` gives,
+1.7724538509 to ten places.
+
+```solve
+solve(x^2 = pi, x) // [-1.77, 1.77]
+solve(2x^2 = e, x) // [-1.17, 1.17]
+solve(x^3 = pi, x) // [-0.7322959438-1.2683737808i, -0.7322959438+1.2683737808i, 1.46]
+sqrt(pi) to 10 dp // 1.7724538509
+```
+
+The boundary is the size of the fraction, not where the number came from. A
+coefficient whose fraction has more than about ten digits above or below the
+line, which is what pi, e, a long typed decimal or the result of `0.1 + 0.2`
+in floating point become, is solved numerically; a shorter one, such as
+`3.14159`, keeps its exact square root.
 
 That is not a gap in effort. It is a theorem that those three roots cannot be
 written with real radicals at all: Cardano's formula reaches them only by taking

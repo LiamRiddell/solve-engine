@@ -44,6 +44,7 @@
  */
 
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, uomValueExact, errorValue } from "@solve-js/vm/Value";
+import { nonFiniteText } from "@solve-js/utilities/Number";
 import { DECIMAL_DIGIT_CEILING, decimalCompare, decimalToString, type DecimalData } from "@solve-js/decimal";
 import { rational, rationalToNumber, type Rational } from "@solve-js/symbolic";
 import { bigIntPow, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemainder, wholeNumberUnchanged } from "@solve-js/vm/ExactIntegers";
@@ -293,7 +294,7 @@ export function roundHalfAwayFromZero(x: number): number {
 
 /** A number as a message writes it: at most twelve significant figures. */
 function shownNumber(x: number): string {
-	return String(Number(x.toPrecision(12)));
+	return nonFiniteText(x) ?? String(Number(x.toPrecision(12)));
 }
 
 /**
