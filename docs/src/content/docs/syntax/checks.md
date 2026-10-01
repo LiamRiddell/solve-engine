@@ -231,6 +231,16 @@ check "a" > "b" // check: text can only be compared with == or !=, not >
 check "a " == "a" // check failed: "a " is not equal to "a"
 ```
 
+A list compared with a value answers once for each of its elements (see
+[comparing a list](/syntax/vectors-and-matrices/#comparing-a-list)), and a
+check gives one verdict, so a list in a check is refused, naming the list. A
+check of one element works:
+
+```solve
+check [1, 2] > 0 // check: [1, 2] is a list, and a check gives one verdict, so it compares one value at a time: check one cell, as in check v[0] > 5
+check [1, 2][1] > 0 // ✓
+```
+
 A piece of text is quoted in a check's message, so two texts that differ only
 by a space can be told apart. Text and a number are two kinds of thing, even
 when they read the same, so a check between them is refused and the message

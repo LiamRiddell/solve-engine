@@ -347,19 +347,17 @@ describe("adversarial: edge cases", () => {
 	});
 });
 
-describe("found bugs pinned by this sweep", () => {
-	// Open, found by this sweep and not this change's: a list compared with
-	// one number answers one true or false, so [100, 200] < 5 is true and
-	// [100, 200] > 5 is false. Reported with this batch; the fix turns this red.
-	test.failing("found bug: [100, 200] < 5 answers true", () => {
-		expect(outcome("[100, 200] < 5")).not.toBe("true");
+describe("found bugs this sweep pinned, now fixed", () => {
+	// Fixed: a list compared with one number is compared cell by cell
+	// (vm/ListComparison.ts; FoundBug_listComparison.spec.ts).
+	test("a list compared with one number answers for each cell: [100, 200] < 5 is [false, false]", () => {
+		expect(outcome("[100, 200] < 5")).toBe("[false, false]");
 	});
 
-	// Open, found by this sweep and not this change's: a percentage written
-	// inside a list is stored as its fraction, so a list of percentages added
-	// to a list adds the fractions. Reported with this batch; the fix turns
-	// this red.
-	test.failing("found bug: [100, 200] + [10%, 20%] adds the fractions", () => {
-		expect(outcome("[100, 200] + [10%, 20%]")).not.toBe("[100.10, 200.20]");
+	// Fixed: a percentage as a cell of a list is refused by name, never kept
+	// as its fraction (percentageCellRefused in vm/MatrixUnits.ts;
+	// FoundBug_listOfPercentages.spec.ts).
+	test("a list of percentages is refused by name: [100, 200] + [10%, 20%] is not [100.10, 200.20]", () => {
+		expect(outcome("[100, 200] + [10%, 20%]")).toMatch(/^LIST_PERCENTAGE_UNSUPPORTED: A list holds plain numbers/);
 	});
 });

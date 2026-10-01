@@ -325,6 +325,27 @@ answered `[100.10, 200.10]`, and a list with a unit refused a percentage.
 10% + [$100, $200] // [$110.00, $220.00]
 ```
 
+A percentage cannot be a value inside a list either. A list holds plain
+numbers, so `[10%, 20%]` would keep each percentage as its fraction, 0.1 and
+0.2, and adding that list to prices would add 0.1 and 0.2 rather than a tenth
+and a fifth. A list with a percentage in it is refused by name, with the two
+forms that say what was meant: one percentage outside the list, applied to
+every value, or the fractions written as numbers. To raise each price by its
+own share, work the amounts out and add them as a list.
+
+```solve
+[10%, 20%] // A list holds plain numbers, so it cannot hold 10% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.1 for 10%).
+[100, 200] + [10%, 20%] // A list holds plain numbers, so it cannot hold 10% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.1 for 10%).
+[100, 200] + [10, 40] // [110, 240]
+[0.1, 0.2] // [0.10, 0.20]
+```
+
+The boundary: the refusal covers every way a list is made, so `map(x%, [10,
+20])` is refused as the literal is, and a sum, an average or a product of such a
+list never runs. These used to answer with the fractions: `[10%, 20%]` was
+`[0.10, 0.20]`, `sum([10%, 20%])` was 0.30 rather than 30%, and `[100, 200] +
+[10%, 20%]` was `[100.10, 200.20]`.
+
 ## A percentage as a multiplier
 
 A multiplier is the number a value is multiplied by to apply a change: a 20%

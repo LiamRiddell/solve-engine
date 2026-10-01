@@ -2,6 +2,9 @@ import { type MatrixData, type MatrixEntry, Value, ValueType, matrixValue, numbe
 import type { SymbolicNode } from "@solve-js/symbolic";
 import { matrixEntryToValue, matrixCompare, sameShape, unitListAlgebraRefused } from "@solve-js/vm/MatrixOps";
 import { unifyUom, describeMeasure, nonNumericKind, binaryOp, sameUnit } from "@solve-js/vm/VMConversion";
+import { numberText } from "@solve-js/utilities/Number";
+import { cellDecimal } from "@solve-js/vm/ListRounding";
+import { decimalFromLiteral, decimalMultiply, decimalToString } from "@solve-js/decimal";
 
 /**
  * Lists that carry a unit (issue #745).
@@ -49,6 +52,50 @@ export function cellMeasuresDiffer(earlier: string, later: string): Value {
 	return errorValue("MATRIX_CELL_UNITS_DIFFER", `${opening}, since there is no conversion between them.`);
 }
 
+/** One hundred, as an exact decimal, to move a fraction's point two places. */
+const HUNDRED = decimalFromLiteral("100");
+
+/**
+ * A fraction as the percentage a reader wrote, with no rounding noise: 0.07 is
+ * `7`, where the double `0.07 * 100` is 7.000000000000001. The fraction's
+ * shortest decimal is moved two places exactly. A fraction too large or too
+ * small to write out in full is given in exponent form.
+ *
+ * @param fraction - A finite fraction (0.1 for 10%).
+ * @returns The percentage's number, with its sign.
+ */
+export function percentText(fraction: number): string {
+	const magnitude = Math.abs(fraction);
+	const exact = magnitude === 0 || (magnitude >= 1e-6 && magnitude < 1e15) ? cellDecimal(fraction) : undefined;
+	if (exact === undefined) return numberText(fraction * 100);
+	const text = decimalToString(decimalMultiply(exact, HUNDRED));
+	return text.includes(".") ? text.replace(/\.?0+$/, "") : text;
+}
+
+/**
+ * The refusal for a percentage as a cell of a plain list (`[10%, 20%]`).
+ *
+ * A list cell holds a plain number, so the percentage was kept as its
+ * fraction: `[10%, 20%]` showed as `[0.10, 0.20]`, and `[100, 200] + [10%,
+ * 20%]` added 0.1 and 0.2 where `100 + 10%` is 110. A list that knew its cells
+ * were percentages would have to carry that through every list form (a sum,
+ * a product, an average, a conversion), so the cell is refused by name, with
+ * the two forms that say what was meant: one percentage beside the list, or
+ * the fractions written as numbers.
+ *
+ * @param cell - The percentage cell.
+ * @returns The `LIST_PERCENTAGE_UNSUPPORTED` error Value.
+ */
+export function percentageCellRefused(cell: Value): Value {
+	const fraction = cell.toNumber();
+	const shown = Number.isFinite(fraction * 100) ? `${percentText(fraction)}%` : "a percentage";
+	const asNumber = Number.isFinite(fraction * 100) ? ` (${numberText(fraction)} for ${shown})` : "";
+	return errorValue(
+		"LIST_PERCENTAGE_UNSUPPORTED",
+		`A list holds plain numbers, so it cannot hold ${shown} as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number${asNumber}.`,
+	);
+}
+
 /**
  * Builds a list from one Value per cell, in the order `cells` is given (the
  * caller has already arranged it into column-major storage order).
@@ -86,6 +133,7 @@ export function listFromCells(rows: number, cols: number, cells: readonly Value[
 				`A list in ${anchor.unit} cannot hold a percentage: every cell of a list with a unit is an amount in it.`,
 			);
 		}
+		if (cell.type === ValueType.Percentage) return percentageCellRefused(cell);
 		if (cell.type === ValueType.Boolean || cell.type === ValueType.Symbolic) {
 			if (anchor !== undefined) {
 				return errorValue(
