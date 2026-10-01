@@ -122,7 +122,10 @@ const GAPS: readonly Example[] = [
 	// Calca, "Calca - the text editor for engineers": an equation in three
 	// unknowns, solved for one of them symbolically. The first line does not
 	// parse (`(yearly salary` is read as a bracket holding one word), and the
-	// second answers `= 0.00%`, a confident wrong answer pinned below.
+	// second is refused as `Undefined variable: tax`. With names of one word
+	// the first line is refused by name instead, since an equation line is
+	// solved for its one unknown (FoundBug_equationWithSeveralUnknowns), and
+	// `tax percent` holds the keyword `percent`, so it is not a name either.
 	[
 		"calca",
 		["(yearly salary / 12) * tax percent / 100 = monthly take", "tax percent =>"],
@@ -238,11 +241,12 @@ describe("other apps: documented examples that do not", () => {
 	});
 
 	// Found while collecting the Calca corpus: an unknown name before
-	// `percent` under `=>` answers a confident zero rather than refusing.
-	// `foo percent` alone says `Undefined variable: foo`. Reported for filing;
-	// this turns red when it is fixed, and then becomes an ordinary test.
-	test.failing("an unknown name before `percent` under `=>` is refused rather than answered as 0.00%", () => {
-		expect(evaluate(["foo percent =>"]).batch).toMatch(/^THREW:/);
+	// `percent` under `=>` answered a confident `= 0.00%`, where `foo percent`
+	// alone says `Undefined variable: foo`. Fixed by
+	// FoundBug_unknownUnderTheArrow.spec.ts; both passes now refuse it the
+	// same way the line without the arrow is refused.
+	test("an unknown name before `percent` under `=>` is refused rather than answered as 0.00%", () => {
+		expect(evaluate(["foo percent =>"])).toEqual({ batch: "THREW: Undefined variable: foo", incremental: "THREW: Undefined variable: foo" });
 	});
 
 	test("the apps not yet collected each say why", () => {

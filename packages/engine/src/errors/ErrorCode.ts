@@ -548,6 +548,8 @@ export const CoreErrorCodes = {
   EQUATION_FACTOR_NOT_MATRIX: "EQUATION_FACTOR_NOT_MATRIX",
   /** A matrix equation whose right-hand side is not a matrix. */
   EQUATION_RHS_NOT_MATRIX: "EQUATION_RHS_NOT_MATRIX",
+  /** An equation on a line of its own with two or more unknowns, as in `(salary / 12) * rate / 100 = net`. An equation line is solved for its one unknown, so the message says to give the others values above it or to name one with `solve`. */
+  EQUATION_SEVERAL_UNKNOWNS: "EQUATION_SEVERAL_UNKNOWNS",
 
   // ── Goal seek, as the engine runs it (engine/ExpressionEngine.ts) ──
   /** Goal seek with no document to re-run: the single-expression entry point, or the batch pass, which evaluates each line once. `evaluateDocument` and a live editor solve it. */

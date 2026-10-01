@@ -152,6 +152,24 @@ export function symbolicDivisionByZero(): Value {
 	);
 }
 
+/**
+ * The name to report when an unknown reaches an operation that needs one
+ * amount: a unit after it (`foo km`), a percentage (`foo percent`), a base, a
+ * fraction, scientific notation, `as number` or a tolerance. Each of those read
+ * the formula through `toNumber()`, which is 0, so `foo percent =>` answered
+ * `0.00%` while `foo percent` said `Undefined variable: foo`. The VM refuses
+ * the line with this name instead, the way an ordinary line refuses it.
+ *
+ * @param v - Any value.
+ * @returns The first unknown in a formula, in the order it was written, or
+ * `null` for a value that is not a formula, or a formula with no unknown left.
+ */
+export function unknownNameIn(v: Value): string | null {
+	if (v.type !== ValueType.Symbolic) return null;
+	for (const name of freeVariables(v.value as SymbolicNode)) return name;
+	return null;
+}
+
 /** The error returned whenever a symbolic operand reaches something with no symbolic meaning, in place of the old silent zero. */
 function unsupported(what: string | undefined): Value {
 	// A builtin with no symbolic name is described rather than shown by its

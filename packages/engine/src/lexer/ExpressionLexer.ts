@@ -341,6 +341,57 @@ export function withoutGroupSpaces(text: string): string {
   return out;
 }
 
+/** The straight apostrophe, `'`. */
+const APOSTROPHE = 0x27;
+
+/** The typographic apostrophe, `’` (U+2019), which a name's value reads as `'`. */
+const TYPOGRAPHIC_APOSTROPHE = 0x2019;
+
+/** Every typographic apostrophe in a word, for its value. */
+const TYPOGRAPHIC_APOSTROPHES = /\u2019/g;
+
+/** One letter of any script, for the character either side of an apostrophe. */
+const LETTER = /^\p{L}$/u;
+
+/** Whether `cc` is a letter: an ASCII one by range, any other by {@link LETTER}. */
+function isWordLetter(cc: number): boolean {
+  if (cc < 128) return (cc >= 65 && cc <= 90) || (cc >= 97 && cc <= 122);
+  return LETTER.test(String.fromCharCode(cc));
+}
+
+/**
+ * Where a word goes on after the straight apostrophe at `pos`, or `pos` when
+ * the apostrophe is not part of it.
+ *
+ * A typographic apostrophe (`’`) has always been read as part of a word,
+ * since every character past ASCII is; the straight one was skipped as an
+ * unknown character, so `Alice's food` read as the three tokens `Alice`, `s`
+ * (seconds) and `food`, and a name of several words with a possessive in it
+ * could not be defined. An apostrophe after a letter is now the word's, either
+ * inside it (`Alice's`, `O'Brien`) or ending it (`the Smiths' rent`). One after
+ * a digit, an underscore or nothing (`5'`, `'tis`) is skipped as it was, so a
+ * length in feet and a stray quote mark read as before.
+ *
+ * @param input - The line.
+ * @param start - Where the word began.
+ * @param pos - The apostrophe's position.
+ * @returns The position after the apostrophe when it belongs to the word, else `pos`.
+ */
+export function wordApostropheEnd(input: string, start: number, pos: number): number {
+  if (pos <= start || input.charCodeAt(pos) !== APOSTROPHE || !isWordLetter(input.charCodeAt(pos - 1))) return pos;
+  const next = pos + 1 < input.length ? input.charCodeAt(pos + 1) : -1;
+  // Inside the word: a letter follows.
+  if (next !== -1 && isWordLetter(next)) return pos + 1;
+  // A word that opened after an apostrophe is a quoted one (`'hello'`), and
+  // its closing mark is not a possessive.
+  if (start > 0 && input.charCodeAt(start - 1) === APOSTROPHE) return pos;
+  // Ending it: nothing that could continue a word follows (a space, an
+  // operator, the end of the line). A digit, an underscore or a second
+  // apostrophe is not a word going on, and is left as it was.
+  const continues = next === APOSTROPHE || next === 95 || (next >= 48 && next <= 57) || (next >= 128 && !isUnicodeSpace(next));
+  return continues ? pos : pos + 1;
+}
+
 function isUnicodeSpace(cc: number): boolean {
   return (
     cc === 0x0085 ||                    // NEL, next line
@@ -1734,21 +1785,34 @@ export class ExpressionLexer {
     const start = pos;
     const startCol = pos - this.lineStartPos + 1;
     let cc: number;
+    let typographic = false;
 
     // Read [a-zA-Z0-9_]* plus any Unicode (>= 128) including emoji surrogate pairs.
     // Without this, non-ASCII characters cause an infinite loop: the default case
     // calls tokenizeIdentifier(), the while loop doesn't match the Unicode char,
     // pos never advances, and the outer loop re-reads the same char forever.
-    while (
-      pos < len &&
-      ((cc = input.charCodeAt(pos)),
-        (cc >= 48 && cc <= 57) ||   // 0-9
-        (cc >= 65 && cc <= 90) ||   // A-Z
-        (cc >= 97 && cc <= 122) ||  // a-z
-        cc === 95 ||                 // _
-        (cc >= 128 && !isUnicodeSpace(cc) && !SYMBOL_TOKENS.has(cc)))  // Unicode (accented chars, emoji, etc.), but not whitespace and not a symbol that is a token of its own
-    ) {
-      pos++;
+    for (;;) {
+      while (
+        pos < len &&
+        ((cc = input.charCodeAt(pos)),
+          (cc >= 48 && cc <= 57) ||   // 0-9
+          (cc >= 65 && cc <= 90) ||   // A-Z
+          (cc >= 97 && cc <= 122) ||  // a-z
+          cc === 95 ||                 // _
+          // Unicode (accented chars, emoji, etc.), but not whitespace and not
+          // a symbol that is a token of its own. A typographic apostrophe is
+          // noted on the way, for the name's value below.
+          (cc >= 128 && !isUnicodeSpace(cc) && !SYMBOL_TOKENS.has(cc) && (cc !== TYPOGRAPHIC_APOSTROPHE || (typographic = true))))
+      ) {
+        pos++;
+      }
+      // A straight apostrophe after a letter is part of the word, as a
+      // typographic one already is (see wordApostropheEnd()). Only a word
+      // that stops at one pays the check.
+      if (pos >= len || input.charCodeAt(pos) !== APOSTROPHE) break;
+      const afterApostrophe = wordApostropheEnd(input, start, pos);
+      if (afterApostrophe === pos) break;
+      pos = afterApostrophe;
     }
 
     const identText = input.slice(start, pos);
@@ -1781,8 +1845,12 @@ export class ExpressionLexer {
     // ── Fall through: emit IDENT
     // Multi-word phrases are now handled by the TokenNormalizer post-lexer pass,
     // which keeps the lexer slim and focused on single-token production.
+    // A name is the same name whichever apostrophe it was typed with, since a
+    // phone or a word processor turns `'` into `’` unasked: `Alice’s food`
+    // reads the name `Alice's food` defines. The text keeps what was typed.
     this.pos = pos;
-    return new LexerToken('IDENT', TT_IDENT, identText, identText, start, 0, this.line, startCol);
+    const identValue = typographic ? identText.replace(TYPOGRAPHIC_APOSTROPHES, "'") : identText;
+    return new LexerToken('IDENT', TT_IDENT, identValue, identText, start, 0, this.line, startCol);
   }
 
   /**
