@@ -7,7 +7,7 @@ import { DEGREE_SIGN, scanGeoAngle } from '@solve-js/lexer/GeoAngleLiteral';
 import { isPipeRow, isSeparatorRowText } from '@solve-js/lexer/TableBlocks';
 import { lakhGroupEnd, rupeeMarked } from '@solve-js/lexer/LakhGrouping';
 import { groupsCurrencyInCall } from '@solve-js/lexer/CurrencyGrouping';
-import { groupsRangeBoundInCall } from '@solve-js/lexer/RangeBoundGrouping';
+import { groupsRangeBoundInCall, malformedRangeBoundGroupEnd } from '@solve-js/lexer/RangeBoundGrouping';
 
 // Bootstrap all token types at module load
 registerAllTokenTypes();
@@ -1663,6 +1663,31 @@ export class ExpressionLexer {
         }
       }
       break;
+    }
+
+    // ── A grouped range bound whose group is the wrong size ────────────
+    // `sum(1,0000:1)` is neither one bound (a grouping comma needs exactly
+    // three digits after it) nor, read as written, plainly two arguments, so
+    // it is refused by name rather than answered as `sum(1, 0000:1)`. See
+    // lexer/RangeBoundGrouping.ts for the shape and its boundaries.
+    if (
+      hasIntPart &&
+      !this.commaDecimal &&
+      input.charCodeAt(pos) === 44 &&
+      this.groupingStack.length > 0 &&
+      this.groupingStack[this.groupingStack.length - 1] === BracketKind.Call
+    ) {
+      const malformedEnd = malformedRangeBoundGroupEnd(input, start);
+      if (malformedEnd !== -1) {
+        const literal = input.slice(start, malformedEnd);
+        const comma = literal.lastIndexOf(',');
+        this.pos = malformedEnd;
+        throw ErrorFactory.parsing(
+          'RANGE_BOUND_GROUP_MALFORMED',
+          `"${literal}" is not a number: a grouping comma needs exactly three digits after it. To give two values, put a space after the comma: ${literal.slice(0, comma + 1)} ${literal.slice(comma + 1)}.`,
+          { literal, offset: start },
+        );
+      }
     }
 
     // ── Indian grouping: 1,00,000 (one lakh) and 12,34,567 ─────────────

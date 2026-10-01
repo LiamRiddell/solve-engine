@@ -219,7 +219,45 @@ export function tooSmallToPrintText(
 ): string | undefined {
 	if (!Number.isFinite(value) || value === 0) return undefined;
 	if (Number(value.toFixed(decimalPlaces)) !== 0) return undefined;
+	return significantDigitsText(value, numberLocale);
+}
 
+/**
+ * The three-significant-digit form of a value below one whose places would
+ * hide digits it has: `0.00667` at two places reads `0.01`, so it is written
+ * `0.00667`. Undefined for a value of one or more, zero, a value the places
+ * already show in full (`0.5` is `0.50`, `0.25` is `0.25`), or one that is not
+ * finite.
+ *
+ * For a list whose cells take this form together once one of them needs it,
+ * so `[0.00333 in, 0.00667 in]` does not read as `[0.00333 in, 0.01 in]` (see
+ * FormatEngine's listTakesSignificantForm). A cell the places show exactly
+ * keeps them, so `[0.001, 0.5]` is still `[0.001, 0.50]`.
+ *
+ * @param value - The cell's value.
+ * @param decimalPlaces - The places it would be written to.
+ * @param numberLocale - `Intl` locale, for the decimal separator.
+ */
+export function hiddenDigitsText(value: number, decimalPlaces: number, numberLocale: string = "en-US"): string | undefined {
+	if (!Number.isFinite(value) || value === 0 || Math.abs(value) >= 1) return undefined;
+	if (Number(value.toFixed(decimalPlaces)) === Number(value.toPrecision(SIGNIFICANT_DIGITS))) return undefined;
+	return significantDigitsText(value, numberLocale);
+}
+
+/**
+ * A value written to three significant digits, the form
+ * {@link tooSmallToPrintText} gives a magnitude that rounds away: a decimal
+ * while the zeros are still countable (`0.00667`), in exponent form once they
+ * are not (`1e-6`), with no padding zeros (`0.01`, not `0.0100`).
+ *
+ * Meant for a magnitude below one; a larger value is written to three digits
+ * too (`1234` as `1230`), which is why the callers check.
+ *
+ * @param value - A finite, non-zero value; anything else is undefined.
+ * @param numberLocale - `Intl` locale, for the decimal separator of the plain form.
+ */
+export function significantDigitsText(value: number, numberLocale: string = "en-US"): string | undefined {
+	if (!Number.isFinite(value) || value === 0) return undefined;
 	const rounded = Number(value.toPrecision(SIGNIFICANT_DIGITS));
 	if (Math.abs(rounded) >= EXPONENT_FORM_BELOW) {
 		// The zeros before the first digit, plus the digits themselves. Trailing

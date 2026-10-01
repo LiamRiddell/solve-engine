@@ -18,13 +18,27 @@ under each example works them out for your own today.
 ## The day of the week
 
 `what day is it on`, `day of the week on` and `weekday on` all ask which day of
-the week a date falls on. The answer is the day's name.
+the week a date falls on (`day of week on` too, without the `the`), and so do
+the same words with `of` in place of `on` (`weekday of`, `day of the week of`,
+`day of week of`), as `month of` asks for the month below. The answer is the day's name.
 
 ```solve
 what day is it on 2026-12-25 // Friday
 what day is it on 25 december // Friday
 day of the week on 1 January 2000 // Saturday
 weekday on 2026-12-25 // Friday
+weekday of 2026-12-25 // Friday
+day of the week of 1 January 2000 // Saturday
+day of week of 2026-12-25 // Friday
+```
+
+Each reads the same in a function's formula, so a function can name the day of
+whatever date it is given:
+
+```solve-doc
+day(d) = weekday of d
+day(2026-10-01) // Thursday
+day(2026-12-25) // Friday
 ```
 
 `what day is it` on its own asks about today, and a length of time after `in`
