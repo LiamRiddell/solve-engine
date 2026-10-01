@@ -313,6 +313,13 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"Total: average(X:12)",
 		"map(x + (X) + prev, 1:3)",
 		"sum(100:200, X)",
+		// A list given to a function of one number, worked for each cell or
+		// refused by name, and a figure in another script's digits before a
+		// colon (FoundBug_listBuiltins, FoundBug_otherScriptDigitsLabel).
+		"sqrt([X, 9])",
+		"gcd([X, 6], 2)",
+		"٢٤:X",
+		"Total: ٢X:00",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,

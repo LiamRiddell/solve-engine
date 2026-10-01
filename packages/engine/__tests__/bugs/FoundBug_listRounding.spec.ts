@@ -114,11 +114,11 @@ describe("the lines that exposed it", () => {
 		expect(outcome("[1, 2] as number")).toBe(`${LIST_REFUSAL} read as one number: it holds several numbers, not one. Convert one value at a time.`);
 	});
 
-	// Open, found here and outside this change: the other one-number builtins
-	// (sqrt, sin, log and the rest) still read a list as 0, so sqrt([4, 9])
-	// answers 0. Reported with this batch; the fix turns this red.
-	test.failing("found bug: sqrt([4, 9]) reads the list as 0 and answers 0", () => {
-		expect(outcome("sqrt([4, 9])")).not.toBe("0");
+	// Found here and fixed since: the other one-number builtins (sqrt, sin,
+	// log and the rest) read a list as 0, so sqrt([4, 9]) answered 0. A list
+	// is now worked out for each number; see FoundBug_listBuiltins.spec.ts.
+	test("sqrt([4, 9]) is worked out for each number, never 0", () => {
+		expect(outcome("sqrt([4, 9])")).toBe("[2, 3]");
 	});
 
 	test("through both document passes, which agree", () => {

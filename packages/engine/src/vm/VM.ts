@@ -16,7 +16,7 @@ import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js
 import { CoreErrorCodes, DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions, builtinArgumentRefused, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, builtinArgumentRefused, listBuiltinCall, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { valuesEqual, valuesOrdered } from "@solve-js/vm/Comparisons";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { QueryClient } from "@tanstack/query-core";
@@ -1040,7 +1040,8 @@ function rateOver(args: Value[], rateIndex: number, context: LineExecutionContex
     if (refused) return refused;
     if (args[0].type === ValueType.Symbolic && !SYMBOLIC_NATIVE_BUILTINS.has(rateIndex)) return symbolicBuiltin(rateIndex, args);
     const fn = builtinAt(rateIndex);
-    return fn === undefined ? errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${rateIndex} is not registered`) : fn(args, context);
+    if (fn === undefined) return errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${rateIndex} is not registered`);
+    return listBuiltinCall(rateIndex, args, fn, context) ?? fn(args, context);
 }
 
 /**
@@ -4720,6 +4721,15 @@ export function executeBytecode(
           const fn = builtinFunctions[fnIdx];
           if (fn) {
             const ordered = args.reverse();
+            // A list is worked out for each number, or refused by name, where
+            // the builtin reads one number; see listBuiltinCall() in
+            // vm/VMBuiltins.ts.
+            const listed = listBuiltinCall(fnIdx, ordered, fn, context);
+            if (listed) {
+              stack.push(listed);
+              if (observeCall !== undefined) observeCall({ kind: "builtin", index: fnIdx, name: "", args: ordered, result: listed });
+              break;
+            }
             // One dispatch point covers all ~60 builtins. Each of their
             // implementations reads args[n].toNumber(), which reports 0 for a
             // symbolic operand, so routing here is what stops `sqrt(x)` from
