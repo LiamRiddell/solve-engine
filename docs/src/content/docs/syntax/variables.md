@@ -168,6 +168,53 @@ take home = 5 // ERROR: "take home" cannot be a name: "take" is a spelling of mi
 tax on = 5 // ERROR: "tax on" cannot be a name: "tax on" is a phrase the engine reads. Choose other words, or join them as tax_on.
 ```
 
+The same holds for an operator word at the end of the words. `monthly take`
+cannot be a name, because the line below it would then read `take` two ways:
+as part of the name in `monthly take * 12`, and as minus in `monthly take 500`,
+which subtracts 500 from `monthly`. An operator with nothing after it is not
+arithmetic either, so the line is refused by name, with the word and what it
+means, rather than reported as a sum that stops too early. Joining the words
+with an underscore, or choosing another word, makes a name that works.
+
+```solve-doc
+monthly take = 4000 // ERROR: "monthly take" cannot be a name: "take" is a spelling of minus. Choose other words, or join them as monthly_take.
+monthly_take = 4000 // 4,000
+monthly pay = 4000 // 4,000
+```
+
+### Possessives
+
+A possessive, the `'s` that says whose something is, can be part of a name:
+`Alice's food`, `the Smiths' rent`. An apostrophe straight after a letter
+belongs to its word, whether it sits inside the word or ends it. Either
+apostrophe will do. The straight `'` a keyboard types and the curly `’` a phone
+or a word processor puts in its place are the same apostrophe in a name, so a
+name typed with one is read when it is typed with the other.
+
+```solve-doc
+Alice's food = £30 // £30.00
+Bob’s food = £20 // £20.00
+Alice’s food + Bob's food // £50.00
+the Smiths' rent = £900 // £900.00
+the Smiths' rent / 3 // £300.00
+```
+
+A mark that only looks like an apostrophe is refused by name rather than made
+part of a name, since it would make a second name that reads the same as the
+first: an opening quotation mark `‘`, or the prime `′` that marks feet and
+minutes of arc. So is an apostrophe before a word's first letter, since a word
+in a name starts with a letter.
+
+```solve-doc
+Alice‘s food = 3 // ERROR: "Alice‘s food" cannot be a name: "‘" in "Alice‘s" is a quotation mark, not an apostrophe. Write the apostrophe as ' or ’.
+’tis rate = 5 // ERROR: "’tis rate" cannot be a name: "’tis" starts with an apostrophe, and a word in a name starts with a letter.
+```
+
+The boundary: a straight apostrophe after a digit or an underscore, or before a
+word, is not read as part of anything and is skipped, as any stray mark is, so
+`'rent'` reads as the word `rent`. A name of one word may hold an apostrophe
+too, as `O'Brien = 4` does.
+
 The boundary: the words are matched as written, so `Hourly rate` is another
 name from `hourly rate`, as `Rate` is from `rate`. The colon forms `:name` and
 `global :name` keep their one-word name. A line with more than four words

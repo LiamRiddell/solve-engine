@@ -1665,6 +1665,73 @@ describe("names of several words across entry points (#743)", () => {
   });
 });
 
+describe("a possessive name of several words across entry points", () => {
+  // The straight apostrophe after a letter is part of its word, as the curly
+  // one always was, and a name's value reads either as the straight one. The
+  // name is the document's, as every name of several words is (#743).
+  const doc = ["Alice's food = £30", "Bob’s food = £20", "Alice’s food + Bob's food", "the Smiths' rent = £900", "the Smiths' rent / 3"];
+
+  test("each line reads the name, and both passes agree", () => {
+    expect(batch(doc)).toEqual(["£30.00", "£20.00", "£50.00", "£900.00", "£300.00"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an edit to the definition re-keys the reader in a live editor, as a fresh pass reads it", () => {
+    const { shown, edited } = editThenEvaluate(doc, [[1, "Alice’s food = £35"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[2]).toBe("£55.00");
+  });
+
+  test("the single-expression path: the definition answers, a read is the parse error it was, and a look-alike mark is refused by name", () => {
+    expect(single("Alice's food = £30")).toEqual({ threw: false, type: ValueType.Uom, message: "£30.00" });
+    const read = single("Alice's food * 2");
+    expect(read.threw).toBe(true);
+    expect(read.message).toBe('Expected an operator or the end of the line, but found "food"');
+    const look = single("Alice‘s food = 3");
+    expect(look.message).toMatch(/is a quotation mark, not an apostrophe/);
+    expect(batch(["Alice‘s food = 3"])[0]).toBe(`ERROR: ${look.message}`);
+  });
+});
+
+describe("an equation line with several unknowns across entry points", () => {
+  // Refused by name on every path, since an equation line is solved for its
+  // one unknown; with the others given values above it, it is stored and
+  // solved as a one-unknown equation is (see FoundBug_equationWithSeveralUnknowns).
+  const equation = "(salary / 12) * rate / 100 = net";
+
+  test("the single-expression path and both passes give the same refusal", () => {
+    const line = single(equation);
+    expect(line.message).toMatch(/^This equation has 3 unknowns, salary, rate and net,/);
+    expect(batch([equation])).toEqual([`ERROR: ${line.message}`]);
+    expect(incremental([equation])).toEqual(batch([equation]));
+  });
+
+  test("with values above it, both passes solve it and agree", () => {
+    const doc = ["salary = 60000", "net = 1000", equation, "rate =>"];
+    expect(batch(doc)).toEqual(["60,000", "1,000", 'rate stored as an equation: solve with "rate =>"', "20"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an edit that gives an unknown its value turns the refusal into a stored equation in a live editor", () => {
+    const { shown, edited } = editThenEvaluate(["salary = 60000", "x = 1", equation, "rate =>"], [[2, "net = 1000"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[3]).toBe("20");
+  });
+});
+
+describe("an unknown under the arrow across entry points", () => {
+  // A unit or a percentage on an unknown is refused with the error the line
+  // gives without the arrow, on every path (FoundBug_unknownUnderTheArrow).
+  test("the single-expression path and both passes refuse it alike, and answer once the name has a value", () => {
+    expect(single("foo percent =>").message).toBe("Undefined variable: foo");
+    expect(batch(["foo percent =>", "foo km =>"])).toEqual(["ERROR: Undefined variable: foo", "ERROR: Undefined variable: foo"]);
+    expect(incremental(["foo percent =>", "foo km =>"])).toEqual(batch(["foo percent =>", "foo km =>"]));
+    const { shown, edited } = editThenEvaluate(["x = 1", "foo percent =>"], [[1, "foo = 12"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[1]).toBe("12.00%");
+  });
+});
+
 // The worker is a further entry point (#770): `evaluateDocument` through the
 // worker client must agree with the main thread's `evaluateDocument` value for
 // value on every whole-document form, and its `parseDocument` with the main

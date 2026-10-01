@@ -23,6 +23,40 @@ x^2+3x+2 => // x^2+3x+2
 sqrt(x) =>  // sqrt(x)
 ```
 
+## An unknown has no amount
+
+Some operations need one amount to work on: giving a value a unit or a
+currency (`km`, `$`), writing it as a percentage, in another base, as a
+fraction or in scientific notation, and `as number`. An unknown has no amount,
+so under the arrow those are refused with the same error the line gives
+without it, naming the unknown. They used to read the unknown as zero, so
+`foo percent =>` answered `0.00%` while `foo percent` said the name was
+undefined.
+
+```solve
+foo + 1 =>     // foo+1
+```
+
+```solve-doc
+foo percent => // ERROR: Undefined variable: foo
+foo km => // ERROR: Undefined variable: foo
+foo as hex => // ERROR: Undefined variable: foo
+```
+
+Once the name has a value, the same lines answer with it.
+
+```solve-doc
+foo = 12 // 12
+foo percent => // 12.00%
+foo km => // 12.00 km
+```
+
+The boundary: arithmetic between an unknown and a quantity is still worked as
+algebra on the numbers alone, so the unit is not carried into the formula
+(`foo * 5 km =>` is `5foo`). A formula stored by a bare assignment, `y = x +
+1`, is refused the same way when a later line gives it a unit with `x` still
+unknown.
+
 ## Exact arithmetic
 
 Coefficients are exact rationals rather than floating-point numbers, so a value

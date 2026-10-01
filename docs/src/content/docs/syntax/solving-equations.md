@@ -54,8 +54,30 @@ a*n = 10
 n => // 5
 ```
 
-An equation with two unknowns is not stored, because there would be no way to
-tell which one to solve for. Use `solve` and name it.
+An equation with two or more unknowns is not stored, because there would be no
+way to tell which one a later arrow asks for. Other calculators, Calca among
+them, keep such a line and solve it for whichever name is asked; here the line
+is refused by name instead, with the two ways to write it: give the other
+unknowns values on the lines above, which leaves one, or name the unknown with
+`solve`.
+
+```solve-doc
+(salary / 12) * rate / 100 = net // ERROR: This equation has 3 unknowns, salary, rate and net, and an equation on a line of its own is solved for its one unknown. Give the others values on the lines above it, or name the one to solve for, as in solve((salary / 12) * rate / 100 = net, salary).
+```
+
+With the salary and the net pay given, the same equation has one unknown left,
+and the arrow solves it.
+
+```solve-doc
+salary = 60000 // 60,000
+net = 1000 // 1,000
+(salary / 12) * rate / 100 = net // rate stored as an equation: solve with "rate =>"
+rate => // 20
+```
+
+The boundary: only names count as unknowns. A unit written after an amount,
+the `km` of `2 km`, is a unit and not an unknown, and a line whose two sides
+do not each read as an expression keeps the error it had.
 
 ## Exact answers, including irrational ones
 
