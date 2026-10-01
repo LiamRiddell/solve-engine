@@ -25,18 +25,24 @@ import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 import { encodeFixedOffset, wallClockInstants, describeMinutes } from "@solve-js/packages/time/timezones/ZoneMath";
 import { MAX_ZONES_PER_LINE } from "@solve-js/packages/time/parselets/shared/ZoneReference";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { formatValue } from "@solve-js/format/FormatEngine";
 
 /** The one Value a line evaluates to, through the single-expression path. */
 function evaluate(expression: string): Value {
 	return newTrackedEngine().evaluateLine(1, expression);
 }
 
-/** The string a line answers, failing loudly when it answers anything else. */
+/**
+ * The text a line answers, failing loudly when it answers anything else: a
+ * list of zones answers text, and one zone a time in it (#757), read here as
+ * an English reader sees it.
+ */
 function answer(expression: string): string {
 	const value = evaluate(expression);
-	expect({ expression, type: value.type, message: value.type === ValueType.Error ? value.unit : undefined })
+	const zoneTime = value.type === ValueType.Datetime && value.grain === "time";
+	expect({ expression, type: zoneTime ? ValueType.String : value.type, message: value.type === ValueType.Error ? value.unit : undefined })
 		.toEqual({ expression, type: ValueType.String, message: undefined });
-	return value.value as string;
+	return zoneTime ? formatValue(value).replace(/^= /, "") : value.value as string;
 }
 
 /** The code of the Error value a line refuses with. */

@@ -5178,6 +5178,17 @@ https://liamriddell.github.io/solve-engine/syntax/time-zones/
 ```
 
 ```
+(3pm London on 23 September 2026 in Tokyo) + 1 hour // 12:00 AM (+1 day)
+(3pm London on 23 September 2026 in Tokyo) - 30 minutes // 10:30 PM
+(3pm London on 23 September 2026 in Tokyo) in New York // 10:00 AM
+```
+
+```
+(3pm London on 23 September 2026 in Tokyo) == "11:00 PM" // true
+"call at " + (3pm London on 23 September 2026 in Tokyo) // call at 11:00 PM
+```
+
+```
 3pm London on 23 September 2026 in Tokyo, New York and Sydney // Tokyo 11:00 PM, New York 10:00 AM, Sydney 12:00 AM (+1 day)
 ```
 
@@ -5257,6 +5268,17 @@ overlap of 9am to 9am in London and Paris on 23 September 2026 // 9:00 AM to 9:0
 time in Paris // 1:00 PM
 date in Vancouver // March 11, 2026
 time difference between Seattle and Moscow // Moscow is 10 hours ahead of Seattle
+```
+
+```
+time difference between Seattle and Moscow in hours // 10 hours
+time difference between Moscow and Seattle in hours // -10 hours
+time difference between London and New Delhi in minutes // 330 minutes
+```
+
+```
+time difference between Paris and Berlin // Berlin and Paris currently share the same UTC offset
+time difference between Paris and Berlin in hours // 0 hours
 ```
 
 ```

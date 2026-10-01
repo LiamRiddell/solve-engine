@@ -268,3 +268,115 @@ export function localCalendarName(kind: CalendarNameKind, index: number, tag: st
 	}
 	return names === null ? undefined : names[index];
 }
+
+/** One clock formatter per tag and zone; null where `Intl` could not build one. */
+const clockFormatters = new Map<string, Intl.DateTimeFormat | null>();
+
+/**
+ * A wall clock to the minute in `tag`'s language and on its clock, `19:00`
+ * under `de`, for a time-zone answer (#757). The zone is an IANA name, or
+ * `UTC` for an instant already moved onto a fixed offset's clock.
+ *
+ * @param epochMs - The instant.
+ * @param zone - The IANA zone to read it in.
+ * @param tag - The number locale.
+ * @returns The time, or undefined to keep the engine's own English.
+ */
+export function localClockTime(epochMs: number, zone: string, tag: string): string | undefined {
+	if (!Number.isFinite(epochMs) || typeof zone !== "string" || zone.length > MAX_TAG_LENGTH || !localisesWords(tag)) return undefined;
+	const key = `${tag}\u0000${zone}`;
+	let formatter = clockFormatters.get(key);
+	if (formatter === undefined) {
+		try {
+			formatter = new Intl.DateTimeFormat(tag, { timeZone: zone, hour: "numeric", minute: "2-digit" });
+		} catch {
+			formatter = null;
+		}
+		if (clockFormatters.size >= MAX_CACHED) clockFormatters.clear();
+		clockFormatters.set(key, formatter);
+	}
+	if (formatter === null) return undefined;
+	try {
+		return formatter.format(epochMs);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * A count of one time unit with its long name in `tag`'s language, the
+ * locale's digits included (`8 Stunden`), or undefined where `Intl` has none.
+ */
+function localCount(count: number, unit: "day" | "hour" | "minute", tag: string): string | undefined {
+	const formatter = unitFormatter(tag, unit, 0);
+	if (formatter === null) return undefined;
+	try {
+		// A no-break space before the name is written as a plain one, as
+		// withLocalUnitName writes it, so `1 jour` reads as `1 day` does.
+		return formatter.format(count).replace(/[  ]/g, " ");
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * A day shift beside a time of day in `tag`'s language, ` (+1 Tag)` under
+ * `de`, as the English ` (+1 day)` is written.
+ *
+ * @param shift - Whole days, positive when the clock is on a later day.
+ * @param tag - The number locale.
+ * @returns The suffix with its leading space, `""` for no shift, or undefined to keep the engine's own English.
+ */
+export function localDayShift(shift: number, tag: string): string | undefined {
+	if (!Number.isInteger(shift) || !localisesWords(tag)) return undefined;
+	if (shift === 0) return "";
+	const days = localCount(Math.abs(shift), "day", tag);
+	return days === undefined ? undefined : ` (${shift > 0 ? "+" : "-"}${days})`;
+}
+
+/**
+ * A length of time in whole minutes in `tag`'s language, hours then minutes as
+ * the English `4 hours 30 minutes` is written: `4 Stunden 30 Minuten` under
+ * `de`.
+ *
+ * @param totalMinutes - A non-negative whole number of minutes.
+ * @param tag - The number locale.
+ * @returns The written length, or undefined to keep the engine's own English.
+ */
+export function localDuration(totalMinutes: number, tag: string): string | undefined {
+	if (!Number.isInteger(totalMinutes) || totalMinutes < 0 || !localisesWords(tag)) return undefined;
+	const hours = Math.floor(totalMinutes / 60);
+	const minutes = totalMinutes % 60;
+	const parts: string[] = [];
+	if (hours > 0) {
+		const written = localCount(hours, "hour", tag);
+		if (written === undefined) return undefined;
+		parts.push(written);
+	}
+	if (minutes > 0 || hours === 0) {
+		const written = localCount(minutes, "minute", tag);
+		if (written === undefined) return undefined;
+		parts.push(written);
+	}
+	return parts.join(" ");
+}
+
+/**
+ * A time difference between two places in a form every language reads, since
+ * `Intl` has no words for "ahead of": the second place's clock as the first's
+ * plus or minus the gap, `Tokyo: London + 8 Stunden` under `de`, and `±` for
+ * a gap of nothing (#757). The places are the names the reader wrote.
+ *
+ * @param minutes - The signed gap in whole minutes, positive when `to` is ahead.
+ * @param from - The first place.
+ * @param to - The second place.
+ * @param tag - The number locale.
+ * @returns The text, or undefined to keep the engine's own English.
+ */
+export function localZoneDifference(minutes: number, from: string, to: string, tag: string): string | undefined {
+	if (!Number.isInteger(minutes)) return undefined;
+	const gap = localDuration(Math.abs(minutes), tag);
+	if (gap === undefined) return undefined;
+	const sign = minutes > 0 ? "+" : minutes < 0 ? "-" : "±";
+	return `${to}: ${from} ${sign} ${gap}`;
+}

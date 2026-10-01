@@ -1,4 +1,4 @@
-import { Value, ValueType, isTimecodeUnit, timecodeFps, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData, type IpCidrData, type UnitLabel } from "@solve-js/vm/Value";
+import { Value, ValueType, isTimecodeUnit, timecodeFps, type TimePrecision, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData, type IpCidrData, type UnitLabel } from "@solve-js/vm/Value";
 import { timecodeText } from "@solve-js/packages/time/timecode/TimecodeMath";
 import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { formatIp } from "@solve-js/packages/ip/IpMath";
@@ -6,7 +6,8 @@ import { formatIpv6 } from "@solve-js/packages/ip/Ipv6Math";
 import { decimalCompare, decimalDivide, decimalFromInteger, decimalRound, decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
 import { autoFormatIntegerOrFloat, compactParts, fixedDecimalText, shortestText, tooSmallToPrintText } from "@solve-js/utilities/Number";
-import { localCalendarName, localCurrencyPlacement, withLocalUnitName } from "./LocaleWords";
+import { localCalendarName, localClockTime, localCurrencyPlacement, localDayShift, localZoneDifference, localisesWords, withLocalUnitName } from "./LocaleWords";
+import { clockInZone, dayShiftWords, zoneDifferenceMinutes, zoneDifferenceText } from "@solve-js/vm/ZoneAnswers";
 import { getMeasure } from "@solve-js/uom/UomConverter";
 import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS, resolveFormattingSettings, type FormattingOverrides } from "./FormattingSettings";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
@@ -434,6 +435,72 @@ function formatDatetime(instant: number, locale: ILocale, settings: FormattingSe
   const time = `${p2(d.hour)}:${p2(d.minute)}:${p2(d.second)}`;
   // ISO joins date and time with `T`; the slash forms with a space.
   return format === "iso" ? `= ${datePart}T${time}` : `= ${datePart} ${time}`;
+}
+
+/** How far either side of 1970 an instant a calendar holds can be, in milliseconds: the range of a JavaScript `Date`. */
+const MAX_INSTANT_MS = 8.64e15;
+
+/**
+ * A time of day: the time alone, in the long form's words or the numeric
+ * forms' `HH:MM:SS`, and the days it has moved from the day it is counted from
+ * beside it, as the timezone forms write a day shift. A time with no anchor
+ * recorded shows no shift.
+ *
+ * A time in another zone (#757) is written to the minute (`precision`
+ * `"minute"`): under an English locale exactly as the timezone forms always
+ * wrote it, `7:00 PM` and `8:00 AM (+1 day)`, and under a locale with words of
+ * its own on that locale's clock with the shift in its words, `19:00` and
+ * `08:00 (+1 Tag)` under `de`; the numeric forms write `HH:MM`. An offset the
+ * reader named is shown on its own clock, as a date in it is.
+ */
+function formatTimeOfDayValue(value: number, locale: ILocale, settings: FormattingSettings, zone?: string, anchor?: number, precision?: TimePrecision): string {
+  const calendar = settings.calendar ?? DATE_CALENDAR;
+  // An instant past the calendar's range reads as every such date does, rather
+  // than throwing where a zone is read for it.
+  if (!(Math.abs(value) <= MAX_INSTANT_MS) || (anchor !== undefined && !(Math.abs(anchor) <= MAX_INSTANT_MS))) return "= Invalid Date";
+  const offsetMs = zone !== undefined && isNamedOffset(zone) ? decodeFixedOffsetMinutes(zone) * 60000 : 0;
+  const readZone = zone !== undefined && isNamedOffset(zone) ? "UTC" : zone;
+  const at = value + offsetMs;
+  const named = readZone !== undefined && !isFixedOffset(readZone);
+  const d = named ? calendar.fieldsInZone(readZone, at) : calendar.fields(at);
+  const format = settings.dateResult?.format ?? "long";
+  const toMinute = precision === "minute";
+  const words = wordsLocale(settings);
+  const localTag = words !== undefined && localisesWords(words) ? words : undefined;
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  let time: string;
+  if (format !== "long") {
+    time = toMinute ? `${p2(d.hour)}:${p2(d.minute)}` : `${p2(d.hour)}:${p2(d.minute)}:${p2(d.second)}`;
+  } else if (toMinute && named) {
+    time = (localTag === undefined ? undefined : localClockTime(at, readZone, localTag)) ?? clockInZone(at, readZone);
+  } else {
+    const tag = dateNamesLocale(settings.numberResult.decimalSeparatorLocale || "en-US", locale);
+    time = named ? timeOfDayInZone(readZone, at, tag) : calendar.formatTimeOfDay(at, tag);
+  }
+  let shift = 0;
+  if (anchor !== undefined) {
+    const from = named ? calendar.fieldsInZone(readZone, anchor + offsetMs) : calendar.fields(anchor + offsetMs);
+    shift = Math.round((Date.UTC(d.year, d.month0, d.day) - Date.UTC(from.year, from.month0, from.day)) / 86_400_000);
+  }
+  const suffix = (localTag === undefined ? undefined : localDayShift(shift, localTag)) ?? dayShiftWords(shift);
+  return `= ${time}${suffix}`;
+}
+
+/**
+ * A time difference between two places (#757): under an English locale the
+ * sentence the timezone forms always answered, `Tokyo is 8 hours ahead of
+ * London`, and under a locale with words of its own a form every language
+ * reads, `Tokyo: London + 8 Stunden` under `de`. Undefined for a quantity that
+ * does not hold one, which is then shown as the quantity it is.
+ */
+function formatZoneDifference(value: Value, settings: FormattingSettings): string | undefined {
+  const minutes = zoneDifferenceMinutes(value);
+  const places = value.zoneDifference;
+  if (minutes === undefined || places === undefined) return undefined;
+  const words = wordsLocale(settings);
+  const local = words === undefined ? undefined : localZoneDifference(minutes, places.from, places.to, words);
+  const text = local ?? zoneDifferenceText(value);
+  return text === undefined ? undefined : formatString(text);
 }
 
 /**
@@ -1180,8 +1247,13 @@ export function formatValue(value: Value, settings?: FormattingOverrides): strin
     case ValueType.Boolean:
       return formatBoolean(value.value as boolean);
     case ValueType.Datetime:
+      if (value.grain === "time") return formatTimeOfDayValue(value.value as number, locale, us, value.zone, value.timeAnchor, value.timePrecision);
       return formatDatetime(value.value as number, locale, us, value.zone);
     case ValueType.Uom:
+      if (value.zoneDifference !== undefined) {
+        const gap = formatZoneDifference(value, us);
+        if (gap !== undefined) return gap;
+      }
       return formatUom(value.value as number, value.unit, locale, us, value.exact, value.datetimeSpan, value.decimalPlaces, value.unitLabel);
     case ValueType.Matrix:
       return formatMatrix(value.value as MatrixData, locale, us);

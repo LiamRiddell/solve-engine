@@ -124,10 +124,35 @@ export type ChartKind = "sparkline" | "plot";
  *   instant follows from the zone it is read in.
  * - `instant`: a fixed point on the timeline, named without depending on a
  *   zone (`2026-04-03T10:30:00Z`, `...+09:00`, `now`).
+ * - `time`: a time of day, shown as the time alone with the days it has moved
+ *   from the day it is counted from beside it (see {@link Value.timeAnchor}).
+ *   A time converted into another zone takes it (`3pm London in Tokyo`, #757),
+ *   held as the instant it names and read in that zone, so arithmetic keeps
+ *   working.
  *
  * See {@link Value.grain} for why the number cannot answer this on its own.
  */
-export type DatetimeGrain = "date" | "datetime" | "instant";
+export type DatetimeGrain = "date" | "datetime" | "instant" | "time";
+
+/**
+ * How finely a time of day is written: `minute` for the time-zone answers,
+ * which have always answered to the minute (`7:00 PM`). See
+ * {@link Value.timePrecision}.
+ */
+export type TimePrecision = "minute";
+
+/**
+ * The two places a time difference was asked between, as the reader named
+ * them (`time difference between London and Tokyo`, #757). The quantity it
+ * rides on is how far the second place's clock is ahead of the first's, so a
+ * negative one means the second is behind. See {@link Value.zoneDifference}.
+ */
+export interface ZoneDifference {
+	/** The first place, as the reader wrote it (`London`). */
+	readonly from: string;
+	/** The second place, as the reader wrote it (`Tokyo`). */
+	readonly to: string;
+}
 
 /**
  * Which name a String drawn from a date holds, so a formatter can write it in
@@ -607,6 +632,34 @@ export class Value {
 	 */
 	public zone?: string;
 	/**
+	 * For a time of day (grain `"time"`), an instant on the day it is counted
+	 * from, in epoch milliseconds. The formatter shows the time alone and the
+	 * days it has moved from this one beside it, read in the value's zone, so
+	 * `11pm London in Tokyo on 10 March 2026` is `8:00 AM (+1 day)`: Tokyo's
+	 * clock is on the day after the one the reader named. The shift is fixed
+	 * when the time is written rather than counted from whatever day it is
+	 * displayed on. Carried through duration arithmetic with the grain. Cleared
+	 * by {@link recycle} alongside the other sidecars.
+	 */
+	public timeAnchor?: number;
+	/**
+	 * For a time of day, that it is written to the minute (`7:00 PM`) rather
+	 * than to the second, as every time-zone answer is (#757). Carried through
+	 * duration arithmetic with the grain. Cleared by {@link recycle}.
+	 */
+	public timePrecision?: TimePrecision;
+	/**
+	 * For a duration that is the gap between two places' clocks (`time
+	 * difference between London and Tokyo`, #757), the two places, so the
+	 * formatter writes the gap as a direction: `Tokyo is 8 hours ahead of
+	 * London`. The quantity is a plain signed duration in hours, positive when
+	 * the second place is ahead, so it converts (`in hours`), adds and compares
+	 * as any duration does; a conversion or arithmetic gives a plain duration,
+	 * since the answer is then a new quantity. A variable holding it keeps it,
+	 * through {@link clone}. Cleared by {@link recycle}.
+	 */
+	public zoneDifference?: ZoneDifference;
+	/**
 	 * That this quantity is the gap between two datetimes, rather than a
 	 * duration someone wrote down.
 	 *
@@ -750,6 +803,9 @@ export class Value {
 		// the arena hands out next.
 		this.grain = undefined;
 		this.zone = undefined;
+		this.timeAnchor = undefined;
+		this.timePrecision = undefined;
+		this.zoneDifference = undefined;
 		this.datetimeSpan = undefined;
 		// Provenance clears too: a reused Value that once held a converted
 		// amount must not tell a host that a plain number came from a rate.
@@ -816,6 +872,9 @@ export class Value {
 		if (this.decimalPlaces !== undefined) out.decimalPlaces = this.decimalPlaces;
 		if (this.grain !== undefined) out.grain = this.grain;
 		if (this.zone !== undefined) out.zone = this.zone;
+		if (this.timeAnchor !== undefined) out.timeAnchor = this.timeAnchor;
+		if (this.timePrecision !== undefined) out.timePrecision = this.timePrecision;
+		if (this.zoneDifference !== undefined) out.zoneDifference = { from: this.zoneDifference.from, to: this.zoneDifference.to };
 		if (this.datetimeSpan !== undefined) out.datetimeSpan = this.datetimeSpan;
 		if (this.timedOut !== undefined) out.timedOut = this.timedOut;
 		if (this.sources !== undefined) out.sources = this.sources;
@@ -1386,12 +1445,14 @@ export function boolValue(b: boolean): Value {
  * @param n - The instant, in epoch milliseconds.
  * @param grain - What the instant anchors, when the caller knows.
  * @param zone - The zone reference the instant was named in, when the line named one.
+ * @param timeAnchor - For a time of day, an instant on the day it is counted from. See {@link Value.timeAnchor}.
  * @returns The Datetime value.
  */
-export function datetimeValue(n: number, grain?: DatetimeGrain, zone?: string): Value {
+export function datetimeValue(n: number, grain?: DatetimeGrain, zone?: string, timeAnchor?: number): Value {
 	const v = _arenaActive && _arena ? _arena.acquire(ValueType.Datetime, n) : new Value(ValueType.Datetime, n);
 	if (grain !== undefined) v.grain = grain;
 	if (zone !== undefined) v.zone = zone;
+	if (timeAnchor !== undefined) v.timeAnchor = timeAnchor;
 	return v;
 }
 
