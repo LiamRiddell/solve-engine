@@ -29,7 +29,7 @@ const config = {
 	rootDir: ".",
 	roots: ["<rootDir>/__tests__"],
 	setupFiles: ["<rootDir>/__tests__/__mocks__/jest-setup.ts"],
-	testEnvironment: "jest-environment-node",
+	testEnvironment: "<rootDir>/tools/jestEnvironment.cjs",
 	testPathIgnorePatterns: [
 		"\\\\node_modules\\\\",
 		"/node_modules/",

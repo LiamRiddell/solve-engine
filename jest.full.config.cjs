@@ -15,6 +15,11 @@
  * that parallel workers on a two-core runner start failing on allocation rather
  * than on anything real.
  *
+ * Running in band means one process holds every spec file in turn, so the
+ * test environment (`packages/engine/tools/jestEnvironment.cjs`) disables each
+ * file's `AsyncLocalStorage` stores when the file ends: left enabled, they
+ * weighed down every later promise until a long spec ran out of heap.
+ *
  * Coverage is measured on this same suite by `jest.coverage.config.cjs`, on a
  * schedule rather than per pull request; see that file for why.
  */

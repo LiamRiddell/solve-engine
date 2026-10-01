@@ -52,7 +52,7 @@ const config = {
 
 	setupFiles: ["<rootDir>/packages/engine/__tests__/__mocks__/jest-setup.ts"],
 
-	testEnvironment: "jest-environment-node",
+	testEnvironment: "<rootDir>/packages/engine/tools/jestEnvironment.cjs",
 
 	testPathIgnorePatterns: [
 		"\\\\node_modules\\\\",
