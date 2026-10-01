@@ -10,8 +10,9 @@
  * - `SUPPORTED`: asserted to produce the documented answer.
  * - `GAPS`: asserted to still not produce it, so a fix fails the run until the
  *   row is promoted.
- * - `DECLINED`: a form this engine refuses by decision, with the reason; it is
- *   asserted to stay refused, so a change that starts accepting it is noticed.
+ * - `DECLINED`: a form this engine refuses, or answers another way, by
+ *   decision, with the reason; it is asserted to stay that way, so a change
+ *   that starts giving the documented answer is noticed.
  *
  * An example is a document: its lines are evaluated together, through both
  * `parseDocument` and `evaluateDocument`, which must agree, and the last line's
@@ -22,11 +23,22 @@
  * Sources, fetched 2026-09-30: Numi's wiki
  * (https://github.com/nikolaeu/numi/wiki, `Home.md`) and Numbr's `DOCS.md`
  * (https://github.com/antonmedv/numbr/blob/master/DOCS.md). The Notes
- * Calculator rows are the examples the audit quotes from
- * docs.notescalculator.com. NumPad's, Notes Calculator's and Calca's own sites
- * could not be reached from the environment this corpus was collected in, so
- * their remaining examples are listed in {@link NOT_YET_COLLECTED} rather than
- * guessed at.
+ * Calculator row is the one example the audit quotes from
+ * docs.notescalculator.com with its result. The Calca rows, fetched
+ * 2026-10-01, are the examples with a stated result in two announcement posts
+ * by Calca's author on his own blog, whose source is the public repository
+ * `praeclarum/praeclarum.github.io` (read through raw.githubusercontent.com):
+ * `_posts/2013/2013-07-09-calca-the-text-editor-for-engineers.md` and
+ * `_posts/2013/2013-10-21-calca-for-windows-you-asked-for-it.md`.
+ *
+ * NumPad's, Notes Calculator's and Calca's own documentation sites, and
+ * web.archive.org, refuse connections from the environment the corpus was
+ * collected in, and no mirror of the first two was found (GitHub code search,
+ * raw.githubusercontent.com and the npm registry were tried). The audit quotes
+ * many of their forms, but without a result (`$40 as a % of $50`,
+ * `sum(line 1 : line 4)`, `double(double(5))`), so those stay prose there
+ * rather than becoming rows with an answer nobody documented. What remains is
+ * listed in {@link NOT_YET_COLLECTED}.
  */
 
 import { describe, expect, test } from "@jest/globals";
@@ -48,8 +60,14 @@ import {
 /** One documented example: the app, the lines of the note, and the answer its docs state for the last line. */
 type Example = readonly [app: string, lines: readonly string[], documented: string];
 
-/** A declined example, with the decision that rules it out. */
-type Declined = readonly [app: string, lines: readonly string[], documented: string, reason: string];
+/**
+ * How a declined example is answered: refused outright, or answered with a
+ * different, deliberate result (the same value shown another way).
+ */
+type DeclinedOutcome = "refused" | "answered differently";
+
+/** A declined example, with the decision that rules it out and how the engine answers it instead. */
+type Declined = readonly [app: string, lines: readonly string[], documented: string, reason: string, outcome: DeclinedOutcome];
 
 /** Documented examples this engine answers as documented. */
 const SUPPORTED: readonly Example[] = [
@@ -67,6 +85,12 @@ const SUPPORTED: readonly Example[] = [
 	["notes-calculator", ["f(x) = 2*x + 1", "f(5)"], "11"],
 	// Numi, "Variables", and the audit's claim about bare names (#786).
 	["numi", ["price = 20", "price * 3"], "60"],
+	// Calca, "Calca for Windows, you asked for it!" (2013-10-21): a unit
+	// conversion, written `12 tbsp in cups => 0.75 cups` there.
+	["calca", ["12 tbsp in cups"], "0.75 cups"],
+	// Calca, "Calca - the text editor for engineers" (2013-07-09): "Numbers
+	// can be written with grouping separators".
+	["calca", ["100,033,234.56"], "100,033,234.56"],
 ];
 
 /** Documented examples this engine does not answer as documented. */
@@ -79,6 +103,31 @@ const GAPS: readonly Example[] = [
 	// Numi, "CSS": a `ppi = 326` line changes what the conversion means. A
 	// variable cannot reconfigure a unit's ratio here; same limitation.
 	["numi", ["ppi = 326", "1 cm in px"], "128.35 px"],
+	// Calca, "Calca for Windows, you asked for it!": the water that falls on a
+	// plot of land in a year. The names of several words read (#743), and the
+	// first two lines answer `0.25 acre` and `36.15 inch/year`; the third is
+	// refused, since a rate (a length per year) times a quantity (an area) is
+	// not a product the engine forms: "Cannot multiply a rate per year by a
+	// quantity in acre". The same refusal meets `10 m/s * 2 m`, so it is the
+	// rate model, not this note.
+	[
+		"calca",
+		[
+			"land area = 0.25 acre",
+			"avg annual precip = 36.15 inch / year",
+			"daily rain accumulation = avg annual precip * land area in gallon/day",
+		],
+		"671.9012 gallon/day",
+	],
+	// Calca, "Calca - the text editor for engineers": an equation in three
+	// unknowns, solved for one of them symbolically. The first line does not
+	// parse (`(yearly salary` is read as a bracket holding one word), and the
+	// second answers `= 0.00%`, a confident wrong answer pinned below.
+	[
+		"calca",
+		["(yearly salary / 12) * tax percent / 100 = monthly take", "tax percent =>"],
+		"1200monthly take/yearly salary",
+	],
 ];
 
 /** Documented forms this engine refuses on purpose. */
@@ -88,6 +137,16 @@ const DECLINED: readonly Declined[] = [
 		["2 x 3"],
 		"6",
 		"a bare `x` stays a name (a coordinate, a variable, `2x`); `*` and `×` are the multiplication signs",
+		"refused",
+	],
+	[
+		// Calca, "Calca - the text editor for engineers": "You can type `33%`
+		// instead of `0.33`".
+		"calca",
+		["33%"],
+		"0.33",
+		"a percentage keeps its kind and is shown as one (`= 33.00%`), so that `+ 10%` and `% of` can read it; its value in arithmetic is the documented one (`33% * 1` gives `= 0.33`)",
+		"answered differently",
 	],
 ];
 
@@ -96,9 +155,18 @@ const DECLINED: readonly Declined[] = [
  * reason. Recorded so the corpus's reach is stated rather than implied.
  */
 const NOT_YET_COLLECTED: ReadonlyMap<string, string> = new Map([
-	["numpad", "docs.numpad.io was not reachable when the corpus was collected; its examples are quoted in the audit without stated results"],
-	["notes-calculator", "docs.notescalculator.com was not reachable; only the example the audit quotes with its result is a row"],
-	["calca", "calca.io/reference was not reachable; its forms are covered page by page in the syntax reference instead"],
+	[
+		"numpad",
+		"docs.numpad.io and web.archive.org refused connections and no mirror was found; the audit quotes its forms without stated results, so none is a row",
+	],
+	[
+		"notes-calculator",
+		"docs.notescalculator.com and web.archive.org refused connections and no mirror was found; only the example the audit quotes with its result is a row",
+	],
+	[
+		"calca",
+		"calca.io/reference refused connections; the rows are the examples with stated results in its author's announcement posts, and the reference's own examples are not collected",
+	],
 	["calculo", "no public syntax reference (its only documentation-shaped page returns 403)"],
 ]);
 
@@ -155,16 +223,26 @@ describe("other apps: documented examples that do not", () => {
 		});
 	});
 
-	test("every declined form is still refused, and each has its reason", () => {
-		for (const [app, lines, documented, reason] of DECLINED) {
+	test("every declined form is still declined in the way recorded, and each has its reason", () => {
+		for (const [app, lines, documented, reason, outcome] of DECLINED) {
 			expect(reason.length).toBeGreaterThan(20);
 			const { batch, incremental } = evaluate(lines);
 			expect(incremental).toBe(batch);
-			expect({ row: label(app, lines), refused: batch.startsWith("THREW:") && !parityMatches(batch, documented) }).toEqual({
-				row: label(app, lines),
-				refused: true,
-			});
+			const seen: DeclinedOutcome | "answered as documented" = parityMatches(batch, documented)
+				? "answered as documented"
+				: batch.startsWith("THREW:")
+					? "refused"
+					: "answered differently";
+			expect({ row: label(app, lines), outcome: seen }).toEqual({ row: label(app, lines), outcome });
 		}
+	});
+
+	// Found while collecting the Calca corpus: an unknown name before
+	// `percent` under `=>` answers a confident zero rather than refusing.
+	// `foo percent` alone says `Undefined variable: foo`. Reported for filing;
+	// this turns red when it is fixed, and then becomes an ordinary test.
+	test.failing("an unknown name before `percent` under `=>` is refused rather than answered as 0.00%", () => {
+		expect(evaluate(["foo percent =>"]).batch).toMatch(/^THREW:/);
 	});
 
 	test("the apps not yet collected each say why", () => {
