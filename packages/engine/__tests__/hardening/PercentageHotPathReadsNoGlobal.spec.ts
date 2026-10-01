@@ -26,7 +26,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { Value, ValueType, bigIntValue, boolValue, numberValue, numberValueExact, numberValueRational, percentageValue, stringValue, uomValue } from "@solve-js/vm/Value";
 import { rational } from "@solve-js/symbolic";
 import type { DecimalData } from "@solve-js/decimal";
-import { hasFiniteExactReading, percentageExact, percentageNotFinite, percentageTooLarge, toPercentage } from "@solve-js/vm/VMConversion";
+import { percentageExact, percentageRefusal, toPercentage } from "@solve-js/vm/VMConversion";
 
 const SRC = path.resolve(__dirname, "../../src");
 
@@ -53,7 +53,9 @@ function oldPercentageExact(value: Value): DecimalData | undefined {
 /** `toPercentage` as it was, for every value that is not a quantity (the quantity branch is unchanged). */
 function oldToPercentage(value: Value): Value {
 	const fraction = value.toNumber();
-	if (!Number.isFinite(fraction * 100)) return Number.isNaN(fraction) || (!Number.isFinite(fraction) && !hasFiniteExactReading(value)) ? percentageNotFinite() : percentageTooLarge();
+	// The refusal it chose is now `percentageRefusal`, which tells an overflow
+	// from a division by zero; the oracle keeps the old finiteness test only.
+	if (!Number.isFinite(fraction * 100)) return percentageRefusal(value, fraction);
 	const percentage = percentageValue(fraction);
 	const exact = oldPercentageExact(value);
 	if (exact !== undefined) percentage.exact = exact;
@@ -169,7 +171,8 @@ describe("toPercentage", () => {
 		expect(toPercentage(numberValue(Number.MAX_VALUE / 100)).type).toBe(ValueType.Percentage);
 		expect(toPercentage(numberValue(1e307)).errorCode).toBe("PERCENTAGE_OVERFLOW");
 		expect(toPercentage(numberValue(Number.NaN)).errorCode).toBe("PERCENTAGE_NOT_FINITE");
-		expect(toPercentage(numberValue(Number.NEGATIVE_INFINITY)).errorCode).toBe("PERCENTAGE_NOT_FINITE");
+		// An infinity no division by zero marked is a number past the largest double.
+		expect(toPercentage(numberValue(Number.NEGATIVE_INFINITY)).errorCode).toBe("PERCENTAGE_OVERFLOW");
 		expect(toPercentage(bigIntValue(1n << 2000n)).errorCode).toBe("PERCENTAGE_OVERFLOW");
 	});
 
