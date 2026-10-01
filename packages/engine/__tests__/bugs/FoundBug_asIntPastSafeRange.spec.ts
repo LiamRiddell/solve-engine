@@ -65,7 +65,8 @@ describe("the lines that exposed it", () => {
 	});
 
 	test("the boundary: a value with no exact reading truncates its double, as floor does", () => {
-		expect(shown("9007199254740993.5 m as int")).toBe("9,007,199,254,740,994");
+		// A length past 2^53 keeps its exact value (FoundBug_quantityPastTheDouble.spec.ts).
+		expect(shown("9007199254740993.5 m as int")).toBe("9,007,199,254,740,993");
 		expect(shown("(9007199254740993.5 + 1/3) as int")).toBe(shown("floor(9007199254740993.5 + 1/3)"));
 		expect(shown("sqrt(2^106) + 0.5 as int")).toBe("9,007,199,254,740,992");
 		// An exact fraction past 2^53 (2^60 + 0.5 is 2^61 + 1 halves) is not an

@@ -767,16 +767,18 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
     formatted = compact;
   } else if (tooSmall !== undefined) {
     formatted = tooSmall;
-  } else if (isTimeSpan && value === Math.floor(value)) {
+  } else if (isTimeSpan && (exact !== undefined ? decimalCompare(decimalRound(exact, 0), exact) === 0 : value === Math.floor(value))) {
     // For whole number TimeSpan values, format as integer
-    formatted = localiseFixedDecimal(fixedDecimalText(value, 0), loc, useGrouping);
+    formatted = localiseFixedDecimal(exact !== undefined ? decimalToFixed(exact, 0) : fixedDecimalText(value, 0), loc, useGrouping);
     shownPlaces = 0;
   } else {
     // For other values, use the configured decimal places, less the zeros
     // that only pad them when the host asked for that (#750). An explicit
     // `to N dp` keeps every place it asked for.
-    // In full digits at any size; see fixedDecimalText.
-    const fixed = fixedDecimalText(value, dp);
+    // In full digits at any size; see fixedDecimalText. A quantity past 2^53
+    // carries the exact value its double cannot hold (see exactPastTheDouble
+    // in vm/MoneyExact.ts), and that is what is written.
+    const fixed = exact !== undefined ? decimalToFixed(exact, dp) : fixedDecimalText(value, dp);
     const shown = explicitPlaces === undefined && settings.floatResult.trimTrailingZeros === true ? trimFractionZeros(fixed, 0) : fixed;
     formatted = localiseFixedDecimal(shown, loc, useGrouping);
     const point = shown.indexOf(".");

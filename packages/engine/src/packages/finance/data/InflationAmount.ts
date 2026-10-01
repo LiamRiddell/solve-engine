@@ -6,6 +6,7 @@
 
 import { Value, ValueType, errorValue } from "@solve-js/vm/Value";
 import { describeQuantity } from "@solve-js/vm/VMConversion";
+import { safeText } from "@solve-js/parser/ParseMessages";
 import { type PriceIndex, priceIndexFor, indexRatio, yearOutsideIndex } from "./PriceIndices";
 
 /** The amounts an index is bundled for, in the reader's words, for the refusals. */
@@ -38,7 +39,34 @@ export function inflationIndexFor(amount: Value): PriceIndex | Value {
   if (what === "money") {
     return errorValue("INFLATION_NO_INDEX", `no price index for ${amount.unit} is bundled, so there is no record of what it bought in another year: only an amount in ${INDEXED}, can be adjusted`);
   }
-  return errorValue("INFLATION_NO_INDEX", `a price index adjusts money, and ${amount.unit} is ${what}: give an amount in ${INDEXED}`);
+  return errorValue("INFLATION_NO_INDEX", `a price index adjusts money, and ${amount.unit} is ${what}: give an amount in ${INDEXED}${poundSterlingHint(amount.unit)}`);
+}
+
+/** The spellings of the pound as a weight, which a reader of money may have meant as sterling. */
+const POUND_WEIGHT_SPELLINGS: ReadonlySet<string> = new Set(["pound", "pounds", "lb", "lbs"]);
+
+/**
+ * A pointer at the sterling spelling for an amount in pounds of weight, or an
+ * empty string. `100 pounds` is a weight to the engine, as `5 pounds in kg`
+ * needs it to be, so a reader asking about money is shown the sign that makes
+ * it sterling.
+ *
+ * @param unit - The amount's unit.
+ */
+export function poundSterlingHint(unit: string): string {
+  return typeof unit === "string" && POUND_WEIGHT_SPELLINGS.has(unit.toLowerCase()) ? ` (for pounds sterling, write £100 or 100 GBP)` : "";
+}
+
+/**
+ * The refusal for an amount written as a count of something that is not money,
+ * `what is 100 apples from 1990`: the word stands where a currency would, and
+ * no index measures it.
+ *
+ * @param word - The word after the number, as the reader typed it.
+ * @returns The sentence the reader sees.
+ */
+export function countedAmountRefusal(word: string): string {
+  return `a price index adjusts money, and ${safeText(String(word))} is not a currency: give an amount in ${INDEXED}`;
 }
 
 /** Whether {@link inflationIndexFor} chose an index rather than refusing. */

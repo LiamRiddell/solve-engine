@@ -574,10 +574,11 @@ export type WholeRounding = "floor" | "ceil" | "trunc" | "round";
  * integer comes first (handed back as it is, see `wholeNumberUnchanged` in
  * vm/ExactIntegers.ts), then the exact fraction ({@link roundExactRationalToWhole}),
  * then the exact decimal ({@link roundExactDecimalToWhole}). A quantity that
- * carries an exact decimal, which is an amount of money, is rounded from it
- * and keeps its unit ({@link roundExactQuantityToWhole}). Null for a value
- * with none of these (a length, a `sqrt` result, a double past the safe
- * range), which keeps its double; a plain double is turned away on its first
+ * carries an exact decimal (an amount of money, or any quantity past 2^53, see
+ * `exactPastTheDouble` in vm/MoneyExact.ts) is rounded from it and keeps its
+ * unit ({@link roundExactQuantityToWhole}). Null for a value with none of
+ * these (a length below 2^53, a `sqrt` result, a double past the safe range),
+ * which keeps its double; a plain double is turned away on its first
  * two reads, so the common path allocates nothing.
  *
  * @param v - The operand.
@@ -602,8 +603,13 @@ export function roundExactToWhole(v: Value, mode: WholeRounding): Value | null {
  * rounded by the rules of {@link roundExactDecimalToWhole} and the unit kept,
  * with the whole number as the new exact decimal.
  *
- * The boundary: a quantity with no exact decimal (a length, a converted
- * amount) has nothing exact to round, and is null here, keeping its double.
+ * A quantity in another unit carries one too once it is past 2^53, where its
+ * double holds no fraction: `ceil((2^60 + 0.5) m)` is ...977.00 m, where the
+ * double answered ...976.00 m.
+ *
+ * The boundary: a quantity with no exact decimal (a length below 2^53, a
+ * converted amount) has nothing exact to round, and is null here, keeping its
+ * double.
  *
  * @param v - The operand.
  * @param mode - Which rounding.

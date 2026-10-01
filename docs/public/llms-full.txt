@@ -167,7 +167,10 @@ round(2^60 + 1/3) // 1,152,921,504,606,846,976
 ```
 sqrt(2^106) + 0.5 // 9,007,199,254,740,992
 2^1024 // ∞
-(2^53 + 1) kg // 9,007,199,254,740,992.00 kg
+(2^53 + 1) kg // 9,007,199,254,740,993.00 kg
+ceil((2^60 + 0.5) m) // 1,152,921,504,606,846,977.00 m
+round((2^60 + 0.5) m) // 1,152,921,504,606,846,977.00 m
+(2^60 + 0.5) m + 1 m // 1,152,921,504,606,846,977.50 m
 floor($9007199254740993.5) // $9,007,199,254,740,993.00
 ceil($9007199254740993.5) // $9,007,199,254,740,994.00
 ```
@@ -2793,6 +2796,12 @@ what is $500 in 1990 worth in 2010 // $834.19
 ```
 what was $500 worth in 1965 // $47.56
 $100 in 1965 dollars // $9.51
+£100 in 1990 pounds // £30.53
+```
+
+```
+what is $100 * 2 from 1990 // $506.78
+what is ($300 + $50) from 2003 // $629.96
 ```
 
 ```
@@ -2809,6 +2818,7 @@ what is €100 in 1999 worth in 2025 // €172.87
 ```
 what is €100 from 1990 // Year 1990 is before the euro began in 1999, so there is no amount in euros from then to adjust (the euro-area price index itself starts in 1996)
 what is €100 from 2000 // Year 2026 is outside the bundled euro-area price index's range (1999-2025): the series it is built from ends with 2025, so name a year up to 2025 to adjust to
+€100 in 2010 euros // Year 2026 is outside the bundled euro-area price index's range (1999-2025): the series it is built from ends with 2025, so name a year up to 2025 to adjust to
 ```
 
 ```
@@ -2822,7 +2832,13 @@ what is 100 from 1990 // a price index measures one currency, and this amount ha
 ```
 
 ```
+what is 100 apples from 1990 // a price index adjusts money, and apples is not a currency: give an amount in US dollars, pounds sterling or euros, such as $100, £100 or €100
+what is 100 pounds from 1990 // a price index adjusts money, and pounds is a mass: give an amount in US dollars, pounds sterling or euros, such as $100, £100 or €100 (for pounds sterling, write £100 or 100 GBP)
+```
+
+```
 £100 in 1990 dollars // in 1990 dollars asks for US dollars, and this amount is in GBP: ask what it was worth in 1990 instead, which reads the UK price index (ONS CDKO)
+$100 in 1990 pounds // in 1990 pounds asks for pounds sterling, and this amount is in USD: ask what it was worth in 1990 instead, which reads the US consumer price index (BLS CPI-U)
 ```
 
 ```
@@ -4966,6 +4982,13 @@ clamp 15 between 1 and 10 // 10
 
 ```
 2 is to 4 as 5 is to what // 10
+```
+
+```
+(one document)
+average(1:3) // ERROR: In average(...), 1:3 is a clock time, not a range, and a time cannot be averaged: a colon between two numbers is a range only as the list of sum, prod, map or reduce. To average numbers, list them with commas, as in average(1, 2, 3).
+average(1, 2, 3) // 2
+sum(1:3) // 6
 ```
 
 ```
