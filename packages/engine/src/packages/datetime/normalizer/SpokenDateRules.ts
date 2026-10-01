@@ -13,6 +13,7 @@ import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { getMeasure } from "@solve-js/uom/UomConverter";
+import { lowerCased } from "@solve-js/normalizer/RuleIndex";
 
 /** The weekday tokens the lexer makes, to their day of the week (0 is Sunday). */
 export const WEEKDAY_TOKEN_DAY: Readonly<Record<string, number>> = {
@@ -42,17 +43,42 @@ export const PERIOD_ANCHOR_TOKENS: Readonly<Record<string, { kind: "week" | "mon
 /** A period word on its own, the current one: `end of month`. */
 export const PERIOD_WORDS: Readonly<Record<string, "week" | "month" | "year">> = { week: "week", month: "month", year: "year" };
 
+/**
+ * {@link PERIOD_ANCHOR_TOKENS} and {@link PERIOD_WORDS} as `Map`s, built once:
+ * own keys only, so a word naming an inherited property is no period, and a
+ * lookup reads no global (`Object.prototype.hasOwnProperty.call` reads `Object`
+ * on each call, which inside a `vm` context is slow).
+ */
+const PERIOD_ANCHOR_MAP: ReadonlyMap<string, { kind: "week" | "month" | "year"; offset: number }> = new Map(Object.entries(PERIOD_ANCHOR_TOKENS));
+const PERIOD_WORD_MAP: ReadonlyMap<string, "week" | "month" | "year"> = new Map(Object.entries(PERIOD_WORDS));
+
 /** Whether a token names a period `start of` or `end of` can take. */
 export function periodOf(token: Token | undefined): { kind: "week" | "month" | "year"; offset: number } | null {
 	if (token === undefined) return null;
-	if (Object.prototype.hasOwnProperty.call(PERIOD_ANCHOR_TOKENS, token.type)) return PERIOD_ANCHOR_TOKENS[token.type];
+	const anchor = PERIOD_ANCHOR_MAP.get(token.type);
+	if (anchor !== undefined) return anchor;
 	if (token.type !== "UNIT" && token.type !== "IDENT") return null;
-	const word = (token.text ?? "").toLowerCase();
-	return Object.prototype.hasOwnProperty.call(PERIOD_WORDS, word) ? { kind: PERIOD_WORDS[word], offset: 0 } : null;
+	const kind = PERIOD_WORD_MAP.get(lowerCased(token.text ?? ""));
+	return kind === undefined ? null : { kind, offset: 0 };
 }
 
+/** A word token's text, lower-cased (only when it has a capital to lower), or "" for any other token. */
 function word(token: Token | undefined): string {
-	return token?.type === "IDENT" || token?.type === "UNIT" ? (token.text ?? "").toLowerCase() : "";
+	return token?.type === "IDENT" || token?.type === "UNIT" ? lowerCased(token.text ?? "") : "";
+}
+
+/**
+ * Whether `token` is the word `ago`, in any case. The length is tested first:
+ * the rule is offered every number and unit pair (`120 km/h`, `5 kg`), and the
+ * token after almost never has three characters, so most are turned away
+ * before any lower-casing. Lower-casing never shortens an ASCII word, and a
+ * non-ASCII text of another length cannot lower to `ago` either, so the
+ * answer is the one `word(token) === "ago"` gives.
+ */
+function isAgo(token: Token | undefined): boolean {
+	if (token === undefined || (token.type !== "IDENT" && token.type !== "UNIT")) return false;
+	const text = token.text ?? "";
+	return text.length === 3 && lowerCased(text) === "ago";
 }
 
 function endOf(token: Token): number {
@@ -75,7 +101,7 @@ export function agoNormalizerRule(priority = 62): NormalizerRule {
 			const amount = tokens[pos];
 			const unit = tokens[pos + 1];
 			const ago = tokens[pos + 2];
-			if (amount.type !== "NUMBER" || unit?.type !== "UNIT" || word(ago) !== "ago") return null;
+			if (amount.type !== "NUMBER" || unit?.type !== "UNIT" || !isAgo(ago)) return null;
 			if (getMeasure(unit.value ?? "") !== "time") return null;
 			const before = new LexerToken("DATE_OFFSET_BEFORE", tokenTypeId("DATE_OFFSET_BEFORE"), unit.value, unit.text, unit.offset, 0, unit.line, unit.col, endOf(unit));
 			const now = new LexerToken("NOW", tokenTypeId("NOW"), "now", ago!.text, ago!.offset, 0, ago!.line, ago!.col, endOf(ago!));

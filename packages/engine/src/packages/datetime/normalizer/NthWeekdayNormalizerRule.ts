@@ -2,11 +2,18 @@ import type { Token } from "@solve-js/lexer/Token";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
+import { lowerCased } from "@solve-js/normalizer/RuleIndex";
 
-/** Weekday token type -> Date.getDay() index (0=Sunday..6=Saturday). */
-const WEEKDAY_TOKEN_INDEX: Record<string, number> = {
-	SUNDAY: 0, MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3, THURSDAY: 4, FRIDAY: 5, SATURDAY: 6,
-};
+/**
+ * Weekday token type -> Date.getDay() index (0=Sunday..6=Saturday). A `Map`,
+ * so a token type that names an inherited property is no weekday.
+ */
+const WEEKDAY_TOKEN_INDEX: ReadonlyMap<string, number> = new Map([
+	["SUNDAY", 0], ["MONDAY", 1], ["TUESDAY", 2], ["WEDNESDAY", 3], ["THURSDAY", 4], ["FRIDAY", 5], ["SATURDAY", 6],
+]);
+
+/** The weekday token types, for the rule's second slot. */
+const WEEKDAY_TOKEN_TYPES: readonly string[] = [...WEEKDAY_TOKEN_INDEX.keys()];
 
 const NTH_WEEKDAY_TYPE = "NTH_WEEKDAY";
 const NTH_WEEKDAY_TYPE_ID = tokenTypeId(NTH_WEEKDAY_TYPE);
@@ -18,7 +25,7 @@ const ORDINAL = /^(\d+)(st|nd|rd|th)$/i;
  * The ordinals in words (#704), `first Monday of next month`. Five is as far as
  * a month goes; `second` lexes as the unit, the rest as names.
  */
-const ORDINAL_WORDS: Readonly<Record<string, number>> = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5 };
+const ORDINAL_WORDS: ReadonlyMap<string, number> = new Map([["first", 1], ["second", 2], ["third", 3], ["fourth", 4], ["fifth", 5]]);
 
 /**
  * Fuses the `<ordinal> <weekday>` head of `2nd Tuesday of March 2026` into a
@@ -52,7 +59,15 @@ export function nthWeekdayNormalizerRule(priority = 66): NormalizerRule {
 		// The ordinal is the LAST keyword or the number of a glued ordinal: the
 		// lexer splits `2nd` into a NUMBER (a BIGINT past the safe range) and a
 		// word, and the rule reads the two as one run.
-		shape: [{ types: ["LAST", "NUMBER", "BIGINT", "IDENT", "UNIT"] }],
+		//
+		// The second slot is the weekday after `last` or a word ordinal, or the
+		// suffix of a glued one: `1st` lexes as a NUMBER and a UNIT, `3rd` as a
+		// NUMBER and an IDENT, `2nd` as a BIGINT and a UNIT. So a number before an
+		// operator (`12 + 34`) is never offered to the rule at all.
+		shape: [
+			{ types: ["LAST", "NUMBER", "BIGINT", "IDENT", "UNIT"] },
+			{ types: ["IDENT", "UNIT", ...WEEKDAY_TOKEN_TYPES] },
+		],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const first = tokens[pos];
 			if (!first) return null;
@@ -60,15 +75,21 @@ export function nthWeekdayNormalizerRule(priority = 66): NormalizerRule {
 			let ordinal: string | null = null;
 			let ordinalTokens = 0;
 
-			const word = first.type === "IDENT" || first.type === "UNIT" ? (first.text ?? "").toLowerCase() : "";
-			if (first.type === "LAST") {
+			const type = first.type;
+			if (type === "LAST") {
 				ordinal = "last";
 				ordinalTokens = 1;
-			} else if (Object.prototype.hasOwnProperty.call(ORDINAL_WORDS, word)) {
-				ordinal = String(ORDINAL_WORDS[word]);
+			} else if (type === "IDENT" || type === "UNIT") {
+				// A word ordinal is followed straight away by its weekday, so a word
+				// that is not (every word of running prose) is turned away by one
+				// type test, before it is lower-cased. Both tests are pure, so the
+				// order changes nothing but the cost.
+				const next = tokens[pos + 1];
+				if (next === undefined || !WEEKDAY_TOKEN_INDEX.has(next.type)) return null;
+				const n = ORDINAL_WORDS.get(lowerCased(first.text ?? ""));
+				if (n === undefined) return null;
+				ordinal = String(n);
 				ordinalTokens = 1;
-			} else if (first.type === "IDENT" || first.type === "UNIT") {
-				return null;
 			} else {
 				const second = tokens[pos + 1];
 				if (!second) return null;
@@ -84,7 +105,7 @@ export function nthWeekdayNormalizerRule(priority = 66): NormalizerRule {
 			}
 
 			const weekday = tokens[pos + ordinalTokens];
-			const dow = weekday ? WEEKDAY_TOKEN_INDEX[weekday.type] : undefined;
+			const dow = weekday ? WEEKDAY_TOKEN_INDEX.get(weekday.type) : undefined;
 			if (dow === undefined) return null;
 
 			// Only a date when `of <month>` follows; otherwise leave the tokens
