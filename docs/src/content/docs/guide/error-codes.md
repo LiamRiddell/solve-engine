@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 532 codes, grouped below by the part
+ship. The engine and its built-in packages ship 533 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -566,6 +566,7 @@ In the package as `ERROR_CODE_CATALOGUES.ConditionalsErrorCodes`.
 | `CHECK_EXPECTED_COMPARISON` | either | A `check` whose statement is not a comparison. The message shows the forms a check takes. |
 | `CHECK_FAILED` | as a value | A `check` whose comparison does not hold. The message says by how much; a host counts these through `ParsingResult.checks`. |
 | `CHECK_INCOMPARABLE` | as a value | A `check` between two values that cannot be compared: text with `<`, or quantities of different measures. |
+| `CHECK_JOIN_UNSUPPORTED` | thrown | A `check` whose comparisons are joined by something other than `and`: `or`, a bitwise operator, or a comparison after a `within` margin. The message says to join them with `and` or to bracket a side. |
 | `NOT_NEEDS_BOOLEAN` | as a value | `not` or a prefix `!` before a value that is not true or false (`not 5`, `!"yes"`). The message names what the value is. |
 
 ## Constants
