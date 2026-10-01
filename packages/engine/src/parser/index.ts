@@ -5,4 +5,4 @@ export { Parser } from "./Parser";
 export { ParseletRegistry, sharedParseletRegistry } from "./registry/ParseletRegistry";
 export { OpCode, getOpCodeName } from "./OpCode";
 export { BytecodeBuilder } from "./BytecodeBuilder";
-export type { BytecodeProgram } from "./BytecodeBuilder";
+export type { BytecodeProgram, PluginCallOptions } from "./BytecodeBuilder";

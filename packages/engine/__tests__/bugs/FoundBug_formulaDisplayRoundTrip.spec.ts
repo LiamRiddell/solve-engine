@@ -405,6 +405,44 @@ describe("the round trip: every printed formula reads back as itself", () => {
 	});
 });
 
+describe("the round trip over unknowns named like units", () => {
+	// `b` is the bit, `m` the metre and `k` a thousand after a number, so a
+	// coefficient beside one of them (`2b`) read back as an amount. The printer
+	// writes them after a `*` (FoundBug_unitNamedUnknown.spec.ts).
+	test.each([2024, 77])("over generated formulas in b, m and k, seed %i, raw and simplified", (seed) => {
+		const engine = newTrackedEngine();
+		const next = generator(seed);
+		const point: ReadonlyMap<string, SymbolicNode> = new Map([["b", c(13, 10)], ["m", c(-7, 10)], ["k", c(21, 10)]]);
+		const wrong: string[] = [];
+		let checked = 0;
+		for (let i = 0; i < 1_500; i++) {
+			const tree = randomFormula(1 + (i % 6), next, ["b", "m", "k"]);
+			const want = valueAt(tree, point);
+			if (want === null || Math.abs(want) > 1e6 || dividesByZero(tree) || !subtrees(tree).every((t) => valueAt(t, point) !== null)) continue;
+			let simplified: SymbolicNode;
+			try {
+				simplified = simplifySymbolic(tree);
+			} catch {
+				continue;
+			}
+			for (const node of [tree, simplified]) {
+				const text = formatSymbolic(node);
+				let got: number | null;
+				try {
+					got = readBack(engine, text, point);
+				} catch (e) {
+					wrong.push(`${text} threw ${(e as Error).message}`);
+					continue;
+				}
+				checked++;
+				if (got === null || !close(got, want)) wrong.push(`${text} is ${String(got)}, the formula ${want}`);
+			}
+		}
+		expect(wrong).toEqual([]);
+		expect(checked).toBeGreaterThan(1_000);
+	});
+});
+
 describe("adversarial: security", () => {
 	test("prototype words as the names round-trip and leave Object.prototype alone", () => {
 		expectPrototypeUntouched(() => {

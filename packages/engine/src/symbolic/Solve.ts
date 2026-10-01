@@ -91,7 +91,7 @@ import {
 	polyDegree,
 	polyCoefficients,
 } from "@solve-js/symbolic/Polynomial";
-import { rationalRoots } from "@solve-js/symbolic/Factor";
+import { searchRationalRoots } from "@solve-js/symbolic/Factor";
 import { COMPLEX_I, complex as complexValue } from "@solve-js/symbolic/Complex";
 import { exactIntegerSqrt, surdNode } from "@solve-js/symbolic/Radicals";
 import { type RootSet, solveCubic, solveQuartic } from "@solve-js/symbolic/CubicQuartic";
@@ -201,13 +201,30 @@ function solveQuadratic(a: Rational, b: Rational, c: Rational): SymbolicNode[] {
 	}
 
 	// Irrational but real: return the surd rather than a decimal.
-	const surd = surdNode(discriminant);
-	// Subtracting the surd gives the smaller root when the leading coefficient
-	// is positive, so this ordering matches the rational case above.
-	const ascending = rationalCompare(twoA, RATIONAL_ZERO) > 0;
-	const lower: SymbolicNode = { kind: "div", left: { kind: "sub", left: constNode(rationalNeg(b)), right: surd }, right: constNode(twoA) };
-	const upper: SymbolicNode = { kind: "div", left: { kind: "add", left: constNode(rationalNeg(b)), right: surd }, right: constNode(twoA) };
-	return ascending ? [lower, upper] : [upper, lower];
+	return realSurdQuadraticRoots(rationalDiv(rationalNeg(b), twoA), rationalDiv(discriminant, rationalMul(twoA, twoA)));
+}
+
+/**
+ * The two real roots `centre ± sqrt(spread)` of a quadratic whose discriminant
+ * is positive and not a perfect square, lower first.
+ *
+ * The division by `2a` is folded into the radicand, as the complex case below
+ * does: `sqrt(D)/2a` is `sqrt(D/(2a)^2)`, which reduces. Dividing outside the
+ * root left `x^2 = 3.14159` as `0.002*sqrt(3141590)/2` and `3x^2 = 1` as
+ * `2*sqrt(3)/6`, since the simplifier cannot see a factor buried in a surd's
+ * coefficient; folded, they are `0.001*sqrt(3141590)` and `sqrt(3)/3`.
+ *
+ * @param centre - `-b/2a`, the midpoint of the two roots.
+ * @param spread - `D/(2a)^2`, positive and not the square of a rational.
+ * @returns The lower root, then the upper one.
+ */
+export function realSurdQuadraticRoots(centre: Rational, spread: Rational): SymbolicNode[] {
+	const surd = surdNode(spread);
+	if (isRationalZero(centre)) return [{ kind: "neg", operand: surd }, surd];
+	return [
+		{ kind: "sub", left: constNode(centre), right: surd },
+		{ kind: "add", left: constNode(centre), right: surd },
+	];
 }
 
 /**
@@ -389,12 +406,15 @@ function closedFormRoots(descending: readonly Rational[]): RootSet | null {
  * equation then fell past every exact method it should have used.
  *
  * @param descending - Descending coefficients, the leading one non-zero.
- * @returns The distinct rational roots in ascending order, and the coefficients
- * of the factor that survives. How much of the degree was consumed is not
- * returned because it does not need to be: every division drops exactly one
- * coefficient, so it is the difference in length and cannot drift from it.
+ * @returns The distinct rational roots in ascending order, the coefficients of
+ * the factor that survives, and whether the search for rational roots of that
+ * factor was out of reach (`searched: false`), which happens when a coefficient
+ * is a long decimal such as pi's sixteen digits. How much of the degree was
+ * consumed is not returned because it does not need to be: every division drops
+ * exactly one coefficient, so it is the difference in length and cannot drift
+ * from it.
  */
-function extractRationalRoots(descending: readonly Rational[]): { roots: Rational[]; remaining: Rational[] } {
+export function extractRationalRoots(descending: readonly Rational[]): { roots: Rational[]; remaining: Rational[]; searched: boolean } {
 	const roots: Rational[] = [];
 	let remaining = [...descending];
 
@@ -407,8 +427,13 @@ function extractRationalRoots(descending: readonly Rational[]): { roots: Rationa
 	// however many powers of `x` came out.
 	if (powersOfX > 0) roots.push(RATIONAL_ZERO);
 
+	let searched = true;
 	while (remaining.length > 1) {
-		const found = rationalRoots(remaining);
+		const found = searchRationalRoots(remaining);
+		if (typeof found === "string") {
+			searched = false;
+			break;
+		}
 		if (found.length === 0) break;
 		for (const root of found) {
 			let multiplicity = 0;
@@ -423,7 +448,7 @@ function extractRationalRoots(descending: readonly Rational[]): { roots: Rationa
 	}
 
 	// Ascending, so a row of roots reads low to high the way a reader expects.
-	return { roots: roots.sort(rationalCompare), remaining };
+	return { roots: roots.sort(rationalCompare), remaining, searched };
 }
 
 /**
@@ -441,7 +466,7 @@ function extractRationalRoots(descending: readonly Rational[]): { roots: Rationa
  * surviving factor or reports it whole as unsolved.
  */
 function solveUnivariate(descending: readonly Rational[]): SolveOutcome {
-	const { roots, remaining } = extractRationalRoots(descending);
+	const { roots, remaining, searched } = extractRationalRoots(descending);
 
 	const exact: SymbolicNode[] = roots.map(constNode);
 	const approximate: ApproximateRoot[] = [];
@@ -455,6 +480,30 @@ function solveUnivariate(descending: readonly Rational[]): SolveOutcome {
 		// an unhandled degree.
 		exact.push(constNode(rationalDiv(rationalNeg(remaining[1]), remaining[0])));
 		return finish(exact, approximate, solvedDegree + 1, 0, "");
+	}
+	// A factor whose rational roots could not be searched has a coefficient
+	// that is a long decimal, almost always an irrational constant read as its
+	// sixteen digits (`x^2 = pi`). Its closed form would be a surd of that
+	// sixteen-digit fraction, exact only for the rounded constant and unreadable,
+	// so its roots are found numerically, as decimals, instead.
+	//
+	// When the numerical method does not converge either (a coefficient near the
+	// largest double, say), the factor is reported unsolved rather than handed
+	// to the closed forms, whose radicals of such fractions are unreadable and,
+	// for a cubic of numbers near 1e308, take tens of seconds to build.
+	if (!searched) {
+		const numeric = approximateRoots(remaining);
+		if (numeric !== null) {
+			approximate.push(...numeric);
+			return finish(exact, approximate, solvedDegree + leftoverDegree, 0, "");
+		}
+		return finish(
+			exact,
+			approximate,
+			solvedDegree,
+			leftoverDegree,
+			`a degree-${leftoverDegree} factor of it has coefficients too long to solve exactly, and the numerical method did not converge on it`,
+		);
 	}
 	if (leftoverDegree === 2) {
 		exact.push(...solveQuadratic(remaining[0], remaining[1], remaining[2]));

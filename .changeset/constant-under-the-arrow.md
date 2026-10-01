@@ -17,7 +17,7 @@ The arrow (`=>`) keeps a name with no value as an unknown, which is what makes `
 | `x*π = 2`, then `x =>` | `π stored as an equation: solve with "π =>"`, then `x` | `0.6366197724` |
 | `π = 3`, then `π km =>` | `3.00 km` | `3.00 km` |
 
-The boundary: a formula holds a constant as its decimal, as it holds any other number, so `π + x =>` is `x+3.1415926536` rather than keeping the letter; that is how `pi` was already read. A note that gives `π` or `ans` a value of its own is read with that value, as before. A look-alike (`Π`, `ϖ`, a Cyrillic `а` in `аns`) is an ordinary name. `ans` inside an equation is read when the equation is solved, relative to the line that asks, as `prev` is.
+The boundary: a formula holds a constant as its decimal, as it holds any other number, so `π + x =>` is `x+3.1415926536` rather than keeping the letter; that is how `pi` was already read. A note that gives `π` or `ans` a value of its own is read with that value, as before. A look-alike (`Π`, `ϖ`, a Cyrillic `а` in `аns`) is an ordinary name. `ans` inside an equation is read relative to the line that stored the equation, the answer above it (a later fix; see `equation-reads-the-line-above.md`).
 
 ## Verification
 

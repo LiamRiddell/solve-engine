@@ -1,4 +1,5 @@
 import { Value, ValueType, numberValue, boolValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, splitValue, type MatrixData } from "@solve-js/vm/Value";
+import { numberText, shortestText } from "@solve-js/utilities/Number";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
@@ -240,7 +241,7 @@ function exactTangent(radians: number): Value {
  */
 function outsideDomain(name: string, x: number, inDomain: (x: number) => boolean, domain: string): Value | null {
     if (Number.isNaN(x) || inDomain(x)) return null;
-    return errorValue("FUNCTION_DOMAIN", `${name}(${x}) has no real value: ${name} is only defined for ${domain}.`);
+    return errorValue("FUNCTION_DOMAIN", `${name}(${shortestText(x)}) has no real value: ${name} is only defined for ${domain}.`);
 }
 
 /** Whether a number is a valid sine or cosine, the domain of the inverse functions. */
@@ -506,7 +507,7 @@ function notWholeCount(name: string, args: readonly Value[]): Value | null {
     for (const arg of args.slice(0, 2)) {
         const x = arg.toNumber();
         if (!Number.isInteger(x)) {
-            return errorValue("NOT_WHOLE_NUMBER", `${name} counts whole things: ${x} is not a whole number.`);
+            return errorValue("NOT_WHOLE_NUMBER", `${name} counts whole things: ${numberText(x)} is not a whole number.`);
         }
     }
     return null;
@@ -1473,7 +1474,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (factRefused !== null) return factRefused;
         const n = args[0].toNumber();
         if (!Number.isInteger(n) || n < 0) {
-            return errorValue("INVALID_FACTORIAL_INPUT", `A factorial is only defined for a whole number of zero or more, and ${n} is not one.`);
+            return errorValue("INVALID_FACTORIAL_INPUT", `A factorial is only defined for a whole number of zero or more, and ${numberText(n)} is not one.`);
         }
         if (n > 170) {
             return errorValue("FACTORIAL_OVERFLOW", `${n}! is too large to hold as a number: 170! is the largest factorial that fits.`);

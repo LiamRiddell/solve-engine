@@ -31,6 +31,31 @@ Exactness holds wherever a currency is involved, a currency against a plain
 number included, and that includes adding a percentage: `$0.10 + 15%` is
 `$0.115`, which the half-cent rule rounds up.
 
+## An amount in scientific notation
+
+Scientific notation writes a number as digits times a power of ten: `1e-3` is
+1 times 10 to the power -3, a thousandth, and `1.5e2` is 150. An amount of money
+written that way is the same amount, held exactly as the point form is, so it
+rounds to the cent the same way, whether the currency is written before the
+amount or after it.
+
+```solve
+$1e-3 // $0.00
+$0.001 // $0.00
+$1.005e0 // $1.01
+$1.5e2 // $150.00
+1e-3 USD // $0.00
+£2.5e-2 // £0.03
+$1e-3 * 1000 // $1.00
+```
+
+The boundary: only the amount of money is read this way. A plain number in
+scientific notation stays a floating-point number, as it has always been (see
+[decimals](/syntax/decimals/)), so `1e-3` on its own is still `0.001`. An
+amount past the largest number the engine holds, `$1e400`, is shown as `$∞`, the
+same as that amount written out in full, and one too small to be anything but
+zero, `$1e-400`, is `$0.00`.
+
 ## Prices per unit
 
 A price per unit, such as 15 cents a kilowatt-hour or £4.50 a kilogram, is

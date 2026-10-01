@@ -179,7 +179,7 @@ export const CoreErrorCodes = {
   SYMBOLIC_FORMULA_VALUE_UNSUPPORTED: "SYMBOLIC_FORMULA_VALUE_UNSUPPORTED",
   /** A builtin with no symbolic reading (`min`, `random`, the finance block, ...) applied to an expression still containing an unknown. Returned rather than computing against `toNumber()`'s placeholder zero. */
   SYMBOLIC_UNSUPPORTED_FUNCTION: "SYMBOLIC_UNSUPPORTED_FUNCTION",
-  /** The rational-root search exceeding `FACTOR_MAX_ROOT_CANDIDATES`. The candidate set is the product of two divisor sets, so a highly-composite coefficient escapes quickly. */
+  /** `factor` of a cubic or higher whose rational roots cannot be searched: a coefficient too long a fraction to list its divisors (`factor(x^3 - pi)`), or a candidate set past `FACTOR_MAX_ROOT_CANDIDATES`. A quadratic is decided by its discriminant instead and never raises it. */
   SYMBOLIC_FACTOR_LIMIT_EXCEEDED: "SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
   /** An equation outside what the solver attempts: above the degree ceiling, non-linear in the unknown while another unknown is present, or not a polynomial and not evaluable numerically either (another unknown in it, an imaginary constant, a function with no numeric form). A non-polynomial equation in one unknown is solved numerically instead (see `symbolic/NumericSolve.ts`). */
   SYMBOLIC_SOLVE_UNSUPPORTED: "SYMBOLIC_SOLVE_UNSUPPORTED",

@@ -158,6 +158,17 @@ export interface UserFunctionDef {
 const EMPTY_STRINGS: readonly string[] = Object.freeze([]);
 const EMPTY_NUMBERS = new Float64Array(0);
 
+/** How {@link BytecodeBuilder.emitPluginCall} emits a call. */
+export interface PluginCallOptions {
+	/**
+	 * The handler never returns a promise: it answers from its arguments as the
+	 * line runs. Such a call does not mark the program as one that may wait for
+	 * data, so it is allowed inside a held expression. A handler marked so that
+	 * does return a promise breaks this contract.
+	 */
+	readonly synchronous?: boolean;
+}
+
 /**
  * Direct-to-bytecode compiler for the Pratt parser.
  *
@@ -201,8 +212,21 @@ export class BytecodeBuilder {
 	 * `pluginFunctions` entry an index at registration; this resolves the name to
 	 * that index and emits `CALL_PLUGIN` + index + argCount. Package authors emit
 	 * through this rather than a hand-allocated index.
+	 *
+	 * A call marks the program as one that may wait for data ({@link
+	 * BytecodeProgram.hasAsync}), since a handler is allowed to return a
+	 * promise, and every held expression (the expression of `solve`, a
+	 * function body, a map transform) refuses such a program. A handler that
+	 * never returns a promise, one that only builds a value from its
+	 * arguments (the constants package attaching `gravity`'s unit), passes
+	 * `{ synchronous: true }`, and the call leaves that mark alone.
+	 *
+	 * @param name - The plugin function's registered name.
+	 * @param argCount - How many values the call takes from the stack.
+	 * @param options - `synchronous`: the handler always answers at once.
 	 */
-	emitPluginCall(name: string, argCount: number): void {
+	emitPluginCall(name: string, argCount: number, options?: PluginCallOptions): void {
+		const wasAsync = this._hasAsync;
 		const index = this.pluginFunctionIndex?.get(name);
 		if (index === undefined) {
 			throw ErrorFactory.execution(
@@ -237,6 +261,9 @@ export class BytecodeBuilder {
 			this.emitIndex((index >> 8) & 0xff); // high byte
 		}
 		this.emitIndex(argCount);
+		// emitOpcode marked the program; a synchronous call puts the mark back
+		// as it was, so an earlier asynchronous call on the line still counts.
+		if (options?.synchronous === true) this._hasAsync = wasAsync;
 	}
 
 	/** Emit an {@link OpCode} instruction. */

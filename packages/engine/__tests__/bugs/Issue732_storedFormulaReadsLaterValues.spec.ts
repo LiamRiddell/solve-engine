@@ -104,7 +104,7 @@ describe("what it must not break", () => {
 	});
 
 	test("a => line keeps its unknowns symbolic", () => {
-		expect(both(["1+2+b+3+b =>"])).toEqual(["2b+6"]);
+		expect(both(["1+2+b+3+b =>"])).toEqual(["2*b+6"]);
 	});
 
 	test("a stored equation read by a solve keeps its behaviour", () => {

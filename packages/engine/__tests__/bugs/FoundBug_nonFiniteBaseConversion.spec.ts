@@ -135,6 +135,9 @@ describe("adversarial", () => {
 			}
 		}
 		expect(shown("(-1/0) in hex")).toMatch(/^BASE_NOT_FINITE: /);
-		expect(shown("(2^1023 * 1.9) in hex")).toMatch(/^0xF3+0+$/);
+		// The exact value, 19/10 of 2^1023, whose hex digits repeat; it was the
+		// double's digits while the exact fraction converted as an infinity
+		// (FoundBug_infinityInAResult, rationalToNumber).
+		expect(shown("(2^1023 * 1.9) in hex")).toMatch(/^0xF3+$/);
 	});
 });

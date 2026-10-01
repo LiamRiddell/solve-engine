@@ -78,6 +78,34 @@ export function numberFormatFor(
 }
 
 /**
+ * A number that is not finite, written the way the engine writes it: `∞`,
+ * `-∞`, or `NaN`. JavaScript's own word for an infinity, `Infinity`, is not
+ * one a reader typed or can type back (the engine reads `∞`), so no text the
+ * reader sees is built from `String(value)` for one.
+ *
+ * @param value - Any number.
+ * @returns `"∞"`, `"-∞"` or `"NaN"`, or `undefined` for a finite number.
+ */
+export function nonFiniteText(value: number): string | undefined {
+	if (value === Number.POSITIVE_INFINITY) return "∞";
+	if (value === Number.NEGATIVE_INFINITY) return "-∞";
+	if (Number.isNaN(value)) return "NaN";
+	return undefined;
+}
+
+/**
+ * A number as `String` writes it, except that an infinity is written `∞` (see
+ * {@link nonFiniteText}): for a message or an answer that quotes a number back
+ * to the reader, where `String` would write `Infinity`.
+ *
+ * @param value - Any number.
+ * @returns Its text (`"0.25"`, `"1e+21"`, `"∞"`, `"-∞"`, `"NaN"`).
+ */
+export function numberText(value: number): string {
+	return nonFiniteText(value) ?? String(value);
+}
+
+/**
  * The magnitude from which `Number.prototype.toFixed` stops writing digits and
  * writes the number as `String` does, in exponent form (`1e+21`).
  */
@@ -96,15 +124,18 @@ const FIXED_EXPONENT_FROM = 1e21;
  * zeros to the decimal point. They are built from `String`'s text rather than
  * by calling the formatter, which costs about forty times as much and is met
  * on every line of a long money chain. A double this large is whole, so the
- * places are zeros. Below it, and for a value that is not finite, this is
- * `toFixed` itself, one comparison and nothing more.
+ * places are zeros. Below it this is `toFixed` itself, one comparison and
+ * nothing more. An infinity is written `∞` (see {@link nonFiniteText}), where
+ * `toFixed` writes `Infinity`, which showed as `Infinity km` and `$Infinity`.
  *
  * @param value - The number.
  * @param places - The places after the point, a whole number from 0 to 100.
- * @returns The digits (`"-12.50"`, `"10000000000000000000000.00"`), or `toFixed`'s text for an infinity or NaN.
+ * @returns The digits (`"-12.50"`, `"10000000000000000000000.00"`), `"∞"` or `"-∞"` for an infinity, or `"NaN"`.
  */
 export function fixedDecimalText(value: number, places: number): string {
-	if (!(value >= FIXED_EXPONENT_FROM || value <= -FIXED_EXPONENT_FROM) || value === Number.POSITIVE_INFINITY || value === Number.NEGATIVE_INFINITY) {
+	if (value === Number.POSITIVE_INFINITY) return "∞";
+	if (value === Number.NEGATIVE_INFINITY) return "-∞";
+	if (!(value >= FIXED_EXPONENT_FROM || value <= -FIXED_EXPONENT_FROM)) {
 		return value.toFixed(places);
 	}
 	return wholeDigitsOfLargeDouble(value) + (places > 0 ? "." + "0".repeat(places) : "");
@@ -140,10 +171,10 @@ export function wholeDigitsOfLargeDouble(value: number): string {
  * too small to show in places.
  *
  * @param n - The number.
- * @returns Its text (`"0.25"`, `"10000000000000000000000"`, `"Infinity"`).
+ * @returns Its text (`"0.25"`, `"10000000000000000000000"`, `"∞"`).
  */
 export function shortestText(n: number): string {
-	return n >= FIXED_EXPONENT_FROM || n <= -FIXED_EXPONENT_FROM ? fixedDecimalText(n, 0) : String(n);
+	return n >= FIXED_EXPONENT_FROM || n <= -FIXED_EXPONENT_FROM ? fixedDecimalText(n, 0) : nonFiniteText(n) ?? String(n);
 }
 
 /** How many digits of a too-small value are worth showing: enough to read it, not enough to imply precision. */

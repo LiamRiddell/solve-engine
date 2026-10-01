@@ -9,6 +9,8 @@ import { BindingPower, buildBindingPowerTable } from "@solve-js/parser/BindingPo
 import { getLocale } from "@solve-js/constants/locales";
 import { bigIntLiteralDigits } from "@solve-js/parser/BigIntLiteral";
 import { isPastSafeWholeLiteral, pastSafeBaseLiteralDigits } from "@solve-js/parser/WholeLiteral";
+import { decimalFromExponentLiteral } from "@solve-js/decimal/Decimal";
+import { isMoneyAmount } from "@solve-js/parser/MoneyAmountLiteral";
 import { localeLiteralRefusal, unreadableInLocale } from "@solve-js/parser/LocaleNumberLiteral";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
@@ -584,10 +586,13 @@ export class PrecedenceParser {
           }
           v = parseFloat(normalized);
           // A plain fractional literal (digits, one dot, digits) is what carries
-          // an exact decimal. Scientific notation like "2.5e-3" has a dot too
-          // but no exact base-ten form worth the trouble, so it stays a
-          // PUSH_NUMBER double, and so does any integer (grouping stripped).
+          // an exact decimal. Scientific notation like "2.5e-3" stays a
+          // PUSH_NUMBER double, as does any integer (grouping stripped), except
+          // as the amount of money: `$1e-3` is exactly 1/1000 dollars, as
+          // `$0.001` is, so it rounds to the cent (see MoneyAmountLiteral.ts;
+          // the VM reads the exponent form exactly).
           if (PLAIN_DECIMAL.test(normalized) || isPastSafeWholeLiteral(normalized)) decimalText = normalized;
+          else if (this.isExactMoneyExponent(normalized)) decimalText = normalized;
         }
         if (decimalText !== null) {
           builder.emitOpcode(OpCode.PUSH_DECIMAL);
@@ -1042,6 +1047,19 @@ export class PrecedenceParser {
 
   peek(): Token | undefined {
     return this.tokens[this.current];
+  }
+
+  /**
+   * Whether the exponent-form literal just consumed (`normalized`, the
+   * locale's marks rewritten) is the amount of money and has an exact value
+   * to keep: `$1e-3`, `1e-3 USD`. See parser/MoneyAmountLiteral.ts.
+   *
+   * @param normalized - The literal as the number path normalized it.
+   * @returns `true` to push it as PUSH_DECIMAL.
+   */
+  private isExactMoneyExponent(normalized: string): boolean {
+    const at = this.current - 1;
+    return isMoneyAmount(this.tokens[at - 1], this.tokens[at - 2], this.tokens[at + 1]) && decimalFromExponentLiteral(normalized) !== null;
   }
 
   /**

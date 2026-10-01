@@ -17,7 +17,7 @@
 import { Value, ValueType, stringValue, errorValue } from "@solve-js/vm/Value";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { moneyUnitOf } from "@solve-js/format/FormatEngine";
-import { compactParts } from "@solve-js/utilities/Number";
+import { compactParts, numberText } from "@solve-js/utilities/Number";
 
 export { compactParts, type CompactParts } from "@solve-js/utilities/Number";
 
@@ -26,7 +26,7 @@ export { compactParts, type CompactParts } from "@solve-js/utilities/Number";
  * that is a multiple of three.
  */
 export function engineeringString(n: number): string {
-	if (!Number.isFinite(n)) return String(n);
+	if (!Number.isFinite(n)) return numberText(n);
 	if (n === 0) return "0e+0";
 	let exponent = Math.floor(Math.floor(Math.log10(Math.abs(n))) / 3) * 3;
 	// Fifteen figures keep the digits the value has while dropping the dust a
@@ -42,7 +42,7 @@ export function engineeringString(n: number): string {
 /** `n` written compactly with a suffix, to three significant figures. See {@link compactParts}. */
 export function compactString(n: number): string {
 	const parts = compactParts(n);
-	if (parts === undefined) return String(n);
+	if (parts === undefined) return numberText(n);
 	return `${parts.sign}${parts.figure}${parts.suffix}`;
 }
 
