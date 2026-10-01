@@ -869,27 +869,56 @@ describe("#774 live values and exiting", () => {
 	});
 
 	test("after a run, the query cache holds no timer that would keep Node running", async () => {
-		const timers = () => process.getActiveResourcesInfo().filter((kind) => kind === "Timeout").length;
+		// Every timer the run starts is recorded, and after it none may still be
+		// pending with a hold on the event loop. Counting the process's timers
+		// instead let one left by another suite in the same worker move the
+		// count while this test ran, which failed it on CI with nothing wrong.
+		const started: NodeJS.Timeout[] = [];
+		const realSetTimeout = globalThis.setTimeout;
+		const recording = ((handler: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+			const t = realSetTimeout(handler, ms, ...args);
+			started.push(t);
+			return t;
+		}) as typeof setTimeout;
+		globalThis.setTimeout = recording;
+		try {
+			await solve(["lookup abcde"], { packages: [probePackage(slowLength(5))] });
+		} finally {
+			globalThis.setTimeout = realSetTimeout;
+		}
 		await later(20);
-		const before = timers();
-		await solve(["lookup abcde"], { packages: [probePackage(slowLength(5))] });
-		await later(20);
-		expect(timers()).toBeLessThanOrEqual(before);
+		expect(started.length).toBeGreaterThan(0);
+		const holding = started.filter((t) => !(t as unknown as { _destroyed?: boolean })._destroyed && t.hasRef());
+		expect(holding).toHaveLength(0);
 
 		// The control: the same lookup on an engine nobody clears keeps its
 		// query in the cache, whose collection timer is what held Node open.
 		// Read from the engine's own cache rather than the process's timer
 		// count, which a timer left by an earlier suite in the same process can
 		// move either way while this one runs.
+		const keptTimers: NodeJS.Timeout[] = [];
+		globalThis.setTimeout = ((handler: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+			const t = realSetTimeout(handler, ms, ...args);
+			keptTimers.push(t);
+			return t;
+		}) as typeof setTimeout;
 		const kept = createEngine({ extraPackages: [probePackage(slowLength(5))] });
-		kept.getBatcher().onLineResult = () => {};
-		kept.evaluateExpression("lookup abcde");
-		await kept.settle();
+		try {
+			kept.getBatcher().onLineResult = () => {};
+			kept.evaluateExpression("lookup abcde");
+			await kept.settle();
+		} finally {
+			globalThis.setTimeout = realSetTimeout;
+		}
+		const holdingOf = (list: NodeJS.Timeout[]) => list.filter((t) => !(t as unknown as { _destroyed?: boolean })._destroyed && t.hasRef());
 		expect(kept.queryClient.getQueryCache().getAll().length).toBeGreaterThan(0);
+		// Before the clear, the kept query's collection timer is still holding
+		// the event loop: the recording sees the very thing it is there to catch.
+		expect(holdingOf(keptTimers).length).toBeGreaterThan(0);
 		kept.clear();
 		expect(kept.queryClient.getQueryCache().getAll()).toHaveLength(0);
 		await later(20);
-		expect(timers()).toBeLessThanOrEqual(before);
+		expect(holdingOf(keptTimers)).toHaveLength(0);
 	});
 });
 
