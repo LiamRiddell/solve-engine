@@ -2722,6 +2722,32 @@ payment = monthly payment on 200000 over 25 years at 4% // 1,055.67
 payment * 12 // 12,668.08
 ```
 
+```
+(one document)
+what is $300 and $50 from 2003 // ERROR: an inflation question names its year straight after the amount, as in what is $300 from 2003 or what is $300 in 1990 worth in 2010, and here "and" comes after the amount: to adjust a total, join the amounts with a plus sign, as in what is $300 + $50 from 2003
+```
+
+```
+(one document)
+what is $100 from 1990 + $5 // $258.39
+what is $100 from (1990 + 5) // $217.31
+year = 1990 // 1,990
+what is $100 from year // $253.39
+```
+
+```
+(one document)
+what is $100 from 1990.5 // ERROR: the year of an inflation question is a plain whole number, such as 1990, and 1990.5 is not a whole number
+what is $100 from $1990 // ERROR: the year of an inflation question is a plain whole number, such as 1990, and this one is money
+what was $100 worth in 1990 kg // ERROR: the year of an inflation question is a plain whole number, such as 1990, and this one is a mass
+```
+
+```
+(one document)
+what is $100 in 1990 + 5 worth in 2010 // ERROR: an inflation question between two years reads what is <amount> in <year> worth in <year>, and here "+" comes after the first year: a year is one number or name, so a year worked out goes in brackets, as in (1990 + 5)
+what is $100 in (1990 + 5) worth in 2010 // $143.08
+```
+
 ## investments
 
 https://liamriddell.github.io/solve-engine/syntax/investments/
@@ -2997,6 +3023,14 @@ sum(5) // sum adds up the items of a list or a range, such as [1, 2, 3] or 1:3, 
 prod(5) // prod multiplies together the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number.
 map(x * 2, 5) // map works through the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number.
 sum(1, 2, 3) // 6
+```
+
+```
+(one document)
+sum(9:30, 10:15) // ERROR: A date or time cannot be added: only numbers and quantities can.
+total(9:30, 10:15) // ERROR: A date or time cannot be added: only numbers and quantities can.
+sum(2 hours, 3 hours) // 5 hours
+sum(x, 1:3) // 6
 ```
 
 ## money-precision

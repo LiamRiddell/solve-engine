@@ -485,9 +485,11 @@ describe("adversarial lines", () => {
 	test("numeric edges where a year goes are honest, and never a number for a year outside 1913 to 2026", () => {
 		for (const line of fill("inflationAdjust($100, X, 2020)", NUMERIC_EDGES)) expectHonestLine(line, { allowNaN: true });
 		for (const line of fill("what was $500 worth in X", NUMERIC_EDGES)) expectHonestLine(line, { engine: engine2026(), allowNaN: true });
-		for (const year of ["0", "-1913", "1912.999", "2026.5e3", "2^53", "1e308"]) {
+		for (const year of ["0", "-1913", "2026.5e3", "2^53", "1e308"]) {
 			expect({ year, code: code(`inflationAdjust($100, ${year}, 2020)`) }).toEqual({ year, code: "INFLATION_YEAR_OUT_OF_RANGE" });
 		}
+		// A fraction is not a year at all, in range or not (see FoundBug_inflationYear.spec.ts).
+		expect(code("inflationAdjust($100, 1912.999, 2020)")).toBe("INFLATION_EXPECTED_YEAR");
 	});
 
 	test("text edges around the form are honest", () => {

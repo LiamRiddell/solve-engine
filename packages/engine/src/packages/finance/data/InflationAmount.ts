@@ -105,3 +105,61 @@ export function adjustByCurrency(amount: Value, fromYear: number, toYear: number
   }
   return { value: amount.toNumber() * ratio };
 }
+
+/** What a value given as a year is, in the reader's words, for {@link inflationYear}'s refusal. */
+function describeNotAYear(value: Value): string {
+  switch (value.type) {
+    case ValueType.Uom:
+      return value.unit === undefined ? "not a plain number" : describeQuantity(value.unit);
+    case ValueType.Percentage:
+      return "a percentage";
+    case ValueType.Datetime:
+      return "a date or time (write its year on its own, such as 1990)";
+    case ValueType.String:
+      return "text";
+    case ValueType.Boolean:
+      return "true or false";
+    case ValueType.Matrix:
+      return "a list";
+    case ValueType.Range:
+      return "a range";
+    default:
+      return "not a plain number";
+  }
+}
+
+/** The opening every {@link inflationYear} refusal shares. */
+const A_YEAR_IS = "the year of an inflation question is a plain whole number, such as 1990";
+
+/**
+ * The year an inflation question names, or the refusal when the value given
+ * for it is not a year.
+ *
+ * A year is a plain whole number. The year after `from`, `in` or `worth in`
+ * used to be read for its number whatever it was, so `$1990` and `1990 kg`
+ * were the year 1990 and `1990.5` was looked up as 1990, each answered with a
+ * confident figure. A whole number outside the index's range is not refused
+ * here: it is a year, and the index says which years it holds
+ * (`INFLATION_YEAR_OUT_OF_RANGE`). A fault or a pending value is handed back
+ * as it is.
+ *
+ * @param value - The value given as the year.
+ * @returns The year, or an `INFLATION_EXPECTED_YEAR` error Value, or the fault.
+ */
+export function inflationYear(value: Value | undefined): number | Value {
+  if (value === undefined || value === null) return errorValue("INFLATION_EXPECTED_YEAR", `an inflation question needs a year: ${A_YEAR_IS}`);
+  if (value.type === ValueType.Error || value.type === ValueType.Pending) return value;
+  const plain = value.type === ValueType.Number || value.type === ValueType.Hex || value.type === ValueType.BigInt
+    || (value.type === ValueType.Uom && value.unit === undefined);
+  if (!plain) return errorValue("INFLATION_EXPECTED_YEAR", `${A_YEAR_IS}, and this one is ${describeNotAYear(value)}`);
+  const year = value.toNumber();
+  if (!Number.isFinite(year)) return errorValue("INFLATION_EXPECTED_YEAR", `${A_YEAR_IS}, and this one is not a finite number`);
+  if (!Number.isInteger(year)) return errorValue("INFLATION_EXPECTED_YEAR", `${A_YEAR_IS}, and ${String(year)} is not a whole number`);
+  // `-0` is the year 0, which the index then refuses as out of range.
+  return year + 0;
+}
+
+/** Whether {@link inflationYear} read a year rather than refusing. */
+export function isYear(year: number | Value): year is number {
+  return typeof year === "number";
+}

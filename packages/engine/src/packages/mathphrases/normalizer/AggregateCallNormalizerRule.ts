@@ -55,6 +55,40 @@ function isCollection(arg: readonly Token[]): boolean {
 }
 
 /**
+ * Whether an argument holds a colon of its own, outside any bracket inside it:
+ * `9:30` does, `[1:3]` and `f(1:3)` do not.
+ *
+ * @param arg - The argument's tokens.
+ */
+export function hasOwnColon(arg: readonly Token[]): boolean {
+	let depth = 0;
+	for (const t of arg) {
+		if (t.type === "LPAREN" || t.type === "LBRACKET") depth++;
+		else if (t.type === "RPAREN" || t.type === "RBRACKET") depth--;
+		else if (depth === 0 && t.type === "COLON") return true;
+	}
+	return false;
+}
+
+/**
+ * Whether a two-argument `sum(...)` is map-reduce's `sum(<element>, <collection>)`:
+ * its first argument is a bare name, or its second a list, a range or a name,
+ * and its first is not a colon form. An element is worked out for each item,
+ * so it is never a range, and a colon written there is a clock time:
+ * `sum(9:30, 10:15)` is two times to add, as `total(9:30, 10:15)` is, where it
+ * used to be read as an element `9` and stopped at the colon with the parser's
+ * wording.
+ *
+ * @param body - The first argument's tokens.
+ * @param collection - The second argument's tokens.
+ */
+export function isMapReduceSum(body: readonly Token[], collection: readonly Token[]): boolean {
+	if (hasOwnColon(body)) return false;
+	const bareName = body.length === 1 && body[0].type === "IDENT";
+	return bareName || isCollection(collection);
+}
+
+/**
  * `sum(1, 2, 3)`, `average(4, 8)`, `mean(1, 2, 3)`, `median(...)` and
  * `stdev(...)`: the spreadsheet calls over plain values (#703), read as
  * `total of`, `average of`, `median of` and `standard deviation of` are.
@@ -65,8 +99,9 @@ function isCollection(arg: readonly Token[]): boolean {
  * - a line range stays a line range: `average(line 1 : line 4)`;
  * - map-reduce stays map-reduce: `sum(x, [10, 20, 30])` and `sum(10*x, 0:9)`,
  *   a two-argument `sum` whose first argument is a bare name or whose second
- *   is a list, a range or a name. Three or more arguments, or two plain values
- *   (`sum(1, 2)`), are an aggregate.
+ *   is a list, a range or a name (see {@link isMapReduceSum}). Three or more
+ *   arguments, two plain values (`sum(1, 2)`), or a first argument written
+ *   with a colon (`sum(9:30, 10:15)`, two clock times) are an aggregate.
  *
  * Runs above the map-reduce and line-range call rules (both at 80), so it is
  * asked first and declines, leaving the call to them, whenever their shape
@@ -90,11 +125,7 @@ export function aggregateCallNormalizerRule(priority = 85): NormalizerRule {
 				if (isLineReference(tokens[i], tokens[i + 1])) return null;
 			}
 			const { args } = call;
-			if (MAP_REDUCE_WORDS.has(name) && args.length === 2) {
-				const [body, collection] = args;
-				const bareName = body.length === 1 && body[0].type === "IDENT";
-				if (bareName || isCollection(collection)) return null;
-			}
+			if (MAP_REDUCE_WORDS.has(name) && args.length === 2 && isMapReduceSum(args[0], args[1])) return null;
 			// The words map-reduce and line ranges already own keep their
 			// single-argument and empty readings.
 			if ((name === "sum" || name === "total" || name === "average") && args.length < 2) return null;

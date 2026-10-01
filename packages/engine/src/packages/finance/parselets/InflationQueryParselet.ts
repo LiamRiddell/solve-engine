@@ -13,7 +13,7 @@ import { quoteToken } from "@solve-js/parser/ParseMessages";
 const INFLATION_ADJUST_BUILTIN_IDX = 60;
 
 /** Which leading phrase triggered this parselet. See FinancePackage.ts's `phrases` field. */
-type InflationQueryVariant = "what-is" | "what-was";
+export type InflationQueryVariant = "what-is" | "what-was";
 
 /**
  * Whether the rest of the line actually spells an inflation query.
@@ -102,6 +102,68 @@ export function parseInflationAmount(parser: Parser, builder: BytecodeBuilder): 
 }
 
 /**
+ * Where a year stops: one factor, before any `*`, `/`, `+`, `-` or conversion
+ * `in`. A number, a name, a bracketed expression, a call or a power
+ * (`2^11`) is a year; an operator that joins factors is not part of it.
+ *
+ * The year used to be read at `Lowest`, to the end of the line, so `what is
+ * $100 from 1990 + $5` added the money to the year and answered for 1995. Read
+ * as one factor, the year is 1990 and the `+ $5` is left to the line, which
+ * adds it to the answer, as `$100 in 1990 dollars + $5` and `5 km in m + 3 m`
+ * add theirs. A year worked out from a sum is written in brackets: `from
+ * (1990 + 5)`.
+ */
+const YEAR_BINDING_POWER = BindingPower.Product;
+
+/**
+ * Read the year of an inflation question: one factor at
+ * {@link YEAR_BINDING_POWER}. Whether its value is a year (a plain whole
+ * number) is decided when the line runs, by `inflationYear`, since a name or
+ * a call has no value until then.
+ *
+ * @param parser - Positioned on the year.
+ * @param builder - Receives the year's bytecode, one value on the stack.
+ */
+export function parseInflationYear(parser: Parser, builder: BytecodeBuilder): void {
+  parser.parseExpression(YEAR_BINDING_POWER, builder);
+}
+
+/**
+ * The refusal for an inflation question whose amount is followed by neither
+ * `from` nor `in`, in the reader's words: the two shapes, and the word that
+ * stands where the keyword goes. An `and` between amounts is pointed at the
+ * plus sign, which the amount reads (see {@link parseInflationAmount}).
+ *
+ * @param next - The token after the amount, or undefined at the end of the line.
+ * @param variant - Which question it is: `what was` has the one shape, `worth in`.
+ * @returns The sentence the reader sees.
+ */
+export function fromOrInRefusal(next: Token | undefined, variant: InflationQueryVariant = "what-is"): string {
+  const shapes = variant === "what-was"
+    ? `an inflation question names its year straight after the amount, as in what was $300 worth in 1965`
+    : `an inflation question names its year straight after the amount, as in what is $300 from 2003 or what is $300 in 1990 worth in 2010`;
+  if (!next) return `${shapes}, and here the line ends after the amount`;
+  const andHint = String(next.value).toLowerCase() === "and"
+    ? `: to adjust a total, join the amounts with a plus sign, as in ${variant === "what-was" ? "what was $300 + $50 worth in 1965" : "what is $300 + $50 from 2003"}`
+    : "";
+  return `${shapes}, and here ${quoteToken(next)} comes after the amount${andHint}`;
+}
+
+/**
+ * The refusal for `what is <amount> in <year>` followed by something other
+ * than `worth in`: most often a sum written as the first year, which is one
+ * factor (see {@link YEAR_BINDING_POWER}).
+ *
+ * @param next - The token after the first year, or undefined at the end of the line.
+ * @returns The sentence the reader sees.
+ */
+export function worthInRefusal(next: Token | undefined): string {
+  const shape = `an inflation question between two years reads what is <amount> in <year> worth in <year>`;
+  const found = next ? `${quoteToken(next)} comes after the first year` : "the line ends after the first year";
+  return `${shape}, and here ${found}: a year is one number or name, so a year worked out goes in brackets, as in (1990 + 5)`;
+}
+
+/**
  * `what is $X from <year>` -> X (given as that year's dollars) expressed
  * in present-day dollars; `what is $X in <year1> worth in <year2>` -> X
  * adjusted between two arbitrary (non-present) years; `what was $X worth
@@ -135,6 +197,11 @@ export function parseInflationAmount(parser: Parser, builder: BytecodeBuilder): 
  * branch has no such collision (the next token is the fused WORTH_IN,
  * which has no infix parselet registered at all), but reads its amount the
  * same way for consistency between both variants of this class.
+ *
+ * Each year is one factor ({@link YEAR_BINDING_POWER}), so an operator after
+ * the last year applies to the answer (`what is $100 from 1990 + $5` is the
+ * answer plus $5), and the VM refuses a year that is not a plain whole number
+ * (`inflationYear`), as it refuses an amount no index measures.
  */
 export class InflationQueryParselet implements PrefixParselet {
   readonly category = "Finance";
@@ -165,9 +232,12 @@ export class InflationQueryParselet implements PrefixParselet {
       parseInflationAmount(parser, builder);
     }
 
+    // Each year is one factor (see YEAR_BINDING_POWER): what follows it is the
+    // line's, so `what is $100 from 1990 + $5` adds $5 to the answer.
     if (this.variant === "what-was") {
+      if (parser.peek()?.type !== "WORTH_IN") throw ErrorFactory.parsing("INFLATION_EXPECTED_FROM_OR_IN", fromOrInRefusal(parser.peek(), "what-was"));
       parser.consume("WORTH_IN");
-      parser.parseExpression(BindingPower.Lowest, builder); // toYear
+      parseInflationYear(parser, builder); // toYear
       builder.emitPluginCall("inflationToYearFromPresent", 2);
       return;
     }
@@ -175,15 +245,16 @@ export class InflationQueryParselet implements PrefixParselet {
     const next = parser.peek();
     if (next?.type === "FROM") {
       parser.consume();
-      parser.parseExpression(BindingPower.Lowest, builder); // fromYear
+      parseInflationYear(parser, builder); // fromYear
       builder.emitPluginCall("inflationFromYearToPresent", 2);
       return;
     }
     if (next?.type === "IN") {
       parser.consume();
-      parser.parseExpression(BindingPower.Lowest, builder); // fromYear (year1)
+      parseInflationYear(parser, builder); // fromYear (year1)
+      if (parser.peek()?.type !== "WORTH_IN") throw ErrorFactory.parsing("INFLATION_EXPECTED_FROM_OR_IN", worthInRefusal(parser.peek()));
       parser.consume("WORTH_IN");
-      parser.parseExpression(BindingPower.Lowest, builder); // toYear (year2)
+      parseInflationYear(parser, builder); // toYear (year2)
       builder.emitOpcode(OpCode.CALL_BUILTIN);
       builder.emitIndex(INFLATION_ADJUST_BUILTIN_IDX);
       builder.emitIndex(3);
@@ -191,10 +262,6 @@ export class InflationQueryParselet implements PrefixParselet {
     }
 
     // What the reader typed, not the parser's name for it (#768).
-    const got = next ? `found ${quoteToken(next)}` : "the line ends";
-    throw ErrorFactory.parsing(
-      "INFLATION_EXPECTED_FROM_OR_IN",
-      `Expected "from <year>" or "in <year> worth in <year>" after "what is <amount>", but ${got}`,
-    );
+    throw ErrorFactory.parsing("INFLATION_EXPECTED_FROM_OR_IN", fromOrInRefusal(next));
   }
 }

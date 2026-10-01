@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 545 codes, grouped below by the part
+ship. The engine and its built-in packages ship 546 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -698,7 +698,8 @@ In the package as `ERROR_CODE_CATALOGUES.FinanceErrorCodes`.
 | `INFLATION_EXPECTED_USD` | either | `<amount> in <year> dollars` of an amount in another currency that has its own index: the phrase asks for dollars. |
 | `INFLATION_EXPECTED_CURRENCY` | either | `<amount> in <year> pounds` or `in <year> euros` of an amount in another currency that has its own index: the phrase asks for that currency. |
 | `INFLATION_NO_INDEX` | as a value | An inflation adjustment of an amount no bundled price index measures: a currency without one, a quantity that is not money, or a bare number. |
-| `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. |
+| `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`, as in `what is $300 and $50 from 2003`. |
+| `INFLATION_EXPECTED_YEAR` | as a value | The year of an inflation question that is not a plain whole number: money, a quantity, a date or a fraction, as in `what is $100 from 1990.5`. |
 | `INFLATION_EXPECTED_INFLATION_WORD` | thrown | `assuming <rate>%` not followed by the word `inflation`. |
 | `SAVINGS_GOAL_SYNTAX` | thrown | `how much per month to reach <target>` followed by neither `in` nor `over` and the time the saving runs for. |
 | `UNKNOWN_COMPOUNDING_INTERVAL` | thrown | `compounding <interval>` naming an interval the package does not know. The message lists the ones it does. |

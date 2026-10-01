@@ -1,7 +1,7 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
-import { adjustByCurrency, countedAmountRefusal, inflationIndexFor, isPriceIndex } from "../data/InflationAmount";
+import { adjustByCurrency, countedAmountRefusal, inflationIndexFor, inflationYear, isPriceIndex, isYear } from "../data/InflationAmount";
 import { rateAtOrBelowMinusHundred } from "@solve-js/vm/FinanceFormulas";
 
 /**
@@ -36,22 +36,28 @@ function adjusted(amount: Value, fromYear: number, toYear: number): Value {
 
 /**
  * "what is $X from YEAR" -> X (given as YEAR's money) expressed in present-day
- * money, by the index the amount's currency picks.
+ * money, by the index the amount's currency picks. A year that is not a plain
+ * whole number is refused (see `inflationYear`).
  */
 export function inflationFromYearToPresentHandler(args: Value[], context?: LineExecutionContext): Value {
   const chosen = inflationIndexFor(args[0]);
   if (!isPriceIndex(chosen)) return chosen;
-  return adjusted(args[0], args[1].toNumber(), presentYear(context));
+  const year = inflationYear(args[1]);
+  if (!isYear(year)) return year;
+  return adjusted(args[0], year, presentYear(context));
 }
 
 /**
  * "what was $X worth in YEAR" -> X (given as present-day money) expressed in
- * YEAR's money, by the index the amount's currency picks.
+ * YEAR's money, by the index the amount's currency picks. A year that is not
+ * a plain whole number is refused (see `inflationYear`).
  */
 export function inflationToYearFromPresentHandler(args: Value[], context?: LineExecutionContext): Value {
   const chosen = inflationIndexFor(args[0]);
   if (!isPriceIndex(chosen)) return chosen;
-  return adjusted(args[0], presentYear(context), args[1].toNumber());
+  const year = inflationYear(args[1]);
+  if (!isYear(year)) return year;
+  return adjusted(args[0], presentYear(context), year);
 }
 
 /**
@@ -107,7 +113,8 @@ export function inflationToYearInCurrencyHandler(args: Value[], context?: LineEx
   const amount = args[0];
   const chosen = inflationIndexFor(amount);
   if (!isPriceIndex(chosen)) return chosen;
-  const year = args[1].toNumber();
+  const year = inflationYear(args[1]);
+  if (!isYear(year)) return year;
   const refused = inYearCurrencyRefused(String(args[2]?.value ?? "USD"), chosen.currency, chosen.name, year);
   if (refused) return refused;
   return adjusted(amount, presentYear(context), year);
