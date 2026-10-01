@@ -86,7 +86,7 @@ describe("Incremental edit benchmarks", () => {
     expect(r.medianMs).toBeLessThan(2_000);
   });
 
-  /** Median keystroke cost by path and size, for the scaling assertions below. */
+  /** Fastest keystroke by path and size, for the scaling assertions below. */
   const keystroke = new Map<string, number>();
 
   for (const size of [1_000, 5_000, 20_000]) {
@@ -94,6 +94,9 @@ describe("Incremental edit benchmarks", () => {
       test(`a keystroke through ${path} at ${size.toLocaleString("en-US")} lines (#713)`, () => {
         const { doc, evaluator } = evaluated(alternating(size));
         live.push(evaluator);
+        // The garbage the setup left is collected now, so a collector pause it
+        // owes does not land inside the timed keystrokes.
+        (globalThis as { gc?: () => void }).gc?.();
         let toggle = false;
         const r = sample(() => {
           toggle = !toggle;
@@ -103,7 +106,7 @@ describe("Incremental edit benchmarks", () => {
           evaluator.evaluate({ startLine: 1, endLine: 40 });
         }, 21);
         recordSample(results, `keystroke_${path}_${size / 1_000}k`, r);
-        keystroke.set(`${path}_${size}`, r.medianMs);
+        keystroke.set(`${path}_${size}`, r.minMs);
         expect(r.medianMs).toBeLessThan(200);
       });
     }
@@ -114,7 +117,10 @@ describe("Incremental edit benchmarks", () => {
   // cannot (#715): four times the lines is about 4 for linear growth and about
   // 16 for a quadratic term, so 6 catches the second and passes the first. A
   // floor of a tenth of a millisecond keeps a keystroke too fast for the clock
-  // from reading as a ratio.
+  // from reading as a ratio. The ratio is of the fastest keystrokes, not the
+  // medians: a collector pause in the larger document's run put its median
+  // past 6 on an unchanged tree (7.55 one run, 2.56 the next), while a growth
+  // term in the code raises every keystroke, the fastest with them.
   for (const path of ["applyTransaction", "editLine"] as const) {
     test(`a keystroke through ${path} grows no faster than the document (#715)`, () => {
       const small = Math.max(keystroke.get(`${path}_5000`) ?? NaN, 0.1);
