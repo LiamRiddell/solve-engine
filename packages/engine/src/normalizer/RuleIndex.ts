@@ -350,4 +350,44 @@ export function lowerCased(value: string): string {
 	return hasUpper(value) ? value.toLowerCase() : value;
 }
 
+/**
+ * Whether `text.toLowerCase() === word`, for a `word` written in lower-case
+ * ASCII, without building the lower-cased copy.
+ *
+ * A rule tried at every word of a line asks this of words that are almost
+ * never the one it wants, and `toLowerCase()` allocates a string for each
+ * (`The`, `Quarterly`) only for the comparison to fail. A length that differs
+ * settles it at once: lower-casing never shortens a string, and the one
+ * character it lengthens (`İ`, which becomes `i` and a combining dot) cannot
+ * lower to ASCII. Past ASCII the answer is left to `toLowerCase()` itself, so
+ * the Kelvin sign `K`, which lowers to `k`, still reads as `k`.
+ *
+ * @param text - A token's text.
+ * @param word - The word to compare with, all lower-case ASCII.
+ */
+export function lowersTo(text: string, word: string): boolean {
+	const n = word.length;
+	if (text.length !== n) return false;
+	for (let i = 0; i < n; i++) {
+		let c = text.charCodeAt(i);
+		if (c >= 128) return text.toLowerCase() === word;
+		if (c >= 65 && c <= 90) c += 32;
+		if (c !== word.charCodeAt(i)) return false;
+	}
+	return true;
+}
+
+/**
+ * Whether a token's value, lower-cased, is `word`: {@link lowersTo} for a token
+ * that may be missing (past the end of the line) or carry no value, neither of
+ * which is the word.
+ *
+ * @param token - A token of the line, or `undefined` past its end.
+ * @param word - The word, all lower-case ASCII.
+ */
+export function valueLowersTo(token: { readonly value?: string | null } | undefined, word: string): boolean {
+	const value = token?.value;
+	return typeof value === "string" && lowersTo(value, word);
+}
+
 //#endregion

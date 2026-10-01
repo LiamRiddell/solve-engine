@@ -1,11 +1,17 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { lowersTo } from "@solve-js/normalizer/RuleIndex";
+
+/** The written form of a token, tolerant of `text` vs `value`. */
+function writtenOf(token: Token | undefined): string {
+  if (token === undefined) return "";
+  return token.text ?? token.value ?? "";
+}
 
 /** The lowercased written form of a token, tolerant of `text` vs `value`. */
 function wordOf(token: Token | undefined): string {
-  if (token === undefined) return "";
-  return (token.text ?? token.value ?? "").toLowerCase();
+  return writtenOf(token).toLowerCase();
 }
 
 /** The fused-trigger token each math-phrase aggregate maps to for a tag. */
@@ -57,10 +63,12 @@ export function tagAggregateNormalizerRule(priority = 80): NormalizerRule {
       // arrives as the raw word `sum` then the `of` keyword). Match on the
       // written word, not the token type: standalone "of" lexes to an `OF`
       // token, not an IDENT.
-      if (head.type === "IDENT" && wordOf(head) === "sum") {
+      // Compared in place: the rule is tried at every word of a line, and a
+      // lower-cased copy of each was built only to be told it was not `sum`.
+      if (head.type === "IDENT" && lowersTo(writtenOf(head), "sum")) {
         const of = tokens[pos + 1];
         const tag = tokens[pos + 2];
-        if (wordOf(of) !== "of") return null;
+        if (!lowersTo(writtenOf(of), "of")) return null;
         if (tag?.type !== "TAG") return null;
         return {
           consumed: 3,

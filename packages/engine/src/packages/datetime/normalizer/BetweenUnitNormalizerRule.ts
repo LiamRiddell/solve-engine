@@ -1,5 +1,6 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { valueLowersTo } from "@solve-js/normalizer/RuleIndex";
 
 /** The tokens that end an amount a unit after them belongs to. */
 const AMOUNT_ENDS: ReadonlySet<string> = new Set(["NUMBER", "RPAREN"]);
@@ -32,10 +33,9 @@ export function betweenUnitNormalizerRule(priority = 60): NormalizerRule {
       // Optional leading "how many".
       let start = pos;
       let howManyLength = 0;
-      if (
-        tokens[pos]?.value?.toLowerCase() === "how" &&
-        tokens[pos + 1]?.value?.toLowerCase() === "many"
-      ) {
+      // Compared in place: asked at every unit and word of a line, a
+      // lower-cased copy of each was built only to be thrown away.
+      if (valueLowersTo(tokens[pos], "how") && valueLowersTo(tokens[pos + 1], "many")) {
         start = pos + 2;
         howManyLength = 2;
       }

@@ -1,11 +1,12 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { lowerCased, valueLowersTo } from "@solve-js/normalizer/RuleIndex";
 
 /** Weekday token type to the index the calendar uses (0 = Sunday). */
-const WEEKDAY_TOKEN_INDEX: Readonly<Record<string, number>> = {
-	SUNDAY: 0, MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3, THURSDAY: 4, FRIDAY: 5, SATURDAY: 6,
-};
+const WEEKDAY_TOKEN_INDEX: ReadonlyMap<string, number> = new Map([
+	["SUNDAY", 0], ["MONDAY", 1], ["TUESDAY", 2], ["WEDNESDAY", 3], ["THURSDAY", 4], ["FRIDAY", 5], ["SATURDAY", 6],
+]);
 
 /**
  * The plural spellings, which are the ones a person counting actually writes.
@@ -14,17 +15,31 @@ const WEEKDAY_TOKEN_INDEX: Readonly<Record<string, number>> = {
  * (`next friday`). `fridays` is an ordinary identifier, and this is the one
  * place it means something, so it is recognised here rather than claimed
  * globally.
+ *
+ * A `Map`, which holds only its own keys: read as an object, a word naming an
+ * inherited property (`constructor until friday`) found `Object` itself and
+ * put its source text into the line's error message.
  */
-const WEEKDAY_PLURAL_INDEX: Readonly<Record<string, number>> = {
-	sundays: 0, mondays: 1, tuesdays: 2, wednesdays: 3, thursdays: 4, fridays: 5, saturdays: 6,
-};
+const WEEKDAY_PLURAL_INDEX: ReadonlyMap<string, number> = new Map([
+	["sundays", 0], ["mondays", 1], ["tuesdays", 2], ["wednesdays", 3], ["thursdays", 4], ["fridays", 5], ["saturdays", 6],
+]);
 
 /** The connector after the weekday, and the token each one fuses to. */
-const CONNECTOR_TYPE: Readonly<Record<string, string>> = {
-	BETWEEN: "WEEKDAY_BETWEEN",
-	UNTIL: "WEEKDAY_UNTIL",
-	SINCE: "WEEKDAY_SINCE",
-};
+const CONNECTOR_TYPE: ReadonlyMap<string, string> = new Map([
+	["BETWEEN", "WEEKDAY_BETWEEN"],
+	["UNTIL", "WEEKDAY_UNTIL"],
+	["SINCE", "WEEKDAY_SINCE"],
+]);
+
+/**
+ * The calendar index of the weekday a token names: a weekday keyword
+ * (`friday`), or the plural identifier (`fridays`) in any case. Undefined for
+ * any other token.
+ */
+export function weekdayIndexOf(token: Token): number | undefined {
+	return WEEKDAY_TOKEN_INDEX.get(token.type) ??
+		(token.type === "IDENT" ? WEEKDAY_PLURAL_INDEX.get(lowerCased(token.value ?? "")) : undefined);
+}
 
 /**
  * `fridays between 01/06/2026 and 31/08/2026`, counting a weekday across a
@@ -61,10 +76,7 @@ export function weekdayCountNormalizerRule(priority = 61): NormalizerRule {
 			// Optional leading `how many`, as the between-unit rule does.
 			let start = pos;
 			let howManyLength = 0;
-			if (
-				tokens[pos]?.value?.toLowerCase() === "how" &&
-				tokens[pos + 1]?.value?.toLowerCase() === "many"
-			) {
+			if (valueLowersTo(tokens[pos], "how") && valueLowersTo(tokens[pos + 1], "many")) {
 				start = pos + 2;
 				howManyLength = 2;
 			}
@@ -73,15 +85,13 @@ export function weekdayCountNormalizerRule(priority = 61): NormalizerRule {
 			const connectorToken = tokens[start + 1];
 			if (!weekdayToken || !connectorToken) return null;
 
-			const index =
-				WEEKDAY_TOKEN_INDEX[weekdayToken.type] ??
-				(weekdayToken.type === "IDENT"
-					? WEEKDAY_PLURAL_INDEX[(weekdayToken.value ?? "").toLowerCase()]
-					: undefined);
-			if (index === undefined) return null;
-
-			const fused = CONNECTOR_TYPE[connectorToken.type];
+			// The connector first: a type lookup, where the weekday may need its
+			// word lower-cased, and in running prose it is what is missing.
+			const fused = CONNECTOR_TYPE.get(connectorToken.type);
 			if (fused === undefined) return null;
+
+			const index = weekdayIndexOf(weekdayToken);
+			if (index === undefined) return null;
 
 			const sources = tokens.slice(pos, start + 2);
 			return {
