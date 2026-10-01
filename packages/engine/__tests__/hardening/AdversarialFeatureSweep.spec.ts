@@ -254,6 +254,15 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"X + e percent",
 		"(X) * b + b =>",
 		"(X) / m =>",
+		// A mathematical constant in a held expression and written against an
+		// amount, a quadratic over pi factored, and a tiny value in a list and
+		// a tolerance (FoundBug_constantInAHeldExpression,
+		// FoundBug_factorOverAnIrrationalConstant, FoundBug_tinyValueShownAsZero).
+		"solve(x^2 = (X) * tau, x)",
+		"(X)tau",
+		"factor(x^2 - (X) * pi)",
+		"[X, 1e-6]",
+		"(X) +/- 1e-6",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,

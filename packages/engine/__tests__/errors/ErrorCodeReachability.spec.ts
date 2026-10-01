@@ -313,7 +313,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS: "der(weather in London, x)",
 	SYMBOLIC_BOUND_INVALID: "integral(x, x, 0, X)",
 	SYMBOLIC_DERIVATIVE_ORDER_LIMIT: "der(x^2, x, 99)",
-	SYMBOLIC_FACTOR_LIMIT_EXCEEDED: "factor(735134400x^2 - 25626846353)",
+	SYMBOLIC_FACTOR_LIMIT_EXCEEDED: "factor(x^3 - pi)",
 	SYMBOLIC_INTEGRAL_IMPROPER: "integral(1/x, x, 0, 1)",
 	SYMBOLIC_INTEGRAL_UNSETTLED: "integral(tan(x), x, 0, 2)",
 	SYMBOLIC_INTEGRAL_UNSUPPORTED: "integral(exp(x^2), x)",

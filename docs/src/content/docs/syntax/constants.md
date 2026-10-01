@@ -37,6 +37,26 @@ tau // 6.28
 golden ratio // 1.62
 ```
 
+Each is a number with a name, exactly as `pi` is, so it goes anywhere a number
+does. An amount written straight before one multiplies it, the way `2pi` is two
+times pi, and an equation or a function can hold one:
+
+```solve
+2tau // 12.57
+3 golden ratio // 4.85
+(1 + 1)tau // 12.57
+solve(x^2 = tau, x) // [-2.51, 2.51]
+solve(x^2 = 2tau, x) // [-3.54, 3.54]
+der(tau*x^2, x) // 12.5663706144x
+```
+
+The boundary is the dimensioned constants. A bare amount before `gravity` or
+`speed of light` is not read as a product, since `2 gravity` could as well mean
+two of something measured in gravities; write the `*`. And inside an equation,
+a function body or a map, a constant with a unit is still refused, because its
+unit is attached as the line runs, the way live data is fetched, and those forms
+are compiled before it runs.
+
 ## Physical constants (values)
 
 These are precise scientific values. Avogadro's number is large enough to show

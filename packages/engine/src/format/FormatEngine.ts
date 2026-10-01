@@ -191,8 +191,15 @@ function formatUncertain(center: number, uncertainty: number, locale: ILocale, s
   // The spread needs room for at least one fractional digit, so a zero-decimal
   // budget cannot leave minimumFractionDigits above maximumFractionDigits.
   const spreadMax = Math.max(dp, 1);
-  const centerText = center.toLocaleString(loc, { useGrouping, minimumFractionDigits: 0, maximumFractionDigits: dp });
-  const spreadText = Math.abs(uncertainty).toLocaleString(loc, { useGrouping, minimumFractionDigits: 1, maximumFractionDigits: spreadMax });
+  // A centre or a spread below the budget is shown to three significant
+  // digits, as a plain number is, rather than as a zero: `0.004 ± 0.001` was
+  // `0 ± 0.0`. A zero centre is written unsigned, as a zero result is.
+  const shownCenter = center === 0 ? 0 : center;
+  const spread = Math.abs(uncertainty);
+  const centerText = tooSmallToPrintText(shownCenter, dp, loc)
+    ?? shownCenter.toLocaleString(loc, { useGrouping, minimumFractionDigits: 0, maximumFractionDigits: dp });
+  const spreadText = tooSmallToPrintText(spread, spreadMax, loc)
+    ?? spread.toLocaleString(loc, { useGrouping, minimumFractionDigits: 1, maximumFractionDigits: spreadMax });
   return `${locale.display.resultPrefix}${centerText} ± ${spreadText}`;
 }
 
@@ -973,8 +980,11 @@ function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings, uni
   const sep = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale;
   // A zero entry is written without a sign, as a zero result is (#585), and an
-  // entry drops its padding zeros when a plain number does (#750).
-  return autoFormatIntegerOrFloat(entry === 0 ? 0 : entry, dp, sep, loc, settings.floatResult.trimTrailingZeros === true);
+  // entry drops its padding zeros when a plain number does (#750). An entry
+  // below the budget is shown to three significant digits, as a plain number
+  // is, rather than as a zero: `[1e-6, 1]` was `[0.00, 1]`.
+  const shown = entry === 0 ? 0 : entry;
+  return tooSmallToPrintText(shown, dp, loc || "en-US") ?? autoFormatIntegerOrFloat(shown, dp, sep, loc, settings.floatResult.trimTrailingZeros === true);
 }
 
 /**

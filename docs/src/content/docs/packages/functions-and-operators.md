@@ -396,6 +396,37 @@ each of its sides. Register it under `infixParselets` keyed by the operator's to
 type. Arithmetic's `+` is the reference; currency's `in` and the conditionals'
 `==` are operators that read differently but hook in the same way.
 
+## A value known when the line is read
+
+Every `emitPluginCall` marks the line as one that may wait for data, since a
+handler is allowed to return a promise (a weather or price lookup). Several forms
+compile part of a line on its own and run it more than once: the expression of
+`solve`, `der` and `integral`, a function body (`f(x) = ...`), a map or reduce
+transform and a plot. Those cannot pause halfway for data to arrive, so each
+refuses a plugin call outright, with `SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`,
+`FUNCTION_BODY_MUST_BE_SYNCHRONOUS` or its own code, whatever the handler does.
+
+So a value your parselet already knows when the line is read, a constant above
+all, is not a plugin call. Emit it as a number, the way the built-in `pi` is:
+
+```ts
+import { OpCode, type PrefixParselet } from "solve-engine/parser";
+
+const tauParselet: PrefixParselet = {
+  category: "Constants",
+  parse(_parser, _token, builder) {
+    builder.emitOpcode(OpCode.PUSH_NUMBER);
+    builder.emitNumber(2 * Math.PI);
+  },
+};
+```
+
+The constants package does this for `tau`, `phi` and `golden ratio`, which is
+what lets `solve(x^2 = tau, x)` answer; they were plugin calls once, and every
+held expression refused them as though they were live data. The boundary: a value
+that needs a unit or other metadata attached as the line runs (`gravity`, in
+m/s²) still goes through a handler, and is still refused inside those forms.
+
 ## Do not hardcode the index
 
 `emitPluginCall(name, ...)` exists so you never touch the numeric index. The VM's

@@ -52,6 +52,7 @@ import {
 } from "@solve-js/symbolic/Polynomial";
 import { factorMultivariate } from "@solve-js/symbolic/MultivariateFactor";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { exactRationalSqrt } from "@solve-js/symbolic/Radicals";
 
 /**
  * Highest degree this module will attempt to factor.
@@ -307,7 +308,7 @@ export function factorUnivariate(descending: readonly Rational[], variable: stri
 	// A root can repeat, so each one is divided out until it stops being one.
 	// That is what turns (x-1)^2 into a single factor with power two rather
 	// than two identical factors.
-	let roots = rationalRoots(remaining);
+	let roots = rootsToFactorBy(remaining);
 	while (roots.length > 0 && remaining.length > 2) {
 		for (const root of roots) {
 			let multiplicity = 0;
@@ -317,7 +318,7 @@ export function factorUnivariate(descending: readonly Rational[], variable: stri
 			}
 			if (multiplicity > 0) factors.push({ base: linearFactorNode(variable, root), power: multiplicity });
 		}
-		roots = remaining.length > 2 ? rationalRoots(remaining) : [];
+		roots = remaining.length > 2 ? rootsToFactorBy(remaining) : [];
 	}
 
 	// Whatever survives is irreducible over the rationals as far as this module
@@ -329,6 +330,92 @@ export function factorUnivariate(descending: readonly Rational[], variable: stri
 		return { content: RATIONAL_ONE, factors };
 	}
 	return { content: remaining.length === 1 ? remaining[0] : RATIONAL_ONE, factors };
+}
+
+/**
+ * The rational roots of a quadratic, from its discriminant rather than a
+ * search.
+ *
+ * `ax^2 + bx + c` has a rational root exactly when `b^2 - 4ac` is the square of
+ * a fraction, and the roots are then `(-b ± its root) / 2a`. That needs no
+ * divisors listed, so it decides a quadratic whose numbers are too long to
+ * search: `x^2 - pi`, with pi held as a sixteen-digit fraction, has the
+ * discriminant `4pi`, which is not a square, so it has no rational root and is
+ * irreducible over the fractions, as `x^2 - 2` is.
+ *
+ * @param descending - Three coefficients, the highest power first, the first
+ * non-zero.
+ * @returns The distinct rational roots, low to high: none, one (a repeated
+ * root) or two. Any other length of input gives none.
+ */
+export function quadraticRationalRoots(descending: readonly Rational[]): readonly Rational[] {
+	if (descending.length !== 3 || isRationalZero(descending[0])) return [];
+	const [a, b, c] = descending;
+	const discriminant = rationalSub(rationalMul(b, b), rationalMul(rationalMul({ n: 4n, d: 1n }, a), c));
+	if (discriminant.n < 0n) return [];
+	const root = exactRationalSqrt(discriminant);
+	if (root === null) return [];
+	const twoA = rationalMul({ n: 2n, d: 1n }, a);
+	const first = rationalDiv(rationalSub(rationalNeg(b), root), twoA);
+	if (isRationalZero(root)) return [first];
+	const second = rationalDiv(rationalAdd(rationalNeg(b), root), twoA);
+	return rationalSub(first, second).n < 0n ? [first, second] : [second, first];
+}
+
+/**
+ * The rational roots `factor` divides out of what is left of a polynomial.
+ *
+ * Searched by the rational-root theorem, as {@link rationalRoots} does. A
+ * quadratic the search cannot reach is decided by its discriminant instead
+ * ({@link quadraticRationalRoots}), which needs no search.
+ *
+ * @param descending - Coefficients from the highest power down.
+ * @returns The distinct rational roots.
+ * @throws {EngineError} `SYMBOLIC_FACTOR_LIMIT_EXCEEDED` when a cubic or higher
+ * cannot be searched: a coefficient too long a fraction to list its divisors
+ * (pi or e in it), or too many candidates to test. Leaving it whole would claim
+ * it has no rational factor, which was never checked.
+ */
+export function rootsToFactorBy(descending: readonly Rational[]): readonly Rational[] {
+	const search = searchRationalRoots(descending);
+	if (typeof search !== "string") return search;
+	if (descending.length === 3) return quadraticRationalRoots(descending);
+	if (search === "too-many-divisors") {
+		throw ErrorFactory.execution(
+			"SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
+			"This polynomial cannot be factored: a number in it is too long as a fraction (as pi and e are) to try every fraction that could be a root. solve finds its roots as decimals.",
+			{ limit: FACTOR_MAX_ROOT_CANDIDATES },
+		);
+	}
+	throw ErrorFactory.execution(
+		"SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
+		"This polynomial cannot be factored: its first and last numbers have too many divisors to try every fraction that could be a root. solve finds its roots as decimals.",
+		{ limit: FACTOR_MAX_ROOT_CANDIDATES },
+	);
+}
+
+/**
+ * Largest numerator or denominator a polynomial's content may have to be
+ * pulled out in front. Past it, the content is the noise of a long fraction
+ * rather than a factor anyone wrote: `x^2 + pi*x` has the content `1/10^15`,
+ * and pulling it out wrote pi's sixteen digits into the answer as
+ * `1e-15x*(1000000000000000x+3141592653589793)`. The bound is the largest
+ * magnitude the divisor search factors completely,
+ * {@link FACTOR_MAX_TRIAL_CANDIDATES} squared.
+ */
+const FACTOR_MAX_CONTENT_PART = FACTOR_MAX_TRIAL_CANDIDATES * FACTOR_MAX_TRIAL_CANDIDATES;
+
+/**
+ * The content `factor` pulls out in front: the rational content, or one when
+ * either of its parts is past {@link FACTOR_MAX_CONTENT_PART}, so a polynomial
+ * over pi or e keeps its coefficients as written.
+ *
+ * @param content - The polynomial's rational content.
+ * @returns The content to pull out.
+ */
+export function readableContent(content: Rational): Rational {
+	const numerator = content.n < 0n ? -content.n : content.n;
+	return numerator > FACTOR_MAX_CONTENT_PART || content.d > FACTOR_MAX_CONTENT_PART ? RATIONAL_ONE : content;
 }
 
 /** Multiplies a content constant and a factor list back into one expression tree. */
@@ -423,7 +510,8 @@ function monomialNode(monomial: Map<string, number>): SymbolicNode | null {
  *
  * 1. Convert to polynomial form. Anything that is not a polynomial over the
  *    rationals is returned unchanged.
- * 2. Pull out the rational content, the shared factor across all coefficients.
+ * 2. Pull out the rational content, the shared factor across all coefficients,
+ *    unless it is a long fraction's noise (see {@link readableContent}).
  * 3. Pull out the highest power of each variable dividing every term, so
  *    `2x^2+4x` becomes `2x*(x+2)`.
  * 4. If more than one variable remains, hand off to
@@ -431,15 +519,16 @@ function monomialNode(monomial: Map<string, number>): SymbolicNode | null {
  *    or difference of cubes, a perfect-square trinomial, or four terms that
  *    group. Anything it declines stops here, with the content and common
  *    monomial extracted and nothing guessed at beyond them.
- * 5. Extract rational roots by the rational-root theorem, dividing each out
+ * 5. Extract rational roots, a quadratic's from its discriminant and a higher
+ *    degree's by the rational-root theorem, dividing each out
  *    with its multiplicity.
  * 6. Leave whatever survives as one irreducible-over-the-rationals factor.
  *
  * @param node - The expression to factor.
  * @returns The factored expression, or `node` unchanged when it is not a
  * polynomial, is already irreducible, or exceeds {@link FACTOR_MAX_DEGREE}.
- * @throws {EngineError} `SYMBOLIC_FACTOR_LIMIT_EXCEEDED` when the rational-root
- * candidate set grows past {@link FACTOR_MAX_ROOT_CANDIDATES}.
+ * @throws {EngineError} `SYMBOLIC_FACTOR_LIMIT_EXCEEDED` when a cubic or higher
+ * factor cannot be searched for rational roots (see {@link rootsToFactorBy}).
  */
 export function factorSymbolic(node: SymbolicNode): SymbolicNode {
 	const polynomial = toPolynomial(node);
@@ -450,7 +539,7 @@ export function factorSymbolic(node: SymbolicNode): SymbolicNode {
 	// path below would hand back `12*1`.
 	if (polynomial.vars.length === 0) return node;
 
-	const content = contentOf(polynomial);
+	const content = readableContent(contentOf(polynomial));
 	const primitive = isRationalOne(content)
 		? polynomial
 		: scaleTerms(polynomial, rationalDiv(RATIONAL_ONE, content));

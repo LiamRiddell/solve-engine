@@ -241,11 +241,10 @@ describe("adversarial: realistic breakage", () => {
 		expectHonestDocument("r = pi\ny = sqrt(r)\nline 2 with r = e");
 	});
 
-	// Found while testing this, and not fixed here: `tau` and `phi` inside
-	// `solve` are refused as though they were live values ("solve's expression
-	// must be synchronous"), and `2tau` there is a parse error. `pi` and `e`
-	// are not affected.
-	test.failing("found, open: tau inside solve is refused as a live value", () => {
+	// Found while testing this: `tau` and `phi` inside `solve` were refused as
+	// though they were live values ("solve's expression must be synchronous").
+	// Fixed with FoundBug_constantInAHeldExpression.spec.ts.
+	test("tau inside solve is a value, as pi is", () => {
 		expect(shown("solve(x^2 = tau, x)")).toBe("[-2.51, 2.51]");
 	});
 });
