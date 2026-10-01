@@ -94,7 +94,7 @@ describe("inflationAdjust (function-call form)", () => {
   });
 
   test(`the bundled CPI table covers ${CPI_MIN_YEAR}-${CPI_MAX_YEAR}, including the present year`, () => {
-    expect(CPI_MIN_YEAR).toBeLessThanOrEqual(1970);
+    expect(CPI_MIN_YEAR).toBe(1913);
     expect(CPI_MAX_YEAR).toBeGreaterThanOrEqual(CURRENT_YEAR);
   });
 });

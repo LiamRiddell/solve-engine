@@ -68,8 +68,8 @@ describe("an amount that is not US dollars is refused by every form", () => {
 
 describe("the boundary: US dollars are adjusted as before", () => {
 	test.each([
-		["inflationAdjust($100, 1990, 2020)", "= $198.01"],
-		["what is $500 in 1990 worth in 2010", "= $834.35"],
+		["inflationAdjust($100, 1990, 2020)", "= $198.02"],
+		["what is $500 in 1990 worth in 2010", "= $834.19"],
 	])("%s", (line, expected) => {
 		expect(shown(line)).toBe(expected);
 	});
@@ -116,7 +116,7 @@ describe("adversarial", () => {
 			"= £100.00",
 			"= $100.00",
 			"ERROR this is the US consumer price index, which says nothing about what GBP bought: only an amount in US dollars, such as $100, can be adjusted with it",
-			"= $198.01",
+			"= $198.02",
 		]);
 	});
 });

@@ -1,0 +1,4 @@
+{
+	"source": "monthly values as mirrored by the Frictionless Data cpi-us dataset (github.com/datasets/cpi-us, data/cpiai.csv, from raw.githubusercontent.com), recorded in scripts/fixtures/cpi/cpiai.csv",
+	"retrieved": "2026-10-01"
+}
