@@ -2748,6 +2748,19 @@ what is $100 in 1990 + 5 worth in 2010 // ERROR: an inflation question between t
 what is $100 in (1990 + 5) worth in 2010 // $143.08
 ```
 
+```
+(one document)
+value of $100 in 2030 assuming 3% inflation // $88.85
+value of £100 in 2030 assuming 3% inflation // £88.85
+value of $100 in 2030 assuming 0% inflation // $100.00
+```
+
+```
+(one document)
+value of $100 in 2030.5 assuming 3% inflation // ERROR: the year of an inflation question is a plain whole number, such as 1990, and 2030.5 is not a whole number
+value of $100 in $2030 assuming 3% inflation // ERROR: the year of an inflation question is a plain whole number, such as 1990, and this one is money
+```
+
 ## investments
 
 https://liamriddell.github.io/solve-engine/syntax/investments/
@@ -3031,6 +3044,23 @@ sum(9:30, 10:15) // ERROR: A date or time cannot be added: only numbers and quan
 total(9:30, 10:15) // ERROR: A date or time cannot be added: only numbers and quantities can.
 sum(2 hours, 3 hours) // 5 hours
 sum(x, 1:3) // 6
+```
+
+```
+(one document)
+prod(9:30, 10:15) // ERROR: A date or time cannot be multiplied: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.
+sum(x, [9:30, 10:15]) // ERROR: A date or time cannot be a cell of a list: each cell holds one number.
+sum(x, [1 hour, 30 min]) // 1.50 hours
+```
+
+```
+(one document)
+price = $5 // $5.00
+fee = $7 // $7.00
+sum(price, fee) // $12.00
+sum(price, 2) // $7.00
+xs = [1, 2, 3] // [1, 2, 3]
+sum(x * 2, xs) // 12
 ```
 
 ## money-precision
@@ -5352,6 +5382,14 @@ P1M in days // 30 days
 (one document)
 1:30 // Wednesday, March 11, 2026, 1:30:00 AM
 1.5:3 // ERROR: "1.5:3" is not a valid time
+```
+
+```
+(one document)
+24:00 // ERROR: "24:00" is not a valid time
+(24:00) // ERROR: "24:00" is not a valid time
+max(9:60, 10:15) // ERROR: "9:60" is not a valid time
+total(24:00, 0:00) // ERROR: "24:00" is not a valid time
 ```
 
 ```

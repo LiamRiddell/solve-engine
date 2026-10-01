@@ -16,6 +16,8 @@ import {
 } from "./parselets/TimezonePluginFunctions";
 import { HOURS_OVERLAP_FN, hoursOverlapHandler } from "./parselets/OverlapPluginFunctions";
 import { clockTimeNormalizerRule } from "./normalizer/ClockTimeNormalizerRule";
+import { invalidClockTimeNormalizerRule, INVALID_CLOCK_TIME } from "./normalizer/InvalidClockTimeNormalizerRule";
+import { InvalidClockTimeParselet } from "./parselets/InvalidClockTimeParselet";
 import { paceNotationNormalizerRule } from "./normalizer/PaceNotationNormalizerRule";
 import { clockTimeIntervalNormalizerRule } from "./normalizer/ClockTimeIntervalNormalizerRule";
 import { clockTimeSumNormalizerRule } from "./normalizer/ClockTimeSumNormalizerRule";
@@ -105,6 +107,8 @@ export const TIME_PACKAGE: IEnginePackage = {
     // `PT1H30M`, an ISO 8601 duration (#760). See normalizer/IsoDurationNormalizerRule.ts.
     ISO_DURATION: new IsoDurationParselet(),
     ISO_DURATION_UNREADABLE: new UnreadableIsoDurationParselet(),
+    // `(24:00)`: a colon pair no time rule read, refused as `24:00` is. See normalizer/InvalidClockTimeNormalizerRule.ts.
+    [INVALID_CLOCK_TIME]: new InvalidClockTimeParselet(),
   },
   normalizerRules: [
     clockTimeNormalizerRule(),
@@ -118,6 +122,7 @@ export const TIME_PACKAGE: IEnginePackage = {
     videoTimecodeNormalizerRule(),
     frameCountNormalizerRule(),
     zoneAfterNameNormalizerRule(),
+    invalidClockTimeNormalizerRule(),
   ],
   infixParselets: {
     // `t London in Tokyo`: a time held in a variable, from the zone after it.
@@ -143,5 +148,7 @@ export const TIME_PACKAGE: IEnginePackage = {
     // An ISO 8601 duration is a length of time, read or refused as one token.
     ISO_DURATION: "datetime",
     ISO_DURATION_UNREADABLE: "datetime",
+    // A colon pair that is no clock time is refused as one token, the way a time is shown.
+    [INVALID_CLOCK_TIME]: "datetime",
   },
 };

@@ -70,6 +70,16 @@ import { MAX_NAME_WORDS, definedNameWords, nameWordRun } from "@solve-js/package
 const SRC = path.resolve(__dirname, "../../src");
 const ORACLE = path.join(__dirname, "fixtures", "NormaliserRulesRejectCheaply.oracle.json");
 
+/**
+ * Answers a later fix changed on purpose since the oracle was recorded, each
+ * as `<line> @<position>` under its rule. A list in square brackets is no
+ * range context, so its items are values and a colon pair there is a clock
+ * time (FoundBug_clockTimesInAMapReduceCall.spec.ts): `[1:3]` holds 1:03.
+ */
+const CHANGED_SINCE: Readonly<Record<string, readonly string[]>> = {
+	"time:clock-time": ["[1:3] @1"],
+};
+
 /** The rules this change altered, by name. */
 const CHANGED_RULES: readonly string[] = [
 	"datetime:weekday-count",
@@ -327,6 +337,7 @@ describe("every changed rule answers what it answered before, at every position"
 						ended.push(oracle.streams[s].line);
 						continue;
 					}
+					if ((CHANGED_SINCE[name] ?? []).indexOf(`${oracle.streams[s].line} @${pos}`) >= 0) continue;
 					if (JSON.stringify(now) !== JSON.stringify(before)) {
 						differences.push(`${oracle.streams[s].line} @${pos}: was ${JSON.stringify(before)}, now ${JSON.stringify(now)}`);
 					}

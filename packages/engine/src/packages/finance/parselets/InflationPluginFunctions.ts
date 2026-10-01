@@ -136,10 +136,16 @@ export function inflationToYearInCurrencyHandler(args: Value[], context?: LineEx
  *
  * Growing a sum at a rate is still available and is a different question:
  * `$500 after 4 years at 5%` (see InvestmentParselets.ts).
+ *
+ * The year is read as every inflation form reads it (see `inflationYear`): a
+ * plain whole number, so `in 2030.5`, `in $2030` and `in 2030-01-01` are
+ * refused with `INFLATION_EXPECTED_YEAR` rather than read for their number.
+ * A whole year in the past is still a year, and discounts backwards.
  */
 export function inflationFutureValueHandler(args: Value[], context?: LineExecutionContext): Value {
   const amountValue = args[0];
-  const futureYear = args[1].toNumber();
+  const futureYear = inflationYear(args[1]);
+  if (!isYear(futureYear)) return futureYear;
   const rate = args[2].toNumber();
   const years = futureYear - presentYear(context);
   if (1 + rate <= 0) {

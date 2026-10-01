@@ -37,6 +37,23 @@ whole part alone:
 1.5:3 // ERROR: "1.5:3" is not a valid time
 ```
 
+A clock shows hours from 0 to 23 and minutes from 0 to 59, so a colon pair
+outside those (`24:00` for the end of a day, `9:60` as a slip of the finger) is
+no time any clock can show. It is refused by name, in the same words, whether it
+stands on its own line or inside brackets, a function call or a list:
+
+```solve-doc
+24:00 // ERROR: "24:00" is not a valid time
+(24:00) // ERROR: "24:00" is not a valid time
+max(9:60, 10:15) // ERROR: "9:60" is not a valid time
+total(24:00, 0:00) // ERROR: "24:00" is not a valid time
+```
+
+Midnight at the start of the day is `0:00`, and the last minute is `23:59`. The
+one place a colon between two numbers is not a time is the list that `sum`,
+`prod`, `map` or `reduce` works through, where `sum(24:30)` is the range of whole
+numbers from 24 to 30 (see [map, reduce and aggregates](/syntax/map-reduce-and-aggregates/)).
+
 A clock time is shown as the full date and time, not as the time of day alone.
 
 ## Durations
