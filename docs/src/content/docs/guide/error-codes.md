@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 542 codes, grouped below by the part
+ship. The engine and its built-in packages ship 544 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -694,7 +694,8 @@ In the package as `ERROR_CODE_CATALOGUES.FinanceErrorCodes`.
 | `IRR_UNRESOLVED` | as a value | `irr` of flows whose rates are too close together to tell apart. |
 | `PAYBACK_NO_OUTLAY` | as a value | `payback` of flows whose running total is never below zero, so there is nothing to pay back. |
 | `PAYBACK_NEVER` | as a value | `payback` of flows that never recover the outlay. The message says how far short the total ends. |
-| `INFLATION_EXPECTED_USD` | as a value | `<amount> in <year> dollars` of an amount in another currency that has its own index: the phrase asks for dollars. |
+| `INFLATION_EXPECTED_USD` | either | `<amount> in <year> dollars` of an amount in another currency that has its own index: the phrase asks for dollars. |
+| `INFLATION_EXPECTED_CURRENCY` | either | `<amount> in <year> pounds` or `in <year> euros` of an amount in another currency that has its own index: the phrase asks for that currency. |
 | `INFLATION_NO_INDEX` | as a value | An inflation adjustment of an amount no bundled price index measures: a currency without one, a quantity that is not money, or a bare number. |
 | `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. |
 | `INFLATION_EXPECTED_INFLATION_WORD` | thrown | `assuming <rate>%` not followed by the word `inflation`. |
@@ -809,6 +810,7 @@ In the package as `ERROR_CODE_CATALOGUES.MathPhrasesErrorCodes`.
 | Code | Arrives | When it arises |
 | --- | --- | --- |
 | `AGGREGATE_CALL_EMPTY` | thrown | An aggregate call with nothing inside, as in `mean()`, refused rather than answered 0. |
+| `AGGREGATE_CALL_RANGE` | thrown | An aggregate call whose only argument is written like a range (`average(1:3)`, `mean(1:3)`, `total(1:3)`), which outside `sum`, `prod`, `map` and `reduce` is a clock time. |
 | `AGGREGATE_NAME_RESERVED` | thrown | A function of the reader's own defined under an aggregate's name (`mean`, `median`, `stdev`), which a call would never reach. |
 | `CLAMP_EXPECTED_BETWEEN_OR_FROM` | thrown | `clamp <value>` followed by neither `between` nor `from`. |
 | `REMAINDER_EXPECTED_DIVIDED_BY` | thrown | `remainder of <a>` not followed by `divided by` or `/`. |

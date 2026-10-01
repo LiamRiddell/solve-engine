@@ -40,6 +40,7 @@ type Example =
 
 const EXAMPLES: Readonly<Record<string, Example>> = {
 	AGGREGATE_CALL_EMPTY: "mean()",
+	AGGREGATE_CALL_RANGE: "average(1:3)",
 	AGGREGATE_NAME_RESERVED: "stdev(a) = a",
 	AGGREGATE_NON_NUMERIC: "min(\"a\", 3)",
 	ALLOCATION_LIMIT_EXCEEDED: { line: "map(x * 2, 0:100)", config: { vm: { maxAllocatedElements: 10 } } },
@@ -141,6 +142,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	HASH_EXPECTED_TEXT: "md5(5)",
 	HEALTH_BAD_INPUT: "bmi(70, 0)",
 	INCOMPATIBLE_UNITS: "$5 + 3 m",
+	INFLATION_EXPECTED_CURRENCY: "$100 in 1990 pounds",
 	INFLATION_EXPECTED_INFLATION_WORD: "value of $100 in 2030 assuming 3% banana",
 	INFLATION_EXPECTED_USD: "£100 in 1990 dollars",
 	INFLATION_NO_INDEX: "what is ¥100 from 1990",

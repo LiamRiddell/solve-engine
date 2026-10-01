@@ -29,6 +29,8 @@ export const FinanceErrorCodes = {
 	PAYBACK_NEVER: "PAYBACK_NEVER",
 	/** `<amount> in <year> dollars` of an amount in another currency that has its own index: the phrase asks for dollars. */
 	INFLATION_EXPECTED_USD: "INFLATION_EXPECTED_USD",
+	/** `<amount> in <year> pounds` or `in <year> euros` of an amount in another currency that has its own index: the phrase asks for that currency. */
+	INFLATION_EXPECTED_CURRENCY: "INFLATION_EXPECTED_CURRENCY",
 	/** An inflation adjustment of an amount no bundled price index measures: a currency without one, a quantity that is not money, or a bare number. */
 	INFLATION_NO_INDEX: "INFLATION_NO_INDEX",
 	/** `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. */

@@ -52,9 +52,12 @@ describe("the lines that exposed it", () => {
 		expect(outcome("floor(¥1234.5)")).toBe("¥1,234");
 	});
 
-	test("the boundary: a length carries no exact value, so its rounding reads its double", () => {
-		expect(outcome("(2^60 + 1) m")).toBe("1,152,921,504,606,846,976.00 m");
-		expect(outcome("ceil((2^60 + 0.5) m)")).toBe("1,152,921,504,606,846,976.00 m");
+	// This was the boundary: a length kept only its double, so these answered
+	// ...976.00 m. A quantity past 2^53 now keeps its exact value
+	// (FoundBug_quantityPastTheDouble.spec.ts).
+	test("a length past 2^53 keeps its exact value, so its rounding reads that", () => {
+		expect(outcome("(2^60 + 1) m")).toBe("1,152,921,504,606,846,977.00 m");
+		expect(outcome("ceil((2^60 + 0.5) m)")).toBe("1,152,921,504,606,846,977.00 m");
 	});
 });
 

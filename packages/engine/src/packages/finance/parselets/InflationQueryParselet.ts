@@ -42,6 +42,40 @@ function hasInflationKeyword(parser: Parser): boolean {
 }
 
 /**
+ * Where the amount stops: above the conversion `in` (35), so the `in` of
+ * `what is $X in <year> worth in <year>` is left for this parselet, and below
+ * `*` and `/` (`Product`, 40), so `$100 * 2` is one amount. The amount used to
+ * be read at `Product`, which stopped it at every `*`, the one the normaliser
+ * puts inside `100 apples` included, and the reader was told it had found a
+ * `"*"` they never typed.
+ */
+const AMOUNT_BINDING_POWER = BindingPower.Product - 1;
+
+/**
+ * The word an amount counts, when it is written `<number> <word>` straight
+ * before the inflation keyword (`what is 100 apples from 1990`), or undefined.
+ *
+ * The normaliser reads a number beside a word as a multiplication and puts a
+ * `*` between them at the word's own position, so the star a reader typed
+ * (`100 * apples`, a variable) is told apart from the inserted one by where it
+ * sits. A unit or a currency is not a word here: `100 kg` and `100 GBP` lex as
+ * units and are judged by the index chooser.
+ *
+ * @param parser - Positioned on the amount.
+ * @returns The counted word, or undefined.
+ */
+export function countedWord(parser: Parser): string | undefined {
+  const number = parser.peekAt(0);
+  const star = parser.peekAt(1);
+  const word = parser.peekAt(2);
+  const after = parser.peekAt(3);
+  if (number?.type !== "NUMBER" || star?.type !== "STAR" || word?.type !== "IDENT") return undefined;
+  if (star.offset !== word.offset) return undefined;
+  if (after?.type !== "FROM" && after?.type !== "IN" && after?.type !== "WORTH_IN") return undefined;
+  return String(word.value);
+}
+
+/**
  * `what is $X from <year>` -> X (given as that year's dollars) expressed
  * in present-day dollars; `what is $X in <year1> worth in <year2>` -> X
  * adjusted between two arbitrary (non-present) years; `what was $X worth
@@ -57,7 +91,7 @@ function hasInflationKeyword(parser: Parser): boolean {
  * trigger, before any keyword to peek at. Same structural reason
  * `ClampParselet`/`CompoundInterestParselet` are hand-written.
  *
- * BINDING-POWER GUARD (why the amount parses at `BindingPower.Product`,
+ * BINDING-POWER GUARD (why the amount parses at `AMOUNT_BINDING_POWER`,
  * not `Lowest`): the "what is ... in <year1> worth in <year2>" branch has
  * a bare `IN` token directly after the amount. The currency package's
  * `InParselet` is a generic infix parselet registered on `IN`
@@ -66,10 +100,10 @@ function hasInflationKeyword(parser: Parser): boolean {
  * parselet kicks off for the amount, even when the token after `IN`
  * isn't a valid conversion target, it still consumes `IN` and silently
  * no-ops, stranding the rest of the grammar. Parsing the amount at
- * `BindingPower.Product` (40) makes the Pratt loop's `bp <= minBp` check
- * block `IN` (35 <= 40) from ever being consumed there, leaving it for
- * this parselet to consume explicitly. Trade-off: the amount can't
- * contain a top-level Sum-tier `+`/`-` in this form, parenthesize if
+ * `AMOUNT_BINDING_POWER` (39) makes the Pratt loop's `bp <= minBp` check
+ * block `IN` (35 <= 39) from ever being consumed there, leaving it for
+ * this parselet to consume explicitly, while `*` and `/` (40) still are.
+ * Trade-off: the amount can't contain a top-level Sum-tier `+`/`-` in this form, parenthesize if
  * needed, e.g. "what is ($300 + $50) from 2003". The "what was ... worth
  * in" branch has no such collision (the next token is the fused
  * WORTH_IN, which has no infix parselet registered at all), but uses the
@@ -89,7 +123,20 @@ export class InflationQueryParselet implements PrefixParselet {
       return;
     }
 
-    parser.parseExpression(BindingPower.Product, builder); // amount
+    // `what is 100 apples from 1990`: a count of something no index measures.
+    // The refusal stands in for the amount, as `100 kg`'s does, so the line
+    // answers with it rather than with the word read as a missing variable.
+    const counted = countedWord(parser);
+    if (counted !== undefined) {
+      parser.consume("NUMBER");
+      parser.consume("STAR");
+      parser.consume("IDENT");
+      builder.emitOpcode(OpCode.PUSH_STRING);
+      builder.emitString(counted);
+      builder.emitPluginCall("inflationCountedAmount", 1);
+    } else {
+      parser.parseExpression(AMOUNT_BINDING_POWER, builder); // amount
+    }
 
     if (this.variant === "what-was") {
       parser.consume("WORTH_IN");

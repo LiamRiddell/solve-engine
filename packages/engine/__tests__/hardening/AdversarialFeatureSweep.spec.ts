@@ -67,7 +67,18 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"inflationAdjust(£100, X, 2020)",
 		"inflationAdjust(€100, 2000, X)",
 		"what was £X worth in 1965",
+		// The pound and euro spellings of `in <year> dollars`, an amount worked
+		// out on the line, and a word where a currency would be.
+		"£X in 1990 pounds",
+		"€X in 2010 euros",
+		"£100 in X pounds",
+		"what is $X * 2 from 1990",
+		"what is X apples from 1990",
 	],
+	// A large quantity keeps its exact value, and the aggregates refuse a range
+	// they would read as a clock time.
+	largeQuantities: ["ceil((X) m)", "round((X) m) + 1 m", "(X) kg * 2", "trunc((X) days)"],
+	aggregateRanges: ["average(X:3)", "mean(1:X)", "total(X:3)", "median(X)"],
 	// A derived unit's prefix read in its own case after `as` and `in` (#824).
 	derivedPrefixes: ["X W as mW", "X W as MW", "X W as mw", "X V in MV", "X J as pJ"],
 	// The qualified cups, the typographic point, imperial mpg and a stated
