@@ -1,6 +1,7 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { isInsideRangeContext } from "@solve-js/normalizer/BuiltinNormalizerRules";
+import { isLabelColon } from "@solve-js/packages/time/normalizer/LabelColon";
 
 /**
  * Fuses a lap-time / stopwatch-split literal, `HH:MM:SS[.f]`, always
@@ -33,6 +34,8 @@ export function laptimeNormalizerRule(priority = 70): NormalizerRule {
       if (m?.type !== "NUMBER") return null;
       if (c2?.type !== "COLON") return null;
       if (s?.type !== "NUMBER") return null;
+      // `Day 1: 9:30` is the label `Day 1` and the time 9:30 (see LabelColon).
+      if (isLabelColon(tokens, pos)) return null;
 
       // See ClockTimeNormalizerRule's identical guard, a laptime inside
       // `[...]` has no legitimate meaning; reserved for matrix ranges.

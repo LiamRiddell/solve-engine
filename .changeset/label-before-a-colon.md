@@ -20,7 +20,7 @@ A line that does not parse whole is retried as `<label>: <expression>`, the way 
 | `Food + drink: $40` | `$40.00` | `$40.00` (unchanged) |
 | `Orders over $100: 12` | `12` | `12` (unchanged) |
 
-The boundary: arithmetic between words stays a label (`Food + drink`, `Year-end`, `Q1/Q2`), since that is how ledgers name things and the figure after the colon is the one the reader wrote. A number after a word is part of a name (`Week 12:75` still answers 75), a question mark that ends the label (`Done?: 5`) is part of it, and a comparison written in words (`over`) is prose. `Net = gross: 5` is untouched: it is a definition whose right-hand side is the labelled figure. Not changed here, and noted for its own fix: a pair with a space after the colon is read as a clock time when it is a valid one, so `Item 2: 45` is refused where `Week 12: 75` answers 75.
+The boundary: arithmetic between words stays a label (`Food + drink`, `Year-end`, `Q1/Q2`), since that is how ledgers name things and the figure after the colon is the one the reader wrote. A number after a word is part of a name (`Week 12:75` still answers 75), a question mark that ends the label (`Done?: 5`) is part of it, and a comparison written in words (`over`) is prose. `Net = gross: 5` is untouched: it is a definition whose right-hand side is the labelled figure. A pair with a space after the colon whose number follows a name (`Item 2: 45`) is a label too, even when the pair is also a valid time; that has its own entry.
 
 ## Verification
 

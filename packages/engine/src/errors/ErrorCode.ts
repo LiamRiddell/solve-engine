@@ -492,7 +492,7 @@ export const CoreErrorCodes = {
   INVALID_RANGE_BOUND: "INVALID_RANGE_BOUND",
   /** A range whose bounds are not whole numbers (`0.5:3`). */
   NON_INTEGER_RANGE_BOUND: "NON_INTEGER_RANGE_BOUND",
-  /** A range whose first bound is above its second (`5:1`). The message suggests the other order. */
+  /** A range whose first bound is above its second (`5:1`). The message names each bound as written, with the number it came to, and suggests the other order. */
   DESCENDING_RANGE: "DESCENDING_RANGE",
   /** A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. */
   COLLECTION_TOO_LARGE: "COLLECTION_TOO_LARGE",

@@ -2845,6 +2845,8 @@ Groceries: 45 // 45
 
 ```
 Week 12: 75 // 75
+Item 2: 45 // 45
+Weeks 1-2: 40 // 40
 Year-end: 5 // 5
 Food + drink: $40 // $40.00
 Done?: 5 // 5
@@ -2863,6 +2865,13 @@ Fees 45 EUR // €45.00
 x = 2 // 2
 x:3 // 3
 x + 1 // 3
+```
+
+```
+(one document)
+Room 4: 12 // 12
+Item 2:45 // ERROR: Expected an operator or the end of the line, but found "2:45"
+9: 30 // Wednesday, March 11, 2026, 9:30:00 AM
 ```
 
 ```
@@ -3084,6 +3093,13 @@ sum(price, fee) // $12.00
 sum(price, 2) // $7.00
 xs = [1, 2, 3] // [1, 2, 3]
 sum(x * 2, xs) // 12
+```
+
+```
+(one document)
+sum(5:1) // ERROR: A range's min (5) cannot be greater than its max (1). Did you mean "1:5"?
+total(1 + 24:00) // ERROR: A range's min (1 + 24, which is 25) cannot be greater than its max (00, which is 0). Did you mean "0:25"?
+total(2*3:1) // ERROR: A range's min (2*3, which is 6) cannot be greater than its max (1). Did you mean "1:6"?
 ```
 
 ## money-precision
@@ -5415,6 +5431,13 @@ P1M in days // 30 days
 (24:00) // ERROR: "24:00" is not a valid time
 max(9:60, 10:15) // ERROR: "9:60" is not a valid time
 total(24:00, 0:00) // ERROR: "24:00" is not a valid time
+```
+
+```
+(one document)
+Room 4: 12 // 12
+Day 1: 9:30 // Wednesday, March 11, 2026, 9:30:00 AM
+9: 30 // Wednesday, March 11, 2026, 9:30:00 AM
 ```
 
 ```

@@ -147,6 +147,18 @@ same way, each naming what it does with a list. A range counts up in whole
 numbers, so `sum(3:1)` and `sum(1.5:3)` are refused by name rather than read
 another way.
 
+The refusal of a range that counts down names each bound as it was written,
+with the number it came to when that differs, since a bound can be worked out
+from a sum. In `total(1 + 24:00)` the colon is the range's, so its bounds are
+`1 + 24` and `00`, not the time 24:00, and the refusal says so in the reader's
+own text rather than as two numbers nobody typed:
+
+```solve-doc
+sum(5:1) // ERROR: A range's min (5) cannot be greater than its max (1). Did you mean "1:5"?
+total(1 + 24:00) // ERROR: A range's min (1 + 24, which is 25) cannot be greater than its max (00, which is 0). Did you mean "0:25"?
+total(2*3:1) // ERROR: A range's min (2*3, which is 6) cannot be greater than its max (1). Did you mean "1:6"?
+```
+
 ```solve
 sum(5) // sum adds up the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number; to add values one by one, list them, as in sum(5, 6).
 prod(5) // prod multiplies together the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number.

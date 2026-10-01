@@ -42,11 +42,33 @@ are all names, so each is a label and the figure after the colon is the answer:
 
 ```solve
 Week 12: 75 // 75
+Item 2: 45 // 45
+Weeks 1-2: 40 // 40
 Year-end: 5 // 5
 Food + drink: $40 // $40.00
 Done?: 5 // 5
 Orders over $100: 12 // 12
 ```
+
+A number in a name and the figure after it can look like a clock time: in
+`Item 2: 45` the 2 and the 45 are also a quarter to three. What tells them
+apart is the space. A time is written with its colon touching the minutes, and
+a label's colon has a space after it, as in prose, so when a name stands before
+the number and a space follows the colon, the colon is the label's and the
+figure is the answer. Without the space, `Item 2:45` is the word `Item` beside
+the time 2:45, which the line cannot work out, and with no name before the
+number, `9: 30` is still half past nine:
+
+```solve-doc
+Room 4: 12 // 12
+Item 2:45 // ERROR: Expected an operator or the end of the line, but found "2:45"
+9: 30 // Wednesday, March 11, 2026, 9:30:00 AM
+```
+
+A name here is a word with only the numbers and joining marks (`-`, `/`) of a
+name between it and the colon, as in `Weeks 1-2` or `Part 1/2`. A word that
+leads into a time is not a name, so `before 9: 30` keeps its time, and nor is an
+operator or `=`: `x = 5: 6` sets `x` to the time 5:06.
 
 A colon has other jobs too, and when the text before it is doing something
 other than naming, reading it as a label would throw that text away and answer

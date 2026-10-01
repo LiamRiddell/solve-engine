@@ -3,6 +3,7 @@ import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { getMeasure } from "@solve-js/uom/UomConverter";
+import { isLabelColon } from "@solve-js/packages/time/normalizer/LabelColon";
 
 const NUMBER_ID = tokenTypeId("NUMBER");
 const UNIT_ID = tokenTypeId("UNIT");
@@ -76,6 +77,8 @@ export function paceNotationNormalizerRule(priority = 76): NormalizerRule {
 			if (tokens[pos + 1]?.type !== "COLON") return null;
 			const seconds = tokens[pos + 2];
 			if (seconds?.type !== "NUMBER") return null;
+			// `Run 2: 30/km` is the label `Run 2` and a rate (see LabelColon).
+			if (isLabelColon(tokens, pos)) return null;
 
 			// The minute unit a reader may write before the slash, `5:30 min/km`:
 			// taken with the literal, since minutes and seconds are what its two

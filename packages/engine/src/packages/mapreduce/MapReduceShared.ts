@@ -4,6 +4,8 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { builtinNameToIndex } from "@solve-js/packages/function/parselets/FunctionCallParselet";
+import type { Token } from "@solve-js/lexer/Token";
+import { textOf } from "@solve-js/engine/ColonLabel";
 
 /**
  * A resolved `map`/`reduce` transform, the first argument to either call.
@@ -96,11 +98,72 @@ export function consumeCollectionName(parser: Parser): string {
  * the full explanation).
  */
 export function parseCollectionExpr(parser: Parser, builder: BytecodeBuilder): void {
+  const first = parser.peek();
   parser.parseExpression(0, builder);
   if (parser.match("COLON")) {
+    // The first side ends on the token before the colon just matched.
+    const minSide = tokensBack(parser, first, 2);
+    const secondFirst = parser.peek();
     parser.parseExpression(0, builder);
-    builder.emitOpcode(OpCode.RANGE_NEW);
+    emitRange(builder, minSide, tokensBack(parser, secondFirst, 1));
   }
+}
+
+/** The most tokens of one range side whose text a refusal keeps. */
+export const MAX_WRITTEN_TOKENS = 64;
+
+/**
+ * The tokens of one side of a range, read back from the parser's position to
+ * the side's first token, in line order.
+ *
+ * @param parser - The parser, just past the side (and `skip - 1` tokens more).
+ * @param first - The side's first token, as `peek()` gave it before the side was parsed.
+ * @param skip - How far back the side's last token is: 1 for the token just consumed.
+ * @returns The side's tokens, or null when `first` is not found within
+ *   {@link MAX_WRITTEN_TOKENS} tokens (a side too long to quote).
+ */
+export function tokensBack(parser: Parser, first: Token | undefined, skip: number): Token[] | null {
+  if (first === undefined) return null;
+  const side: Token[] = [];
+  for (let i = skip; i < skip + MAX_WRITTEN_TOKENS; i++) {
+    const token = parser.peekAt(-i);
+    if (token === undefined) return null;
+    side.push(token);
+    if (token === first) return side.reverse();
+  }
+  return null;
+}
+
+/**
+ * Whether a side is written as one plain whole number, `5`, the way the
+ * refusal's number already says it. `05` and `5.0` are not: the refusal quotes
+ * them as written.
+ *
+ * @param side - The side's tokens, or null when not kept.
+ * @returns `true` for a single token written `0` or a whole number with no leading zero.
+ */
+export function isPlainNumber(side: readonly Token[] | null): boolean {
+  return side !== null && side.length === 1 && side[0].type === "NUMBER" && /^(?:0|[1-9]\d*)$/.test(side[0].text);
+}
+
+/**
+ * Emits the range of the two sides on the stack: `RANGE_NEW` when both are
+ * written as plain whole numbers (`1:5`), otherwise `RANGE_NEW_WRITTEN` with
+ * each side's text, so a refusal names the bounds the way the reader wrote
+ * them (`1 + 24:00`) rather than only as the numbers they came to.
+ *
+ * @param builder - The builder to emit into.
+ * @param minSide - The first side's tokens, or null when not kept.
+ * @param maxSide - The second side's tokens, or null when not kept.
+ */
+export function emitRange(builder: BytecodeBuilder, minSide: readonly Token[] | null, maxSide: readonly Token[] | null): void {
+  if (isPlainNumber(minSide) && isPlainNumber(maxSide)) {
+    builder.emitOpcode(OpCode.RANGE_NEW);
+    return;
+  }
+  builder.emitOpcode(OpCode.RANGE_NEW_WRITTEN);
+  builder.emitString(minSide === null ? "" : textOf(minSide) ?? "");
+  builder.emitString(maxSide === null ? "" : textOf(maxSide) ?? "");
 }
 
 /** The token kinds that open and close a nesting level inside a call's brackets. */
