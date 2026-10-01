@@ -3,6 +3,7 @@ import { compareUom, incomparableUnitsError, compareBigIntOperands, compareRatio
 import { unitListCompare } from "@solve-js/vm/MatrixUnits";
 import { bigBaseInteger } from "@solve-js/vm/ExactIntegers";
 import { zoneAnswerEqualsText } from "@solve-js/vm/ZoneAnswers";
+import { listAgainstOne } from "@solve-js/vm/ListComparison";
 
 /**
  * The six comparison opcodes past their plain-number fast path.
@@ -35,6 +36,16 @@ const ORDER_CELLS: readonly ((a: number, b: number) => boolean)[] = [
 ];
 const EQUAL_CELLS = (a: number, b: number): boolean => a === b;
 const UNEQUAL_CELLS = (a: number, b: number): boolean => a !== b;
+
+/** One cell of a list beside one value, read by the rule one value follows, one per operator, built once. */
+const CELL_ORDERS: readonly ((l: Value, r: Value) => Value)[] = [
+	(l, r) => valuesOrdered(l, r, 0),
+	(l, r) => valuesOrdered(l, r, 1),
+	(l, r) => valuesOrdered(l, r, 2),
+	(l, r) => valuesOrdered(l, r, 3),
+];
+const cellsEqual = (l: Value, r: Value): Value => valuesEqual(l, r, false);
+const cellsUnequal = (l: Value, r: Value): Value => valuesEqual(l, r, true);
 
 /**
  * Whether either side carries an exact value to compare on: a fraction or an
@@ -84,7 +95,8 @@ export function orderHoldsFor(op: Order, order: -1 | 0 | 1): boolean {
  * on their family, address, prefix and zone (see ipEqual()); an exact fraction
  * or decimal compares on its exact value; a bigint digit for digit; two pieces
  * of text as text; two quantities once put in one unit; two lists cell by cell
- * (a list of answers, so NEQ is not EQ negated there); two colours on their
+ * (a list of answers, so NEQ is not EQ negated there), and a list beside one
+ * value cell by cell (see vm/ListComparison.ts); two colours on their
  * channels; and a colour or an IP value never equals anything else. Text
  * never equals a value that is not text, however alike the two read (see
  * {@link textAgainstOther}), with one exception: a time-zone answer equals
@@ -94,7 +106,7 @@ export function orderHoldsFor(op: Order, order: -1 | 0 | 1): boolean {
  * @param l - The left operand.
  * @param r - The right operand.
  * @param negate - True for `!=`.
- * @returns A boolean Value, a list of them for two lists, or the fault.
+ * @returns A boolean Value, a list of them when either side is a list, or the fault.
  */
 export function valuesEqual(l: Value, r: Value, negate: boolean): Value {
 	const fault = faultedOperand(l, r);
@@ -104,6 +116,11 @@ export function valuesEqual(l: Value, r: Value, negate: boolean): Value {
 	const zoneText = zoneAnswerEqualsText(l, r);
 	if (zoneText !== null) return boolValue(zoneText !== negate);
 	if (textAgainstOther(l, r)) return boolValue(negate);
+	// A list beside one value is asked of each cell (see vm/ListComparison.ts).
+	if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) {
+		const cells = listAgainstOne(l, r, negate ? cellsUnequal : cellsEqual);
+		if (cells !== null) return cells;
+	}
 	const ip = ipEqual(l, r);
 	if (ip !== null) return boolValue(ip !== negate);
 	if (hasExactSide(l, r)) {
@@ -193,19 +210,25 @@ export function textOrderRefused(l: Value, r: Value, op: Order): Value {
  * path passed over. A faulted operand propagates; two IPv6 addresses order by
  * their 128 bits and one against anything else is refused (see ipv6Order()); a
  * colour has no order and is refused by name (see colourRefused()); an exact
- * fraction or decimal, a bigint, two quantities put in one unit and two lists
- * cell by cell each compare on their own terms. Two quantities that share no
+ * fraction or decimal, a bigint, two quantities put in one unit, two lists
+ * cell by cell and a list beside one value cell by cell (see
+ * vm/ListComparison.ts) each compare on their own terms. Two quantities that share no
  * measure cannot be ordered, and say so.
  *
  * @param l - The left operand.
  * @param r - The right operand.
  * @param op - The operator.
- * @returns A boolean Value, a list of them for two lists, or the refusal.
+ * @returns A boolean Value, a list of them when either side is a list, or the refusal.
  */
 export function valuesOrdered(l: Value, r: Value, op: Order): Value {
 	const fault = faultedOperand(l, r);
 	if (fault) return fault;
 	if (l.type === ValueType.String || r.type === ValueType.String) return textOrderRefused(l, r, op);
+	// A list beside one value is asked of each cell (see vm/ListComparison.ts).
+	if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) {
+		const cells = listAgainstOne(l, r, CELL_ORDERS[op]);
+		if (cells !== null) return cells;
+	}
 	const ipv6 = ipv6Order(l, r);
 	if (ipv6 !== null) return ipv6 instanceof Value ? ipv6 : boolValue(orderHoldsFor(op, ipv6));
 	if (l.type === ValueType.Colour || r.type === ValueType.Colour) return colourRefused("put in order");

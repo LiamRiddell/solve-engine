@@ -514,8 +514,10 @@ export const CoreErrorCodes = {
   LIST_ARGUMENT_UNSUPPORTED: "LIST_ARGUMENT_UNSUPPORTED",
   /** A list given to a function of one number that is worked out for each cell (`sqrt`, `sin`, `ln`, `fact`), or added to or taken from a percentage (`[true, 2] + 10%`), when a cell is not a number (a true or false, a formula with an unknown), when a cell has no real answer (`sqrt([4, -9])`), or when the answers come in different units. */
   LIST_CELL_UNSUPPORTED: "LIST_CELL_UNSUPPORTED",
-  /** A percentage written before a plain list with `+` or `-` (`10% + [100, 200]`). One number there gives a percentage (`10% + 100` is 10,010%), which a list of plain numbers cannot hold, so the message gives the order that adds the percentage to each number, `[100, 200] + 10%`. */
+  /** A percentage written before a plain list with `+` or `-` (`10% + [100, 200]`), or a percentage as a cell of a plain list (`[10%, 20%]`, `map(x%, [10, 20])`). A list holds plain numbers, so it would keep the percentage as its fraction and add 0.1 where 10% was meant; the message gives the forms that work, `[100, 200] + 10%` or the fractions `[0.1, 0.2]`. */
   LIST_PERCENTAGE_UNSUPPORTED: "LIST_PERCENTAGE_UNSUPPORTED",
+  /** A list as the condition of an `if` (`if [1, 2] > 0 then 1 else 2`), where one true or false is needed. A list compared with a value answers once per cell, so the message points at one cell (`v[0] > 5`) or at `map` to choose for each cell. */
+  LIST_CONDITION_UNSUPPORTED: "LIST_CONDITION_UNSUPPORTED",
   /** A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. */
   COLLECTION_TOO_LARGE: "COLLECTION_TOO_LARGE",
   /** A list cell that is not a number or a quantity: a list inside a list, text, a date. */

@@ -1149,6 +1149,11 @@ check "a " == "a" // check failed: "a " is not equal to "a"
 ```
 
 ```
+check [1, 2] > 0 // check: [1, 2] is a list, and a check gives one verdict, so it compares one value at a time: check one cell, as in check v[0] > 5
+check [1, 2][1] > 0 // ✓
+```
+
+```
 check 255 == "255" // check: "255" on the right is text and 255 is a number, so they cannot be compared. To read the text as a number, write "255" as number
 check (255 in hex) == "0xFF" // check: "0xFF" on the right is text and 0xFF is a number, so they cannot be compared. To read the text as a number, write "0xFF" as number
 check "255" as number == 255 // ✓
@@ -1396,6 +1401,15 @@ not 5 // "not" works on true or false, and 5 is a number: compare it first, as i
 ```
 "5" > 3 // "5" on the left is text and the other side is a number, so they cannot be put in order. To read the text as a number, write "5" as number.
 "a" < "b" // Text has no order: two pieces of text can only be compared with == or !=, not <.
+```
+
+```
+[100, 200] > 150 // [false, true]
+[100, 200] > 150 and true // [false, true]
+```
+
+```
+if [100, 200] > 150 then 1 else 0 // "if" needs one true or false, and this is a list of 2 cells. Compare one cell, as in v[0] > 5, or choose for each cell with map, as in map(if x > 5 then 1 else 0, v).
 ```
 
 ```
@@ -4210,6 +4224,13 @@ percent change from 50 to 75 // 50.00%
 ```
 
 ```
+[10%, 20%] // A list holds plain numbers, so it cannot hold 10% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.1 for 10%).
+[100, 200] + [10%, 20%] // A list holds plain numbers, so it cannot hold 10% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.1 for 10%).
+[100, 200] + [10, 40] // [110, 240]
+[0.1, 0.2] // [0.10, 0.20]
+```
+
+```
 20% as multiplier // 1.2x
 150% as multiplier // 2.5x
 0.5 as multiplier // 0.5x
@@ -6614,6 +6635,27 @@ det([1 km, 2 km; 3 km, 4 km]) // A determinant of a list in km is not covered: m
 ```
 
 ```
+[100, 200] > 150 // [false, true]
+[100, 200] == 100 // [true, false]
+150 < [100, 200] // [false, true]
+[1, 2] > [0, 3] // [true, false]
+[1 km, 2 km] > 1500 m // [false, true]
+[$100, $200] <= $150 // [true, false]
+```
+
+```
+([1, 2, 3] > 1) and ([1, 2, 3] < 3) // [false, true, false]
+not ([1, 2] > 1) // [true, false]
+sum([12, 18, 25] > 15) // 2
+```
+
+```
+[1 km, 2 km] > 1 kg // length and mass cannot be compared
+if [1, 2] > 0 then 1 else 2 // "if" needs one true or false, and this is a list of 2 cells. Compare one cell, as in v[0] > 5, or choose for each cell with map, as in map(if x > 5 then 1 else 0, v).
+map(if x > 150 then 1 else 0, [100, 200]) // [0, 1]
+```
+
+```
 sqrt([4, 9]) // [2, 3]
 sqrt([4, 9; 16, 25]) // [2, 3; 4, 5]
 sin([30 deg, 90 deg]) // [0.50, 1]
@@ -6657,6 +6699,7 @@ det([1,2;3,4]) // -2
 ```
 (one document)
 [(1, 2), 3] // ERROR: A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3].
+[1, 7%] // ERROR: A list holds plain numbers, so it cannot hold 7% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.07 for 7%).
 ```
 
 ```

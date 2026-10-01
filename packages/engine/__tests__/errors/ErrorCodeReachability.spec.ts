@@ -263,6 +263,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	LIST_ARGUMENT_UNSUPPORTED: "gcd([4, 6], 2)",
 	LIST_CELL_UNSUPPORTED: "sqrt([4, -9])",
 	LIST_PERCENTAGE_UNSUPPORTED: "10% + [100, 200]",
+	LIST_CONDITION_UNSUPPORTED: "if [1, 2] > 0 then 1 else 2",
 	RATE_MUL_MEASURE_MISMATCH: "30/week * 3 kg",
 	RATIO_EXPECTED_NUMBERS: "ratio(\"a\", 2)",
 	RATIO_INVALID: "ratio(5)",
