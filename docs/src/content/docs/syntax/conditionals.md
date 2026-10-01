@@ -64,12 +64,30 @@ not 5 // "not" works on true or false, and 5 is a number: compare it first, as i
 !1 > 2 // "!" works on true or false, and 1 is a number: compare it first, as in not (x > 3).
 ```
 
+A list of answers, a row of `true` and `false` in square brackets, is negated
+one answer at a time, whether it is written out, worked out from comparisons, or
+held in a name. A list of numbers is not a list of answers, so `not` before one
+is refused in the same words as `not 5`:
+
+```solve
+not [true, false] // [false, true]
+not [1 > 0, 2 > 3] // [false, true]
+not [1, 2] // "not" works on true or false, and [1, 2] is a list: compare it first, as in not (x > 3).
+![1, 2] // "!" works on true or false, and [1, 2] is a list: compare it first, as in not (x > 3).
+```
+
+`not [1, 2]` used to be read as an item of a list called `not`, and answered
+"Undefined variable: not", while `![1, 2]` and `not ([1, 2] > 1)` were read as
+negation.
+
 The boundary: a `!` straight after a value is still the factorial (`5!` is
 120), and `!=` is still "is not equal to". `not` is ordinary English, so it is
 read as negation only where a value is expected (at the start of a line, or
 after `if`, `then`, `else`, a bracket, `and`, `or` or a comparison) and a
 condition follows it. A sentence that starts with it (`not now`) stays prose,
-and a variable called `not` keeps working:
+and a variable called `not` keeps working, except before a square bracket,
+which opens a list to negate, so an item of a list called `not` is not read
+as `not[0]`:
 
 ```solve-doc
 not = 3 // 3

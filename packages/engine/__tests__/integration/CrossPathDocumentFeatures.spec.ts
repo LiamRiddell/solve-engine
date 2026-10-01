@@ -1896,6 +1896,44 @@ describe("a product equation and the line above under the arrow, across entry po
   });
 });
 
+describe("a column of percentages across entry points", () => {
+  // A set of percentages totals to a percentage wherever it is gathered: by
+  // position (`total above`, a line range), by heading (a section) or by tag,
+  // as `sum(10%, 20%)` does on one line. A percentage beside a number is
+  // refused by name on every path, never added as its fraction.
+  const doc = [
+    "# Rates", "10% #r", "20% #r", "# Totals",
+    "total of section \"Rates\"", "total of #r", "average of #r",
+    "", "10%", "20%", "total above", "average above", "max above",
+    "sum(line 9 : line 10)", "average(line 9 : line 10)",
+    "", "100", "10%", "total above",
+  ];
+  const mixed = "ERROR: A percentage (10%) and a number cannot be added together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 10% as the number 0.1; to raise an amount by a percentage, write it as 100 + 10%.";
+
+  test("the column answers a percentage, a mixed one is refused, and both passes agree", () => {
+    const expected = [
+      "", "10.00%", "20.00%", "",
+      "30.00%", "30.00%", "15.00%",
+      "", "10.00%", "20.00%", "30.00%", "15.00%", "20.00%",
+      "30.00%", "15.00%",
+      "", "100", "10.00%", mixed,
+    ];
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(expected);
+  });
+
+  test("an edit that turns a percentage into a number reaches the total in a live editor", () => {
+    const { shown, edited } = editThenEvaluate(["10%", "20%", "total above"], [[2, "20"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[2]).toMatch(/^ERROR: A percentage \(10%\) and a number cannot be added together/);
+  });
+
+  test("the single-expression path has no column, and says so; the comma form needs none", () => {
+    for (const form of ["total above", "average above", "sum(line 1 : line 2)", "total of section \"Rates\""]) expectNeedsDocument(form);
+    expect(single("sum(10%, 20%)")).toEqual({ threw: false, type: ValueType.Percentage, message: "30.00%" });
+  });
+});
+
 // The worker is a further entry point (#770): `evaluateDocument` through the
 // worker client must agree with the main thread's `evaluateDocument` value for
 // value on every whole-document form, and its `parseDocument` with the main

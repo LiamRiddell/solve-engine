@@ -1,7 +1,7 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
 import { isCheckLine } from "@solve-js/packages/conditionals/CheckFunctions";
 import { isScenarioDeclarationText } from "@solve-js/packages/whatif/ScenarioText";
-import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
+import { nonNumericKind, unifyQuantities, percentageAnswer, isAggregateFigure } from "@solve-js/vm/VMConversion";
 import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
 import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
 import { numberOfBase } from "@solve-js/vm/ExactIntegers";
@@ -129,6 +129,8 @@ function combineQuantities(values: Value[], isAverage: boolean): Value {
   if (unified instanceof Value) return unified;
   const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
   const result = isAverage ? sum / values.length : sum;
+  // A column of percentages totals to a percentage, as `sum(10%, 20%)` does.
+  if (unified.percent) return percentageAnswer(result, unified.sources);
   if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
   const combined = withSources(uomValue(result, unified.unit), unified.sources);
   // A total of clock-time spans is still a span, so a timesheet column of
@@ -176,7 +178,7 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
     if (err) return err;
     // A number written in a base is added as the number it is.
     const figure = numberOfBase(v!);
-    if (figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
+    if (!isAggregateFigure(figure)) {
       return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value, so it cannot be included in a sum, total or average range`);
     }
     values.push(figure);
@@ -273,7 +275,7 @@ function aggregateAbove(context: LineExecutionContext, mode: AboveMode): Value {
     if (err) return err;
     // A number written in a base is added as the number it is.
     const figure = numberOfBase(v!);
-    if (figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
+    if (!isAggregateFigure(figure)) {
       return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value, so it cannot be included in an "above" aggregation`);
     }
     values.push(figure);
@@ -312,6 +314,7 @@ function combineAbove(values: Value[], mode: AboveMode): Value {
     result = cells[0];
     for (const n of cells) result = mode === "min" ? Math.min(result, n) : Math.max(result, n);
   }
+  if (unified.percent) return percentageAnswer(result, unified.sources);
   if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
   const combined = withSources(uomValue(result, unified.unit), unified.sources);
   if (values.every((v) => v.datetimeSpan === true)) combined.datetimeSpan = true;
@@ -577,7 +580,7 @@ function aggregateSection(context: LineExecutionContext, name: string, mode: Sec
     // line that is not a number still counts; only sum and average add.
     // A number written in a base is added as the number it is.
     const figure = numberOfBase(v!);
-    if (mode !== "count" && figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
+    if (mode !== "count" && !isAggregateFigure(figure)) {
       return sectionNonNumeric(v!, n, open.name, verb);
     }
     values.push(figure);

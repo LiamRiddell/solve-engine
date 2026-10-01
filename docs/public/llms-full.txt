@@ -1392,6 +1392,13 @@ not 5 // "not" works on true or false, and 5 is a number: compare it first, as i
 ```
 
 ```
+not [true, false] // [false, true]
+not [1 > 0, 2 > 3] // [false, true]
+not [1, 2] // "not" works on true or false, and [1, 2] is a list: compare it first, as in not (x > 3).
+![1, 2] // "!" works on true or false, and [1, 2] is a list: compare it first, as in not (x > 3).
+```
+
+```
 "paid" == "paid" // true
 255 == "255" // false
 255 != "255" // true
@@ -4231,6 +4238,11 @@ percent change from 50 to 75 // 50.00%
 ```
 
 ```
+sum(10%, 20%) // 30.00%
+average of 10%, 20% // 15.00%
+```
+
+```
 20% as multiplier // 1.2x
 150% as multiplier // 2.5x
 0.5 as multiplier // 0.5x
@@ -5046,6 +5058,20 @@ total of 800 m, 1.2 km, 3 km // 5,000.00 m
 ```
 
 ```
+sum(10%, 20%) // 30.00%
+total of 10%, 20% // 30.00%
+average of 10%, 20% // 15.00%
+max(10%, 20%) // 20.00%
+median of 10%, 20%, 40% // 20.00%
+stdev of 10%, 20% // 5.00%
+```
+
+```
+sum(10%, 100) // A percentage (10%) and a number cannot be added together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 10% as the number 0.1; to raise an amount by a percentage, write it as 100 + 10%.
+average of 10%, $5 // A percentage (10%) and an amount in USD cannot be averaged together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 10% as the number 0.1.
+```
+
+```
 standard deviation of 2, 4, 4, 4, 5, 5, 7, 9 // 2
 variance of 2, 4, 4, 4, 5, 5, 7, 9 // 4
 spread of 3, 7, 2, 9 // 7
@@ -5143,6 +5169,14 @@ total of 1, 2, 3 // 6
 3 km
 800 m
 total above // 5.00 km
+```
+
+```
+(one document)
+10% // 10.00%
+20% // 20.00%
+total above // 30.00%
+average above // 15.00%
 ```
 
 ```
@@ -6646,6 +6680,7 @@ det([1 km, 2 km; 3 km, 4 km]) // A determinant of a list in km is not covered: m
 ```
 ([1, 2, 3] > 1) and ([1, 2, 3] < 3) // [false, true, false]
 not ([1, 2] > 1) // [true, false]
+not [true, false] // [false, true]
 sum([12, 18, 25] > 15) // 2
 ```
 

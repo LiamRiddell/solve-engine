@@ -346,6 +346,16 @@ list never runs. These used to answer with the fractions: `[10%, 20%]` was
 `[0.10, 0.20]`, `sum([10%, 20%])` was 0.30 rather than 30%, and `[100, 200] +
 [10%, 20%]` was `[100.10, 200.20]`.
 
+To add up or average percentages, list them with commas rather than brackets,
+or put each on a line of its own and total the lines: a set of percentages
+answers a percentage, and a percentage beside a plain number is refused by name
+(see [a list of percentages](/syntax/statistics/#a-list-of-percentages)).
+
+```solve
+sum(10%, 20%) // 30.00%
+average of 10%, 20% // 15.00%
+```
+
 ## A percentage as a multiplier
 
 A multiplier is the number a value is multiplied by to apply a change: a 20%

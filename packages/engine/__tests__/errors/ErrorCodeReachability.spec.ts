@@ -43,6 +43,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	AGGREGATE_CALL_RANGE: "average(1:3)",
 	AGGREGATE_NAME_RESERVED: "stdev(a) = a",
 	AGGREGATE_NON_NUMERIC: "min(\"a\", 3)",
+	AGGREGATE_PERCENTAGE_MIXED: "sum(10%, 100)",
 	ALLOCATION_LIMIT_EXCEEDED: { line: "map(x * 2, 0:100)", config: { vm: { maxAllocatedElements: 10 } } },
 	AS_CONVERTER_EXPECTED_NAME: "1 as as",
 	AS_CONVERTER_EXPECTED_NUMBER: "\"x\" as compact",
