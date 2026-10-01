@@ -167,8 +167,11 @@ describe("the lines that exposed it", () => {
 	});
 
 	test("a call that waits or reads other lines is still refused in a function body and a map", () => {
-		for (const line of ["f(x) = x + weather in London", "f(x) = x + prev", "f(x) = x + line 1"]) {
-			expect(outcome(line)).toMatch(BODY_REFUSED);
+		expect(outcome("f(x) = x + weather in London")).toMatch(BODY_REFUSED);
+		// A call that reads other lines waits for nothing, so it has its own
+		// refusal (FoundBug_functionBodyReadsLines.spec.ts).
+		for (const line of ["f(x) = x + prev", "f(x) = x + line 1"]) {
+			expect(outcome(line)).toMatch(/^FUNCTION_BODY_READS_LINES: /);
 		}
 		expect(outcome("map(x + prev, 1:3)")).toBe("MAP_REDUCE_TRANSFORM_MUST_BE_SYNCHRONOUS: map/reduce transform expressions must be synchronous (no weather/stocks/currency calls).");
 	});
@@ -221,12 +224,12 @@ describe("every registered built-in plugin function is decided", () => {
 });
 
 describe("the parts: pluginCallOptions", () => {
-	test("ordinary: a synchronous name, and a name that waits", () => {
+	test("ordinary: a synchronous name, a name that waits and one that reads other lines", () => {
 		expect(pluginCallOptions("textUpper")).toEqual({ synchronous: true });
 		expect(pluginCallOptions("hashSha256")).toEqual({ synchronous: true });
 		expect(pluginCallOptions("aspectRatio")).toEqual({ synchronous: true });
 		expect(pluginCallOptions("weather")).toEqual({});
-		expect(pluginCallOptions("lineRef")).toEqual({});
+		expect(pluginCallOptions("lineRef")).toEqual({ readsDocument: true });
 	});
 
 	test("boundary: the empty name, a different case, a name with spaces", () => {

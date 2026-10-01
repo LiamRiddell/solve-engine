@@ -134,7 +134,7 @@ import type { ObservedCall } from "@solve-js/vm/VM";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { trailingTokenWording } from "@solve-js/parser/ParseMessages";
 import { wordLabelEnd } from "@solve-js/engine/WordLabel";
-import { colonLabelFault, ternaryAtQuestion } from "@solve-js/engine/ColonLabel";
+import { colonLabelFault, openBracketsAt, ternaryAtQuestion } from "@solve-js/engine/ColonLabel";
 import { MultiWordNameTable, multiWordDefinitionRule, multiWordNameRule, multiWordNameRefusal } from "@solve-js/packages/variables/MultiWordNames";
 import { isTopLevel, namesSomething, severalUnknownsRefusal, typedText, undefinedFactorMessage } from "@solve-js/engine/SeveralUnknowns";
 import { documentErrors, errorOnLine, inlineExpressionOffset, lineFailureOf, recordLineFailure } from "@solve-js/engine/LineDiagnostics";
@@ -4712,9 +4712,14 @@ export class ExpressionEngine {
             // VariableParselet needs to recognize a definition at all,
             // leaving a bare "x = 5" that fails to parse. Falling back to
             // the next colon to the left ("value:") keeps ":x = 5" intact.
+            // A label stands at the top level of the line, so a colon inside a
+            // bracket is never one: `Total: total(1000:1002)` keeps its range,
+            // and the label is the colon after `Total`. See openBracketsAt.
+            const openBrackets = allowLabelFallback ? openBracketsAt(tokens) : [];
             for (let i = allowLabelFallback ? tokens.length - 1 : 0; i >= 1; i--) {
                 if (tokens[i].type !== "COLON") continue;
                 if (i + 1 >= tokens.length) continue;
+                if (openBrackets[i] > 0) continue;
 
                 // Nothing but numbers to the left of the colon means this is
                 // not a label at all: it is a time, a lap time or a timecode

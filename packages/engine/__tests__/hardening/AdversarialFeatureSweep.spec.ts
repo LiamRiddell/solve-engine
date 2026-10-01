@@ -287,6 +287,17 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"sum(X:1,002)",
 		"map(erf(x), [X])",
 		"map(x + erf(X), 0:2)",
+		// A malformed group against a range's colon, a list whose cells take
+		// three significant digits together, the weekday asked with `of`, a
+		// body that reads another line, and a range total after a label
+		// (FoundBug_malformedRangeBoundGroup, FoundBug_listCellPrecision,
+		// FoundBug_weekdayOfInAFunctionBody, FoundBug_functionBodyReadsLines,
+		// FoundBug_labelledRangeTotal).
+		"sum(1,0000:X)",
+		"map(x * (X) px at 300 dpi, 1:2)",
+		"weekday of X",
+		"f(x) = x + (X) + prev",
+		"Total: total(X:1002)",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,

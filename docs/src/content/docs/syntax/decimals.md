@@ -169,6 +169,26 @@ sides of a tolerance (a measurement written with `±`), which used to round to
 0.004 ± 0.001 // 0.004 ± 0.001
 ```
 
+The figures of one list are read side by side, so they are shown alike. Once a
+list shows one figure to three significant digits, every other figure below one
+that two decimal places would cut short is shown to three significant digits
+too. A pixel at 300 dots per inch is a third of a hundredth of an inch and two
+pixels are two thirds of one: the first rounds away at two places and the second
+does not, and they used to read `0.00333 in` and `0.01 in` side by side, as if
+the second were measured less finely. A figure two places already show in full
+keeps them, as `0.5` keeps `0.50` above, and a figure of one or more keeps the
+two places.
+
+```solve
+map(x px at 300 dpi, 1:2) // [0.00333 in, 0.00667 in]
+map(x px at 300 dpi, 1:4) // [0.00333 in, 0.00667 in, 0.01 in, 0.0133 in]
+[0.001, 0.123] // [0.001, 0.123]
+[0.5, 0.25] // [0.50, 0.25]
+```
+
+A list of money keeps its currency's places for every figure that does not
+round away, since a cent is the precision of an amount (see below).
+
 The one zero that is real is a number too small for the computer to hold. A
 number is stored as a double, which reaches down to about 4.94e-324 and no
 further, so a result below that is zero before it is ever shown, as a result

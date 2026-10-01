@@ -154,6 +154,33 @@ export function timeAtColon(tokens: readonly Token[], colon: number): string | n
 }
 
 /**
+ * How many brackets, `(` or `[`, are still open at each token: the entry at
+ * `k` counts those opened before token `k` and not yet closed. A closing
+ * bracket with none open is ignored, so the count is never negative.
+ *
+ * A label stands at the top level of a line, never inside a bracket, so a
+ * colon whose count is above zero is not a label's: `Total: total(1000:1002)`
+ * has its label colon at the top and a range's colon inside the call. The
+ * label reading used to weigh the range's colon first (it walks from the
+ * right), read `1000:1002` as a time of day and refused the line, where the
+ * same call with no label answers 3,003.
+ *
+ * @param tokens - The line's normalised tokens.
+ * @returns One count per token, in line order.
+ */
+export function openBracketsAt(tokens: readonly Token[]): number[] {
+	const counts: number[] = new Array<number>(tokens.length);
+	let depth = 0;
+	for (let k = 0; k < tokens.length; k++) {
+		counts[k] = depth;
+		const type = tokens[k].type;
+		if (type === "LPAREN" || type === "LBRACKET") depth++;
+		else if ((type === "RPAREN" || type === "RBRACKET") && depth > 0) depth--;
+	}
+	return counts;
+}
+
+/**
  * Why the text before the colon at `colon` cannot be a label, or null when it
  * may be one.
  *

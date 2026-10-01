@@ -404,8 +404,9 @@ Several forms compile part of a line on its own and run it more than once: the
 expression of `solve`, `der` and `integral`, a function body (`f(x) = ...`), a
 map or reduce transform and a plot. Those cannot pause halfway for data to
 arrive, so each refuses a marked call outright, with
-`SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`, `FUNCTION_BODY_MUST_BE_SYNCHRONOUS` or
-its own code, whatever the handler does.
+`SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`, `FUNCTION_BODY_MUST_BE_SYNCHRONOUS`
+(`FUNCTION_BODY_READS_LINES` for a call emitted with `readsDocument`) or its own
+code, whatever the handler does.
 
 So a value your parselet already knows when the line is read, a constant above
 all, is not a plugin call. Emit it as a number, the way the built-in `pi` is:
@@ -461,8 +462,32 @@ past date) cannot answer in a function body, which is worked out at once. A
 call that reads other lines of the note (`prev`, `line 1`, the totals of a
 section, a tag or a table column, goal seek, what-if) does not wait, but a held
 expression is run away from the line that wrote it, where there is no document
-to read, so it is refused there too. Leave the option off for either kind in
+to read, so it is refused there too. Leave `synchronous` off for either kind in
 your own package.
+
+A call of the second kind says so with the other option, `readsDocument`. The
+call still marks the line, so every held expression still refuses it, but a
+function body is then refused for the reason that applies,
+`FUNCTION_BODY_READS_LINES` ("a function body has no lines to read: pass the
+value in as an argument instead"), rather than as a call that waits for the
+weather. A handler of yours that reads other lines through its context should
+be emitted this way:
+
+```ts
+import type { PrefixParselet } from "solve-engine/parser";
+
+const previousRowParselet: PrefixParselet = {
+  category: "Lines",
+  parse(_parser, _token, builder) {
+    builder.emitPluginCall("previousRow", 0, { readsDocument: true });
+  },
+};
+```
+
+`readsDocument` is ignored beside `synchronous`, since a call that reads other
+lines is never one a held expression can take. Builder code can ask whether
+anything it has emitted reads the document since its last reset through
+`builder.readsDocument`.
 
 The contract is yours to keep: a handler marked `synchronous` must return a
 `Value`, never a promise. One that breaks it is caught as the line runs: on a

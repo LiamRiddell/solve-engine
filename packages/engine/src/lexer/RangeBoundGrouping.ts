@@ -112,3 +112,49 @@ export function firstBoundBefore(text: string, colonAt: number): boolean {
 	const unit = text.charCodeAt(colonAt - 1);
 	return unit === 0x29 || unit === 0x5f || (unit >= 0x41 && unit <= 0x5a) || (unit >= 0x61 && unit <= 0x7a);
 }
+
+/**
+ * A number in a call written as a grouped range bound whose group is the wrong
+ * size: `sum(1,0000:1)`, `sum(1,00:1)`, `sum(12,3456:1)`.
+ *
+ * {@link groupsRangeBoundInCall} reads a comma as a group only when exactly
+ * three digits follow it, so these fell back to the argument reading and
+ * `sum(1,0000:1)` answered 2 (the element form adding 1 for each of 0 and 1),
+ * a confident wrong number. The reader wrote no space after the comma and put
+ * the digits straight against the range's colon, which is how a grouped bound
+ * is written, and a grouping comma needs exactly three digits after it. Read
+ * either way the answer would be a guess, so the line is refused by name.
+ *
+ * The shape: a leading group of one to three digits (a `:` or `.` straight
+ * before the number makes it the second half of a pair, `9:30,17:30`, or a
+ * fraction, and is left alone), any whole `,ddd` groups,
+ * then a comma and a run of two digits or of four or more, straight against a
+ * `:`. Two boundaries keep the separator reading: a run of one digit
+ * (`sum(1,1:3)` reads as nobody's grouping), and a run of two digits whose
+ * colon is followed by exactly two (`max(1,12:30)`, which may be a clock time).
+ * A space after the comma (`sum(1, 0000:1)`) always means two arguments.
+ *
+ * @param text - The text the number sits in.
+ * @param start - Index of the number's first digit.
+ * @returns The index just past the malformed run (its last digit before the
+ * colon), or -1 when the number is not that shape.
+ */
+export function malformedRangeBoundGroupEnd(text: string, start: number): number {
+	if (!digitAt(text, start) || digitAt(text, start - 1)) return -1;
+	const before = start > 0 ? text.charCodeAt(start - 1) : -1;
+	// The second half of a pair (`9:30,17:30`) or of a decimal is not a bound.
+	if (before === 0x3a || before === 0x2e) return -1;
+	let lead = start;
+	while (digitAt(text, lead)) lead++;
+	if (lead - start > 3) return -1;
+	const grouped = groupsEnd(text, lead);
+	const commaAt = grouped === -1 ? lead : grouped;
+	if (text.charCodeAt(commaAt) !== 0x2c) return -1;
+	let end = commaAt + 1;
+	while (digitAt(text, end)) end++;
+	const run = end - commaAt - 1;
+	if (run === 3 || run < 2 || text.charCodeAt(end) !== 0x3a) return -1;
+	// Two digits, a colon and exactly two more can be a clock time.
+	if (run === 2 && digitAt(text, end + 1) && digitAt(text, end + 2) && !digitAt(text, end + 3)) return -1;
+	return end;
+}

@@ -103,15 +103,14 @@ describe("DAG parameter-shadowing exclusion", () => {
 });
 
 describe("v1 scope restriction: async function bodies are rejected at definition time", () => {
-  test("a body containing any CALL_PLUGIN-flagged opcode (async or not) is rejected with a clear error", () => {
-    // `prev` (packages/lines) is itself fully synchronous, but BytecodeBuilder's
-    // hasAsync flag is conservatively set for ANY CALL_PLUGIN opcode, not just
-    // genuinely-async ones -- the same blanket flag the engine already uses
-    // elsewhere (e.g. skipping the O(n) resolver preflight for purely
-    // synchronous expressions). A body that trips it is rejected rather than
-    // silently risking the async-body gap the plan explicitly scoped out.
+  test("a body containing a flagged plugin call is rejected with a clear error", () => {
+    // A lookup that waits (weather) is refused as asynchronous. `prev`
+    // (packages/lines) waits for nothing, but reads another line, which a
+    // body run away from its line cannot do, so it has its own refusal
+    // (FoundBug_functionBodyReadsLines.spec.ts).
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-    expect(() => engine.evaluateExpression("f(x) = x + prev")).toThrow(/synchronous/i);
+    expect(() => engine.evaluateExpression("f(x) = x + weather in London")).toThrow(/synchronous/i);
+    expect(() => engine.evaluateExpression("f(x) = x + prev")).toThrow(/reads other lines/i);
   });
 
   test("a synchronous body defines and calls normally (no false positive)", () => {

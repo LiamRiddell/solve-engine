@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 548 codes, grouped below by the part
+ship. The engine and its built-in packages ship 550 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -79,6 +79,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `USER_FUNCTION_INVALID_PARAM_NAME` | thrown | A function definition (`f(x, y) = ...`) with something other than a name where a parameter goes. |
 | `USER_FUNCTION_NO_PARAMS` | thrown | A function definition with no parameters, `f() = ...`, which would read the same as a call. A definition needs at least one. |
 | `FUNCTION_BODY_MUST_BE_SYNCHRONOUS` | thrown | A function definition whose body reaches live data (weather, stocks, a currency rate). Refused when it is defined, since a function body must be synchronous. |
+| `FUNCTION_BODY_READS_LINES` | thrown | A function definition whose body reads other lines (`f(x) = x + prev`, `x + line 1`, a total above, a tag or a table column). Refused when it is defined, since a body runs wherever it is called, with no document lines to read; the value is passed in as an argument instead. |
 | `TOO_MANY_FUNCTION_DEFINITIONS` | thrown | One line defining more functions than a compiled program can index. A safety limit, of the same kind as `TOO_MANY_NUMERIC_CONSTANTS`. |
 | `TOO_MANY_ANONYMOUS_BODIES` | thrown | One line with more `map` or `reduce` bodies than a compiled program can index. A safety limit, of the same kind as `TOO_MANY_FUNCTION_DEFINITIONS`. |
 | `UNKNOWN_PLUGIN_FUNCTION` | either | A parselet emitted a call to a plugin function by a name no registered package declares, or before its package registered. A package-authoring or registration fault, not the reader's line. |
@@ -359,6 +360,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `INVALID_RANGE_BOUND` | as a value | A range (`0:3`) whose bounds are not plain numbers. |
 | `NON_INTEGER_RANGE_BOUND` | as a value | A range whose bounds are not whole numbers (`0.5:3`). |
 | `DESCENDING_RANGE` | as a value | A range whose first bound is above its second (`5:1`). The message names each bound as written, with the number it came to, and suggests the other order. |
+| `RANGE_BOUND_GROUP_MALFORMED` | thrown | A number in a call written like a grouped range bound whose group is not three digits (`sum(1,0000:1)`, `sum(1,00:1)`): refused by the lexer, since it is neither one bound nor plainly two arguments. The message says a space after the comma gives two. |
 | `COLLECTION_TOO_LARGE` | as a value | A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. |
 | `MATRIX_CELL_NON_NUMERIC` | as a value | A list cell that is not a number or a quantity: a list inside a list, text, a date. |
 | `MATRIX_CELL_UNITS_DIFFER` | as a value | A list whose cells are quantities of different measures (`[1 km, 2 kg]`), or money in two currencies with no rate between them: a list holds one unit. |

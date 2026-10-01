@@ -84,6 +84,30 @@ sum(1, 100:200) // 101
 max(1,000, 2) // 2
 ```
 
+A grouping comma always has exactly three digits after it, so a comma straight
+against the colon with any other number of digits after it is neither a grouped
+bound nor plainly two arguments. `sum(1,0000:1)` could be the mistyped bound
+10,000 or the two values `1` and `0000:1`, and it used to be read as the second
+without a word and answered 2. It is refused by name instead, and the refusal
+says how to write two values: put a space after the comma.
+
+```solve-doc
+sum(1,0000:1) // ERROR: "1,0000" is not a number: a grouping comma needs exactly three digits after it. To give two values, put a space after the comma: 1, 0000.
+sum(12,3456:1) // ERROR: "12,3456" is not a number: a grouping comma needs exactly three digits after it. To give two values, put a space after the comma: 12, 3456.
+sum(1, 0000:1) // 2
+```
+
+The refusal covers a run of two digits, or of four or more, against the colon.
+Two shapes keep the separator reading, because that is how two values are
+written: a single digit (`sum(1,1:3)` adds 1 for each of 1, 2 and 3) and two
+digits followed by two more after the colon, which may be a clock time
+(`max(9:00,17:30)`).
+
+```solve
+sum(1,1:3) // 3
+sum(1,12:30) // 19
+```
+
 ## Map
 
 `map(expression, list)` works the expression out once for each element, with

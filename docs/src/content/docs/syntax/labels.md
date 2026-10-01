@@ -21,6 +21,20 @@ total: 5 + 3 // 8
 Groceries: 45 // 45
 ```
 
+The expression after the colon is read exactly as it would be on a line of its
+own, colons of its own included. A range inside a call, the `1000:1002` of
+`total(1000:1002)` (the whole numbers from 1,000 to 1,002), keeps its meaning
+after a label: a label stands at the start of the line, never inside a bracket,
+so a colon inside one is never taken for the label's. That line used to be
+refused as the time of day "1000:1002".
+
+```solve
+Total: total(1000:1002) // 3,003
+Total: total(1,000:1,002) // 3,003
+Cost: total(10:12) // 33
+Squares: sum(x^2, 1:3) // 14
+```
+
 One letter is a word too, so `x: 3` is a label, the way `A: 40` and `B: 55`
 label a ledger. The label is only a name for the figure: it never reads or
 changes a variable called the same, so with `x = 2` above it, `x: 3` is 3 and
