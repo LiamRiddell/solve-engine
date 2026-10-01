@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 544 codes, grouped below by the part
+ship. The engine and its built-in packages ship 548 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -62,6 +62,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | --- | --- | --- |
 | `INVALID_NUMBER_LITERAL` | thrown | A number written in a form that does not read as one: a hex, binary or octal literal with a digit its base lacks (`0xZZ`), or thousands groups that are not three digits long. The reader fixes the digits. |
 | `UNTERMINATED_STRING` | thrown | A `"` that is never closed, as in `"abc`. Raised by the lexer; the reader closes the text. |
+| `DIRECTION_CONTROL_IN_NAME` | thrown | A name, number or unit holds an invisible character that changes the direction text is shown in (U+202A to U+202E, U+2066 to U+2069, U+200E, U+200F, U+061C), so it would show as something other than what the engine reads. The message names the character by its code point; the reader deletes it. Text in quotes, a comment, a heading and a label keep such characters. |
 | `NO_PREFIX_PARSELET` | thrown | A line has something where a value should start that cannot start one: the `*` in `2 + * 3`, the `)` in `round(3.14, )`, the `>` in `(5 km) -> miles`. Thrown with a span on the character and, where there is an obvious next step, a `suggestion`. |
 | `UNEXPECTED_END_OF_INPUT` | thrown | A line stops before its expression does: `5 +`, `(2 + 3`, `sqrt(`. Thrown with an empty span just after the last character, where an editor puts the caret, and a `suggestion`. |
 | `UNEXPECTED_TOKEN_TYPE` | thrown | A form needed one particular thing next and found another: a `)` where a `,` stands, or dice notation (`roll 1d6`) where a range was expected. Thrown with a span and a `suggestion`. |
@@ -183,6 +184,8 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `COMPOUND_ASSIGN_ASYNC_UNSUPPORTED` | thrown | A running total (`+= / -=`) whose right-hand side calls an async plugin (weather/stocks/currency). The same v1 scope restriction as the `"=>"` and user-function bodies. |
 | `UNKNOWN_SAVINGS_PERIOD` | thrown | A savings-goal contribution period that is not one of daily/weekly/monthly/yearly (`how long to save $X at $Y <period>`). Names the accepted set. |
 | `INVALID_TIME_LITERAL` | thrown | Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. |
+| `TERNARY_UNSUPPORTED` | either | A choice written `condition ? value : other` (`true ? 25 : 30`). There is no such operator; the message spells the line as `if ... then ... else`. Raised by the labelled-line fallback, which used to read `true ? 25` as a label and answer 30. |
+| `LABEL_NOT_A_NAME` | either | Text before a colon that is a comparison, an assignment or a calculation with no word in it (`a > b: 1`, `(1+2): 5`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. |
 | `NETWORK_DISABLED` | as a value | A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. |
 
 **What-if**
@@ -355,7 +358,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | --- | --- | --- |
 | `INVALID_RANGE_BOUND` | as a value | A range (`0:3`) whose bounds are not plain numbers. |
 | `NON_INTEGER_RANGE_BOUND` | as a value | A range whose bounds are not whole numbers (`0.5:3`). |
-| `DESCENDING_RANGE` | as a value | A range whose first bound is above its second (`5:1`). The message suggests the other order. |
+| `DESCENDING_RANGE` | as a value | A range whose first bound is above its second (`5:1`). The message names each bound as written, with the number it came to, and suggests the other order. |
 | `COLLECTION_TOO_LARGE` | as a value | A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. |
 | `MATRIX_CELL_NON_NUMERIC` | as a value | A list cell that is not a number or a quantity: a list inside a list, text, a date. |
 | `MATRIX_CELL_UNITS_DIFFER` | as a value | A list whose cells are quantities of different measures (`[1 km, 2 kg]`), or money in two currencies with no rate between them: a list holds one unit. |
@@ -697,7 +700,8 @@ In the package as `ERROR_CODE_CATALOGUES.FinanceErrorCodes`.
 | `INFLATION_EXPECTED_USD` | either | `<amount> in <year> dollars` of an amount in another currency that has its own index: the phrase asks for dollars. |
 | `INFLATION_EXPECTED_CURRENCY` | either | `<amount> in <year> pounds` or `in <year> euros` of an amount in another currency that has its own index: the phrase asks for that currency. |
 | `INFLATION_NO_INDEX` | as a value | An inflation adjustment of an amount no bundled price index measures: a currency without one, a quantity that is not money, or a bare number. |
-| `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. |
+| `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`, as in `what is $300 and $50 from 2003`. |
+| `INFLATION_EXPECTED_YEAR` | as a value | The year of an inflation question that is not a plain whole number: money, a quantity, a date or a fraction, as in `what is $100 from 1990.5`. |
 | `INFLATION_EXPECTED_INFLATION_WORD` | thrown | `assuming <rate>%` not followed by the word `inflation`. |
 | `SAVINGS_GOAL_SYNTAX` | thrown | `how much per month to reach <target>` followed by neither `in` nor `over` and the time the saving runs for. |
 | `UNKNOWN_COMPOUNDING_INTERVAL` | thrown | `compounding <interval>` naming an interval the package does not know. The message lists the ones it does. |
@@ -810,7 +814,7 @@ In the package as `ERROR_CODE_CATALOGUES.MathPhrasesErrorCodes`.
 | Code | Arrives | When it arises |
 | --- | --- | --- |
 | `AGGREGATE_CALL_EMPTY` | thrown | An aggregate call with nothing inside, as in `mean()`, refused rather than answered 0. |
-| `AGGREGATE_CALL_RANGE` | thrown | An aggregate call whose only argument is written like a range (`average(1:3)`, `mean(1:3)`, `total(1:3)`), which outside `sum`, `prod`, `map` and `reduce` is a clock time. |
+| `AGGREGATE_CALL_RANGE` | thrown | An aggregate call whose only argument is written like a range (`average(1:3)`, `mean(1:3)`, `median(1:3)`), which outside `sum` (and its synonym `total`), `prod`, `map` and `reduce` is a clock time. |
 | `AGGREGATE_NAME_RESERVED` | thrown | A function of the reader's own defined under an aggregate's name (`mean`, `median`, `stdev`), which a call would never reach. |
 | `CLAMP_EXPECTED_BETWEEN_OR_FROM` | thrown | `clamp <value>` followed by neither `between` nor `from`. |
 | `REMAINDER_EXPECTED_DIVIDED_BY` | thrown | `remainder of <a>` not followed by `divided by` or `/`. |

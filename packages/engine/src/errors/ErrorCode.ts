@@ -31,6 +31,8 @@ export const CoreErrorCodes = {
   INVALID_NUMBER_LITERAL: "INVALID_NUMBER_LITERAL",
   /** A `"` that is never closed, as in `"abc`. Raised by the lexer; the reader closes the text. */
   UNTERMINATED_STRING: "UNTERMINATED_STRING",
+  /** A name, number or unit holds an invisible character that changes the direction text is shown in (U+202A to U+202E, U+2066 to U+2069, U+200E, U+200F, U+061C), so it would show as something other than what the engine reads. The message names the character by its code point; the reader deletes it. Text in quotes, a comment, a heading and a label keep such characters. */
+  DIRECTION_CONTROL_IN_NAME: "DIRECTION_CONTROL_IN_NAME",
   /** A line has something where a value should start that cannot start one: the `*` in `2 + * 3`, the `)` in `round(3.14, )`, the `>` in `(5 km) -> miles`. Thrown with a span on the character and, where there is an obvious next step, a `suggestion`. */
   NO_PREFIX_PARSELET: "NO_PREFIX_PARSELET",
   /** A line stops before its expression does: `5 +`, `(2 + 3`, `sqrt(`. Thrown with an empty span just after the last character, where an editor puts the caret, and a `suggestion`. */
@@ -247,6 +249,10 @@ export const CoreErrorCodes = {
   UNKNOWN_SAVINGS_PERIOD: "UNKNOWN_SAVINGS_PERIOD",
   /** Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. */
   INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
+  /** A choice written `condition ? value : other` (`true ? 25 : 30`). There is no such operator; the message spells the line as `if ... then ... else`. Raised by the labelled-line fallback, which used to read `true ? 25` as a label and answer 30. */
+  TERNARY_UNSUPPORTED: "TERNARY_UNSUPPORTED",
+  /** Text before a colon that is a comparison, an assignment or a calculation with no word in it (`a > b: 1`, `(1+2): 5`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. */
+  LABEL_NOT_A_NAME: "LABEL_NOT_A_NAME",
   /** A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. */
   NETWORK_DISABLED: "NETWORK_DISABLED",
 
@@ -486,7 +492,7 @@ export const CoreErrorCodes = {
   INVALID_RANGE_BOUND: "INVALID_RANGE_BOUND",
   /** A range whose bounds are not whole numbers (`0.5:3`). */
   NON_INTEGER_RANGE_BOUND: "NON_INTEGER_RANGE_BOUND",
-  /** A range whose first bound is above its second (`5:1`). The message suggests the other order. */
+  /** A range whose first bound is above its second (`5:1`). The message names each bound as written, with the number it came to, and suggests the other order. */
   DESCENDING_RANGE: "DESCENDING_RANGE",
   /** A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. */
   COLLECTION_TOO_LARGE: "COLLECTION_TOO_LARGE",

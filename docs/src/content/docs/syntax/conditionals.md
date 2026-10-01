@@ -118,6 +118,18 @@ a charge that applies only above some amount.
 if 5 > 3 then 100 else 200 // 100
 ```
 
+Programming languages often write the same choice with a question mark and a
+colon, `condition ? value : other` (the "ternary" operator). The engine has no
+such operator, and a colon on a line usually ends a [label](/syntax/labels/),
+so rather than read the text before the colon as a name and answer with the
+last value, the line is refused with its own parts spelled the way the engine
+reads them:
+
+```solve-doc
+true ? 25 : 30 // ERROR: There is no choice written with "?" and ":": write if true then 25 else 30
+if true then 25 else 30 // 25
+```
+
 ## Conversions beside a comparison
 
 A conversion changes how a value is shown or which unit it is in: `as hex`,

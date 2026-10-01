@@ -73,12 +73,24 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"€X in 2010 euros",
 		"£100 in X pounds",
 		"what is $X * 2 from 1990",
+		// The year is one factor and a plain whole number, and an operator
+		// after it is the line's; a colon form as sum's first argument is a
+		// clock time (batch U).
+		"what is $100 from X",
+		"what is $100 from 1990 + X",
+		"what is $100 in X worth in 2010",
+		"sum(X, 10:15)",
 		"what is X apples from 1990",
+		// The flat-rate projection reads its year as the other forms do (batch V).
+		"value of $100 in X assuming 3% inflation",
+		"value of $X in 2030 assuming 3% inflation",
 	],
 	// A large quantity keeps its exact value, and the aggregates refuse a range
 	// they would read as a clock time.
 	largeQuantities: ["ceil((X) m)", "round((X) m) + 1 m", "(X) kg * 2", "trunc((X) days)"],
 	aggregateRanges: ["average(X:3)", "mean(1:X)", "total(X:3)", "median(X)"],
+	// A range's bounds named as written in its refusal (FoundBug_rangeBoundsAsWritten).
+	writtenRangeBounds: ["total(1 + X:00)", "sum(2*X:1)", "map(10*x, X:2*1)", "[1,2,3;4,5,6][X+1:1, 1]"],
 	// A derived unit's prefix read in its own case after `as` and `in` (#824).
 	derivedPrefixes: ["X W as mW", "X W as MW", "X W as mw", "X V in MV", "X J as pJ"],
 	// The qualified cups, the typographic point, imperial mpg and a stated
@@ -195,6 +207,13 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	// words on its definition line (#743).
 	negation: ["not (X > 0)", "!(X > 0)", "not X", "!X", "if not X > 0 then 1 else 2"],
 	wordLabels: ["Rent $X", "Petrol X l", "Flight to Paris X EUR", "Chapter X", "take home $X"],
+	// What may stand before a label's colon: a time the clock rules refused, a
+	// choice written with "?" and ":", a comparison, a calculation with no word
+	// (FoundBug_labelBeforeAColon).
+	colonLabels: ["1 + X:00", "X:23:99", "true ? X : 30", "X > 0 ? 1 : 2", "X > 0: 1", "Week X: 75", "(X+1): 5", "Rent: X"],
+	// A label whose name ends on a number, before a figure that would make a
+	// clock time with it (FoundBug_labelColonBeforeAClockTime).
+	labelNumberColons: ["Item X: 45", "Item 2: X", "Weeks 1-X: 40", "Day 1: X:30", "X 2: 45"],
 	multiWordNames: ["hourly rate = X", "take home = X", "tax on = X"],
 	// An unknown given a unit or a percentage under the arrow, a possessive
 	// name with either apostrophe, an operator word ending a name, and an
@@ -281,6 +300,15 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"(X) * 1e306 as %",
 		"-(X) * 1e306 in %",
 		"50% + (X) * 1e308",
+		// The sixth: a colon pair that is no clock time inside a bracket, clock
+		// times as the element or in a list of a map-reduce call, and sum of two
+		// values that are not a list.
+		"(X:00)",
+		"max(24:00, X)",
+		"total(X:61, 0:00)",
+		"prod(X, 10:15)",
+		"sum(x, [X, 10:15])",
+		"sum(2 hours, X)",
 	],
 	// A timecode in its own notation, its arithmetic and its conversions out
 	// (#759), and an ISO 8601 duration beside a value, spread through a date
@@ -515,6 +543,9 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "t = X\nt London in Tokyo" },
 	{ form: "salary = £X\nsalary after tax" },
 	{ form: "x = X\nx:3\nx + 1" },
+	// A label before a colon beside the refusals its boundary gives
+	// (FoundBug_labelBeforeAColon).
+	{ form: "start = 9:30\nRent: X\nstart + 24:00\ntrue ? X : 0\ntotal above" },
 	// Membership through a variable holding a block, and a variable holding
 	// anything else after `in`.
 	{ form: "lab = 192.168.1.0/24\nX in lab" },

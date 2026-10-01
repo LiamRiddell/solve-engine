@@ -105,11 +105,13 @@ const CLOSER_OF: Readonly<Record<string, string>> = { RPAREN: "LPAREN", RBRACKET
 /**
  * Whether a character would not show as itself in a message: a C0 or C1
  * control, a line or paragraph separator, a zero-width character, a byte
- * order mark, or a direction override or isolate.
+ * order mark, or a direction mark, override or isolate (the Arabic letter
+ * mark, U+061C, among them).
  */
 function isInvisible(code: number): boolean {
 	return code < 0x20
 		|| (code >= 0x7f && code <= 0x9f)
+		|| code === 0x061c
 		|| (code >= 0x200b && code <= 0x200f)
 		|| (code >= 0x2028 && code <= 0x202e)
 		|| (code >= 0x2060 && code <= 0x2069)

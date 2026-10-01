@@ -134,9 +134,11 @@ import type { ObservedCall } from "@solve-js/vm/VM";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { trailingTokenWording } from "@solve-js/parser/ParseMessages";
 import { wordLabelEnd } from "@solve-js/engine/WordLabel";
+import { colonLabelFault, ternaryAtQuestion } from "@solve-js/engine/ColonLabel";
 import { MultiWordNameTable, multiWordDefinitionRule, multiWordNameRule, multiWordNameRefusal } from "@solve-js/packages/variables/MultiWordNames";
 import { isTopLevel, namesSomething, severalUnknownsRefusal, typedText, undefinedFactorMessage } from "@solve-js/engine/SeveralUnknowns";
 import { documentErrors, errorOnLine, inlineExpressionOffset, lineFailureOf, recordLineFailure } from "@solve-js/engine/LineDiagnostics";
+import { NO_HIDDEN_DIRECTIONS, directionControlRefusal, findHiddenDirections, hasDirectionControl, hiddenDirectionToRefuse, type HiddenDirection } from "@solve-js/engine/DirectionControls";
 import {
     type DiagnosticPipelineResult,
     type PipelineStageResult,
@@ -469,6 +471,12 @@ interface FailedParse {
      * handed to the caller, which may change it.
      */
     span: SourceSpan | undefined;
+    /**
+     * The words holding a direction control the text was lexed with (see
+     * engine/DirectionControls.ts). A replay is not lexed again, so this is
+     * how it still knows to keep such a line out of the effectful shapes.
+     */
+    hidden: readonly HiddenDirection[];
 }
 
 /**
@@ -4673,6 +4681,16 @@ export class ExpressionEngine {
                     );
                 }
 
+                // Text before the colon that is not a name at all: a time the
+                // clock rules refused (`1 + 24:00`, `1:23:99`), a choice
+                // written `a ? b : c`, a comparison or an assignment. Read as
+                // a label, each answered with whatever followed the colon. See
+                // engine/ColonLabel.ts for the shapes and the boundary.
+                const fault = colonLabelFault(tokens, i);
+                if (fault !== null) {
+                    throw ErrorFactory.parsing(fault.code, fault.message, { tokenType: tokens[i].type, tokenValue: tokens[i].value });
+                }
+
                 builder.reset();
                 try {
                     // `false`: the retry gets a plain parse, with no fallback
@@ -4719,6 +4737,15 @@ export class ExpressionEngine {
                     } catch {
                         // Not an amount after all; the line's own error stands.
                     }
+                }
+            }
+
+            // A choice written `a > b ? 1 : 2`, whose `1 : 2` the clock rules
+            // read as a time, so no colon was left for the label loop above.
+            if (leftover.type === "QUESTION") {
+                const choice = ternaryAtQuestion(tokens, tokens.indexOf(leftover));
+                if (choice !== null) {
+                    throw ErrorFactory.parsing(choice.code, choice.message, { tokenType: leftover.type, tokenValue: leftover.value });
                 }
             }
 
@@ -5565,22 +5592,34 @@ export class ExpressionEngine {
         // user-unit definition records neither: it reads no name, and what it
         // defines is a unit, tracked by the unit table rather than the graph.
         let symbolicReadsWrites: { reads: string[]; writes: string[] } | null = null;
+        // Words holding an invisible direction control (`<U+202E>rent`), which
+        // no name may hold; see engine/DirectionControls.ts. The line's text is
+        // tested first, so a line without one pays a single scan of it. A
+        // replayed failure was not lexed again, and carries its own.
+        const hidden = failed ? failed.hidden : hasDirectionControl(expression) ? findHiddenDirections(tokens) : NO_HIDDEN_DIRECTIONS;
+        // A line with a word holding a direction control is only matched
+        // against the effectful shapes, never run through one: each stores or
+        // reads a name before any parse could refuse it. A line that has one of
+        // those shapes is a definition or a running total, so the word is a
+        // name and the line is refused; any other line is parsed below, where
+        // the refusal is decided.
+        const shapeEffects: EffectMode = hidden.length > 0 ? "check" : effects;
         try {
             // A user-unit definition (`1 sprint = 2 weeks`) is an effectful line
             // like the symbolic shapes below, so it rides the same non-bytecode
             // channel. Checked first, so it claims its narrow pattern before the
             // scalar-equation grammar sees the bare `=`.
             const definingLineId = this.documentModel?.getLineAt(lineNumber)?.lineId ?? -1;
-            symbolicResult = this.tryDefineUserUnit(normalizedTokens, definingLineId, effects);
+            symbolicResult = this.tryDefineUserUnit(normalizedTokens, definingLineId, shapeEffects);
             if (symbolicResult === null) {
-                const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber, effects);
+                const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber, shapeEffects);
                 if (compound !== null) {
                     symbolicResult = compound;
                     symbolicReadsWrites = extractReadsAndWrites(normalizedTokens);
                 }
             }
             if (symbolicResult === null) {
-                const symbolic = this.trySymbolicGrammar(normalizedTokens, lineNumber, effects);
+                const symbolic = this.trySymbolicGrammar(normalizedTokens, lineNumber, shapeEffects);
                 if (symbolic?.colonForm !== undefined) {
                     normalizedTokens = symbolic.colonForm;
                 } else if (symbolic !== null) {
@@ -5599,9 +5638,14 @@ export class ExpressionEngine {
             // yet parse, so a caller tracking dependencies can re-evaluate it
             // once the user finishes typing.
             const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+            if (hidden.length > 0) return this.refuseHiddenDirection(expression, hidden[0], normalizedTokens, reads, writes, tokens, hidden);
             return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes, normalizedTokens };
         }
         if (symbolicResult !== null) {
+            if (hidden.length > 0) {
+                const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+                return this.refuseHiddenDirection(expression, hidden[0], normalizedTokens, reads, writes, tokens, hidden);
+            }
             return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: symbolicReadsWrites?.reads, writes: symbolicReadsWrites?.writes };
         }
         if (failed) {
@@ -5621,11 +5665,16 @@ export class ExpressionEngine {
         } catch (e) {
             const error = normalizeUnknownError(e);
             const { reads, writes } = extractReadsAndWrites(normalizedTokens);
-            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span } });
+            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span }, hidden });
             return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
         }
 
         const { reads, writes } = extractReadsAndWrites(frozenLine?.operand ?? normalizedTokens);
+
+        if (frozenLine?.program && hidden.length > 0) {
+            const refused = hiddenDirectionToRefuse(hidden, this.codeStartOffset(frozenLine.operand));
+            if (refused !== null) return this.refuseHiddenDirection(expression, refused, normalizedTokens, reads, writes, tokens, hidden);
+        }
 
         // ══ BYTECODE CACHE / PARSE+COMPILE ══
         // Reached with a cached program only when its front half is missing
@@ -5667,6 +5716,11 @@ export class ExpressionEngine {
                 program = builder.build();
             }
         } catch (e) {
+            if (hidden.length > 0) {
+                const thrown = normalizeUnknownError(e);
+                const refused = hiddenDirectionToRefuse(hidden, null, thrown.span?.start);
+                if (refused !== null) return this.refuseHiddenDirection(expression, refused, normalizedTokens, reads, writes, tokens, hidden);
+            }
             // reads/writes were already extracted above from the full token
             // list (independent of whether parsing succeeds), returned
             // alongside the error (not merged into its context here, since
@@ -5676,12 +5730,50 @@ export class ExpressionEngine {
             // learn what this line references and can re-evaluate it once
             // those variables become defined.
             const error = normalizeUnknownError(e);
-            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span } });
+            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span }, hidden });
             return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
+        }
+
+        if (hidden.length > 0) {
+            const refused = hiddenDirectionToRefuse(hidden, this.codeStartOffset(normalizedTokens));
+            if (refused !== null) return this.refuseHiddenDirection(expression, refused, normalizedTokens, reads, writes, tokens, hidden);
         }
 
         this.cacheBytecode(expression, program, { normalizedTokens, reads, writes });
         return { kind: 'ready', normalizedTokens, reads, writes, program, cached: false, parserAlloc };
+    }
+
+    /**
+     * Where the code part of a line that just parsed begins: the offset of the
+     * first token past the label the parse set aside, so a label's words (prose)
+     * are not held to the rules a name is.
+     *
+     * @param tokens - The tokens the parse was given.
+     */
+    private codeStartOffset(tokens: readonly Token[]): number {
+        return tokens[this.parsedLabelEnd]?.offset ?? tokens[0]?.offset ?? 0;
+    }
+
+    /**
+     * The parse failure for a line with a word holding a direction control
+     * (see engine/DirectionControls.ts), remembered like any other failure so
+     * the next evaluation of the same text does not parse it again.
+     *
+     * @param hidden - The word the refusal names.
+     * @param all - Every such word on the line, for the remembered failure.
+     */
+    private refuseHiddenDirection(
+        expression: string,
+        hidden: HiddenDirection,
+        normalizedTokens: Token[],
+        reads: string[],
+        writes: string[],
+        tokens: Token[],
+        all: readonly HiddenDirection[],
+    ): { kind: 'error'; stage: 'parse'; error: EngineError; reads: string[]; writes: string[]; normalizedTokens: Token[] } {
+        const error = directionControlRefusal(hidden);
+        this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span }, hidden: all });
+        return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
     }
 
     /**
@@ -7779,12 +7871,16 @@ export class ExpressionEngine {
 	readExpressionTokens(expression: string, units: readonly DocumentUnit[] = [], names: readonly string[] = []): ExpressionTokens | null {
 		if (expression.length > this.config.validation.maxExpressionLength) return null;
 		let tokens: Token[];
+		// Words holding a direction control, which compiling refuses as names
+		// (see engine/DirectionControls.ts); read from the lexer's own tokens.
+		let hidden: readonly HiddenDirection[] = NO_HIDDEN_DIRECTIONS;
 		try {
 			// Lexed afresh even when the expression is compiled and cached: the
 			// cached tokens are not guaranteed to be the ones a fresh read of this
 			// text produces once a user unit has been defined or dropped since.
 			const raw = this.lexToTokens(expression, undefined, false).tokens;
 			if (raw.length === 0) return null;
+			if (hasDirectionControl(expression)) hidden = findHiddenDirections(raw);
 			// The note's own units are in place for the normaliser, which is the
 			// one stage that reads them, and gone again before this returns.
 			tokens = this.userUnits.withUnits(units, () => this.multiWordNames.withNames(names, () => this.normalizer.normalize(raw)));
@@ -7842,6 +7938,7 @@ export class ExpressionEngine {
 		// 4 hours`), which neither side would parse as on its own.
 		const unit = userUnitDefinitionShape(tokens);
 		if (unit !== null) {
+			if (hidden.length > 0) return null;
 			return {
 				tokens,
 				start: 0,
@@ -7856,8 +7953,15 @@ export class ExpressionEngine {
 		const last = tokens.length - 1;
 		if (tokens[last].type === 'EQUALS' && last > 0 && isNameProduct(tokens, last)) return null;
 
-		if (this.parsesWhole(tokens, hasParens)) return { tokens, start: this.parsedLabelEnd, unit: null };
-		if (this.readsAsStatement(tokens, hasParens)) return { tokens, start: 0, unit: null };
+		// A statement shape stores or reads a name, so a word holding a
+		// direction control refuses it outright, as compiling does; a parsed
+		// line is refused only when such a word is past its label.
+		if (this.parsesWhole(tokens, hasParens)) {
+			const start = this.parsedLabelEnd;
+			if (hidden.length > 0 && hiddenDirectionToRefuse(hidden, this.codeStartOffset(tokens)) !== null) return null;
+			return { tokens, start, unit: null };
+		}
+		if (hidden.length === 0 && this.readsAsStatement(tokens, hasParens)) return { tokens, start: 0, unit: null };
 		return null;
 	}
 

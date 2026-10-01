@@ -33,8 +33,10 @@ export const FinanceErrorCodes = {
 	INFLATION_EXPECTED_CURRENCY: "INFLATION_EXPECTED_CURRENCY",
 	/** An inflation adjustment of an amount no bundled price index measures: a currency without one, a quantity that is not money, or a bare number. */
 	INFLATION_NO_INDEX: "INFLATION_NO_INDEX",
-	/** `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. */
+	/** `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`, as in `what is $300 and $50 from 2003`. */
 	INFLATION_EXPECTED_FROM_OR_IN: "INFLATION_EXPECTED_FROM_OR_IN",
+	/** The year of an inflation question that is not a plain whole number: money, a quantity, a date or a fraction, as in `what is $100 from 1990.5`. */
+	INFLATION_EXPECTED_YEAR: "INFLATION_EXPECTED_YEAR",
 	/** `assuming <rate>%` not followed by the word `inflation`. */
 	INFLATION_EXPECTED_INFLATION_WORD: "INFLATION_EXPECTED_INFLATION_WORD",
 	/** `how much per month to reach <target>` followed by neither `in` nor `over` and the time the saving runs for. */

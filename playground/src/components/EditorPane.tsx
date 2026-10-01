@@ -652,15 +652,14 @@ function createTabEditor(tabId: string, container: HTMLElement, initialDoc: stri
   // alongside BUILTIN_PACKAGES so "osrs"/game-item tokens still highlight
   // correctly. Keep this in sync with engine.ts's PLAYGROUND_PACKAGES.
   const highlightEngine = new ExpressionEngine({ packages: [...BUILTIN_PACKAGES, OSRS_PACKAGE] })
-  // highlightEngine never evaluates anything, so its own DAG is always
-  // empty — read variable names from the real evaluation engine's
-  // already-computed DAG snapshot instead (the ACTIVE tab's snapshot).
+  // highlightEngine never evaluates anything, so it holds no names of its
+  // own. The names come from the evaluating engine's documentVariableNames(),
+  // read in the worker where that engine lives and carried on the active
+  // tab's report: the names the document defines and the engine still holds.
+  // A graph snapshot also listed names lines only read, and names a deleted
+  // line once wrote.
   const languageService = new LanguageService(highlightEngine, {
-    variableNameSource: () => {
-      const snap = useDiagnosticReportStore.getState().dagSnapshot
-      if (!snap) return []
-      return [...Object.keys(snap.consumers), ...Object.values(snap.writes).flat()]
-    },
+    variableNameSource: () => useDiagnosticReportStore.getState().documentNames,
   })
 
   function solveCompletionSource(context: CompletionContext): CompletionResult | null {

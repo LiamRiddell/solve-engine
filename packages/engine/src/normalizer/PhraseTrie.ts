@@ -253,9 +253,14 @@ export class PhraseTrie {
 	 * Used by diagnostic mode to expose the complete trie structure to the
 	 * playground's NormalizerTab for rendering ALL registered phrases
 	 * (not just the ones that matched in this evaluation).
+	 *
+	 * The listing has no prototype, so it holds exactly its own entries: a
+	 * phrase spelled `__proto__` is listed rather than reaching the prototype
+	 * setter and vanishing, and `constructor` or `toString` read back as the
+	 * phrase's token type, never as an inherited function.
 	 */
 	getAllPhrases(): Record<string, string> {
-		const result: Record<string, string> = {};
+		const result: Record<string, string> = Object.create(null);
 
 		// The phrase so far is carried as one string rather than an array of its
 		// words copied at every level: the language service reads every phrase

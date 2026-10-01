@@ -2,6 +2,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { isInsideRangeContext } from "@solve-js/normalizer/BuiltinNormalizerRules";
+import { isLabelColon } from "@solve-js/packages/time/normalizer/LabelColon";
 
 /**
  * Converts an hour[:minute] + optional am/pm marker into total
@@ -130,6 +131,9 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
         // a decimal on either side is not a time, and is left for what else
         // the line can be.
         if (!isClockDigits(hourToken) || !isClockDigits(minuteToken)) return null;
+        // `Item 2: 45` is a label and its figure, not the time 2:45: a colon
+        // with a space after it, after a name, is a label's (see LabelColon).
+        if (isLabelColon(tokens, pos)) return null;
         const minute = parseInt(minuteToken.value, 10);
         const ampmToken = tokens[pos + 3];
         const hasAmPm = isAmPmToken(ampmToken);

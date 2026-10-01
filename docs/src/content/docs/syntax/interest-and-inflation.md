@@ -236,12 +236,63 @@ $100 in 1965 dollars // $9.51
 ```
 
 The amount can be worked out on the line: `what is $100 * 2 from 1990` adjusts
-$200. A sum needs brackets, `what is ($300 + $50) from 2003`, since the phrase
-reads its amount up to the first `+` or `-`.
+$200, and `what is $300 + $50 from 2003` adjusts $350, the same as the
+bracketed `($300 + $50)`. Everything between `what is` and `from` (or `in`, or
+`worth in`) is the amount, so a `+` or `-` there joins two amounts, since the
+year can only come after one of those words.
 
 ```solve
 what is $100 * 2 from 1990 // $506.78
+what is $300 + $50 from 2003 // $629.96
 what is ($300 + $50) from 2003 // $629.96
+what is $300 + $50 in 1990 worth in 2010 // $583.93
+```
+
+Only a sign joins amounts. A word between them is not read as a sum, so `and`
+is refused, and the refusal points at the plus sign:
+
+```solve-doc
+what is $300 and $50 from 2003 // ERROR: an inflation question names its year straight after the amount, as in what is $300 from 2003 or what is $300 in 1990 worth in 2010, and here "and" comes after the amount: to adjust a total, join the amounts with a plus sign, as in what is $300 + $50 from 2003
+```
+
+### The year
+
+The year is a plain whole number, the way a calendar writes it: `1990`, or a
+name that holds one. It is a single number, so an operator written after it
+belongs to the line rather than to the year: `what is $100 from 1990 + $5`
+adjusts $100 from 1990 and then adds $5 to the answer, the same way `$100 in
+1990 dollars + $5` and `5 km in m + 3 m` add to theirs. A year worked out from a
+sum goes in brackets, `from (1990 + 5)`.
+
+```solve-doc
+what is $100 from 1990 + $5 // $258.39
+what is $100 from (1990 + 5) // $217.31
+year = 1990 // 1,990
+what is $100 from year // $253.39
+```
+
+A year that is not a plain whole number is refused by name rather than read for
+whatever number it holds. Before this, `from $1990` was the year 1990, `from
+1990 + $5` was 1995 with the money added to the year, and `from 1990.5` was
+looked up as 1990, each answered with a confident figure. Money, a quantity, a
+date and a fraction are all refused the same way, in every inflation form,
+`inflationAdjust(...)` included.
+
+```solve-doc
+what is $100 from 1990.5 // ERROR: the year of an inflation question is a plain whole number, such as 1990, and 1990.5 is not a whole number
+what is $100 from $1990 // ERROR: the year of an inflation question is a plain whole number, such as 1990, and this one is money
+what was $100 worth in 1990 kg // ERROR: the year of an inflation question is a plain whole number, such as 1990, and this one is a mass
+```
+
+The boundary: a whole number is a year even when no index covers it, so `from
+-1990` and `from 1e9` are refused by the index, which names the years it holds
+(see below), not by this rule. Between two named years the first is followed by
+`worth in`, so a sum written there is refused with a pointer at the brackets
+rather than read as part of the year.
+
+```solve-doc
+what is $100 in 1990 + 5 worth in 2010 // ERROR: an inflation question between two years reads what is <amount> in <year> worth in <year>, and here "+" comes after the first year: a year is one number or name, so a year worked out goes in brackets, as in (1990 + 5)
+what is $100 in (1990 + 5) worth in 2010 // $143.08
 ```
 
 ### Which index answers each currency
@@ -361,7 +412,25 @@ $100 in 1990 pounds // in 1990 pounds asks for pounds sterling, and this amount 
 ```
 
 `value of £100 in 2030 assuming 3% inflation` is a different question: it states
-the rate rather than reading an index, so it takes any currency.
+the rate rather than reading an index, so it takes any currency. It answers what
+the amount will buy in that year if prices rise by the rate each year, which is
+less than the amount: the money is divided by the growth in prices, once for
+each year from now. A rate of 0% leaves it as it is.
+
+```solve-doc
+value of $100 in 2030 assuming 3% inflation // $88.85
+value of £100 in 2030 assuming 3% inflation // £88.85
+value of $100 in 2030 assuming 0% inflation // $100.00
+```
+
+Its year is read as every other inflation form reads one: a plain whole number,
+so a fraction, money, a quantity or a date there is refused with the same words
+rather than read for its number.
+
+```solve-doc
+value of $100 in 2030.5 assuming 3% inflation // ERROR: the year of an inflation question is a plain whole number, such as 1990, and 2030.5 is not a whole number
+value of $100 in $2030 assuming 3% inflation // ERROR: the year of an inflation question is a plain whole number, such as 1990, and this one is money
+```
 
 The figures are the published indices, but an adjustment by one is still an
 average over a typical basket of shopping, not what any one price did. For a

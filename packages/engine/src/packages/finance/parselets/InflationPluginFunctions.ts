@@ -1,7 +1,7 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
-import { adjustByCurrency, countedAmountRefusal, inflationIndexFor, isPriceIndex } from "../data/InflationAmount";
+import { adjustByCurrency, countedAmountRefusal, inflationIndexFor, inflationYear, isPriceIndex, isYear } from "../data/InflationAmount";
 import { rateAtOrBelowMinusHundred } from "@solve-js/vm/FinanceFormulas";
 
 /**
@@ -36,22 +36,28 @@ function adjusted(amount: Value, fromYear: number, toYear: number): Value {
 
 /**
  * "what is $X from YEAR" -> X (given as YEAR's money) expressed in present-day
- * money, by the index the amount's currency picks.
+ * money, by the index the amount's currency picks. A year that is not a plain
+ * whole number is refused (see `inflationYear`).
  */
 export function inflationFromYearToPresentHandler(args: Value[], context?: LineExecutionContext): Value {
   const chosen = inflationIndexFor(args[0]);
   if (!isPriceIndex(chosen)) return chosen;
-  return adjusted(args[0], args[1].toNumber(), presentYear(context));
+  const year = inflationYear(args[1]);
+  if (!isYear(year)) return year;
+  return adjusted(args[0], year, presentYear(context));
 }
 
 /**
  * "what was $X worth in YEAR" -> X (given as present-day money) expressed in
- * YEAR's money, by the index the amount's currency picks.
+ * YEAR's money, by the index the amount's currency picks. A year that is not
+ * a plain whole number is refused (see `inflationYear`).
  */
 export function inflationToYearFromPresentHandler(args: Value[], context?: LineExecutionContext): Value {
   const chosen = inflationIndexFor(args[0]);
   if (!isPriceIndex(chosen)) return chosen;
-  return adjusted(args[0], presentYear(context), args[1].toNumber());
+  const year = inflationYear(args[1]);
+  if (!isYear(year)) return year;
+  return adjusted(args[0], presentYear(context), year);
 }
 
 /**
@@ -107,7 +113,8 @@ export function inflationToYearInCurrencyHandler(args: Value[], context?: LineEx
   const amount = args[0];
   const chosen = inflationIndexFor(amount);
   if (!isPriceIndex(chosen)) return chosen;
-  const year = args[1].toNumber();
+  const year = inflationYear(args[1]);
+  if (!isYear(year)) return year;
   const refused = inYearCurrencyRefused(String(args[2]?.value ?? "USD"), chosen.currency, chosen.name, year);
   if (refused) return refused;
   return adjusted(amount, presentYear(context), year);
@@ -129,10 +136,16 @@ export function inflationToYearInCurrencyHandler(args: Value[], context?: LineEx
  *
  * Growing a sum at a rate is still available and is a different question:
  * `$500 after 4 years at 5%` (see InvestmentParselets.ts).
+ *
+ * The year is read as every inflation form reads it (see `inflationYear`): a
+ * plain whole number, so `in 2030.5`, `in $2030` and `in 2030-01-01` are
+ * refused with `INFLATION_EXPECTED_YEAR` rather than read for their number.
+ * A whole year in the past is still a year, and discounts backwards.
  */
 export function inflationFutureValueHandler(args: Value[], context?: LineExecutionContext): Value {
   const amountValue = args[0];
-  const futureYear = args[1].toNumber();
+  const futureYear = inflationYear(args[1]);
+  if (!isYear(futureYear)) return futureYear;
   const rate = args[2].toNumber();
   const years = futureYear - presentYear(context);
   if (1 + rate <= 0) {

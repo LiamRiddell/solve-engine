@@ -62,6 +62,8 @@ const TWO_OPERANDS: readonly OpCode[] = [
 	OpCode.PLOT_INVOKE,
 	// The denominator's pooled name plus the rate builtin's index.
 	OpCode.RATE_OR_DIVIDE,
+	// The pooled source text of a range's two sides.
+	OpCode.RANGE_NEW_WRITTEN,
 ];
 
 /**
