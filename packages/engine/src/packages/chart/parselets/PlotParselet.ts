@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { heldExpressionReadsLines } from "@solve-js/parser/HeldExpression";
 
 /**
  * `plot <expr> from <a> to <b>` (wiki: `plot sin(x) from 0 to 2pi`), samples the
@@ -35,6 +36,8 @@ export class PlotParselet implements PrefixParselet {
 		parser.parseExpression(BindingPower.Lowest, bodyBuilder);
 		parser.setBuilder(builder);
 		const program = bodyBuilder.build();
+		const readsLines = heldExpressionReadsLines(program, bodyBuilder, "plot");
+		if (readsLines !== null) throw readsLines;
 		if (program.hasAsync) {
 			throw ErrorFactory.parsing(
 				"PLOT_EXPR_MUST_BE_SYNCHRONOUS",

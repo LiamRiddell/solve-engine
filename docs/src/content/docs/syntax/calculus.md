@@ -43,6 +43,15 @@ der(x*y, x) // y
 A function whose derivative is not known is left as an unevaluated `der` call
 rather than guessed at.
 
+The expression is a formula worked out away from the line, so it cannot read
+another line of the note: `prev` or `line 1` inside `der`, `integral` or
+`solve` is refused by name, with the way to write it (name the value on a line
+above, then use the name).
+
+```solve-doc
+der(x^2 + prev, x) // ERROR: der's expression reads other lines of the document, and it is worked out away from the line, where there are no lines to read: give the line's value a name first, as in p = prev, and use p in the expression
+```
+
 ## Integrals
 
 `integral(expression, variable)` finds an indefinite integral, the expression

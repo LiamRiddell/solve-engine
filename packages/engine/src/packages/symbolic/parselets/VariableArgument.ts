@@ -3,6 +3,7 @@ import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/Bytecode
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { heldExpressionReadsLines } from "@solve-js/parser/HeldExpression";
 
 /**
  * Reads a bare variable name argument and returns it, consuming the token.
@@ -96,6 +97,8 @@ export function parseBoundExpression(parser: Parser, builder: BytecodeBuilder, v
 	parser.parseExpression(BindingPower.Lowest, inner);
 	parser.setBuilder(builder);
 	const program = inner.build();
+	const readsLines = heldExpressionReadsLines(program, inner, verb);
+	if (readsLines !== null) throw readsLines;
 	if (program.hasAsync) {
 		// Same v1 restriction every other deferred body carries (user-defined
 		// functions, map/reduce transforms): a reentrant execution cannot

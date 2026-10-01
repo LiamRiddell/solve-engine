@@ -7,6 +7,7 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { parseCollectionExpr, emitInvoke, callHasOwnComma, parseElementFold } from "../MapReduceShared";
 import { ReduceForm } from "@solve-js/vm/MatrixOps";
+import { heldExpressionReadsLines } from "@solve-js/parser/HeldExpression";
 
 /**
  * `prod(elementExpr, collection)`, parse-time sugar for
@@ -34,6 +35,8 @@ export class ProdParselet implements PrefixParselet {
     parser.setBuilder(builder);
     bodyBuilder.emitOpcode(OpCode.MUL);
     const bodyProgram = bodyBuilder.build();
+    const readsLines = heldExpressionReadsLines(bodyProgram, bodyBuilder, "prod");
+    if (readsLines !== null) throw readsLines;
     if (bodyProgram.hasAsync) {
       throw ErrorFactory.parsing(
         "MAP_REDUCE_TRANSFORM_MUST_BE_SYNCHRONOUS",

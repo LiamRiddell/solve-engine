@@ -298,6 +298,19 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"weekday of X",
 		"f(x) = x + (X) + prev",
 		"Total: total(X:1002)",
+		// A list rounded cell by cell and refused a one-number conversion, a
+		// time after a label, a label's own expression error, a held
+		// expression that reads a line, and a range before another argument
+		// (FoundBug_listRounding, FoundBug_labelColonTime,
+		// FoundBug_labelledRetryError, FoundBug_heldExpressionReadsLines,
+		// FoundBug_rangeBeforeAnotherArgument).
+		"[X, 0.006] to 4 dp",
+		"[X, 2] to 2 sf",
+		"[X, 2] as sci",
+		"Total: X:00",
+		"Total: average(X:12)",
+		"map(x + (X) + prev, 1:3)",
+		"sum(100:200, X)",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,

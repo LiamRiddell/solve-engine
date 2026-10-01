@@ -16,6 +16,7 @@ import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
 import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
+import { roundEachCell } from "@solve-js/vm/ListRounding";
 import { apartSymbolic } from "@solve-js/symbolic/PartialFractions";
 import { differentiate } from "@solve-js/symbolic/Derivative";
 import { integrate } from "@solve-js/symbolic/Integral";
@@ -455,6 +456,30 @@ function roundToPlaces(source: Value, places: number): Value {
     const scaled = value * scale;
     if (!Number.isFinite(scaled) || Math.abs(scaled) > Number.MAX_SAFE_INTEGER) return withPlaces(source, value, p);
     return withPlaces(source, roundHalfAwayFromZero(scaled) / scale, p);
+}
+
+/** ceil(x) of one number or quantity, exact where the value carries an exact form. */
+function ceilOne(value: Value): Value {
+    return roundExactToWhole(value, "ceil") ?? keepUnit(value, Math.ceil(value.toNumber()));
+}
+
+/** int(x) of one number or quantity: the whole part, exact where the value carries an exact form. */
+function truncOne(value: Value): Value {
+    return roundExactToWhole(value, "trunc") ?? keepUnit(value, Math.trunc(value.toNumber()));
+}
+
+/** floor(x) of one number or quantity, exact where the value carries an exact form. */
+function floorOne(value: Value): Value {
+    return roundExactToWhole(value, "floor") ?? keepUnit(value, Math.floor(value.toNumber()));
+}
+
+/**
+ * round(x) of one number or quantity: the nearest whole number, a half away
+ * from zero as round(x, n) and `to N dp` round one (#584); see
+ * roundHalfAwayFromZero().
+ */
+function roundOne(value: Value): Value {
+    return roundExactToWhole(value, "round") ?? keepUnit(value, roundHalfAwayFromZero(value.toNumber()));
 }
 
 /**
@@ -912,15 +937,17 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         ?? numberValue(logToBase(args[0].toNumber(), args[1].toNumber())),
     113: (args) => quantityRefused("ln", args[0], false) ?? outsideDomain("ln", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
-    6: (args) => roundExactToWhole(args[0], "ceil") ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
-    7: (args) => roundExactToWhole(args[0], "floor") ?? keepUnit(args[0], Math.floor(args[0].toNumber())),
-    8: (args) =>
-        args.length >= 2
-            ? // round(x, n): round to n decimal places and display at that precision.
-              roundToPlaces(args[0], args[1].toNumber())
-            : // round(x): the nearest whole number, a half away from zero as
-              // round(x, n) and `to N dp` round one (#584); see roundHalfAwayFromZero().
-              roundExactToWhole(args[0], "round") ?? keepUnit(args[0], roundHalfAwayFromZero(args[0].toNumber())),
+    // A list is rounded cell by cell; see roundEachCell() in vm/ListRounding.ts.
+    6: (args) => roundEachCell(args[0], ceilOne, "rounded up") ?? ceilOne(args[0]),
+    7: (args) => roundEachCell(args[0], floorOne, "rounded down") ?? floorOne(args[0]),
+    8: (args) => {
+        if (args.length >= 2) {
+            // round(x, n): round to n decimal places and display at that precision.
+            const places = args[1].toNumber();
+            return roundEachCell(args[0], (cell) => roundToPlaces(cell, places), "rounded") ?? roundToPlaces(args[0], places);
+        }
+        return roundEachCell(args[0], roundOne, "rounded") ?? roundOne(args[0]);
+    },
     // min/max: see extremum() for why the winner is carried around as a Value
     // rather than as a running number.
     9: (args) => extremum(args, false),
@@ -1236,7 +1263,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // which only strips a unit/percentage wrapper and keeps any decimal
     // part (e.g. "5.7 as number" -> 5.7), int() additionally truncates.
     // Text is read only when it spells a number whole; see intOfText().
-    50: (args) => args[0].type === ValueType.String ? intOfText(args[0].value as string) : roundExactToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
+    // A list is cut to whole numbers cell by cell, as the rounding family is.
+    50: (args) => args[0].type === ValueType.String ? intOfText(args[0].value as string) : roundEachCell(args[0], truncOne, "cut to whole numbers") ?? truncOne(args[0]),
 
     // ── Finance (packages/finance/) ──────────────────────────────────────
     // All finance builtins preserve the principal/amount argument's Uom
@@ -1941,10 +1969,16 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // fractional part to round at all, and the round trip through 1e23 was
     // pure loss. Asking for fewer decimal places than a number has cannot
     // change it, so a value that is already whole is returned untouched.
-    97: (args) => roundToPlaces(args[0], args[1].toNumber()),
+    97: (args) => {
+        const places = args[1].toNumber();
+        return roundEachCell(args[0], (cell) => roundToPlaces(cell, places), "rounded") ?? roundToPlaces(args[0], places);
+    },
     // Not reachable by name, only through `<value> to <n> sf`; see
     // roundToSignificant() and converters/parselets/RoundingParselets.ts.
-    108: (args) => roundToSignificant(args[0], args[1].toNumber()),
+    108: (args) => {
+        const figures = args[1].toNumber();
+        return roundEachCell(args[0], (cell) => roundToSignificant(cell, figures), "rounded") ?? roundToSignificant(args[0], figures);
+    },
     // splitEach(amount, n): a per-person bill split, `split $180 between 4` and
     // `$120 + 18% split 3 ways`. Backs both split spellings (see
     // BillSplitParselets.ts). Money stays exact and the shares add back to the

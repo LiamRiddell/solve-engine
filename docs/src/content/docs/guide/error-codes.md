@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 550 codes, grouped below by the part
+ship. The engine and its built-in packages ship 554 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -80,6 +80,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `USER_FUNCTION_NO_PARAMS` | thrown | A function definition with no parameters, `f() = ...`, which would read the same as a call. A definition needs at least one. |
 | `FUNCTION_BODY_MUST_BE_SYNCHRONOUS` | thrown | A function definition whose body reaches live data (weather, stocks, a currency rate). Refused when it is defined, since a function body must be synchronous. |
 | `FUNCTION_BODY_READS_LINES` | thrown | A function definition whose body reads other lines (`f(x) = x + prev`, `x + line 1`, a total above, a tag or a table column). Refused when it is defined, since a body runs wherever it is called, with no document lines to read; the value is passed in as an argument instead. |
+| `HELD_EXPRESSION_READS_LINES` | thrown | A held expression that reads other lines (`map(x + prev, 1:3)`, `sum(x + line 1, 1:3)`, `plot x + prev from 0 to 1`, `der(x^2 + prev, x)`). Refused when the line is read, since the expression is worked out away from the line, with no lines to read; the message says to name the line's value first (`p = prev`) and use the name. |
 | `TOO_MANY_FUNCTION_DEFINITIONS` | thrown | One line defining more functions than a compiled program can index. A safety limit, of the same kind as `TOO_MANY_NUMERIC_CONSTANTS`. |
 | `TOO_MANY_ANONYMOUS_BODIES` | thrown | One line with more `map` or `reduce` bodies than a compiled program can index. A safety limit, of the same kind as `TOO_MANY_FUNCTION_DEFINITIONS`. |
 | `UNKNOWN_PLUGIN_FUNCTION` | either | A parselet emitted a call to a plugin function by a name no registered package declares, or before its package registered. A package-authoring or registration fault, not the reader's line. |
@@ -361,6 +362,9 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `NON_INTEGER_RANGE_BOUND` | as a value | A range whose bounds are not whole numbers (`0.5:3`). |
 | `DESCENDING_RANGE` | as a value | A range whose first bound is above its second (`5:1`). The message names each bound as written, with the number it came to, and suggests the other order. |
 | `RANGE_BOUND_GROUP_MALFORMED` | thrown | A number in a call written like a grouped range bound whose group is not three digits (`sum(1,0000:1)`, `sum(1,00:1)`): refused by the lexer, since it is neither one bound nor plainly two arguments. The message says a space after the comma gives two. |
+| `RANGE_BEFORE_ANOTHER_ARGUMENT` | either | A whole-number colon pair no clock reads, written as the first of several arguments to `sum`, `total`, `prod`, `map` or `reduce` (`sum(100:200, 50)`): a range is read only as the last argument. Refused by the normaliser; the message says where the range goes. |
+| `LIST_ROUNDING_NON_NUMERIC` | as a value | A list rounded (`to 2 dp`, `to 3 sf`, `round`, `ceil`, `floor`) that holds a cell with no number to round: a true or false, or a formula with an unknown. |
+| `LIST_CONVERSION_UNSUPPORTED` | as a value | A list of several numbers written as one: in scientific notation, as a fraction or a percentage, or in hex, binary or octal (`[1234, 5678] as sci`). Each value is converted on its own. |
 | `COLLECTION_TOO_LARGE` | as a value | A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. |
 | `MATRIX_CELL_NON_NUMERIC` | as a value | A list cell that is not a number or a quantity: a list inside a list, text, a date. |
 | `MATRIX_CELL_UNITS_DIFFER` | as a value | A list whose cells are quantities of different measures (`[1 km, 2 kg]`), or money in two currencies with no rate between them: a list holds one unit. |

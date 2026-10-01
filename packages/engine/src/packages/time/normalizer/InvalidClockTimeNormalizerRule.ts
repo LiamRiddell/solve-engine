@@ -2,6 +2,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { isInsideRangeContext } from "@solve-js/normalizer/BuiltinNormalizerRules";
+import { rangeBeforeLaterArgument } from "@solve-js/normalizer/RangeArgumentOrder";
 
 /** The token a colon pair that is no clock time is fused into. See `InvalidClockTimeParselet`. */
 export const INVALID_CLOCK_TIME = "INVALID_CLOCK_TIME";
@@ -92,7 +93,9 @@ export function invalidClockTimeNormalizerRule(priority = 20): NormalizerRule {
       const fused = createFusedToken(INVALID_CLOCK_TIME, pair.literal, tokens.slice(pos, pos + pair.consumed));
       // The refusal rides on the token, so the parser gives it wherever it
       // meets the pair, as a value or where it needed another token.
-      fused.fault = { code: "INVALID_TIME_LITERAL", message: invalidTimeMessage(pair.literal) };
+      // A whole-number pair before a later argument of sum, prod, map or
+      // reduce is a range in the wrong place, and is refused as one.
+      fused.fault = rangeBeforeLaterArgument(tokens, pos, pair.consumed) ?? { code: "INVALID_TIME_LITERAL", message: invalidTimeMessage(pair.literal) };
       return {
         consumed: pair.consumed,
         replacement: [fused],

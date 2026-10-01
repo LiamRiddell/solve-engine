@@ -368,3 +368,8 @@ bump(x, v) = x + v
 10
 bump(2, prev) // 12
 ```
+
+The expression of a `map`, `reduce`, `sum` or `prod`, a plot and the algebra
+verbs is held the same way, and refuses a reference to another line for the
+same reason (see
+[map, reduce and aggregates](/syntax/map-reduce-and-aggregates/#using-another-lines-value)).
