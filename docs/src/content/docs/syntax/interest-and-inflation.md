@@ -213,22 +213,47 @@ index is bundled with the engine so that no line needs the network, and it is
 the **US** index, so it adjusts amounts in US dollars.
 
 ```solve
-what is $100 from 1990 // $254.55
-inflationAdjust($100, 1990, 2020) // $198.01
-what is $500 in 1990 worth in 2010 // $834.35
+what is $100 from 1990 // $253.39
+inflationAdjust($100, 1990, 2020) // $198.02
+what is $500 in 1990 worth in 2010 // $834.19
 ```
 
 The first line runs to the current year, so its answer moves on each January;
 the other two name both years.
 
-The index is the United States CPI-U (the consumer price index for all urban
-consumers) as annual averages, from 1970 to 2026, with 2025 and 2026 estimated
-rather than published. A year outside that range is refused rather than
-extrapolated:
+`what was $500 worth in 1965` runs the other way: it takes $500 of today's money
+and says what the same buying power came to in 1965, when prices were lower.
+`$100 in 1965 dollars` asks the same question in fewer words.
 
 ```solve
-what is $100 from 1960 // Year 1960 is outside the bundled CPI table's range (1970-2026)
+what was $500 worth in 1965 // $47.56
+$100 in 1965 dollars // $9.51
 ```
+
+The index is the United States CPI-U (the consumer price index for all urban
+consumers, US city average, all items), series CUUR0000SA0 from the Bureau of
+Labor Statistics. Each year is the average of its twelve monthly figures, worked
+out the way BLS works out its own annual average, and the table runs from 1913,
+the first year of the series, to the current year. Two years are not a full
+twelve months:
+
+- **2025** has eleven: October 2025 was never collected, during the 2025 lapse
+  in US government funding. Its figure is the average of the other eleven, which
+  is the 321.943 BLS published.
+- **The current year** is partial: it averages the months published so far
+  (January to July 2026 in this build), so an answer that reads it moves a
+  little each time the table is rebuilt.
+
+A year outside the table is refused rather than extrapolated, since a year
+before the series began has no figure, and a year after the latest has a
+forecast at best:
+
+```solve
+what is $100 from 1912 // Year 1912 is outside the bundled CPI table's range (1913-2026)
+```
+
+The table is built ahead of time by a script in the repository and shipped with
+the engine, so no inflation line ever reaches the network.
 
 The US index says nothing about what a pound or a euro bought, so an amount in
 any other currency is refused rather than given the American figure with its own
@@ -244,5 +269,7 @@ what is 100 from 1990 // this is the US consumer price index, so it adjusts an a
 `value of £100 in 2030 assuming 3% inflation` is a different question: it states
 the rate rather than reading the index, so it takes any currency.
 
-The inflation figures are an approximation, not a substitute for a real
-financial calculation.
+The figures are the published index, but an adjustment by it is still an
+average over a typical basket of shopping, not what any one price did. For a
+contract, a tax figure or a cost-of-living clause, use the series at bls.gov/cpi
+directly.

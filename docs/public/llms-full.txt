@@ -734,7 +734,7 @@ $120 + 18% split 3 ways // $47.20 each
 ```
 interest on 1000 over 3 years at 5% // 157.63
 monthly repayment on 200000 over 25 years at 4% // 1,055.67
-what is $500 in 1990 worth in 2010 // $834.35
+what is $500 in 1990 worth in 2010 // $834.19
 ```
 
 ```
@@ -2764,13 +2764,18 @@ compoundInterest($1,000, 5%, 3) // $1,157.63
 ```
 
 ```
-what is $100 from 1990 // $254.55
-inflationAdjust($100, 1990, 2020) // $198.01
-what is $500 in 1990 worth in 2010 // $834.35
+what is $100 from 1990 // $253.39
+inflationAdjust($100, 1990, 2020) // $198.02
+what is $500 in 1990 worth in 2010 // $834.19
 ```
 
 ```
-what is $100 from 1960 // Year 1960 is outside the bundled CPI table's range (1970-2026)
+what was $500 worth in 1965 // $47.56
+$100 in 1965 dollars // $9.51
+```
+
+```
+what is $100 from 1912 // Year 1912 is outside the bundled CPI table's range (1913-2026)
 ```
 
 ```
