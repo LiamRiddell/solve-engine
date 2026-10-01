@@ -15,6 +15,7 @@ import { valueInUnit } from "@solve-js/vm/MoneyExact";
 import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isKnownUnit } from "@solve-js/lexer/units";
+import { numberText } from "@solve-js/utilities/Number";
 
 /**
  * The provenance record of the exchange rate an operation between two
@@ -780,7 +781,7 @@ export function toBigIntOperand(v: Value): bigint {
     if (!Number.isInteger(n)) {
         // Covers NaN and both infinities as well as fractions, all of which
         // `BigInt()` refuses and none of which has a whole-number form.
-        const shown = Number.isNaN(n) ? "NaN" : String(n);
+        const shown = numberText(n);
         throw ErrorFactory.execution(
             "BIGINT_INEXACT_OPERAND",
             `A whole-number (n) value can only be combined with another whole number, and ${shown} is not one`,

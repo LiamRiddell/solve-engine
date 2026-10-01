@@ -67,11 +67,11 @@ describe("simplifySymbolic — identities", () => {
 });
 
 describe("simplifySymbolic — flatten-and-collect top-level sums", () => {
-  test("1+2+b+3+b collects to 2b+6 (left-assoc chain, matching how a parser would build it)", () => {
+  test("1+2+b+3+b collects to 2*b+6 (left-assoc chain, matching how a parser would build it; b is the bit, so it takes a *)", () => {
     // ((((1+2)+b)+3)+b)
     const tree = add(add(add(add(constNode(1), constNode(2)), varNode("b")), constNode(3)), varNode("b"));
     const simplified = simplifySymbolic(tree);
-    expect(formatSymbolic(simplified)).toBe("2b+6");
+    expect(formatSymbolic(simplified)).toBe("2*b+6");
   });
 
   test("x-x cancels to 0 (structural, no numeric value needed for x)", () => {
@@ -88,7 +88,7 @@ describe("simplifySymbolic — flatten-and-collect top-level sums", () => {
     // sum through Polynomial.ts first collects it properly.
     const tree = add(mul(constNode(2), varNode("b")), mul(constNode(3), varNode("b")));
     const simplified = simplifySymbolic(tree);
-    expect(formatSymbolic(simplified)).toBe("5b");
+    expect(formatSymbolic(simplified)).toBe("5*b");
   });
 
   test("a sum that is not a polynomial keeps the tree-level handling", () => {
@@ -108,8 +108,12 @@ describe("formatSymbolic — display", () => {
     expect(formatSymbolic(varNode("x"))).toBe("x");
   });
   test("coefficient*variable renders with no space or asterisk", () => {
-    expect(formatSymbolic(mul(constNode(2), varNode("b")))).toBe("2b");
-    expect(formatSymbolic(mul(varNode("b"), constNode(2)))).toBe("2b");
+    expect(formatSymbolic(mul(constNode(2), varNode("y")))).toBe("2y");
+    expect(formatSymbolic(mul(varNode("y"), constNode(2)))).toBe("2y");
+  });
+  test("a coefficient on a name that is also a unit takes an asterisk, since 2b reads back as two bits", () => {
+    expect(formatSymbolic(mul(constNode(2), varNode("b")))).toBe("2*b");
+    expect(formatSymbolic(mul(varNode("b"), constNode(2)))).toBe("2*b");
   });
   test("negation renders with a leading minus, no space", () => {
     expect(formatSymbolic(neg(varNode("x")))).toBe("-x");
@@ -148,7 +152,7 @@ describe("executeBytecode — symbolicTolerant mode", () => {
     expect(formatSymbolic(value.value as SymbolicNode)).toBe("b");
   });
 
-  test("1+2+b+3+b, evaluated via real bytecode with symbolicTolerant=true, produces 2b+6", () => {
+  test("1+2+b+3+b, evaluated via real bytecode with symbolicTolerant=true, produces 2*b+6", () => {
     const vm = freshVM();
     // ((((1+2)+b)+3)+b) -- left-associative chain, matching real parser output.
     const result = executeBytecode(
@@ -174,7 +178,7 @@ describe("executeBytecode — symbolicTolerant mode", () => {
     );
     const value = unwrapEvalResult(result);
     expect(value.type).toBe(ValueType.Symbolic);
-    expect(formatSymbolic(value.value as SymbolicNode)).toBe("2b+6");
+    expect(formatSymbolic(value.value as SymbolicNode)).toBe("2*b+6");
   });
 
   test("a symbolic value combined with SUB/MUL/DIV all dispatch correctly", () => {
@@ -200,7 +204,7 @@ describe("executeBytecode — symbolicTolerant mode", () => {
     );
     const value = unwrapEvalResult(result);
     expect(value.type).toBe(ValueType.Symbolic);
-    expect(formatSymbolic(value.value as SymbolicNode)).toBe("3b-1");
+    expect(formatSymbolic(value.value as SymbolicNode)).toBe("3*b-1");
   });
 
   test("a fully-defined variable (present in vm) is read normally even in tolerant mode — no symbolic leakage for known variables", () => {

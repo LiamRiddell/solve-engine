@@ -79,9 +79,9 @@ describe("fixedDecimalText", () => {
 		expect(fixedDecimalText(1e22, 100)).toBe(`10000000000000000000000.${"0".repeat(100)}`);
 	});
 
-	test("hostile: an infinity and NaN are toFixed's own text, never an exception", () => {
-		expect(fixedDecimalText(Number.POSITIVE_INFINITY, 2)).toBe("Infinity");
-		expect(fixedDecimalText(Number.NEGATIVE_INFINITY, 2)).toBe("-Infinity");
+	test("hostile: an infinity is written as the engine writes it and NaN as toFixed's text, never an exception", () => {
+		expect(fixedDecimalText(Number.POSITIVE_INFINITY, 2)).toBe("∞");
+		expect(fixedDecimalText(Number.NEGATIVE_INFINITY, 2)).toBe("-∞");
 		expect(fixedDecimalText(Number.NaN, 2)).toBe("NaN");
 	});
 });
@@ -95,7 +95,7 @@ describe("shortestText", () => {
 		expect(shortestText(-1e22)).toBe("-10000000000000000000000");
 		expect(shortestText(1e-7)).toBe("1e-7");
 		expect(shortestText(-0)).toBe("0");
-		expect(shortestText(Number.POSITIVE_INFINITY)).toBe("Infinity");
+		expect(shortestText(Number.POSITIVE_INFINITY)).toBe("∞");
 		expect(shortestText(Number.NaN)).toBe("NaN");
 	});
 });

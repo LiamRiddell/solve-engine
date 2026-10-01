@@ -168,6 +168,8 @@ const LEAK_MARKERS: readonly string[] = [
 	"exec_failed",
 	"mps2",
 	"timecode@",
+	// JavaScript's word for an infinity; the engine writes `∞`.
+	"Infinity",
 ];
 
 /** What an adversarial check allows beyond the defaults. */

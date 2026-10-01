@@ -18,6 +18,7 @@
 import { CPI_TABLE, CPI_MIN_YEAR, CPI_MAX_YEAR } from "./CpiTable";
 import { UK_CPI_TABLE, UK_CPI_MIN_YEAR, UK_CPI_MAX_YEAR } from "./UkCpiTable";
 import { EURO_HICP_TABLE, EURO_HICP_MIN_YEAR, EURO_HICP_MAX_YEAR, EURO_FIRST_YEAR } from "./EuroHicpTable";
+import { numberText } from "@solve-js/utilities/Number";
 
 /** One bundled index: the currency it measures, its table, and the years an amount can be adjusted between. */
 export interface PriceIndex {
@@ -42,7 +43,7 @@ export const US_PRICE_INDEX: PriceIndex = Object.freeze({
   table: CPI_TABLE,
   firstYear: CPI_MIN_YEAR,
   lastYear: CPI_MAX_YEAR,
-  yearOutside: (year: number) => `Year ${year} is outside the bundled CPI table's range (${CPI_MIN_YEAR}-${CPI_MAX_YEAR})`,
+  yearOutside: (year: number) => `Year ${numberText(year)} is outside the bundled CPI table's range (${CPI_MIN_YEAR}-${CPI_MAX_YEAR})`,
 });
 
 /** The UK index: the ONS long-term indicator of consumer prices, series CDKO. */
@@ -52,7 +53,7 @@ export const UK_PRICE_INDEX: PriceIndex = Object.freeze({
   table: UK_CPI_TABLE,
   firstYear: UK_CPI_MIN_YEAR,
   lastYear: UK_CPI_MAX_YEAR,
-  yearOutside: (year: number) => `Year ${year} is outside the bundled UK price index's range (${UK_CPI_MIN_YEAR}-${UK_CPI_MAX_YEAR})`,
+  yearOutside: (year: number) => `Year ${numberText(year)} is outside the bundled UK price index's range (${UK_CPI_MIN_YEAR}-${UK_CPI_MAX_YEAR})`,
 });
 
 /** The euro-area index: Eurostat's HICP for the euro area, from 1999 when the euro began. */
@@ -64,8 +65,8 @@ export const EURO_PRICE_INDEX: PriceIndex = Object.freeze({
   lastYear: EURO_HICP_MAX_YEAR,
   yearOutside: (year: number) =>
     year < EURO_FIRST_YEAR
-      ? `Year ${year} is before the euro began in ${EURO_FIRST_YEAR}, so there is no amount in euros from then to adjust (the euro-area price index itself starts in ${EURO_HICP_MIN_YEAR})`
-      : `Year ${year} is outside the bundled euro-area price index's range (${Math.max(EURO_FIRST_YEAR, EURO_HICP_MIN_YEAR)}-${EURO_HICP_MAX_YEAR}): the series it is built from ends with ${EURO_HICP_MAX_YEAR}, so name a year up to ${EURO_HICP_MAX_YEAR} to adjust to`,
+      ? `Year ${numberText(year)} is before the euro began in ${EURO_FIRST_YEAR}, so there is no amount in euros from then to adjust (the euro-area price index itself starts in ${EURO_HICP_MIN_YEAR})`
+      : `Year ${numberText(year)} is outside the bundled euro-area price index's range (${Math.max(EURO_FIRST_YEAR, EURO_HICP_MIN_YEAR)}-${EURO_HICP_MAX_YEAR}): the series it is built from ends with ${EURO_HICP_MAX_YEAR}, so name a year up to ${EURO_HICP_MAX_YEAR} to adjust to`,
 });
 
 /** The indices by currency code, with no prototype, so a hostile code finds nothing. */

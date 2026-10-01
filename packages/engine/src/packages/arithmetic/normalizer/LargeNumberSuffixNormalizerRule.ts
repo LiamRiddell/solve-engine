@@ -87,6 +87,21 @@ const WORD_MAGNITUDE: Record<string, number> = {
 };
 
 /**
+ * Whether a word written straight after a number scales it rather than naming
+ * something: a letter of {@link SUFFIX_MAGNITUDE} as written (`k`, `M`), or a
+ * word of {@link WORD_MAGNITUDE} in any case (`million`, `bn`). The formula
+ * printer asks this so it never writes a coefficient beside such a name, since
+ * `2k` reads back as two thousand however the `k` was meant.
+ *
+ * @param word - A name as written.
+ * @returns True for a magnitude suffix.
+ */
+export function isMagnitudeSuffix(word: string): boolean {
+  return Object.prototype.hasOwnProperty.call(SUFFIX_MAGNITUDE, word)
+    || Object.prototype.hasOwnProperty.call(WORD_MAGNITUDE, word.toLowerCase());
+}
+
+/**
  * Plain unsigned decimal literal, digits, with at most one ".", as
  * produced by the lexer's ordinary NUMBER scanning. Deliberately excludes
  * `0x`/`0X` hex and `0b`/`0B` binary literals (also lexed as type

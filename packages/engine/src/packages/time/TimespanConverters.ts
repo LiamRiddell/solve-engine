@@ -1,6 +1,7 @@
 import { Value, ValueType, stringValue, isTimecodeUnit, timecodeFps } from "@solve-js/vm/Value";
 import { timecodeSeconds } from "./timecode/TimecodeMath";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+import { nonFiniteText } from "@solve-js/utilities/Number";
 
 /**
  * `as timespan` and `as laptime`, the two ways of writing a duration out.
@@ -64,6 +65,10 @@ export function toTimespanString(value: Value): Value {
 	if (total === null) {
 		return stringValue(`"as timespan" needs a duration, got ${value.unit ?? "a non-duration"}`);
 	}
+	// An infinite span has no weeks and days to count out: the loop below
+	// would write `Infinity weeks`.
+	const infinite = nonFiniteText(total);
+	if (infinite !== undefined) return stringValue(`${infinite} seconds`);
 
 	const negative = total < 0;
 	let remaining = Math.abs(total);
