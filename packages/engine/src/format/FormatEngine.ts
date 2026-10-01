@@ -564,6 +564,40 @@ function localiseDigits(ascii: string, loc: string): string {
   return out;
 }
 
+/** The most grouping formatters {@link groupedIntegerFormatFor} keeps before starting again. */
+const GROUPED_INTEGER_FORMAT_LIMIT = 64;
+
+/** Grouping formatters by locale; see {@link groupedIntegerFormatFor}. */
+const groupedIntegerFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * The formatter that groups a whole number's digits for a locale, built once
+ * and reused.
+ *
+ * `BigInt.prototype.toLocaleString(loc, { useGrouping: true })` builds a new
+ * `Intl.NumberFormat` on every call. A long money chain met that on every line
+ * once batch L wrote money past 1e21 in full digits rather than in exponent
+ * form, and 4,000 lines of `x = x * 1.123456789` from `$1` took about four
+ * times as long to show. `format` on a formatter built from the same locale and
+ * options writes what `toLocaleString` writes, since that is how the
+ * specification defines it. `useGrouping: true` is kept as it was, which under
+ * current `Intl` groups every number of four digits or more, so the text is
+ * unchanged. The cache is bounded because the locale is a host string; an
+ * unusable locale throws the constructor's `RangeError` and caches nothing.
+ *
+ * @param loc - `Intl` locale tag.
+ * @returns The formatter.
+ */
+export function groupedIntegerFormatFor(loc: string): Intl.NumberFormat {
+  let format = groupedIntegerFormats.get(loc);
+  if (format === undefined) {
+    format = new Intl.NumberFormat(loc, { useGrouping: true });
+    if (groupedIntegerFormats.size >= GROUPED_INTEGER_FORMAT_LIMIT) groupedIntegerFormats.clear();
+    groupedIntegerFormats.set(loc, format);
+  }
+  return format;
+}
+
 /**
  * Write a fixed-decimal string (`"1234567.50"`) the way `loc` writes numbers:
  * its digits, its decimal mark, and its digit grouping when `useGrouping` is on.
@@ -589,7 +623,7 @@ export function localiseFixedDecimal(fixed: string, loc: string, useGrouping: bo
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(fixed);
   if (!match) return fixed;
   const [, sign, integer, fraction] = match;
-  const integerText = useGrouping ? BigInt(integer).toLocaleString(loc, { useGrouping: true }) : localiseDigits(integer, loc);
+  const integerText = useGrouping ? groupedIntegerFormatFor(loc).format(BigInt(integer)) : localiseDigits(integer, loc);
   if (fraction === undefined) return `${sign}${integerText}`;
   return `${sign}${integerText}${decimalMark(loc)}${localiseDigits(fraction, loc)}`;
 }
