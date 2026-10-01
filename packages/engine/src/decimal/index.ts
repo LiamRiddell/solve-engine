@@ -5,6 +5,8 @@ export {
 	decimalFromInteger,
 	decimalFromNumberIfExact,
 	decimalFromLiteral,
+	decimalFromExponentLiteral,
+	EXACT_EXPONENT_LIMIT,
 	decimalAdd,
 	decimalSubtract,
 	decimalMultiply,

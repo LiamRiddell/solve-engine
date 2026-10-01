@@ -30,11 +30,14 @@ export function inlineConstantValue(name: string): number | null {
  * A mathematical constant is pushed as its number, the way `pi` is, so it is a
  * plain value wherever a held expression is compiled on its own (the
  * expression of `solve`, a function body, a map transform). Those refuse a
- * plugin call, since a plugin may answer from live data, and a constant read
- * through one was refused there as though it were live. A physical constant
- * pushes its name and calls the `constantValue` plugin, which returns the
- * value with its unit; the name travels as data so a single plugin serves
- * every such constant.
+ * plugin call that may answer from live data, and a constant read through one
+ * was refused there as though it were live. A physical constant pushes its
+ * name and calls the `constantValue` plugin, which returns the value with its
+ * unit; the name travels as data so a single plugin serves every such
+ * constant. That plugin answers from its own table and never waits, so the
+ * call is emitted as synchronous: a function body or a map transform takes
+ * `gravity` as it takes `pi`, and a formula that keeps no units refuses it for
+ * its unit, not as live data.
  */
 export function constantParselet(name: string): PrefixParselet {
 	const inline = inlineConstantValue(name);
@@ -48,7 +51,7 @@ export function constantParselet(name: string): PrefixParselet {
 			}
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(name);
-			builder.emitPluginCall("constantValue", 1);
+			builder.emitPluginCall("constantValue", 1, { synchronous: true });
 		},
 	};
 }

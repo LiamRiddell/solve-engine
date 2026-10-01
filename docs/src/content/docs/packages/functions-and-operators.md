@@ -398,12 +398,14 @@ type. Arithmetic's `+` is the reference; currency's `in` and the conditionals'
 ## A value known when the line is read
 
 Every `emitPluginCall` marks the line as one that may wait for data, since a
-handler is allowed to return a promise (a weather or price lookup). Several forms
-compile part of a line on its own and run it more than once: the expression of
-`solve`, `der` and `integral`, a function body (`f(x) = ...`), a map or reduce
-transform and a plot. Those cannot pause halfway for data to arrive, so each
-refuses a plugin call outright, with `SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`,
-`FUNCTION_BODY_MUST_BE_SYNCHRONOUS` or its own code, whatever the handler does.
+handler is allowed to return a promise (a weather or price lookup), unless the
+call is emitted as synchronous (see [a handler that never waits](#a-handler-that-never-waits)).
+Several forms compile part of a line on its own and run it more than once: the
+expression of `solve`, `der` and `integral`, a function body (`f(x) = ...`), a
+map or reduce transform and a plot. Those cannot pause halfway for data to
+arrive, so each refuses a marked call outright, with
+`SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`, `FUNCTION_BODY_MUST_BE_SYNCHRONOUS` or
+its own code, whatever the handler does.
 
 So a value your parselet already knows when the line is read, a constant above
 all, is not a plugin call. Emit it as a number, the way the built-in `pi` is:
@@ -422,9 +424,43 @@ const tauParselet: PrefixParselet = {
 
 The constants package does this for `tau`, `phi` and `golden ratio`, which is
 what lets `solve(x^2 = tau, x)` answer; they were plugin calls once, and every
-held expression refused them as though they were live data. The boundary: a value
-that needs a unit or other metadata attached as the line runs (`gravity`, in
-m/s²) still goes through a handler, and is still refused inside those forms.
+held expression refused them as though they were live data.
+
+## A handler that never waits
+
+A value that needs a unit or other metadata attached as the line runs
+(`gravity`, in m/s²) cannot be pushed as a bare number, so it still goes
+through a handler. When that handler answers from its arguments alone and
+never returns a promise, say so when you emit the call, and the call does not
+mark the line as one that may wait for data:
+
+```ts
+import { OpCode, type PrefixParselet } from "solve-engine/parser";
+
+const gravityParselet: PrefixParselet = {
+  category: "Constants",
+  parse(_parser, _token, builder) {
+    builder.emitOpcode(OpCode.PUSH_STRING);
+    builder.emitString("gravity");
+    builder.emitPluginCall("constantValue", 1, { synchronous: true });
+  },
+};
+```
+
+The bytes emitted are the same as any call's; only the mark differs, so a
+function body (`f(m) = m * gravity`), a map or reduce transform and a plot take
+the call. This is how the constants package attaches `gravity`'s unit. The
+option's type is `PluginCallOptions`, exported from `solve-engine/parser`.
+
+The contract is yours to keep: a handler marked `synchronous` must return a
+`Value`, never a promise. One that breaks it is caught as the line runs: on a
+line of its own the answer waits for the promise as any lookup's does, and
+inside a function body or a map the line is refused, as a call that waits is
+refused there. An asynchronous call anywhere else on the same line still marks
+it, whichever comes first. The boundary: a formula (the expression
+of `solve`, `der` and `integral`) is algebra on plain numbers, so a value with a
+unit is refused there for its unit (`SYMBOLIC_QUANTITY_OPERAND`) however the
+call was emitted.
 
 ## Do not hardcode the index
 

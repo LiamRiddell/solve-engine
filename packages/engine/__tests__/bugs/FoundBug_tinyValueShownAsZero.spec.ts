@@ -220,11 +220,10 @@ describe("adversarial: edge cases", () => {
 		expect(both(["[1e-6, 1]\r", ""])[0]).toBe("[1e-6, 1]");
 	});
 
-	// Found while testing this, and not fixed here: an amount typed in
-	// exponent form carries no exact decimal (a literal with an `e` stays a
-	// double), so it is shown as a conversion's amount is, to three significant
-	// digits, where the same amount written with a point rounds to the cent.
-	test.failing("found, open: $1e-3 rounds to the cent as $0.001 does", () => {
+	// Found while testing this, and fixed since: an amount of money typed in
+	// exponent form now keeps its exact decimal as the point form does
+	// (FoundBug_moneyInExponentForm.spec.ts), so it rounds to the cent.
+	test("$1e-3 rounds to the cent as $0.001 does", () => {
 		expect(shown("$1e-3")).toBe("$0.00");
 	});
 });

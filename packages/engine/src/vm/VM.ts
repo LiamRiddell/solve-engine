@@ -1,6 +1,6 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData, type DisplayBase } from "@solve-js/vm/Value";
-import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
+import { decimalFromLiteral, decimalFromExponentLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
 import { nonFiniteText, numberText } from "@solve-js/utilities/Number";
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-js/symbolic";
@@ -2006,14 +2006,35 @@ const bigIntRemainder = (a: bigint, b: bigint): bigint => {
  * exact base-ten value in the `exact` sidecar, with the nearest double in
  * `value`, so it reads as an ordinary Number everywhere except where it meets
  * money. A literal with no point is a whole number past 2^53, which keeps its
- * exact integer instead (see parser/WholeLiteral.ts). Kept out of the dispatch
- * loop, which has to stay under V8's optimisation ceiling.
+ * exact integer instead (see parser/WholeLiteral.ts). An exponent-form
+ * literal (`1e-3`) keeps its exact value as the point form does, so `$1e-3`
+ * rounds to the cent as `$0.001` does; see {@link exponentLiteralValue}. Kept
+ * out of the dispatch loop, which has to stay under V8's optimisation ceiling.
  */
 function exactLiteralValue(text: string): Value {
+  if (text.indexOf("e") !== -1 || text.indexOf("E") !== -1) return exponentLiteralValue(text);
   const whole = text.indexOf(".") === -1 ? exactWholeLiteral(text) : null;
   if (whole !== null) return whole;
   const dec = decimalFromLiteral(text);
   return numberValueExact(decimalToNumber(dec), dec);
+}
+
+/**
+ * The Value an exponent-form literal pushes: its nearest double, with its
+ * exact decimal beside it when the double holds the same amount. A literal
+ * whose double overflowed to infinity or underflowed to zero (`1e309`,
+ * `1e-330`), or whose exponent is past the limit, is the plain double alone,
+ * as it always was: an exact value there would let arithmetic answer what the
+ * number itself cannot.
+ *
+ * @param text - The literal, normalized (`1.5e2`, `-2.5E-3`).
+ * @returns A Number Value.
+ */
+export function exponentLiteralValue(text: string): Value {
+  const n = Number(text);
+  const dec = decimalFromExponentLiteral(text);
+  if (dec === null || !Number.isFinite(n) || (n === 0 && dec.coef !== 0n)) return numberValue(n);
+  return numberValueExact(n, dec);
 }
 
 /**

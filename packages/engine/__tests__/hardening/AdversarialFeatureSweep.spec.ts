@@ -254,6 +254,13 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"factor(x^2 - (X) * pi)",
 		"[X, 1e-6]",
 		"(X) +/- 1e-6",
+		// A constant with a unit in a map and in a formula, and an amount of
+		// money in scientific notation (FoundBug_unitConstantInAHeldExpression,
+		// FoundBug_moneyInExponentForm).
+		"map(x * gravity, [X])",
+		"solve(x = (X) * gravity, x)",
+		"$(X) * 1e-3",
+		"(X) * 1e-3 USD",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,

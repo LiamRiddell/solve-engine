@@ -17,7 +17,7 @@ A result too small for the two decimal places the engine shows is written to thr
 | `[1e-6 km, 1 km]` | `[1e-6 km, 1.00 km]` | `[1e-6 km, 1.00 km]` |
 | `12.3 ± 0.5` | `12.3 ± 0.5` | `12.3 ± 0.5` |
 
-The boundary: `1e-320 km / 1e10`, which led here, still shows `0.00 km`, and that is right. A number is held as a double, which reaches down to about 4.94e-324, so that quotient is zero before it is shown, exactly as `1e-320 / 1e10` is 0 and as a result past about 1.8e308 is `∞`; every quantity that is not zero, down to the smallest double, already shows its digits, and the spec pins that across the range. Money is unchanged: it rounds to its currency's minor unit, so `$0.001` is `$0.00`. Found and not fixed here: an amount typed in exponent form (`$1e-3`) carries no exact decimal, since a literal with an `e` stays a double, and so is shown as a conversion's amount is, `$0.001`, where `$0.001` typed with a point is `$0.00`; it is pinned as a failing test. The tolerance still drops its unit, as the uncertainty page documents.
+The boundary: `1e-320 km / 1e10`, which led here, still shows `0.00 km`, and that is right. A number is held as a double, which reaches down to about 4.94e-324, so that quotient is zero before it is shown, exactly as `1e-320 / 1e10` is 0 and as a result past about 1.8e308 is `∞`; every quantity that is not zero, down to the smallest double, already shows its digits, and the spec pins that across the range. Money is unchanged: it rounds to its currency's minor unit, so `$0.001` is `$0.00`. An amount typed in exponent form (`$1e-3`) now rounds to the cent as well; see `money-in-exponent-form.md`, in the same release. The tolerance still drops its unit, as the uncertainty page documents.
 
 ## Verification
 

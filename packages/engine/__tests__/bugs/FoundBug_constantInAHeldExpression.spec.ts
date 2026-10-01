@@ -152,9 +152,11 @@ describe("the parts: constantParselet", () => {
 		expect(program.pluginCalls).toBeUndefined();
 	});
 
-	test("boundary: gravity still calls the plugin, which attaches its unit", () => {
+	test("boundary: gravity still calls the plugin, which attaches its unit, as a call that never waits", () => {
 		const program = compiled("gravity");
-		expect(program.hasAsync).toBe(true);
+		// The call is synchronous (FoundBug_unitConstantInAHeldExpression.spec.ts),
+		// so it no longer marks the program as one that may wait for data.
+		expect(program.hasAsync).toBe(false);
 		expect(program.pluginCalls?.names).toEqual(["constantValue"]);
 		expect(program.strings).toEqual(["gravity"]);
 	});
@@ -231,11 +233,10 @@ describe("adversarial: realistic breakage", () => {
 		expectHonestLine("solve(x * 1 kg = gravity, x)");
 	});
 
-	// Found while fixing this, and not fixed here: a physical constant still
-	// reaches its value through the plugin, so inside a held expression it is
-	// refused as though it were live data ("calls an async operation (weather,
-	// stocks, currency, ...)"). Its unit needs the plugin to attach it.
-	test.failing("found, open: gravity inside a function body is refused as live data", () => {
+	// Found while fixing this, and fixed since: a physical constant reaches its
+	// value through the plugin, and that call is now synchronous, so a function
+	// body takes it (FoundBug_unitConstantInAHeldExpression.spec.ts).
+	test("gravity inside a function body is a value, not refused as live data", () => {
 		expect(shown("f(m) = m * gravity")).toBe("f(m) defined");
 	});
 
