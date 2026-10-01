@@ -8,13 +8,52 @@ import { parseIpv6 } from "../Ipv6Math";
 const IPV6_TYPE = "IPV6_ADDRESS";
 const IPV6_TYPE_ID = tokenTypeId(IPV6_TYPE);
 
-/** The characters an address run is made of: hex digits, colons, dots, a zone and a prefix (a minus is subtraction, not part of a zone). */
-const RUN_TEXT = /^[0-9A-Za-z.:%/]+$/;
+/**
+ * Whether every character of `text` is one an address run is made of: a digit,
+ * a letter (hex digits, and a zone's name), a colon, a dot, `%` before a zone
+ * and `/` before a prefix. A minus is subtraction, not part of a zone.
+ *
+ * A loop over character codes rather than a pattern, because this runs at
+ * every word and number of a line: it reads no global and builds nothing, so
+ * the common answer (a token that is not part of any address) costs a few
+ * comparisons. It accepts exactly what `/^[0-9A-Za-z.:%/]+$/` did.
+ *
+ * @param text - A token's source text.
+ * @returns True for a non-empty run of those characters.
+ */
+export function isRunText(text: string): boolean {
+	if (text.length === 0) return false;
+	for (let i = 0; i < text.length; i++) {
+		const c = text.charCodeAt(i);
+		// 0-9 and the colon, 48 to 58.
+		if (c >= 48 && c <= 58) continue;
+		// A-Z and a-z.
+		if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) continue;
+		// The dot, the percent sign and the slash.
+		if (c === 46 || c === 37 || c === 47) continue;
+		return false;
+	}
+	return true;
+}
+
+/**
+ * How many colons `text` holds, counted in place rather than by splitting it,
+ * which built an array per token only to read its length.
+ *
+ * @param text - A token's source text.
+ */
+export function colonsIn(text: string): number {
+	let colons = 0;
+	for (let i = 0; i < text.length; i++) {
+		if (text.charCodeAt(i) === 58) colons++;
+	}
+	return colons;
+}
 
 /** The source text of `token`, or `undefined` for a token that carries none. */
 function sourceText(token: Token): string | undefined {
 	const text = token.text;
-	return text !== undefined && text.length > 0 && RUN_TEXT.test(text) ? text : undefined;
+	return text !== undefined && isRunText(text) ? text : undefined;
 }
 
 /**
@@ -36,6 +75,31 @@ function colonSoonAfter(tokens: Token[], pos: number): boolean {
 		end = next.offset + (next.text?.length ?? 0);
 	}
 	return false;
+}
+
+/**
+ * Whether the run that starts at `tokens[pos]` has a colon as its second
+ * character: in the first token's own text, or as the first character of the
+ * token joined straight after it.
+ *
+ * An address whose text opens with a colon opens with `::` (`::1`,
+ * `::ffff:192.168.1.1`): one colon followed by anything else leaves an empty
+ * first group, which `readIpv6Shape` refuses however the text goes on. So a
+ * run that fails this was never going to read as an address, and the rule can
+ * turn it away before measuring the run.
+ *
+ * @param tokens - The line's tokens.
+ * @param pos - The run's first token.
+ * @param firstText - That token's source text, already checked.
+ */
+export function secondCharacterIsColon(tokens: readonly Token[], pos: number, firstText: string): boolean {
+	if (firstText.length > 1) return firstText.charCodeAt(1) === 58;
+	const next = tokens[pos + 1];
+	return next !== undefined
+		&& next.sourceEnd === undefined
+		&& next.offset === tokens[pos].offset + firstText.length
+		&& next.text !== undefined
+		&& next.text.charCodeAt(0) === 58;
 }
 
 /** A prefix written after an address, too long for any (`/129`), read so the literal can refuse it by name. */
@@ -100,6 +164,9 @@ export function ipv6NormalizerRule(priority = 95): NormalizerRule {
 			if (first.type !== "COLON" && !colonSoonAfter(tokens, pos)) return null;
 			const firstText = sourceText(first);
 			if (firstText === undefined) return null;
+			// Cheap reject for the colon of a label or a `:name` (`:v42 = 43`):
+			// an address that opens with a colon opens with two.
+			if (firstText.charCodeAt(0) === 58 && !secondCharacterIsColon(tokens, pos, firstText)) return null;
 
 			// A token joined to the one before it is inside a run that started earlier.
 			const before = pos > 0 ? tokens[pos - 1] : undefined;
@@ -108,23 +175,29 @@ export function ipv6NormalizerRule(priority = 95): NormalizerRule {
 				return null;
 			}
 
-			let text = firstText;
+			// The run is measured first and its text joined only once it has the
+			// two colons every address has, so a label (`:v42 = 43`, a colon and
+			// a word) is turned away without building a string.
+			let length = firstText.length;
 			let runEnd = first.offset + firstText.length;
 			let consumed = 1;
-			let colons = firstText.split(":").length - 1;
+			let colons = colonsIn(firstText);
 			for (let i = pos + 1; i < tokens.length; i++) {
 				const next = tokens[i];
 				if (next.sourceEnd !== undefined || next.offset !== runEnd) break;
 				const nextText = sourceText(next);
 				if (nextText === undefined) break;
-				text += nextText;
-				if (text.length > MAX_IPV6_TEXT) return null;
+				length += nextText.length;
+				if (length > MAX_IPV6_TEXT) return null;
 				runEnd = next.offset + nextText.length;
-				colons += nextText.split(":").length - 1;
+				colons += colonsIn(nextText);
 				consumed++;
 			}
 			// Cheap reject: an address has at least two colons.
 			if (colons < 2) return null;
+			// Every token in the run passed `sourceText`, so each has its text.
+			let text = firstText;
+			for (let i = pos + 1; i < pos + consumed; i++) text += tokens[i].text as string;
 
 			const read = readAddress(text);
 			if (read === null) return null;

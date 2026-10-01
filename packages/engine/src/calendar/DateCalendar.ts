@@ -19,8 +19,12 @@ import { checkedClock } from "./Clock";
  * @returns A `Date` at local midnight on that day.
  */
 export function localDate(year: number, month0: number, day: number): Date {
+	// The window is the years whose integer part is 0 to 99, which is every
+	// year above -1 and below 100. Tested on the year itself, so the common
+	// year (2026) reads no global: `Math` inside a `vm` context costs hundreds
+	// of nanoseconds, and this runs for every date literal a line holds.
+	if (!(year > -1 && year < 100)) return new Date(year, month0, day);
 	const whole = Math.trunc(year);
-	if (!(whole >= 0 && whole <= 99)) return new Date(year, month0, day);
 	const date = new Date(whole + 400, month0, day);
 	date.setFullYear(date.getFullYear() - 400);
 	return date;
