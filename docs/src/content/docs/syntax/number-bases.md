@@ -41,6 +41,20 @@ result comes back in decimal.
 0x1F + 1 // 32
 ```
 
+A literal too long for an ordinary number to hold exactly (past about nine
+thousand million million, 2^53) keeps every digit it was typed with, as a long
+decimal literal does, so twenty hex digits are read as the twenty digits and
+not the nearest round number:
+
+```solve
+0xFFFFFFFFFFFFFFFFFFFF // 1,208,925,819,614,629,174,706,175
+0x20000000000001 // 9,007,199,254,740,993
+0xFFFFFFFFFFFFFFFFFFFF + 1 // 1,208,925,819,614,629,174,706,176
+```
+
+The boundary: a literal past about 1.8e308, the largest an ordinary number
+holds, is infinite, as the same number typed in decimal is.
+
 ## Showing a number in another base
 
 `as` converts the display, and there is a function form for each base.

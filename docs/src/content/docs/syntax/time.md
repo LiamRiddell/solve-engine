@@ -164,11 +164,13 @@ minutes and seconds (26 hours stays `PT26H`, since a calendar day is not always
 
 A spelling that is shaped like a duration but breaks the rules is refused by
 name rather than read as a name nobody defined. `P1H` puts a time part before
-the `T`; `P1D1D` repeats a part.
+the `T`; `P1D1D` repeats a part; `P.5D` has no digit before its decimal mark,
+which the standard requires (`P0.5D` is half a day).
 
 ```solve-doc
 P1H // ERROR: P1H is not an ISO 8601 duration: H is a time part, and time parts come after a T, as in PT1H.
 P1D1D // ERROR: P1D1D is not an ISO 8601 duration: 1D is out of place: the parts run from the largest to the smallest, each once.
+P.5D // ERROR: P.5D is not an ISO 8601 duration: a decimal mark needs a digit before it, as in P0.5D.
 ```
 
 The boundary: only the upper-case letters the standard uses are read, and only

@@ -392,7 +392,7 @@ export const CoreErrorCodes = {
   UNCERTAINTY_UNIT_MISMATCH: "UNCERTAINTY_UNIT_MISMATCH",
 
   // ── Arithmetic and functions (vm/VM.ts, vm/VMBuiltins.ts, vm/ExactDecimals.ts) ──
-  /** Text used in arithmetic with a number, or given to a numeric function (`sqrt("abc")`). The message points at `as number` for text that holds a number. */
+  /** Text used in arithmetic with a number, written after a sign (`-"abc"`), or given to a numeric function (`sqrt("abc")`). The message points at `as number` for text that holds a number. */
   TEXT_ARITHMETIC: "TEXT_ARITHMETIC",
   /** Text in an order comparison (`"5" > 3`, `"a" < "b"`): text has no order a note would mean. Against a number the message says which side is text and, for text that holds a number, points at `as number`. */
   TEXT_COMPARISON: "TEXT_COMPARISON",

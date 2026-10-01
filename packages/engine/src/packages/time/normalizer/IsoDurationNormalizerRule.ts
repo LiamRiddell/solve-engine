@@ -40,6 +40,12 @@ const LOOSE_AFTER: ReadonlySet<string> = new Set([
  * joined only while they touch (no space between), and a decimal mark only
  * after a digit, so `P1D, 2` and `P1D .5` stay what they were.
  *
+ * One exception: a point with no digit before it (`P.5D`, `PT.5S`, `P1DT.5H`)
+ * is joined when a designator letter touches its digits, so the duration it
+ * was meant as is refused by name (a digit is needed before the decimal mark)
+ * rather than left as `P` and a stray `.5`. A point that no designator follows
+ * (`P.5`, `P1D.5x`) is not joined, and `P * .5` has spaces, so neither changes.
+ *
  * @returns The text and how many tokens it spans.
  */
 function joinedRun(tokens: Token[], pos: number): { text: string; consumed: number } {
@@ -51,7 +57,10 @@ function joinedRun(tokens: Token[], pos: number): { text: string; consumed: numb
 		if (next === undefined || next.offset !== end) break;
 		// Every piece the lexer splits off follows a digit: the decimal after
 		// `PT0`, and the designator letters after the decimal's own digits.
-		if (!/[0-9]$/.test(text)) break;
+		if (!/[0-9]$/.test(text)) {
+			if (bareFraction(tokens, k, end)) { text += next.text; end += next.text.length; k++; continue; }
+			break;
+		}
 		if (next.type === "NUMBER" && /^\.[0-9]/.test(next.text)) {
 			text += next.text;
 		} else if (next.type === "COMMA") {
@@ -68,6 +77,22 @@ function joinedRun(tokens: Token[], pos: number): { text: string; consumed: numb
 		k++;
 	}
 	return { text, consumed: k - pos };
+}
+
+/**
+ * Whether the token at `k` is a point and digits (`.5`) touching the text
+ * before it at `end`, with a designator letter touching its own digits: the
+ * `.5D` of `P.5D`, which is a duration written without the digit before the
+ * decimal mark.
+ */
+function bareFraction(tokens: Token[], k: number, end: number): boolean {
+	const fraction = tokens[k];
+	if (fraction.type !== "NUMBER" || fraction.offset !== end || !/^\.[0-9]+$/.test(fraction.text)) return false;
+	const letter = tokens[k + 1];
+	return letter !== undefined
+		&& letter.offset === end + fraction.text.length
+		&& (letter.type === "IDENT" || letter.type === "UNIT")
+		&& /^[A-Z]/.test(letter.text);
 }
 
 /** The unit spelling a part is pushed in: singular for exactly one, so `P1D` answers `1 day`. */
