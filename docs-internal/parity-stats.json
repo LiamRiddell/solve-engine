@@ -1,9 +1,9 @@
 {
 	"otherApps": {
-		"supported": 8,
-		"gaps": 2,
-		"declined": 1,
-		"total": 11
+		"supported": 10,
+		"gaps": 4,
+		"declined": 2,
+		"total": 16
 	},
 	"soulver": {
 		"supported": 104,
