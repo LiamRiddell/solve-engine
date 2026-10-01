@@ -6384,6 +6384,13 @@ sqr(16) // ERROR: Undefined function: sqr. Did you mean sqrt?
 
 ```
 (one document)
+rent = 1200 // 1,200
+‮rent = 5 // ERROR: "<U+202E>rent" holds U+202E (right-to-left override), an invisible character that changes the direction text is shown in, so it would not read as what it is. A name, a number or a unit cannot hold one: delete it and type the word again.
+rent * 12 // 14,400
+```
+
+```
+(one document)
 hourly rate = $50 // $50.00
 hours = 8 // 8
 hourly rate * hours // $400.00

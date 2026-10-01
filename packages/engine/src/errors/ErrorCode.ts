@@ -31,6 +31,8 @@ export const CoreErrorCodes = {
   INVALID_NUMBER_LITERAL: "INVALID_NUMBER_LITERAL",
   /** A `"` that is never closed, as in `"abc`. Raised by the lexer; the reader closes the text. */
   UNTERMINATED_STRING: "UNTERMINATED_STRING",
+  /** A name, number or unit holds an invisible character that changes the direction text is shown in (U+202A to U+202E, U+2066 to U+2069, U+200E, U+200F, U+061C), so it would show as something other than what the engine reads. The message names the character by its code point; the reader deletes it. Text in quotes, a comment, a heading and a label keep such characters. */
+  DIRECTION_CONTROL_IN_NAME: "DIRECTION_CONTROL_IN_NAME",
   /** A line has something where a value should start that cannot start one: the `*` in `2 + * 3`, the `)` in `round(3.14, )`, the `>` in `(5 km) -> miles`. Thrown with a span on the character and, where there is an obvious next step, a `suggestion`. */
   NO_PREFIX_PARSELET: "NO_PREFIX_PARSELET",
   /** A line stops before its expression does: `5 +`, `(2 + 3`, `sqrt(`. Thrown with an empty span just after the last character, where an editor puts the caret, and a `suggestion`. */
