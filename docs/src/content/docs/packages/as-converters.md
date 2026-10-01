@@ -79,6 +79,16 @@ converters `as` does. A normaliser rule of your own can ask it too: a rule's
 `environment.asConverters.match(word)` says whether a word names one of this
 engine's converters.
 
+## Beside a comparison
+
+`as` binds at `BindingPower.Conditional`, one step tighter than the comparisons
+(`BindingPower.Comparison`), so a converter written on either side of `==`, `<`
+or a `check` is that side's own. `7 as tally == 7 as tally` compares the two
+converted values, and `check 7 in tally == "||||| ||"` checks the converter's text.
+A converter that answers text is compared as text, one that answers a number as
+a number, so a converter meant to be checked should answer the kind of value a
+reader would write on the other side.
+
 ## Names and their case
 
 A name is matched without regard to case, so `7 as TALLY` and `as Tally` reach

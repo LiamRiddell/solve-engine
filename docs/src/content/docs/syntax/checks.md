@@ -92,6 +92,31 @@ check (2 > 1) == (3 > 2) // ✓
 check true == false // check failed: true is not equal to false
 ```
 
+## Conversions on either side
+
+A side of a check can carry a conversion: a quantity put into another unit
+(`in m`), or a number shown in another base (`in hex`, `as binary`; see
+[number bases](/syntax/number-bases/)). The conversion belongs to the side it
+is written on, and the check compares what the two sides are, not how they are
+written. A number shown in hexadecimal is still that number, so it passes
+against the same value in decimal, as a kilometre shown in metres passes
+against 1,000 metres:
+
+```solve
+check 255 in hex == 255 // ✓
+check 255 in binary == 0xff in octal // ✓
+check 1 km in m == 1000 m // ✓
+check 256 in hex == 255 // check failed: 0x100 is not equal to 255
+```
+
+The same holds for values from the lines above:
+
+```solve-doc
+A = 255
+B = 0xff
+check A in hex == B in hex // ✓
+```
+
 ## Colours and addresses
 
 A colour is three channels of light (red, green and blue), and an IP address
