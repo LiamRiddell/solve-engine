@@ -60,6 +60,14 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"planck * X Hz",
 		"inflationAdjust($X, 1990, 2020)",
 	],
+	// The UK and euro-area price indices, chosen by the amount's currency (#756).
+	priceIndices: [
+		"inflationAdjust(£X, 1990, 2020)",
+		"inflationAdjust(€X, 2000, 2020)",
+		"inflationAdjust(£100, X, 2020)",
+		"inflationAdjust(€100, 2000, X)",
+		"what was £X worth in 1965",
+	],
 	// A derived unit's prefix read in its own case after `as` and `in` (#824).
 	derivedPrefixes: ["X W as mW", "X W as MW", "X W as mw", "X V in MV", "X J as pJ"],
 	// The qualified cups, the typographic point, imperial mpg and a stated

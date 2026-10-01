@@ -38,9 +38,13 @@
  * (`CPI_CSV_BAD_HEADER: ...`), so a test or a maintainer can tell which check
  * failed.
  *
+ * `npm run data:cpi` runs this with the UK and euro-area builders
+ * (`build-price-indices.mjs`, #756); run it directly for the US options.
+ *
  * Usage:
- *   npm run data:cpi                                   rebuild from the recorded CSV
- *   npm run data:cpi -- --check                        exit 1 when the committed table differs
+ *   npm run data:cpi                                   rebuild every bundled index from its recorded CSV
+ *   npm run data:cpi -- --check                        exit 1 when a committed table differs
+ *   node scripts/build-cpi-table.mjs --check
  *   node scripts/build-cpi-table.mjs --from-csv=<file> --retrieved=2026-10-01
  *   node scripts/build-cpi-table.mjs --from-bls --save-csv=scripts/fixtures/cpi/cpiai.csv
  *   node scripts/build-cpi-table.mjs --out=<file>      write somewhere other than the engine
@@ -494,25 +498,31 @@ export function readSourceFile(csvFile) {
 	return { source: parsed.source, retrieved: parsed.retrieved };
 }
 
-async function main() {
-	const args = process.argv.slice(2);
+/**
+ * Build, then either write the table or, with `--check`, compare it.
+ *
+ * @param args - The arguments, as `process.argv.slice(2)`.
+ * @returns The exit status: 0, or 1 when `--check` found a difference or a check refused.
+ */
+export async function run(args) {
 	try {
 		const { text, out, existing } = await build(args);
 		const relative = path.relative(REPO, out);
 		if (option(args, "check")) {
 			if (text !== existing) {
 				console.error(`${relative} is not what scripts/build-cpi-table.mjs generates. Run npm run data:cpi.`);
-				process.exit(1);
+				return 1;
 			}
 			console.log(`${relative} matches its source.`);
-			return;
+			return 0;
 		}
 		fs.writeFileSync(out, text);
 		console.log(`Wrote ${relative}.`);
+		return 0;
 	} catch (error) {
 		console.error(error instanceof Error ? error.message : String(error));
-		process.exit(1);
+		return 1;
 	}
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = await run(process.argv.slice(2));
