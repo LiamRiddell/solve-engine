@@ -357,13 +357,14 @@ function steppedValues(start: Value, end: Value, step: Value, name: string, cale
 
 /**
  * The kinds of answer a sweep can list. A list here is a vector of plain
- * numbers, so an answer has to have a numeric reading: a number, a
- * percentage (listed as its fraction), a quantity or money (listed as its
- * amount), a true or false (1 or 0), or a whole number in another base.
+ * numbers, so an answer has to have a numeric reading: a number, a quantity
+ * or money (listed as its amount), a true or false (1 or 0), or a whole
+ * number in another base. A percentage has one too, its fraction, but a list
+ * would show 10% as 0.10, so it is refused on its own (see
+ * {@link sweepPercentageRefused}).
  */
 const LISTABLE: ReadonlySet<ValueType> = new Set([
 	ValueType.Number,
-	ValueType.Percentage,
 	ValueType.Uom,
 	ValueType.Boolean,
 	ValueType.Hex,
@@ -377,6 +378,30 @@ function describeInput(value: Value): string {
 	if (value.type === ValueType.Percentage) return `${Number((magnitude * 100).toPrecision(12))}%`;
 	const shown = String(Number(magnitude.toPrecision(12)));
 	return value.type === ValueType.Uom && value.unit !== undefined ? `${shown} ${value.unit}` : shown;
+}
+
+/**
+ * The refusal for a sweep of a line that answers a percentage.
+ *
+ * A list holds plain numbers, so a sweep's list of percentages would show
+ * each as its fraction (`[0.10, 0.20, 0.30]` for 10%, 20%, 30%), which the
+ * reader would read as numbers they never meant. A list with a percentage in
+ * it is refused for the same reason (`LIST_PERCENTAGE_UNSUPPORTED`). The
+ * message names the step and the answer, and gives the form that sweeps: a
+ * line that writes the answer as a number, its percentage points.
+ *
+ * @param name - The swept name.
+ * @param input - The step's input value.
+ * @param targetLine - The swept line.
+ * @param answer - The line's answer at that step, a percentage.
+ * @returns The `SWEEP_ANSWER_PERCENTAGE` error Value.
+ */
+export function sweepPercentageRefused(name: string, input: Value, targetLine: number, answer: Value): Value {
+	const shown = Number.isFinite(answer.toNumber() * 100) ? `${describeInput(answer)}, a percentage` : "a percentage";
+	return errorValue(
+		"SWEEP_ANSWER_PERCENTAGE",
+		`With ${name} at ${describeInput(input)}, line ${targetLine} answers ${shown}, and a sweep lists its answers in a list, which holds plain numbers, not percentages. To sweep it, add a line that gives the answer as a number, such as "line ${targetLine} * 100" for its percentage points, and sweep that line.`,
+	);
 }
 
 /**
@@ -450,6 +475,9 @@ export function sweepHandler(args: Value[], context?: LineExecutionContext): Val
 				const message = typeof answer.unit === "string" ? answer.unit : String(answer.value);
 				return stepFailed(name, input, targetLine, message);
 			}
+			// A percentage would be listed as its fraction; refused at the
+			// first step that answers one, so the steps after it never run.
+			if (answer.type === ValueType.Percentage) return sweepPercentageRefused(name, input, targetLine, answer);
 			if (!LISTABLE.has(answer.type)) {
 				return errorValue(
 					"SWEEP_ANSWER_NOT_NUMERIC",

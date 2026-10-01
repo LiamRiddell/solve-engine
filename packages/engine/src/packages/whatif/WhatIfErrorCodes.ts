@@ -39,6 +39,8 @@ export const WhatIfErrorCodes = {
 	SWEEP_STEP_FAILED: "SWEEP_STEP_FAILED",
 	/** A sweep one of whose answers is not a number or a quantity, which is all a sweep lists. */
 	SWEEP_ANSWER_NOT_NUMERIC: "SWEEP_ANSWER_NOT_NUMERIC",
+	/** A sweep of a line that answers a percentage, which a list (a row of plain numbers) cannot hold. */
+	SWEEP_ANSWER_PERCENTAGE: "SWEEP_ANSWER_PERCENTAGE",
 	/** A sweep between two dates whose step is not a length of time (`step 5`), or is working days. */
 	SWEEP_DATE_STEP_NOT_DURATION: "SWEEP_DATE_STEP_NOT_DURATION",
 	/** `line N under bull` with no `scenario bull with ...` line above it. */

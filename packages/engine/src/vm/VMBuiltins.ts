@@ -40,7 +40,7 @@ import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } fr
 import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan, loanTermsRefused, rateAtOrBelowMinusHundred, compoundingRefused } from "@solve-js/vm/FinanceFormulas";
 import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, valueInBase, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
-import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
+import { exactDecimalPower, exactDecimalTotal, percentTotal, percentSum, percentWeightedMean, absExactDecimal, roundExactToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
 
 /**
  * A duration in seconds, shown in the largest whole time unit that keeps the
@@ -1278,6 +1278,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (exactMean !== null) return exactMean;
         const unified = unifyQuantities(args, "averaged");
         if (unified instanceof Value) return unified;
+        // A mean of percentages is formed in base ten, as a mean of decimals is.
+        if (unified.percent) return quantity(percentTotal(unified.magnitudes, true), undefined, unified.sources, true);
         const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
         return quantity(sum / unified.magnitudes.length, unified.unit, unified.sources, unified.percent);
     },
@@ -1289,8 +1291,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (unified instanceof Value) return unified;
         const sorted = unified.magnitudes.slice().sort((a, b) => a - b);
         const mid = Math.floor(sorted.length / 2);
+        // The midpoint of two percentages is their mean, formed in base ten.
+        const midpoint = (a: number, b: number): number => unified.percent ? percentTotal([a, b], true) : (a + b) / 2;
         return quantity(
-            sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid],
+            sorted.length % 2 === 0 ? midpoint(sorted[mid - 1], sorted[mid]) : sorted[mid],
             unified.unit,
             unified.sources,
             unified.percent,
@@ -1304,6 +1308,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (exactTotal !== null) return exactTotal;
         const unified = unifyQuantities(args, "added");
         if (unified instanceof Value) return unified;
+        // A total of percentages is formed in base ten, so `sum(10%, 20%) == 30%`.
+        if (unified.percent) return quantity(percentTotal(unified.magnitudes, false), undefined, unified.sources, true);
         return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit, unified.sources, unified.percent);
     },
     // count(...), number of arguments passed.
@@ -2138,7 +2144,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const unified = unifyQuantities(args, "compared");
         if (unified instanceof Value) return unified;
         const nums = unified.magnitudes;
-        return quantity(Math.max(...nums) - Math.min(...nums), unified.unit, undefined, unified.percent);
+        const largest = Math.max(...nums), smallest = Math.min(...nums);
+        // The spread of percentages is a difference of two, formed in base ten.
+        return quantity(unified.percent ? percentSum(largest, smallest, -1) : largest - smallest, unified.unit, undefined, unified.percent);
     },
     // mode: the most frequent value. A tie is broken by first appearance, so the
     // result is deterministic for the same list. Quantities are read in the
@@ -2171,7 +2179,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (weightTotal === 0) {
             return errorValue("WEIGHTED_AVERAGE_ZERO_WEIGHT", "weighted average: the weights sum to zero, so there is nothing to divide by");
         }
-        if (percent) return percentageAnswer(weightedSum / weightTotal);
+        // Formed in base ten, so `weighted average of 10% at 1, 20% at 3` is 17.5%.
+        if (percent) return percentageAnswer(percentWeightedMean(args.map((a) => a.toNumber()), weightedSum / weightTotal));
         return numberValue(weightedSum / weightTotal);
     },
     // Number theory (#514), over exact integers; see vm/NumberTheory.ts.
