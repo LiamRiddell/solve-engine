@@ -1443,14 +1443,22 @@ export function partsPerFraction(value: Value): number {
  * read the 100 as whole ones and answered 10000.00%. A quantity that is not a
  * proportion (a length, money) has no percentage and is refused, where
  * `5 km as %` answered 500.00%. A number or a ratio is its own fraction, as
- * before; one that is not finite is refused (see {@link percentageNotFinite}).
+ * before; one that is not finite is refused (see {@link percentageNotFinite}),
+ * and so is one whose percentage, a hundred times it, is past the largest
+ * number a double holds (see {@link percentageTooLarge}).
  *
  * @param value - The value, already checked for a fault and a date.
  * @returns The Percentage, or an error Value.
  */
 export function toPercentage(value: Value): Value {
     if (value.type === ValueType.Uom && value.unit !== undefined) {
-        if (isPartsPerUnit(value.unit)) return percentageValue(partsPerFraction(value));
+        if (isPartsPerUnit(value.unit)) {
+            // A parts-per figure past the largest double converts to an
+            // infinite fraction (1e308 permille is 1e311 ppm), though the
+            // quantity typed is finite: too large, not a division by zero.
+            const fraction = partsPerFraction(value);
+            return Number.isFinite(fraction * 100) ? percentageValue(fraction) : percentageTooLarge();
+        }
         const what = describeQuantity(value.unit);
         return errorValue(
             "PERCENTAGE_OF_QUANTITY",
@@ -1458,7 +1466,9 @@ export function toPercentage(value: Value): Value {
         );
     }
     const fraction = value.toNumber();
-    if (!Number.isFinite(fraction)) return percentageNotFinite();
+    // One multiplication: the percentage is what the formatter writes, and a
+    // fraction past about 1.8e306 is finite while a hundred times it is not.
+    if (!Number.isFinite(fraction * 100)) return Number.isNaN(fraction) || (!Number.isFinite(fraction) && !hasFiniteExactReading(value)) ? percentageNotFinite() : percentageTooLarge();
     const percentage = percentageValue(fraction);
     const exact = percentageExact(value);
     if (exact !== undefined) percentage.exact = exact;
@@ -1543,6 +1553,36 @@ export function percentageNotFinite(): Value {
         "PERCENTAGE_NOT_FINITE",
         "This has no percentage: its value is not a finite number, which is what dividing by zero gives.",
     );
+}
+
+/**
+ * The refusal for a percentage too large to hold: `1e308 as %` printed
+ * Infinity%, though 1e308 is an ordinary number, because a percentage is a
+ * hundred times its fraction and a hundred times 1e308 is past the largest
+ * double (about 1.8e308). A whole number written with `n` past that
+ * (`2n^2000`) is refused the same way, since its double is infinite only for
+ * want of room. The value is a real number, so this names its size, where
+ * {@link percentageNotFinite} names a division by zero.
+ *
+ * @returns The `PERCENTAGE_OVERFLOW` error Value.
+ */
+export function percentageTooLarge(): Value {
+    return errorValue(
+        "PERCENTAGE_OVERFLOW",
+        "This is too large to write as a percentage: a percentage is a hundred times the number, and that is past about 1.8e308, the largest number that can be held.",
+    );
+}
+
+/**
+ * Whether a value whose double is infinite still stands for a finite number:
+ * a whole number written with `n` (`2n^2000`), or a number carrying an exact
+ * integer, fraction or decimal past where a double reaches. A plain infinity
+ * (`1/0`, and `2^2000`, which is computed in doubles) has none of these.
+ *
+ * @param value - The value.
+ */
+export function hasFiniteExactReading(value: Value): boolean {
+    return value.type === ValueType.BigInt || value.rational !== undefined || value.exact !== undefined;
 }
 
 /**

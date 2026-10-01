@@ -230,6 +230,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	PAYROLL_UNKNOWN_LOAN_PLAN: "£50,000 after tax with student loan",
 	PAYROLL_NEGATIVE_SALARY: "-£50,000 after tax",
 	PERCENTAGE_NOT_FINITE: "1/0 as %",
+	PERCENTAGE_OVERFLOW: "1e308 as %",
 	PERCENTAGE_OF_QUANTITY: "$5 as %",
 	PERCENT_CHANGE_EXPECTED_TO: "percent change from 50",
 	PERCENT_CHANGE_FROM_ZERO: "0 to 0",
