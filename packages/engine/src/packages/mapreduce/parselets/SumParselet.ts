@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { parseCollectionExpr, emitInvoke, callHasOwnComma, parseElementFold } from "../MapReduceShared";
+import { ReduceForm } from "@solve-js/vm/MatrixOps";
 
 /**
  * `sum(elementExpr, collection)`, parse-time sugar for
@@ -31,7 +32,7 @@ export class SumParselet implements PrefixParselet {
     // isInsideRangeContext), so without this the one-argument form read the
     // range's start as the element expression and stopped at its colon.
     if (!callHasOwnComma(parser)) {
-      parseElementFold(parser, builder, OpCode.ADD, 0);
+      parseElementFold(parser, builder, OpCode.ADD, 0, ReduceForm.sum);
       return;
     }
 
@@ -63,6 +64,6 @@ export class SumParselet implements PrefixParselet {
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(0);
 
-    emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program: bodyProgram }, ["acc", "x"], 1);
+    emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program: bodyProgram }, ["acc", "x"], ReduceForm.sum);
   }
 }

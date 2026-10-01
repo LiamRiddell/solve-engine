@@ -207,6 +207,16 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"sum(X:3)",
 		"prod(1:X)",
 		"sum([X, 2])",
+		// The fourth: a salary below zero, a number past 2^53 as an integer and
+		// as a percentage, and a map or reduce over a single value.
+		"-£X after tax",
+		"hourly for -£X",
+		"-X after 20% tax",
+		"X + 0.5 as int",
+		"-(X) as int",
+		"X + 0.5 as percent",
+		"map(x * 2, X)",
+		"reduce(acc + x, X)",
 	],
 	// Arithmetic straight on a value written in a base, a base conversion of
 	// a value with no digits, and checks between colours and addresses.

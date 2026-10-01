@@ -58,19 +58,29 @@ skipped.
 
 ## Live values
 
-A package that fetches, through an async resolver or a plugin function that
-returns a promise, answers **Pending** the first time a line runs: the engine
-starts the fetch and says "not yet" rather than showing a stale or zero figure.
-`toBePending` confirms that path was taken. `toResolveTo` is the other half: it
-waits for the fetch to land, evaluates the line again, and compares what it
-resolved to.
+A package that fetches live data (a price, a reading from a service) answers
+**Pending** the first time a line runs: the engine starts the fetch and says
+"not yet" rather than showing a stale or zero figure. `toBePending` confirms that
+path was taken. `toResolveTo` is the other half: it waits for the fetch to land,
+evaluates the line again, and compares what it resolved to.
+
+The package below is built the way the [package
+starter](https://github.com/LiamRiddell/solve-engine/tree/main/examples/package-starter)
+builds its `rainfall("Oslo")`: with `createQueryResolver` from
+`solve-engine/resolvers`, the engine's helper for a lookup of one quoted query
+(see [the short path](/guide/async-data-sources/#the-short-path-createqueryresolver)).
+The helper builds the resolver, which starts the fetch before the line runs, and
+the plugin function that reads its answer, so the package supplies only the
+fetch. Taking the fetch as an argument is what makes the package testable: the
+test hands it a stub, and nothing reaches a network.
 
 ```ts
 import type { IEnginePackage } from "solve-engine";
 import type { PrefixParselet, Parser, BytecodeBuilder } from "solve-engine/parser";
 import { BindingPower } from "solve-engine/parser";
 import type { Token } from "solve-engine/lexer";
-import { uomValue, type Value } from "solve-engine/vm";
+import { createQueryResolver } from "solve-engine/resolvers";
+import { pluginFunctionIndexFor, uomValue } from "solve-engine/vm";
 import { createTestEngine, expectExpression } from "solve-engine/testing";
 
 // tide("Dover") asks a service for the height of the tide, in metres.
@@ -84,15 +94,21 @@ class TideParselet implements PrefixParselet {
   }
 }
 
-function createTidesPackage(fetchHeight: (port: string) => Promise<number>): IEnginePackage {
+function createTidesPackage(fetchHeight: (port: string, signal: AbortSignal) => Promise<number>): IEnginePackage {
+  // The resolver watches for the plugin call by the index the engine files
+  // `tide` under: the package name and the function name.
+  const { resolver, pluginFunction } = createQueryResolver({
+    namespace: "tides",
+    pluginFunctionIndex: pluginFunctionIndexFor("tides:tide"),
+    fetchQuery: async (port, signal) => uomValue(await fetchHeight(port, signal), "m"),
+  });
   return {
     name: "tides",
     engineVersion: "^2.0.0",
     callFusions: { tide: "TIDE_CALL" },
     prefixParselets: { TIDE_CALL: new TideParselet() },
-    pluginFunctions: {
-      tide: async (args: Value[]) => uomValue(await fetchHeight(String(args[0].value)), "m"),
-    },
+    pluginFunctions: { tide: pluginFunction },
+    asyncResolvers: [resolver],
     tokenCategories: { TIDE_CALL: "function" },
   };
 }
@@ -102,6 +118,12 @@ const engine = createTestEngine([createTidesPackage(async () => 4.2)]);
 
 expectExpression(engine, 'tide("Dover")').toBePending();
 await expectExpression(engine, 'tide("Dover")').toResolveTo(4.2, "m");
+
+// A service that fails is a settled result too, with the code the resolver gives it.
+const offline = createTestEngine([createTidesPackage(async () => { throw new Error("no signal"); })]);
+
+expectExpression(offline, 'tide("Dover")').toBePending();
+(await expectExpression(offline, 'tide("Dover")').settled()).toFailWith("TIDES_QUERY_FAILED");
 ```
 
 `toResolveTo` waits within one deadline, 5,000 ms unless you pass
@@ -110,7 +132,16 @@ first fetch reveals a second is evaluated again after each one lands. A value
 still Pending at the deadline fails with `EXPECTED_SETTLED`, so a resolver that
 never answers is a failed test rather than a hung one. A fetch that fails is a
 settled result too: `await expectExpression(engine, line).settled()` waits, and
-`toFailWith` then reads the failure's code.
+`toFailWith` then reads the failure's code, `TIDES_QUERY_FAILED` above, which is
+the code `createQueryResolver` gives a failure unless its `onError` option builds
+one of the package's own.
+
+The boundary: the resolver reads the port from the line before it runs, so the
+query has to be written there in quotes. A port held in a variable is known only
+as the line runs, and the plugin function answers `TIDES_NOT_PREFLIGHTED`; the
+starter shows how to turn that into a refusal of the package's own. A lookup
+whose input is computed needs the resolver that [fetches on a cache
+miss](/guide/async-data-sources/#resolvers-that-never-reach-a-network) instead.
 
 The wait is the engine's own `settle()`, which a host can call as well (see
 [async and live data](/guide/async-and-live-data/#waiting-for-every-value-to-settle)).

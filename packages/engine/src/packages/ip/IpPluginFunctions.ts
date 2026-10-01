@@ -1,5 +1,7 @@
 import { Value, ValueType, numberValue, bigIntValue, boolValue, errorValue, ipCidrValue, type IpCidrData } from "@solve-js/vm/Value";
 import { usableHosts, netmask, networkAddress, broadcastAddress, addressInBlock } from "./IpMath";
+import { wholeNumberUnchanged } from "@solve-js/vm/ExactIntegers";
+import { roundExactDecimalToWhole } from "@solve-js/vm/ExactDecimals";
 import { IPV6_BITS, ipv6AddressCount, ipv6InBlock, ipv6LastAddress, ipv6Netmask, ipv6Network } from "./Ipv6Math";
 
 /** The IP/CIDR payload of a value, or a coded error when it is not one. */
@@ -167,8 +169,8 @@ export function ipInCidr(args: Value[]): Value {
 /**
  * `<cidr> as int`: the address as its integer, 32 bits for IPv4 and 128 for
  * IPv6 (a bigint once it is past what a double holds exactly). A non-IP value
- * truncates to a whole number instead, so `as int` is also a general integer
- * converter.
+ * truncates to a whole number instead (see {@link truncateToWhole}), so `as
+ * int` is also a general integer converter.
  */
 export function ipAsInt(value: Value): Value {
 	if (value.type === ValueType.IpCidr) {
@@ -176,5 +178,25 @@ export function ipAsInt(value: Value): Value {
 		if (ip.addr6 !== undefined) return wholeNumber(ip.addr6);
 		return numberValue(ip.addr ?? 0);
 	}
-	return numberValue(Math.trunc(value.toNumber()));
+	return truncateToWhole(value);
+}
+
+/**
+ * A value that is not an address, as `as int` writes it: its whole part, the
+ * fraction dropped towards zero, as `int(...)` and `trunc(...)` drop it.
+ *
+ * The exact value comes first. Past 2^53 a double holds no fraction, so the
+ * literal `9007199254740993.5` is the double 9,007,199,254,740,994, and
+ * truncating that double answered 9,007,199,254,740,994 where `floor` and
+ * `int` read the exact decimal and answered 9,007,199,254,740,993. A number
+ * carrying an exact integer (`2^53 + 1`) is handed back as it is, one carrying
+ * an exact decimal is truncated in base ten (so `-9007199254740993.5` is
+ * -9,007,199,254,740,993), and anything else (text that reads as a number, a
+ * quantity, a result with no exact reading) truncates its double, as before.
+ *
+ * @param value - The value to truncate.
+ * @returns A whole number.
+ */
+export function truncateToWhole(value: Value): Value {
+	return wholeNumberUnchanged(value, false) ?? roundExactDecimalToWhole(value, "trunc") ?? numberValue(Math.trunc(value.toNumber()));
 }
