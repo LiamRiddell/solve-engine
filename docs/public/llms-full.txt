@@ -2957,6 +2957,13 @@ Total: 1000:1002 // ERROR: "1000:1002" is not a valid time
 true ? 25 : 30 // ERROR: There is no choice written with "?" and ":": write if true then 25 else 30
 a > b: 1 // ERROR: "a > b" before the colon is a comparison, not a label: a label names the figure in words, and a choice is written if ... then ... else
 (1+2): 5 // ERROR: "(1+2)" before the colon is a calculation, not a label: a label names the figure in words
+(24):00 // ERROR: "(24)" before the colon is a calculation, not a label: a label names the figure in words
+Total (2026): 500 // 500
+```
+
+```
+(one document)
+‍24:00 // ERROR: "<U+200D>24" holds U+200D (zero width joiner), an invisible character, so it is read as a word and not as the number 24. A number cannot hold one: delete it and type the number again.
 ```
 
 ```
@@ -4184,6 +4191,25 @@ percent change from 50 to 75 // 50.00%
 ```
 
 ```
+[100, 200] + 10% // [110, 220]
+[100, 200] - 10% // [90, 180]
+[100 m, 200 m] + 10% // [110.00 m, 220.00 m]
+[$100, $200] - 10% // [$90.00, $180.00]
+```
+
+```
+10% of [100, 200] // [10, 20]
+15% off [$80, $120] // [$68.00, $102.00]
+20% on [50 kg, 60 kg] // [60.00 kg, 72.00 kg]
+[100 m, 200 m] * 10% // [10.00 m, 20.00 m]
+```
+
+```
+10% + [100, 200] // A percentage plus a list would be a list of percentages, and a list holds plain numbers. To add the percentage to each number, write the list first, as in [100, 200] + 10%.
+10% + [$100, $200] // [$110.00, $220.00]
+```
+
+```
 20% as multiplier // 1.2x
 150% as multiplier // 2.5x
 0.5 as multiplier // 0.5x
@@ -4192,6 +4218,13 @@ percent change from 50 to 75 // 50.00%
 ```
 (one document)
 5 km as multiplier // ERROR: A multiplier is a plain number or a percentage, as in "0.5 as multiplier" or "50% as multiplier", not a length.
+```
+
+```
+(one document)
+prices = [$19.99, $5.00] // [$19.99, $5.00]
+vat = 20% // 20.00%
+prices + vat // [$23.99, $6.00]
 ```
 
 ## probability-distributions
@@ -6572,6 +6605,12 @@ det([1 km, 2 km; 3 km, 4 km]) // A determinant of a list in km is not covered: m
 ```
 [1,2,3] * 10 // [10, 20, 30]
 [1,2,3] + [10,20,30] // [11, 22, 33]
+```
+
+```
+[100, 200] + 10% // [110, 220]
+[1 km, 2 km] + 10% // [1.10 km, 2.20 km]
+10% of [1 km, 2 km] // [0.10 km, 0.20 km]
 ```
 
 ```
