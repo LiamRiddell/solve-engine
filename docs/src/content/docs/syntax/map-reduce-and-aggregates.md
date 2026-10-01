@@ -15,7 +15,8 @@ or a largest-so-far is kept by hand.
 
 A range is `start:end`, the whole numbers from the start to the end, inclusive at
 both ends. A colon between two numbers means a range only where a list is
-expected: as the list `map`, `reduce`, `sum` and `prod` work through. Anywhere
+expected: as the list `map`, `reduce`, `sum` (or `total`, its synonym) and
+`prod` work through. Anywhere
 else it is a clock time, because that reading is far more common in a document:
 a bare `0:3`, `(0:3)`, and `max(9:30, 10:15)`, which compares two times of day.
 
@@ -72,6 +73,19 @@ same as writing `x` for the expression:
 sum(1:3) // 6
 sum([10, 20, 30]) // 60
 prod(1:5) // 120
+```
+
+`total` is another name for `sum`, the word a spreadsheet or a receipt uses,
+and with a single list it reads the same way: a range or a bracketed list
+inside `total(...)` is added up. With commas, `total(1, 2, 3)` adds the values
+one by one, as `sum(1, 2, 3)` does, and over lines `total(line 1 : line 3)`
+adds a span of the document (see [line references](/syntax/line-references/)).
+The element form, `sum(x^2, 1:3)`, is `sum`'s alone.
+
+```solve
+total(1:3) // 6
+total([10, 20, 30]) // 60
+total(1, 2, 3) // 6
 ```
 
 A single argument has to be a list: a range, a bracketed list, or a name holding

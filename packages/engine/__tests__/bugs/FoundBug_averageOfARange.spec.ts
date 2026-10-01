@@ -43,7 +43,6 @@ describe("the lines that exposed it", () => {
 		["mean(1:3)", `ERROR In mean(...), 1:3 is a clock time, not a range, and a time cannot be averaged: ${RULE} To average numbers, list them with commas, as in mean(1, 2, 3).`],
 		["median(1:3)", `ERROR In median(...), 1:3 is a clock time, not a range, and a time cannot be used in a median: ${RULE} To find a median, list the numbers with commas, as in median(1, 2, 3).`],
 		["stdev(10:20)", `ERROR In stdev(...), 10:20 is a clock time, not a range, and a time cannot be used in a standard deviation: ${RULE} To find a standard deviation, list the numbers with commas, as in stdev(1, 2, 3).`],
-		["total(1:3)", `ERROR In total(...), 1:3 is a clock time, not a range, and a time cannot be added up: ${RULE} To add up a range, write sum(1:3).`],
 		["average(x:3)", `ERROR In average(...), x:3 is not a range: ${RULE} To average numbers, list them with commas, as in average(1, 2, 3).`],
 		["average(1 : 3)", `ERROR In average(...), 1:3 is a clock time, not a range, and a time cannot be averaged: ${RULE} To average numbers, list them with commas, as in average(1, 2, 3).`],
 	])("%s is refused by name", (line, expected) => {
@@ -53,6 +52,9 @@ describe("the lines that exposed it", () => {
 
 	test("what was right stays right", () => {
 		expect(shown("sum(1:3)")).toBe("6");
+		// `total` is `sum`'s synonym, so its one-argument call reads the range too
+		// (see FoundBug_totalOfARange.spec.ts).
+		expect(shown("total(1:3)")).toBe("6");
 		expect(shown("prod(1:4)")).toBe("24");
 		expect(shown("average(1, 2, 3)")).toBe("2");
 		expect(shown("mean(4, 8)")).toBe("6");

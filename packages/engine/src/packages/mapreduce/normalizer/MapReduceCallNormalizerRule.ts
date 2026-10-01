@@ -2,6 +2,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
+import { isSingleArgumentCall } from "@solve-js/normalizer/BuiltinNormalizerRules";
 
 const WORD_TO_TOKEN_TYPE: Record<string, string> = {
   map: "MAP",
@@ -53,15 +54,20 @@ export function mapReduceCallNormalizerRule(priority = 80): NormalizerRule {
   return {
     name: "mapreduce:call",
     priority,
-    shape: [{ types: ["IDENT"], values: Object.keys(WORD_TO_TOKEN_TYPE) }, { types: ["LPAREN"] }],
+    shape: [{ types: ["IDENT"], values: [...Object.keys(WORD_TO_TOKEN_TYPE), "total"] }, { types: ["LPAREN"] }],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       const token = tokens[pos];
       if (!token || token.type !== "IDENT") return null;
       const word = token.value.toLowerCase();
-      const tokenType = Object.prototype.hasOwnProperty.call(WORD_TO_TOKEN_TYPE, word) ? WORD_TO_TOKEN_TYPE[word] : undefined;
+      // `total(...)` with one argument is `sum(...)`: `total(1:3)` adds up the
+      // range, `total([1, 2, 3])` the list. With commas it stays the aggregate
+      // (`total(1, 2, 3)`), and over lines the line range (`total(line 1 : line 3)`).
+      const isTotal = word === "total";
+      const tokenType = isTotal ? "SUM_FN" : Object.prototype.hasOwnProperty.call(WORD_TO_TOKEN_TYPE, word) ? WORD_TO_TOKEN_TYPE[word] : undefined;
       if (!tokenType) return null;
       if (tokens[pos + 1]?.type !== "LPAREN") return null;
-      if (word === "sum" && looksLikeLineRef(tokens[pos + 2], tokens[pos + 3])) return null;
+      if ((word === "sum" || isTotal) && looksLikeLineRef(tokens[pos + 2], tokens[pos + 3])) return null;
+      if (isTotal && !isSingleArgumentCall(tokens, pos + 1)) return null;
 
       return {
         consumed: 1,
