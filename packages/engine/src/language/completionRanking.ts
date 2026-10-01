@@ -85,3 +85,42 @@ export function mergeRankedCompletions(groups: readonly (readonly CompletionItem
 	}
 	return out;
 }
+
+/**
+ * A completion candidate with its lowercased label precomputed, so a keystroke
+ * compares prefixes without allocating a lowercased copy per candidate.
+ *
+ * Internal to the prefix index; callers only ever see the {@link CompletionItem}.
+ */
+export interface IndexedCompletionCandidate {
+	readonly item: CompletionItem;
+	readonly lowerLabel: string;
+}
+
+/**
+ * Two runs of candidates, each already in completion order, merged into the
+ * order a stable sort of `first` followed by `second` would give: a tie goes to
+ * `first`, then to the earlier place within a run. Lets a language service keep
+ * its own vocabulary and the shared built-in units apart and still read one
+ * ordered bucket.
+ *
+ * @param first - The run gathered first (an engine's own vocabulary).
+ * @param second - The run gathered after it (the built-in units).
+ * @returns A new array holding every candidate of both; neither run is changed.
+ */
+export function mergeRankedCandidates(
+	first: readonly IndexedCompletionCandidate[],
+	second: readonly IndexedCompletionCandidate[],
+): IndexedCompletionCandidate[] {
+	const out: IndexedCompletionCandidate[] = [];
+	let i = 0;
+	let j = 0;
+	while (i < first.length && j < second.length) {
+		// Strictly less: on a tie the first run keeps its place.
+		if (compareCompletionItems(second[j].item, first[i].item) < 0) out.push(second[j++]);
+		else out.push(first[i++]);
+	}
+	while (i < first.length) out.push(first[i++]);
+	while (j < second.length) out.push(second[j++]);
+	return out;
+}

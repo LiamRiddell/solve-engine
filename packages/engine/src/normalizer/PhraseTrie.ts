@@ -257,17 +257,21 @@ export class PhraseTrie {
 	getAllPhrases(): Record<string, string> {
 		const result: Record<string, string> = {};
 
-		const collect = (node: TrieNode, path: string[]): void => {
+		// The phrase so far is carried as one string rather than an array of its
+		// words copied at every level: the language service reads every phrase
+		// on an engine's first completion, and the copies were most of the cost.
+		const collect = (node: TrieNode, phrase: string): void => {
 			if (node.terminal) {
-				result[path.join(' ')] = node.terminal.tokenType;
+				result[phrase] = node.terminal.tokenType;
 			}
-			for (const [word, child] of node.children ?? []) {
-				collect(child, [...path, word]);
+			if (node.children === null) return;
+			for (const [word, child] of node.children) {
+				collect(child, `${phrase} ${word}`);
 			}
 		};
 
 		for (const [firstWord, node] of this.root) {
-			collect(node, [firstWord]);
+			collect(node, firstWord);
 		}
 
 		return result;

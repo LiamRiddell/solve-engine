@@ -23,6 +23,7 @@ import { LanguageService, type CompletionItem } from "@solve-js/language/Languag
 import { compareCompletionItems, completionTier, mergeRankedCompletions } from "@solve-js/language/completionRanking";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { referenceStaticCandidates } from "@tools/completionOracle";
 import { PROTOTYPE_WORDS, RESOURCE_PROBES, TEXT_EDGES, expectPrototypeUntouched } from "@tools/adversarial";
 
 // ── The implementation replaced, kept as an oracle ──────────────────────────
@@ -32,9 +33,14 @@ const OLD_CATEGORY_TIER: Partial<Record<TokenCategory, number>> = {
 	variable: 0, function: 1, keyword: 1, operator: 1, comparison: 1, bitwise: 1, datetime: 1, vector: 1, unit: 2,
 };
 
-/** The private candidate list the index is built from, which this change leaves as it was. */
-function staticCandidates(ls: LanguageService): CompletionItem[] {
-	return (ls as unknown as { getStaticCompletionCandidates(): CompletionItem[] }).getStaticCompletionCandidates();
+/**
+ * The candidate list the index was built from, which this change left as it
+ * was. The service no longer holds it whole (the built-in units are shared
+ * across engines since the cold-completion fix), so it is rebuilt from the
+ * engine's pieces the way the service built it.
+ */
+function staticCandidates(engine: ReturnType<typeof newTrackedEngine>): CompletionItem[] {
+	return referenceStaticCandidates(engine);
 }
 
 /**
@@ -54,7 +60,7 @@ function oldGetCompletions(ls: LanguageService, engine: ReturnType<typeof newTra
 	for (const name of engine.userUnitNames()) {
 		if (name.toLowerCase().startsWith(prefix)) matches.push({ label: name, category: "unit", detail: "defined in this document" });
 	}
-	const candidates = staticCandidates(ls);
+	const candidates = staticCandidates(engine);
 	for (const item of candidates) {
 		if (item.label.toLowerCase().startsWith(prefix)) matches.push(item);
 	}
