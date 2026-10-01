@@ -87,6 +87,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	DESCENDING_RANGE: "sum(x, 5:1)",
 	DETERMINANT_REQUIRES_SQUARE_MATRIX: "det([1,2,3;4,5,6])",
 	DIMENSION_MISMATCH: "[1,2] + [1,2,3]",
+	DIRECTION_CONTROL_IN_NAME: "\u202Erent = 5",
 	DOCUMENT_ELEMENT_LIMIT_EXCEEDED: { doc: ["[1, 2, 3, 4, 5, 6]", "[1, 2, 3, 4, 5, 6]"], config: { vm: { maxRetainedElements: 8 } } },
 	DOCUMENT_TOO_LARGE: { doc: ["1", "2", "3"], config: { performance: { maxDocumentLines: 2 } } },
 	EMPTY_MATRIX_LITERAL: "[]",

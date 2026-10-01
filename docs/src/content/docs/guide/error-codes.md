@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 542 codes, grouped below by the part
+ship. The engine and its built-in packages ship 543 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -62,6 +62,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | --- | --- | --- |
 | `INVALID_NUMBER_LITERAL` | thrown | A number written in a form that does not read as one: a hex, binary or octal literal with a digit its base lacks (`0xZZ`), or thousands groups that are not three digits long. The reader fixes the digits. |
 | `UNTERMINATED_STRING` | thrown | A `"` that is never closed, as in `"abc`. Raised by the lexer; the reader closes the text. |
+| `DIRECTION_CONTROL_IN_NAME` | thrown | A name, number or unit holds an invisible character that changes the direction text is shown in (U+202A to U+202E, U+2066 to U+2069, U+200E, U+200F, U+061C), so it would show as something other than what the engine reads. The message names the character by its code point; the reader deletes it. Text in quotes, a comment, a heading and a label keep such characters. |
 | `NO_PREFIX_PARSELET` | thrown | A line has something where a value should start that cannot start one: the `*` in `2 + * 3`, the `)` in `round(3.14, )`, the `>` in `(5 km) -> miles`. Thrown with a span on the character and, where there is an obvious next step, a `suggestion`. |
 | `UNEXPECTED_END_OF_INPUT` | thrown | A line stops before its expression does: `5 +`, `(2 + 3`, `sqrt(`. Thrown with an empty span just after the last character, where an editor puts the caret, and a `suggestion`. |
 | `UNEXPECTED_TOKEN_TYPE` | thrown | A form needed one particular thing next and found another: a `)` where a `,` stands, or dice notation (`roll 1d6`) where a range was expected. Thrown with a span and a `suggestion`. |
