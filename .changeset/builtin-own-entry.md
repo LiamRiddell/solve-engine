@@ -15,4 +15,4 @@ The boundary: this is the lookup alone. Which builtin an index names, and what e
 
 ## Verification
 
-`VmStackContract.spec.ts` gains 2 tests: the planted function is not called and the unregistered index is refused by its own code, and the arity table ignores a planted entry while `sqrt` still reads its own. Gates run: `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:docs`, and the VM, error-code and list-builtin specs.
+`VmStackContract.spec.ts` gains 2 tests (35,053 in 869 suites in all): the planted function is not called and the unregistered index is refused by its own code, and the arity table ignores a planted entry while `sqrt` still reads its own. Gates run: `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:docs`, and the VM, error-code and list-builtin specs.
