@@ -90,7 +90,7 @@ describe("inflationAdjust (function-call form)", () => {
   });
 
   test("inflationAdjust refuses a bare amount, which would assume dollars without saying so (#650)", () => {
-    expect(parseAndExecute("inflationAdjust(500, 1970, 2020)").errorCode).toBe("INFLATION_EXPECTED_USD");
+    expect(parseAndExecute("inflationAdjust(500, 1970, 2020)").errorCode).toBe("INFLATION_NO_INDEX");
   });
 
   test(`the bundled CPI table covers ${CPI_MIN_YEAR}-${CPI_MAX_YEAR}, including the present year`, () => {
@@ -111,7 +111,7 @@ describe(`what is $X from YEAR -> present-day value (real engine, present year =
     // This used to answer the US figure for a bare number. The index is
     // American, so a bare amount is refused rather than read as dollars; the
     // dollar form is the one above.
-    expect(evalReal("what is 500 from 2003").errorCode).toBe("INFLATION_EXPECTED_USD");
+    expect(evalReal("what is 500 from 2003").errorCode).toBe("INFLATION_NO_INDEX");
   });
 });
 

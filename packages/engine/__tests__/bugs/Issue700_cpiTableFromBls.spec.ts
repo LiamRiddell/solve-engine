@@ -27,7 +27,7 @@ import {
  * recorded in `scripts/fixtures/cpi/cpiai.csv`.
  *
  * The boundary: the index is still the US CPI-U, applied only to US dollars
- * (#650; the pound and the euro are #756), and inflation still makes no
+ * (#650; the pound and the euro read their own indices since #756), and inflation still makes no
  * network call when a line is evaluated. The script is a build step.
  */
 
@@ -501,8 +501,9 @@ describe("adversarial lines", () => {
 
 	test("realistic breakage: a typo, pounds, a bare number and a value from the line above", () => {
 		expect(expectHonestLine("what was $500 worth in 1965x", { engine: engine2026() }).kind).not.toBe("value");
-		expect(code("what was £500 worth in 1965")).toBe("INFLATION_EXPECTED_USD");
-		expect(code("what was 500 worth in 1965")).toBe("INFLATION_EXPECTED_USD");
+		// Pounds read the UK index since #756; a bare number is still refused.
+		expect(shown("what was £500 worth in 1965")).toBe("= £17.92");
+		expect(code("what was 500 worth in 1965")).toBe("INFLATION_NO_INDEX");
 		const { batch } = expectHonestDocument("year = 1913\ninflationAdjust($1, year, year + 113)");
 		expect(batch[1]).toBe("= $33.45");
 	});
