@@ -77,8 +77,8 @@ const SAVINGS_PAYMENT = 99, SAVINGS_PERIODS = 100;
  * Inflation-adjusted value (extends this package, see
  * `parselets/InflationQueryParselet.ts`/`InflationFutureValueParselet.ts`/
  * `InYearDollarsParselet.ts` and `data/CpiTable.ts` for the bundled,
- * clearly-labeled-approximate CPI-U table and its doc comment on
- * vintage/accuracy) was the one topic explicitly deferred from this
+ * CPI-U table generated from the BLS series (#700) and its doc comment on
+ * source and method) was the one topic explicitly deferred from this
  * package's original scope, now implemented.
  *
  * Cash-flow appraisal (`npv of`, `irr of`, `payback of`, see

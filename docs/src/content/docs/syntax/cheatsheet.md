@@ -366,7 +366,7 @@ worth in another.
 ```solve
 interest on 1000 over 3 years at 5% // 157.63
 monthly repayment on 200000 over 25 years at 4% // 1,055.67
-what is $500 in 1990 worth in 2010 // $834.35
+what is $500 in 1990 worth in 2010 // $834.19
 ```
 
 **[Investments](/syntax/investments/)**: what a sum grows to at a rate, what a

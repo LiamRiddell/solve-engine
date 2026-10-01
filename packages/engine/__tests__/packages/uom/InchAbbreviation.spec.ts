@@ -81,7 +81,7 @@ describe("every conversion the engine already read still reads the same", () => 
 	});
 
 	test("a year, which is a number and not a unit", () => {
-		expect(answer("$500 in 1990 dollars")).toBe("$196.42");
+		expect(answer("$500 in 1990 dollars")).toBe("$197.32");
 	});
 
 	test("a number base, whose name is neither unit nor identifier", () => {

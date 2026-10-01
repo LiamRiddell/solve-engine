@@ -141,7 +141,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	INCOMPATIBLE_UNITS: "$5 + 3 m",
 	INFLATION_EXPECTED_INFLATION_WORD: "value of $100 in 2030 assuming 3% banana",
 	INFLATION_EXPECTED_USD: "£100 in 1990 dollars",
-	INFLATION_YEAR_OUT_OF_RANGE: "what is $100 from 1960",
+	INFLATION_YEAR_OUT_OF_RANGE: "what is $100 from 1900",
 	INSTRUCTION_LIMIT_EXCEEDED: { line: "1+2+3+4+5+6+7+8", config: { vm: { maxInstructions: 5 } } },
 	INVALID_DATETIME_OP: "9am + 2",
 	INVALID_DECIMAL_PLACES: "1.5 to 101 dp",
