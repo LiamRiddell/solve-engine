@@ -143,7 +143,10 @@ max(1,000, 2) // 2
 The boundary is the ambiguity the rule cannot resolve. `max($1,234)` is read as
 the one amount $1,234; to mean $1 and 234, put a space after the comma, as
 `max($1, 234)`. A plain number keeps the separator reading, so write
-`max(1000, 2)` for a thousand. An amount with its currency after it (`1,000 USD`)
+`max(1000, 2)` for a thousand. The one other exception is a range's bound,
+whose comma straight against the range's colon groups the thousands, so
+`sum(1,000:2,000)` is the range from one thousand to two thousand (see
+[large bounds](/syntax/map-reduce-and-aggregates/#large-bounds)). An amount with its currency after it (`1,000 USD`)
 inside a call is not read as grouped either: write the sign in front, or no
 comma.
 

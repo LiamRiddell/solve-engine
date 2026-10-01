@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { DELETED_LINE_REF } from "../normalizer/LineRefNormalizerRule";
 import { DELETED_LINE_NUMBER } from "../LinesPluginFunctions";
 import { aggregateRangeRefusal } from "@solve-js/packages/mathphrases/parselets/AggregateRangeArgument";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `sum(line 1 : line 4)` / `total(line 1 : line 4)` / `average(line 1 :
@@ -57,7 +58,7 @@ export class RangeAggregateParselet implements PrefixParselet {
     if (fromToken.value === DELETED_LINE_REF || toToken.value === DELETED_LINE_REF) {
       builder.emitOpcode(OpCode.PUSH_NUMBER);
       builder.emitNumber(DELETED_LINE_NUMBER);
-      builder.emitPluginCall("lineRef", 1);
+      emitBuiltinPluginCall(builder, "lineRef", 1);
       return;
     }
 
@@ -68,6 +69,6 @@ export class RangeAggregateParselet implements PrefixParselet {
     builder.emitNumber(from);
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(to);
-    builder.emitPluginCall(this.isAverage ? "averageRange" : "sumRange", 2);
+    emitBuiltinPluginCall(builder, this.isAverage ? "averageRange" : "sumRange", 2);
   }
 }

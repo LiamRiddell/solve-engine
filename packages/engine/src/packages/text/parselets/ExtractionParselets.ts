@@ -4,6 +4,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `numbers in X` and `amounts in X`: the list of numbers, or amounts of money,
@@ -23,7 +24,7 @@ export function extractListParselet(pluginName: string): PrefixParselet {
 			parser.parseExpression(BindingPower.Prefix, builder);
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(parser.getLocaleCode());
-			builder.emitPluginCall(pluginName, 2);
+			emitBuiltinPluginCall(builder, pluginName, 2);
 		},
 	};
 }
@@ -49,6 +50,6 @@ export const extractAggregateParselet: PrefixParselet = {
 		builder.emitString(source ?? "numbers");
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(parser.getLocaleCode());
-		builder.emitPluginCall("textExtractAggregate", 4);
+		emitBuiltinPluginCall(builder, "textExtractAggregate", 4);
 	},
 };

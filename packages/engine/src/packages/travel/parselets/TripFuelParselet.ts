@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `fuel for <distance> at <economy>` and `cost to drive <distance> at
@@ -38,13 +39,13 @@ export class TripFuelParselet implements PrefixParselet {
 		// part, so letting it take everything is safe.
 		if (!this.withPrice) {
 			parser.parseExpression(BindingPower.Lowest, builder);
-			builder.emitPluginCall(this.fn, 2);
+			emitBuiltinPluginCall(builder, this.fn, 2);
 			return;
 		}
 		parser.parseExpression(BindingPower.Product, builder);
 		this.consumeAt(parser, token, "a fuel price");
 		parser.parseExpression(BindingPower.Lowest, builder);
-		builder.emitPluginCall(this.fn, 3);
+		emitBuiltinPluginCall(builder, this.fn, 3);
 	}
 
 	/** Consume the `at` before a part, naming what was expected when it is missing. */

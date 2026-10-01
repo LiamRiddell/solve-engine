@@ -217,6 +217,15 @@ titlecase("hello world") // Hello World
 slugify("Hello World") // hello-world
 ```
 
+The call spellings work inside a function of your own too (see
+[functions](/syntax/variables/#functions)), so a step you repeat can be named
+once and used on any text:
+
+```solve-doc
+shout(s) = upper(s) + "!"
+shout("hello") // HELLO!
+```
+
 The boundary for counting lines: a quoted string cannot hold a line break, since
 the engine reads one line at a time and has no escape for a new line. So `\n`
 inside quotes is two characters, a backslash and an `n`, and a quoted string

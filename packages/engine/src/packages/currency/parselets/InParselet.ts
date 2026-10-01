@@ -9,6 +9,7 @@ import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
 import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN } from "@solve-js/uom/HistoricalCurrency";
 import { tryReadUtcOffset } from "@solve-js/calendar/UtcOffset";
 import { takeUnitPower } from "@solve-js/parser/UnitPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * InParselet, handles the standalone `IN` keyword as a postfix conversion.
@@ -40,7 +41,7 @@ export class InParselet implements InfixParselet {
 		// address is already on the stack.
 		if (targetToken?.type === "IP_CIDR" || targetToken?.type === "IPV6_ADDRESS") {
 			parser.parseExpression(BindingPower.Prefix, builder);
-			builder.emitPluginCall("ipInCidr", 2);
+			emitBuiltinPluginCall(builder, "ipInCidr", 2);
 			return;
 		}
 		// `in %`: the value as a percentage, on the parts-per scale (#633). The
@@ -106,7 +107,7 @@ export class InParselet implements InfixParselet {
 				builder.emitString(targetUnit);
 				builder.emitOpcode(OpCode.PUSH_STRING);
 				builder.emitString(isoDate);
-				builder.emitPluginCall(HISTORICAL_CURRENCY_FN, 3);
+				emitBuiltinPluginCall(builder, HISTORICAL_CURRENCY_FN, 3);
 				return;
 			}
 

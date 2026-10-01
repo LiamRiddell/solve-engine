@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `current timestamp` -> the current Unix timestamp in seconds, as a
@@ -26,6 +27,6 @@ export class CurrentTimestampParselet implements PrefixParselet {
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     builder.emitOpcode(OpCode.DATE_NOW);
-    builder.emitPluginCall("toTimestampFromAny", 1);
+    emitBuiltinPluginCall(builder, "toTimestampFromAny", 1);
   }
 }

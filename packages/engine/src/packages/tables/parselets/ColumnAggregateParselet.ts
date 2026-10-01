@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `sum of column "cost" in table above` and its siblings (`total`/`average`/
@@ -60,7 +61,7 @@ export class ColumnAggregateParselet implements PrefixParselet {
 
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(nameToken.value);
-    builder.emitPluginCall(this.pluginFnName, 1);
+    emitBuiltinPluginCall(builder, this.pluginFnName, 1);
   }
 }
 

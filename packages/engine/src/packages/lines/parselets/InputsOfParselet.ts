@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { TRACE_INPUTS } from "../LinesPluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `inputs of line N`, which lines fed line N's answer, followed upwards.
@@ -41,6 +42,6 @@ export class InputsOfParselet implements PrefixParselet {
 		builder.emitNumber(parseInt(lineRef.value, 10));
 		builder.emitOpcode(OpCode.PUSH_NUMBER);
 		builder.emitNumber(TRACE_INPUTS);
-		builder.emitPluginCall("lineRef", 2);
+		emitBuiltinPluginCall(builder, "lineRef", 2);
 	}
 }

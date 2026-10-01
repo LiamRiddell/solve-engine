@@ -53,6 +53,37 @@ sum(x, [1 hour, 30 min]) // 1.50 hours
 Slicing a matrix, `m[0:1, 0:1]`, keeps its ranges: there the brackets follow a
 name, and pick a range of its rows and a range of its columns.
 
+### Large bounds
+
+A large number is easier to read with its thousands grouped, `1,000`, and a
+range's bound can be written that way. Inside a call's brackets a comma usually
+separates one argument from the next (so `max(1,000, 2)` is the largest of 1, 0
+and 2, see [amounts inside a call](/syntax/currency/#amounts-inside-a-call)), but
+a comma between digits straight against a range's colon is read as grouping, since
+nobody writes a range as starting at `000` and a colon after three digits is
+never a clock time. So `sum(1,000:2,000)` is the range from one thousand to two
+thousand, and `sum(1,000:1)`, a range that counts down, is refused by name
+rather than read as `1` and the range `000:1`:
+
+```solve
+sum(1,000:2,000) // 1,501,500
+sum(1,000:1,005) // 6,015
+map(x * 2, 1,000:1,002) // [2,000, 2,002, 2,004]
+sum(1,000:1) // A range's min (1000) cannot be greater than its max (1). Did you mean "1:1000"?
+```
+
+The second bound is grouped when the first cannot be the hour of a clock time:
+three or more digits (`100:1,000`), a name or a bracket. After a short first
+bound, as in `sum(1:2,000)`, the comma still separates, because `1:2` could be a
+time. The boundary is the reading the rule cannot tell apart: `sum(1,100:200)`
+is the range from 1,100 down to 200, and refused, not the element form adding 1
+for each of 100 to 200. To mean two arguments, put a space after the comma:
+
+```solve
+sum(1, 100:200) // 101
+max(1,000, 2) // 2
+```
+
 ## Map
 
 `map(expression, list)` works the expression out once for each element, with

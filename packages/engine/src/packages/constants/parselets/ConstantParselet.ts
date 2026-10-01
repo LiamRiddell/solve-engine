@@ -4,6 +4,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { constantEntry } from "../Constants";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The value a constant can be written into a line as, a plain number, or null
@@ -51,7 +52,7 @@ export function constantParselet(name: string): PrefixParselet {
 			}
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(name);
-			builder.emitPluginCall("constantValue", 1, { synchronous: true });
+			emitBuiltinPluginCall(builder, "constantValue", 1);
 		},
 	};
 }

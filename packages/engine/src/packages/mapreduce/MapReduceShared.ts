@@ -136,14 +136,15 @@ export function tokensBack(parser: Parser, first: Token | undefined, skip: numbe
 
 /**
  * Whether a side is written as one plain whole number, `5`, the way the
- * refusal's number already says it. `05` and `5.0` are not: the refusal quotes
+ * refusal's number already says it, its thousands grouped or not (`1,000` is
+ * the number 1000, as `1000` is). `05` and `5.0` are not: the refusal quotes
  * them as written.
  *
  * @param side - The side's tokens, or null when not kept.
  * @returns `true` for a single token written `0` or a whole number with no leading zero.
  */
 export function isPlainNumber(side: readonly Token[] | null): boolean {
-  return side !== null && side.length === 1 && side[0].type === "NUMBER" && /^(?:0|[1-9]\d*)$/.test(side[0].text);
+  return side !== null && side.length === 1 && side[0].type === "NUMBER" && /^(?:0|[1-9]\d*|[1-9]\d{0,2}(?:,\d{3})+)$/.test(side[0].text);
 }
 
 /**

@@ -5,6 +5,7 @@ import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { TEXT_CALL_FUNCTIONS } from "../TextFunctionNames";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The parenthesised call form of a text function: `length("hi")`,
@@ -36,6 +37,6 @@ export class TextCallParselet implements PrefixParselet {
 		}
 		parser.consume("RPAREN");
 
-		builder.emitPluginCall(pluginName, argCount);
+		emitBuiltinPluginCall(builder, pluginName, argCount);
 	}
 }
