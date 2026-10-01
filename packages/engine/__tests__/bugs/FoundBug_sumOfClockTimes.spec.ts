@@ -191,10 +191,9 @@ describe("adversarial", () => {
 
 	test("edge: midnight and the end of the day, numeric edges beside a time, CRLF", () => {
 		expect(outcome("sum(0:00, 23:59)")).toBe(TIMES_REFUSED);
-		// `24:00` is no clock time, so it is not fused as one anywhere in a
-		// bracket, `(24:00)` included; that wording is outside this fix (noted
-		// in its changeset). Here it is a structured refusal, never a crash.
-		expect(evaluateLine("sum(24:00, 0:00)").kind).toBe("thrown");
+		// `24:00` is no clock time, and inside a bracket it is refused as it is
+		// on its own line (see FoundBug_invalidClockTimeInBrackets.spec.ts).
+		expect(outcome("sum(24:00, 0:00)")).toBe('INVALID_TIME_LITERAL: "24:00" is not a valid time');
 		expectHonestLine("sum(24:00, 0:00)");
 		for (const line of fill("sum(9:30, X)", NUMERIC_EDGES)) expectHonestLine(line, { allowNaN: true });
 		const { batch, incremental } = both("sum(9:30, 10:15)\r\ntotal(9:30, 10:15)\r\n");

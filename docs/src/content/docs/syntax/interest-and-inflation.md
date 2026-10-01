@@ -412,7 +412,25 @@ $100 in 1990 pounds // in 1990 pounds asks for pounds sterling, and this amount 
 ```
 
 `value of £100 in 2030 assuming 3% inflation` is a different question: it states
-the rate rather than reading an index, so it takes any currency.
+the rate rather than reading an index, so it takes any currency. It answers what
+the amount will buy in that year if prices rise by the rate each year, which is
+less than the amount: the money is divided by the growth in prices, once for
+each year from now. A rate of 0% leaves it as it is.
+
+```solve-doc
+value of $100 in 2030 assuming 3% inflation // $88.85
+value of £100 in 2030 assuming 3% inflation // £88.85
+value of $100 in 2030 assuming 0% inflation // $100.00
+```
+
+Its year is read as every other inflation form reads one: a plain whole number,
+so a fraction, money, a quantity or a date there is refused with the same words
+rather than read for its number.
+
+```solve-doc
+value of $100 in 2030.5 assuming 3% inflation // ERROR: the year of an inflation question is a plain whole number, such as 1990, and 2030.5 is not a whole number
+value of $100 in $2030 assuming 3% inflation // ERROR: the year of an inflation question is a plain whole number, such as 1990, and this one is money
+```
 
 The figures are the published indices, but an adjustment by one is still an
 average over a typical basket of shopping, not what any one price did. For a

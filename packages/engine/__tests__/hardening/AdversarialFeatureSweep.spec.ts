@@ -81,6 +81,9 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"what is $100 in X worth in 2010",
 		"sum(X, 10:15)",
 		"what is X apples from 1990",
+		// The flat-rate projection reads its year as the other forms do (batch V).
+		"value of $100 in X assuming 3% inflation",
+		"value of $X in 2030 assuming 3% inflation",
 	],
 	// A large quantity keeps its exact value, and the aggregates refuse a range
 	// they would read as a clock time.
@@ -312,6 +315,15 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"(X) * 1e306 as %",
 		"-(X) * 1e306 in %",
 		"50% + (X) * 1e308",
+		// The sixth: a colon pair that is no clock time inside a bracket, clock
+		// times as the element or in a list of a map-reduce call, and sum of two
+		// values that are not a list.
+		"(X:00)",
+		"max(24:00, X)",
+		"total(X:61, 0:00)",
+		"prod(X, 10:15)",
+		"sum(x, [X, 10:15])",
+		"sum(2 hours, X)",
 	],
 	// A timecode in its own notation, its arithmetic and its conversions out
 	// (#759), and an ISO 8601 duration beside a value, spread through a date

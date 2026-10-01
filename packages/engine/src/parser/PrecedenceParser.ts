@@ -1013,6 +1013,12 @@ export class PrecedenceParser {
     if (expectedType !== undefined) {
       const expectedId = tokenTypeId(expectedType);
       if (token.typeId !== expectedId) {
+        // A run the normaliser has already refused (a colon pair that is no
+        // clock time, a date naming no real day) is reported for its own
+        // reason, not as a token standing where another was needed.
+        if (token.fault !== undefined) {
+          throw ErrorFactory.parsing({ code: token.fault.code, message: token.fault.message, span: this.spanOf(token) });
+        }
         throw ErrorFactory.parsing({
           code: "UNEXPECTED_TOKEN_TYPE",
           ...unexpectedTokenWording(expectedType, token),
