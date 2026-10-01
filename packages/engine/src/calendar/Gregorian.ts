@@ -43,8 +43,9 @@ const MS_PER_400_YEARS = 146_097 * MS_PER_DAY;
 function literalUtc(year: number, month0: number, day: number, hour = 0, minute = 0, second = 0): number {
 	// `Date.UTC` truncates the year before it windows it, so the window is
 	// exactly the years whose integer part is 0 to 99, and -0.5 is one of them.
-	const whole = Math.trunc(year);
-	if (whole >= 0 && whole <= 99) return Date.UTC(whole + 400, month0, day, hour, minute, second) - MS_PER_400_YEARS;
+	// Those are the years above -1 and below 100, tested on the year itself so
+	// the common year reads no `Math` (a global, slow inside a `vm` context).
+	if (year > -1 && year < 100) return Date.UTC(Math.trunc(year) + 400, month0, day, hour, minute, second) - MS_PER_400_YEARS;
 	return Date.UTC(year, month0, day, hour, minute, second);
 }
 
