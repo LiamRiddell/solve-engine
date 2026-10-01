@@ -15,12 +15,12 @@ const shown = (source: string) => formatValue(evaluate(source));
 
 describe("an infinite angle has no sine, cosine or tangent", () => {
 	test.each([
-		["sin(1/0)", "sin(Infinity) has no real value: sin is only defined for finite angles."],
-		["cos(-1/0)", "cos(-Infinity) has no real value: cos is only defined for finite angles."],
-		["tan(1/0)", "tan(Infinity) has no real value: tan is only defined for finite angles."],
-		["sind(1/0)", "sind(Infinity) has no real value: sind is only defined for finite angles."],
-		["cosd(-1/0)", "cosd(-Infinity) has no real value: cosd is only defined for finite angles."],
-		["tand(1/0)", "tand(Infinity) has no real value: tand is only defined for finite angles."],
+		["sin(1/0)", "sin(∞) has no real value: sin is only defined for finite angles."],
+		["cos(-1/0)", "cos(-∞) has no real value: cos is only defined for finite angles."],
+		["tan(1/0)", "tan(∞) has no real value: tan is only defined for finite angles."],
+		["sind(1/0)", "sind(∞) has no real value: sind is only defined for finite angles."],
+		["cosd(-1/0)", "cosd(-∞) has no real value: cosd is only defined for finite angles."],
+		["tand(1/0)", "tand(∞) has no real value: tand is only defined for finite angles."],
 	])("%s", (source, message) => {
 		const value = evaluate(source);
 		expect(value.errorCode).toBe("FUNCTION_DOMAIN");
@@ -32,8 +32,8 @@ describe("a remainder with no value is refused by name", () => {
 	test.each([
 		["5 mod 0", "5 mod 0 has no value: nothing is left over from a division by zero, because it never ends."],
 		["-5.5 mod 0", "-5.5 mod 0 has no value: nothing is left over from a division by zero, because it never ends."],
-		["(1/0) mod 3", "Infinity mod 3 has no value: an infinite number has no remainder."],
-		["(-1/0) mod 3", "-Infinity mod 3 has no value: an infinite number has no remainder."],
+		["(1/0) mod 3", "∞ mod 3 has no value: an infinite number has no remainder."],
+		["(-1/0) mod 3", "-∞ mod 3 has no value: an infinite number has no remainder."],
 	])("%s", (source, message) => {
 		const value = evaluate(source);
 		expect(value.errorCode).toBe("REMAINDER_UNDEFINED");

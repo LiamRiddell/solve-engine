@@ -684,7 +684,7 @@ integral(x^2, x, 0, 3) // 9
 ```
 
 ```
-1+2+b+3+b => // 2b+6
+1+2+x+3+x => // 2x+6
 ```
 
 ```
@@ -1455,6 +1455,23 @@ golden ratio // 1.62
 ```
 
 ```
+2tau // 12.57
+3 golden ratio // 4.85
+(1 + 1)tau // 12.57
+solve(x^2 = tau, x) // [-2.51, 2.51]
+solve(x^2 = 2tau, x) // [-3.54, 3.54]
+der(tau*x^2, x) // 12.5663706144x
+```
+
+```
+map(x * gravity, [1, 2]) // [9.81 m/s², 19.61 m/s²]
+```
+
+```
+solve(x = gravity * 2, x) // A formula keeps no units, so combining "x" with an amount in m/s² would drop the m/s². Give "x" a value on a line above, or write the formula without the unit.
+```
+
+```
 avogadro // 602,214,076,000,000,000,000,000
 ```
 
@@ -1467,6 +1484,12 @@ boltzmann * 300 K // 4.14e-21 J
 planck * 5e14 // 3.31e-19
 avogadro * 2 // 1,204,428,152,000,000,000,000,000
 planck * 5e14 Hz // A constant measured in J·s and a quantity in Hz cannot be multiplied: the engine cannot spell J·s yet, so the answer would wrongly be in Hz. Leave the unit off the other side and read the result in the unit it should have.
+```
+
+```
+(one document)
+f(m) = m * gravity // f(m) defined
+f(70 kg) as N // 686.47 N
 ```
 
 ## converting-units
@@ -2088,6 +2111,18 @@ sqrt(2) * sqrt(2) == 2 // false
 ```
 
 ```
+[1e-6, 1] // [1e-6, 1]
+[0.001, 0.5] // [0.001, 0.50]
+0.004 ± 0.001 // 0.004 ± 0.001
+```
+
+```
+1e-320 / 2 // 5e-321
+1e-320 / 1e10 // 0
+1e-320 km / 1e10 // 0.00 km
+```
+
+```
 1 Hz in MHz as scientific // 1e-6
 1500000 as scientific // 1.5e+6
 0.25 as sci // 2.5e-1
@@ -2280,6 +2315,13 @@ factor(x^2+1) // x^2+1
 ```
 
 ```
+factor(x^2 - pi) // x^2-3.1415926536
+factor(x^2 - e) // x^2-2.7182818285
+factor(x^2 + pi*x) // x*(x+3.1415926536)
+factor((x - pi)^2) // (x-3.1415926536)^2
+```
+
+```
 factor(x^2-y^2) // (x-y)*(x+y)
 factor(x^3-8y^3) // (x-2y)*(x^2+2x*y+4y^2)
 factor(x^2+2x*y+y^2) // (x+y)^2
@@ -2288,6 +2330,12 @@ factor(a*x+a*y+b*x+b*y) // (a+b)*(x+y)
 
 ```
 factor(x^2+3x*y+y^2) // x^2+3x*y+y^2
+```
+
+```
+(one document)
+factor(x^3 - pi) // ERROR: This polynomial cannot be factored: a number in it is too long as a fraction (as pi and e are) to try every fraction that could be a root. solve finds its roots as decimals.
+solve(x^3 = pi, x) // [-0.7322959438-1.2683737808i, -0.7322959438+1.2683737808i, 1.46]
 ```
 
 ## fractions
@@ -3121,6 +3169,16 @@ $0.10 + 15% // $0.12
 ```
 
 ```
+$1e-3 // $0.00
+$0.001 // $0.00
+$1.005e0 // $1.01
+$1.5e2 // $150.00
+1e-3 USD // $0.00
+£2.5e-2 // £0.03
+$1e-3 * 1000 // $1.00
+```
+
+```
 $0.15 * 12.3 // $1.85
 12.3 kWh * $0.15/kWh // $1.85
 12.3 kg at $0.15/kg // $1.85
@@ -3525,7 +3583,7 @@ asin(2) // ERROR: asin(2) has no real value: asin is only defined for numbers fr
 
 ```
 (one document)
-sin(1/0) // ERROR: sin(Infinity) has no real value: sin is only defined for finite angles.
+sin(1/0) // ERROR: sin(∞) has no real value: sin is only defined for finite angles.
 ```
 
 ## number-suffixes
@@ -3684,6 +3742,16 @@ subtract 3 // -3
 2√3 // 3.46
 2π // 6.28
 1/∞ // 0
+```
+
+```
+∞ km // ∞ km
+-∞ m // -∞ m
+5 km / 0 // ∞ km
+1e308 * 10 km // ∞ km
+∞ km in m // ∞ m
+$1e308 * 10 // $∞
+1 / 0 as sci // ∞
 ```
 
 ```
@@ -3894,6 +3962,13 @@ https://liamriddell.github.io/solve-engine/syntax/percentages/
 ```
 15 percent of 60 // 9
 0.25 as percent // 25.00%
+```
+
+```
+pi percent // 3.14%
+e percent of 200 // 5.44
+200 + pi percent // 206.28
+tau percent // 6.28%
 ```
 
 ```
@@ -4607,7 +4682,13 @@ solve(x + 10% = 220, x) // 200
 ```
 
 ```
+x + ans = 7 // A line reference needs a document to read, and an expression evaluated on its own has none
+```
+
+```
 solve(x^2-2=0, x) // [-sqrt(2), sqrt(2)]
+solve(3x^2 = 1, x) // [-sqrt(3)/3, sqrt(3)/3]
+solve(x^2 = 3.14159, x) // [-0.001*sqrt(3141590), 0.001*sqrt(3141590)]
 ```
 
 ```
@@ -4632,6 +4713,13 @@ solve(x^4-2x^2+3=0, x) // [-sqrt((sqrt(3)+1)/2)-sqrt((sqrt(3)-1)/2)*i, -sqrt((sq
 
 ```
 solve(x^3-3x+1=0, x) // [-1.88, 0.35, 1.53]
+```
+
+```
+solve(x^2 = pi, x) // [-1.77, 1.77]
+solve(2x^2 = e, x) // [-1.17, 1.17]
+solve(x^3 = pi, x) // [-0.7322959438-1.2683737808i, -0.7322959438+1.2683737808i, 1.46]
+sqrt(pi) to 10 dp // 1.7724538509
 ```
 
 ```
@@ -4688,6 +4776,14 @@ solve(a*x+b=0, x) // -b/a
 ```
 :factor = 1.5
 :factor * 2 // 3
+```
+
+```
+(one document)
+5 // 5
+x + ans = 7 // x stored as an equation: solve with "x =>"
+100 // 100
+x => // 2
 ```
 
 ```
@@ -4922,7 +5018,7 @@ https://liamriddell.github.io/solve-engine/syntax/surveying-units/
 https://liamriddell.github.io/solve-engine/syntax/symbolic/
 
 ```
-1+2+b+3+b => // 2b+6
+1+2+x+3+x => // 2x+6
 ```
 
 ```
@@ -4952,6 +5048,20 @@ x/(1/y) => // x*y
 -x/-y => // x/y
 -(x^2) => // -(x^2)
 solve(salary/1200 * rate = net, rate) // 1200*net/salary
+```
+
+```
+1+2+b+3+b => // 2*b+6
+m + m => // 2*m
+k * 3 => // 3*k
+2*b => // 2*b
+2b // 2.00 b
+```
+
+```
+0.5/m // 0.50 /m
+0.5/(m) => // 0.5/(m)
+solve(b*m = 4, m) // 4/(b)
 ```
 
 ```
@@ -5858,6 +5968,11 @@ https://liamriddell.github.io/solve-engine/syntax/uncertainty/
 (12.3 +/- 0.5) * 4 // 49.2 ± 2.0
 (10 +/- 1) + (20 +/- 2) // 30 ± 2.24
 (100 +/- 5) + 10% // 110 ± 5.5
+```
+
+```
+0.004 +/- 0.001 // 0.004 ± 0.001
+2e-6 +/- 1e-7 // 2e-6 ± 1e-7
 ```
 
 ```

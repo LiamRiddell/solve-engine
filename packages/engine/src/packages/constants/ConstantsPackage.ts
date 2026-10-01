@@ -2,6 +2,7 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { numberValue, uomValue, errorValue, ValueType, type Value } from "@solve-js/vm/Value";
 import { constantEntry } from "./Constants";
 import { constantParselet } from "./parselets/ConstantParselet";
+import { constantMultiplyNormalizerRule } from "./normalizer/ConstantMultiplyNormalizerRule";
 
 /**
  * Named physical and mathematical constants (issue #256): `speed of light`,
@@ -34,6 +35,8 @@ export const CONSTANTS_PACKAGE: IEnginePackage = {
 			phi: "PHI",
 		},
 	},
+	// `2tau` is `2 * tau`, as `2pi` is `2 * pi`.
+	normalizerRules: [constantMultiplyNormalizerRule()],
 	prefixParselets: {
 		SPEED_OF_LIGHT: constantParselet("speed of light"),
 		ELECTRON_MASS: constantParselet("electron mass"),

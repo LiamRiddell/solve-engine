@@ -83,7 +83,7 @@ describe("the lines that exposed it", () => {
 	test("the boundary: a number as the first factor makes it the scalar equation, which keeps the rest as unknowns", () => {
 		// A plain-number factor is not a matrix, so the product is solved as the
 		// scalar equation it also is, as before this fix.
-		expect(both([":a = 2", "a*b*x = 10", "x =>"])[2]).toBe("10/(2b)");
+		expect(both([":a = 2", "a*b*x = 10", "x =>"])[2]).toBe("10/(2*b)");
 	});
 });
 

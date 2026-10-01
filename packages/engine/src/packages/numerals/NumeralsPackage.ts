@@ -2,6 +2,7 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { stringValue, numberValue, errorValue, ValueType, type Value } from "@solve-js/vm/Value";
 import { numberToRoman, romanToNumber, numberToOrdinal, numberToWords } from "./NumeralOps";
 import { FromRomanParselet } from "./parselets/FromRomanParselet";
+import { shortestText } from "@solve-js/utilities/Number";
 
 /** A converter over a number: number in, string out, an error for a value it cannot represent. */
 function numeralConverter(name: string, fn: (n: number) => string | null): (value: Value) => Value {
@@ -11,7 +12,7 @@ function numeralConverter(name: string, fn: (n: number) => string | null): (valu
 		}
 		const out = fn(value.value as number);
 		if (out === null) {
-			return errorValue("NUMERAL_OUT_OF_RANGE", `${value.value} cannot be written as ${name}`);
+			return errorValue("NUMERAL_OUT_OF_RANGE", `${shortestText(value.value as number)} cannot be written as ${name}`);
 		}
 		return stringValue(out);
 	};

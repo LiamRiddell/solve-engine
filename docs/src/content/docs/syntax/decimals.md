@@ -159,7 +159,27 @@ countable, and in exponent form once they are not.
 ```
 
 A percentage follows the same rule, and is grouped by thousands like any other
-figure: `1234567%` is `1,234,567.00%`.
+figure: `1234567%` is `1,234,567.00%`. So does each figure of a list and both
+sides of a tolerance (a measurement written with `±`), which used to round to
+`0.00` and `0 ± 0.0`.
+
+```solve
+[1e-6, 1] // [1e-6, 1]
+[0.001, 0.5] // [0.001, 0.50]
+0.004 ± 0.001 // 0.004 ± 0.001
+```
+
+The one zero that is real is a number too small for the computer to hold. A
+number is stored as a double, which reaches down to about 4.94e-324 and no
+further, so a result below that is zero before it is ever shown, as a result
+past about 1.8e308 is `∞`. `1e-320 / 1e10` is zero for that reason, and so is
+the same quotient with a unit.
+
+```solve
+1e-320 / 2 // 5e-321
+1e-320 / 1e10 // 0
+1e-320 km / 1e10 // 0.00 km
+```
 
 Three digits, rather than everything the double holds, because a conversion is
 not more precise than what went into it: `1 second in years` is

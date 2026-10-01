@@ -11,7 +11,7 @@ an arrow evaluates it in a mode where a name with no value
 stays symbolic instead of becoming an error.
 
 ```solve
-1+2+b+3+b => // 2b+6
+1+2+x+3+x => // 2x+6
 ```
 
 An unknown survives arithmetic, exponentiation, negation and function calls, so
@@ -143,10 +143,37 @@ solve(salary/1200 * rate = net, rate) // 1200*net/salary
 
 A coefficient is written beside its term (`2x`) only where the two read as a
 product; otherwise a `*` separates them, as in `1200*net`, since `1200n` is a
-whole number. The boundary: the printer knows no units, so a name that is also
-a unit is still written beside its coefficient, and `2b` typed back is two
-bytes. A fraction whose parts are over a million is shown as its decimal, to
-ten significant figures.
+whole number.
+
+The same goes for a name that is also a unit or a size word. A number written
+straight before a unit is an amount of it, so `2b` is two bits and `2m` two
+metres, and a number before `k` or `million` scales it, so `2k` is two
+thousand. An unknown called `b`, `m` or `k` is therefore written after a `*`
+(`2*b`), and typed back that is the formula again: a unit word with no number
+of its own in front of it is read as a name.
+
+```solve
+1+2+b+3+b => // 2*b+6
+m + m =>     // 2*m
+k * 3 =>     // 3*k
+2*b =>       // 2*b
+2b           // 2.00 b
+```
+
+A slash before a unit means "per", so `0.5/m` is half of something per metre.
+A division by an unknown called `m` is therefore written with the name in
+brackets, which reads back as the division:
+
+```solve
+0.5/m          // 0.50 /m
+0.5/(m) =>     // 0.5/(m)
+solve(b*m = 4, m) // 4/(b)
+```
+
+The boundary: only the units and size words built into the engine are known
+to the printer. A unit a note defines for itself is not, so an unknown with
+that unit's name is still written beside its coefficient. A fraction whose
+parts are over a million is shown as its decimal, to ten significant figures.
 
 ## Exact arithmetic
 

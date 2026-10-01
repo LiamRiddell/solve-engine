@@ -14,8 +14,25 @@ const DECREASE_ID = tokenTypeId("DECREASE");
 /** The words that mean the `%` sign after an amount. */
 const PERCENT_WORDS: ReadonlySet<string> = new Set(["percent", "percentage"]);
 
-/** What a percentage is written after: an amount, a bracket, or a name (`rate percent`, `what percent`). */
-const RATE_BEFORE: ReadonlySet<string> = new Set(["NUMBER", "RPAREN", "IDENT"]);
+/**
+ * What a percentage is written after: an amount, a bracket, a name (`rate
+ * percent`, `what percent`), or a word that stands for a number.
+ *
+ * The last group is the constants the lexer reads as their own tokens (`pi`,
+ * `e`, `∞`, and `tau`, `phi` and `golden ratio` from the constants package) and
+ * `prev`, the line above. Each is an amount wherever a number is, and `pi%` and
+ * `prev%` already read, so `pi percent` was refused only because its token was
+ * not a number's or a name's (`π`, read as a name, always worked). A constant
+ * with a unit (`gravity`, `speed of light`) is read the same way, so the word
+ * after it meets the refusal `%` does (an acceleration is not a proportion)
+ * rather than a parse error at the word.
+ */
+export const RATE_BEFORE: ReadonlySet<string> = new Set([
+	"NUMBER", "RPAREN", "IDENT",
+	"PI", "E", "TAU", "PHI", "GOLDEN_RATIO", "INFINITY_SIGN", "PREV",
+	"GRAVITY", "AVOGADRO", "PLANCK", "BOLTZMANN",
+	"SPEED_OF_LIGHT", "ELECTRON_MASS", "PROTON_MASS", "ELEMENTARY_CHARGE", "GAS_CONSTANT",
+]);
 
 /**
  * `percent` or `percentage` after an amount is the `%` sign: `15 percent of 60`

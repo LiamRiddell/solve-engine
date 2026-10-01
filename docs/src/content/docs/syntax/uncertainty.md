@@ -34,6 +34,16 @@ Everything else reads the centre and drops the tolerance: a comparison compares
 the centres, and `sqrt`, `sin` and the like work on the centre alone. Correlated
 errors are out of scope.
 
+A centre or a spread too small for the usual places is shown to three
+significant digits, as any small number is (see
+[decimals](/syntax/decimals/#numbers-too-small-for-two-decimal-places)), so a
+fine measurement never reads as `0 ± 0.0`:
+
+```solve
+0.004 +/- 0.001 // 0.004 ± 0.001
+2e-6 +/- 1e-7 // 2e-6 ± 1e-7
+```
+
 ## A tolerance as a percentage
 
 A tolerance written as a percentage is relative to the value, the way a

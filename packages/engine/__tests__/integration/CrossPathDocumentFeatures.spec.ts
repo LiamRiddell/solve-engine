@@ -142,6 +142,33 @@ function expectNeedsDocument(expr: string): void {
   expect(message.toLowerCase()).toContain("document");
 }
 
+describe("ans and prev inside a stored equation across entry points", () => {
+  // The equation's sides are run as the line that stored it, so ans and prev
+  // read the answer above the equation, not the line above the arrow
+  // (FoundBug_lineReadInAnEquation).
+  const doc = ["5", "x + ans = 7", "100", "x =>"];
+  const stored = 'x stored as an equation: solve with "x =>"';
+
+  test("both document passes solve with the line above the equation, and agree", () => {
+    expect(batch(doc)).toEqual(["5", stored, "100", "2"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+    const withPrev = ["5", "x + prev = 7", "x =>"];
+    expect(batch(withPrev)).toEqual(["5", stored, "2"]);
+    expect(incremental(withPrev)).toEqual(batch(withPrev));
+  });
+
+  test("an edit to the line above the equation re-solves it, and a fresh batch pass agrees", () => {
+    const { shown, edited } = editThenEvaluate(["5", "x + ans = 7", "x =>"], [[1, "6"]]);
+    expect(shown).toEqual(["6", stored, "1"]);
+    expect(batch(edited)).toEqual(shown);
+  });
+
+  test("the single-line path refuses the equation as needing a document", () => {
+    expectNeedsDocument("x + ans = 7");
+    expectNeedsDocument("x + prev = 7");
+  });
+});
+
 describe("category tags across entry points", () => {
   const totalDoc = ["40 #grocery", "20 #grocery", "total of #grocery"];
 

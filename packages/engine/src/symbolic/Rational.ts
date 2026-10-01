@@ -21,6 +21,7 @@
  */
 
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { nonFiniteText } from "@solve-js/utilities/Number";
 
 /**
  * An exact rational number.
@@ -170,8 +171,8 @@ export function rationalFromNumber(value: number): Rational {
 	if (!Number.isFinite(value)) {
 		throw ErrorFactory.execution(
 			"SYMBOLIC_NONFINITE_OPERAND",
-			`"${String(value)}" has no exact value, so it cannot appear in a symbolic expression.`,
-			{ value: String(value) },
+			`"${nonFiniteText(value) ?? String(value)}" has no exact value, so it cannot appear in a symbolic expression.`,
+			{ value: nonFiniteText(value) ?? String(value) },
 		);
 	}
 	if (Number.isInteger(value)) return normalize(BigInt(value), 1n);
@@ -202,20 +203,28 @@ export function rationalFromNumber(value: number): Rational {
  *
  * @param r - The rational.
  * @returns The nearest double, or `±Infinity` when the value genuinely
- * exceeds double range.
+ * exceeds double range (and zero when it is below the smallest one).
  */
 export function rationalToNumber(r: Rational): number {
 	if (r.d === 1n) return Number(r.n);
 
-	const direct = Number(r.n) / Number(r.d);
-	if (!Number.isNaN(direct)) return direct;
+	const numerator = Number(r.n);
+	const denominator = Number(r.d);
+	if (Number.isFinite(numerator) && Number.isFinite(denominator)) return numerator / denominator;
 
-	// Both components individually overflow a double, so the naive division is
-	// Infinity/Infinity. Dividing in bigint space with 64 guard bits first
-	// keeps the ratio, and scaling back by a power of two is exact in binary
-	// floating point.
-	const GUARD_BITS = 64n;
-	return Number((r.n << GUARD_BITS) / r.d) / 2 ** 64;
+	// A component past the largest double makes the naive division wrong
+	// whatever the ratio is: Infinity/Infinity is NaN, a large numerator over a
+	// modest denominator is Infinity (`x*π = 1e308` solved to ∞ rather than
+	// 3.18e307), and a modest numerator over a huge denominator is 0. Dividing
+	// in bigint space, shifted so the quotient keeps about 64 significant bits,
+	// keeps the ratio; scaling back by powers of two is exact in binary
+	// floating point, and is done in two steps so neither factor overflows on
+	// its own before the true value does.
+	const magnitude = r.n < 0n ? -r.n : r.n;
+	const shift = 64 - (magnitude.toString(2).length - r.d.toString(2).length);
+	const quotient = shift >= 0 ? (r.n << BigInt(shift)) / r.d : r.n / (r.d << BigInt(-shift));
+	const half = Math.trunc(shift / 2);
+	return (Number(quotient) / 2 ** half) / 2 ** (shift - half);
 }
 
 /**
@@ -419,8 +428,14 @@ export function formatRational(r: Rational): string {
 		// 1.4e-9, wrong in its second digit), so a small one keeps ten
 		// significant figures instead.
 		const value = rationalToNumber(r);
+		// A fraction past the largest double has no decimal to show here, and
+		// is written as the engine writes an infinity, never as `Infinity`.
+		const infinite = nonFiniteText(value);
+		if (infinite !== undefined) return infinite;
 		if (Math.abs(value) < 1e-4) return String(Number(value.toPrecision(10)));
-		return String(Math.round(value * 1e10) / 1e10);
+		const rounded = Math.round(value * 1e10) / 1e10;
+		// Rounding multiplies by 1e10 first, which overflows past about 1.8e298.
+		return String(Number.isFinite(rounded) ? rounded : value);
 	}
 
 	const scaled = (r.n < 0n ? -r.n : r.n) * bigintPow(10n, BigInt(decimals)) / r.d;

@@ -5,7 +5,7 @@ import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { formatIpv6 } from "@solve-js/packages/ip/Ipv6Math";
 import { decimalCompare, decimalDivide, decimalFromInteger, decimalRound, decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
-import { autoFormatIntegerOrFloat, compactParts, fixedDecimalText, shortestText, tooSmallToPrintText } from "@solve-js/utilities/Number";
+import { autoFormatIntegerOrFloat, compactParts, fixedDecimalText, nonFiniteText, shortestText, tooSmallToPrintText } from "@solve-js/utilities/Number";
 import { localCalendarName, localClockTime, localCurrencyPlacement, localDayShift, localZoneDifference, localisesWords, withLocalUnitName } from "./LocaleWords";
 import { clockInZone, dayShiftWords, zoneDifferenceMinutes, zoneDifferenceText } from "@solve-js/vm/ZoneAnswers";
 import { getMeasure } from "@solve-js/uom/UomConverter";
@@ -191,8 +191,15 @@ function formatUncertain(center: number, uncertainty: number, locale: ILocale, s
   // The spread needs room for at least one fractional digit, so a zero-decimal
   // budget cannot leave minimumFractionDigits above maximumFractionDigits.
   const spreadMax = Math.max(dp, 1);
-  const centerText = center.toLocaleString(loc, { useGrouping, minimumFractionDigits: 0, maximumFractionDigits: dp });
-  const spreadText = Math.abs(uncertainty).toLocaleString(loc, { useGrouping, minimumFractionDigits: 1, maximumFractionDigits: spreadMax });
+  // A centre or a spread below the budget is shown to three significant
+  // digits, as a plain number is, rather than as a zero: `0.004 ± 0.001` was
+  // `0 ± 0.0`. A zero centre is written unsigned, as a zero result is.
+  const shownCenter = center === 0 ? 0 : center;
+  const spread = Math.abs(uncertainty);
+  const centerText = tooSmallToPrintText(shownCenter, dp, loc)
+    ?? shownCenter.toLocaleString(loc, { useGrouping, minimumFractionDigits: 0, maximumFractionDigits: dp });
+  const spreadText = tooSmallToPrintText(spread, spreadMax, loc)
+    ?? spread.toLocaleString(loc, { useGrouping, minimumFractionDigits: 1, maximumFractionDigits: spreadMax });
   return `${locale.display.resultPrefix}${centerText} ± ${spreadText}`;
 }
 
@@ -208,7 +215,7 @@ function formatHex(value: number | bigint, settings: FormattingSettings, base?: 
   // An infinity or a NaN has no digits in any base, and asking for them
   // produced `0xINFINITY`, a literal that reads back as nothing at all. Render
   // the value itself, which is what every other non-finite result shows.
-  if (typeof value === "number" && !Number.isFinite(value)) return `= ${value}`;
+  if (typeof value === "number" && !Number.isFinite(value)) return `= ${nonFiniteText(value)}`;
 
   // Truncate and take the sign off before converting. `Number.toString(radix)`
   // does neither: it renders -255 as "-ff", which lands the minus inside the
@@ -516,6 +523,10 @@ function formatZoneDifference(value: Value, settings: FormattingSettings): strin
  * to no whole second is written without a sign, whichever side of zero it fell.
  */
 export function formatMsDuration(ms: number): string {
+  // An infinite span has no hours and minutes; the clock below would read
+  // `Infinity:NaN:NaN`.
+  const infinite = nonFiniteText(ms);
+  if (infinite !== undefined) return infinite;
   const totalSeconds = Math.round(Math.abs(ms) / 1000);
   // The sign is the rounded span's: `now - now` reads the clock twice and can
   // land a millisecond below zero, which rounds to no time at all, not `-0:00`.
@@ -964,8 +975,11 @@ function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings, uni
   const sep = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale;
   // A zero entry is written without a sign, as a zero result is (#585), and an
-  // entry drops its padding zeros when a plain number does (#750).
-  return autoFormatIntegerOrFloat(entry === 0 ? 0 : entry, dp, sep, loc, settings.floatResult.trimTrailingZeros === true);
+  // entry drops its padding zeros when a plain number does (#750). An entry
+  // below the budget is shown to three significant digits, as a plain number
+  // is, rather than as a zero: `[1e-6, 1]` was `[0.00, 1]`.
+  const shown = entry === 0 ? 0 : entry;
+  return tooSmallToPrintText(shown, dp, loc || "en-US") ?? autoFormatIntegerOrFloat(shown, dp, sep, loc, settings.floatResult.trimTrailingZeros === true);
 }
 
 /**

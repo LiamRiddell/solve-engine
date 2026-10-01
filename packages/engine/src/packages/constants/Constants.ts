@@ -49,7 +49,12 @@ export const CONSTANTS: Record<string, ConstantEntry> = {
 	phi: { value: 1.618033988749895 },
 };
 
-/** Look up a constant by name, or null if it is not one. */
+/**
+ * Look up a constant by name, or null if it is not one. An own-property read:
+ * the table is a plain object, and `constructor` or `toString` must not find
+ * an inherited function and read it as a constant.
+ */
 export function constantEntry(name: string): ConstantEntry | null {
-	return CONSTANTS[name.toLowerCase()] ?? null;
+	const key = name.toLowerCase();
+	return Object.prototype.hasOwnProperty.call(CONSTANTS, key) ? CONSTANTS[key] : null;
 }

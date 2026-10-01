@@ -60,10 +60,12 @@ describe("fixedDecimalText", () => {
 		}
 	});
 
-	test("below 1e21 and for a value that is not finite it is toFixed, as before", () => {
-		for (const v of [0, -0, 1.005, -12.5, 999999999999999900000, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.MIN_VALUE]) {
+	test("below 1e21 and for NaN it is toFixed, as before, and an infinity is written as the engine writes it", () => {
+		for (const v of [0, -0, 1.005, -12.5, 999999999999999900000, Number.NaN, Number.MIN_VALUE]) {
 			expect(fixedDecimalText(v, 2)).toBe(v.toFixed(2));
 		}
+		expect(fixedDecimalText(Number.POSITIVE_INFINITY, 2)).toBe("∞");
+		expect(fixedDecimalText(Number.NEGATIVE_INFINITY, 2)).toBe("-∞");
 	});
 
 	test("shortestText writes a large number in full and a small one as String does", () => {

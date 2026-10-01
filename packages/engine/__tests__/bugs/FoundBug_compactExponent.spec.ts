@@ -72,7 +72,7 @@ describe("compactParts, the part that was wrong", () => {
 		expect(compactParts(Infinity)).toBeUndefined();
 		expect(compactParts(-Infinity)).toBeUndefined();
 		expect(compactParts(NaN)).toBeUndefined();
-		expect(compactString(Infinity)).toBe("Infinity");
+		expect(compactString(Infinity)).toBe("∞");
 	});
 });
 
