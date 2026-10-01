@@ -85,13 +85,21 @@ equal, and a [check](/syntax/checks/) reads it the same way:
 check 255 in hex == 255 // ✓
 ```
 
-A negative keeps its sign outside the literal, and a fraction is truncated,
-since there is no useful way to write a fractional hex digit.
+A negative keeps its sign outside the literal. A fraction is truncated (cut
+off, toward zero), since there is no useful way to write a fractional hex
+digit, and the value is truncated with the display: the number a base holds is
+the whole number it shows, so it compares and adds as that number.
 
 ```solve
 hex(-255) // -0xFF
 255.7 as hex // 0xFF
+255.7 in hex == 255 // true
+(255.7 in hex) + 1 // 256
+-1.5 in hex // -0x1
+check (0.5 in hex) == 0 // ✓
 ```
+
+To keep the fraction, keep the number in decimal: `255.7 + 1` is 256.70.
 
 A whole number too large for an ordinary number to hold exactly (past about
 nine thousand million million, 2^53) keeps every digit when it is written in

@@ -1100,6 +1100,10 @@ check 5.4 ≈ 5 // check failed: 5.4 is not equal to 5
 ```
 
 ```
+check 22/7 ≈ pi within 0.1% and 5 m ≈ 5.01 m within 1 cm // ✓ (differs by 0.04% and by 0.01 m)
+```
+
+```
 check !(1 > 2) == true // ✓
 check (2 > 1) == (3 > 2) // ✓
 check true == false // check failed: true is not equal to false
@@ -1135,6 +1139,13 @@ check * 2 // 90
 check 1 m == 1 kg // check: length and mass cannot be compared
 check "a" == "a" // ✓
 check "a" > "b" // check: text can only be compared with == or !=, not >
+check "a " == "a" // check failed: "a " is not equal to "a"
+```
+
+```
+check 255 == "255" // check: "255" on the right is text and 255 is a number, so they cannot be compared. To read the text as a number, write "255" as number
+check (255 in hex) == "0xFF" // check: "0xFF" on the right is text and 0xFF is a number, so they cannot be compared
+check "255" as number == 255 // ✓
 ```
 
 ```
@@ -1151,6 +1162,22 @@ check 1 km == 1000 m // ✓
 :b = 4
 check :a^2 + :b^2 == 25 // ✓
 check :a^2 + :b^2 == 26 // ERROR: check failed: 25 is not equal to 26
+```
+
+```
+(one document)
+:a = 3
+:b = 4
+check 0 < :a < 10 // ✓
+check :a > 0 and :b > 0 // ✓
+check 1 == 1 == 1 // ✓
+check :a > 0 and :b > 10 // ERROR: check failed: 4 is not more than 10
+```
+
+```
+(one document)
+check 1 == 1 or 1 == 2 // ERROR: a check states things that must all hold, so it joins them with "and", not "or". To check that one of two things holds, compare the answer, as in "check (:a > 0 or :b > 0) == true"
+check (1 == 1 or 1 == 2) == true // ✓
 ```
 
 ```
@@ -3238,6 +3265,10 @@ check 255 in hex == 255 // ✓
 ```
 hex(-255) // -0xFF
 255.7 as hex // 0xFF
+255.7 in hex == 255 // true
+(255.7 in hex) + 1 // 256
+-1.5 in hex // -0x1
+check (0.5 in hex) == 0 // ✓
 ```
 
 ```

@@ -253,6 +253,22 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"X == X to hex",
 		"check X to hex != X + 1",
 	],
+	// A fraction written in a base, which the value now drops as the display
+	// does (FoundBug_fractionInABase); a check against text, refused by name
+	// (FoundBug_checkAgainstText); a chained check and a check joined with
+	// `and`, each read as every comparison at once (FoundBug_chainedCheck,
+	// FoundBug_checkJoinedWithAnd).
+	checksOfSeveralThings: [
+		"(X + 0.5) in hex == X in hex",
+		"check ((X + 0.7) in hex) == X in hex",
+		"check X == \"X\"",
+		"check X in hex == \"X\"",
+		"check 0 <= X <= X",
+		"check X == X == X",
+		"check X > -1/0 and X < 1/0",
+		"check X == X and X ≈ X within 1%",
+		"check X == X or X == 1",
+	],
 };
 
 describe("every form stays honest over the numeric edges", () => {
@@ -337,6 +353,9 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "lab = X\n192.168.1.7 in lab" },
 	{ form: "big = (2^100 + X) in hex\nbig + 1" },
 	{ form: "A = X\nB = X\nA in hex == B in hex\ncheck A in hex == B in binary" },
+	// A chained check and a check joined with `and` over the lines above.
+	{ form: "A = X\ncheck A - 1 < A < A + 1\ncheck A == A and A >= A" },
+	{ form: "A = X + 0.5\nB = A in hex\ncheck B == A and B in hex == B" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {
@@ -377,6 +396,9 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"fe80::1 in X",
 		"192.168.1.7 in X",
 		"check X == #ff0000",
+		"check 1 < X < 2",
+		"check X == 1 and 1 == X",
+		"check X == \"X\"",
 		"hosts in X",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {

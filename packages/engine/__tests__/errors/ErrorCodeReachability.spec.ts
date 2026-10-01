@@ -66,6 +66,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	CASH_FLOW_TOO_FEW: "irr of -1000",
 	CHECK_FAILED: "check 3 < 3",
 	CHECK_INCOMPARABLE: "check \"a\" < \"b\"",
+	CHECK_JOIN_UNSUPPORTED: "check 1 == 1 or 1 == 2",
 	NOT_NEEDS_BOOLEAN: "not 5",
 	CLAMP_EXPECTED_BETWEEN_OR_FROM: "clamp 5 3",
 	COLLECTION_TOO_LARGE: "map(10*x, 0:2000000000)",
