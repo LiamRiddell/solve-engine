@@ -930,11 +930,15 @@ export function listBuiltinCall(fnIdx: number, args: readonly Value[], context?:
     return listArgumentRefused(name, args);
 }
 
+/** The registry's own entries by index, built on first use by {@link callBuiltin}. */
+let builtinsByIndex: Map<number, (args: Value[], context?: LineExecutionContext) => Value> | undefined;
+
 /**
  * Call the builtin at `fnIdx`, or answer UNKNOWN_BUILTIN_FUNCTION when the
- * registry holds none there. The entry is read as the registry's own property
- * and called only once it is known to be a function, so an index never reaches
- * one inherited from `Object.prototype` (CodeQL's unvalidated dynamic call).
+ * registry holds none there. The entry is looked up in a map of the registry's
+ * own entries, not read off the object by index, so an index never reaches a
+ * property inherited from `Object.prototype` (CodeQL's unvalidated dynamic
+ * call, which an own-property check before the read did not satisfy).
  *
  * @param fnIdx - The builtin's index.
  * @param args - Its arguments, in call order.
@@ -942,8 +946,9 @@ export function listBuiltinCall(fnIdx: number, args: readonly Value[], context?:
  * @returns What the builtin answers, or the refusal.
  */
 export function callBuiltin(fnIdx: number, args: Value[], context?: LineExecutionContext): Value {
-    const entry = Object.prototype.hasOwnProperty.call(builtinFunctions, fnIdx) ? builtinFunctions[fnIdx] : undefined;
-    if (typeof entry !== "function") return errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${fnIdx} is not registered`);
+    builtinsByIndex ??= new Map(Object.entries(builtinFunctions).map(([index, fn]) => [Number(index), fn]));
+    const entry = builtinsByIndex.get(fnIdx);
+    if (entry === undefined) return errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${fnIdx} is not registered`);
     return entry(args, context);
 }
 
