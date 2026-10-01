@@ -276,6 +276,55 @@ percentage, and is refused:
 5 km as % // A length is not a proportion, so it has no percentage: only a number, a ratio or a parts-per quantity (ppm, permille) can be written as one.
 ```
 
+## A percentage and a list
+
+A list (a row of numbers in square brackets, see
+[vectors and matrices](/syntax/vectors-and-matrices/)) is a set of values
+worked on together, such as a column of prices. A percentage added to a list,
+or taken from one, is a share of each value in it, exactly as it is of one
+number: a 10% rise on a list of prices raises every price by a tenth of
+itself. A list of quantities or money keeps its unit.
+
+```solve
+[100, 200] + 10% // [110, 220]
+[100, 200] - 10% // [90, 180]
+[100 m, 200 m] + 10% // [110.00 m, 220.00 m]
+[$100, $200] - 10% // [$90.00, $180.00]
+```
+
+Every other way of writing a percentage of a value works on a list the same
+way, value by value: `of`, a discount or markup, multiplying and dividing.
+
+```solve
+10% of [100, 200] // [10, 20]
+15% off [$80, $120] // [$68.00, $102.00]
+20% on [50 kg, 60 kg] // [60.00 kg, 72.00 kg]
+[100 m, 200 m] * 10% // [10.00 m, 20.00 m]
+```
+
+Each value is worked out as it would be on a line of its own, so money stays
+exact to the cent, and a percentage held in a variable reads the same way:
+
+```solve-doc
+prices = [$19.99, $5.00] // [$19.99, $5.00]
+vat = 20% // 20.00%
+prices + vat // [$23.99, $6.00]
+```
+
+The boundary: a percentage written before a plain list with `+` or `-` is
+refused by name. For one number, `10% + 100` is the percentage 10,010%, and a
+list holds plain numbers, not percentages, so the answer would be shown as
+fractions nobody meant. The refusal gives the order that adds the percentage
+to each value. Before a list of quantities or money, a percentage reads as it
+does before one amount (`10% + $5` is $5.50), so there it is answered. These
+answers used to be wrong: `[100, 200] + 10%` added 0.1 to each value and
+answered `[100.10, 200.10]`, and a list with a unit refused a percentage.
+
+```solve
+10% + [100, 200] // A percentage plus a list would be a list of percentages, and a list holds plain numbers. To add the percentage to each number, write the list first, as in [100, 200] + 10%.
+10% + [$100, $200] // [$110.00, $220.00]
+```
+
 ## A percentage as a multiplier
 
 A multiplier is the number a value is multiplied by to apply a change: a 20%

@@ -315,18 +315,15 @@ describe("adversarial: edge cases", () => {
 		expect(outcome("   ٢٤:00   ")).toBe(UNREAD("٢٤", "24"));
 	});
 
-	// Open, found by this sweep and not this change's: a bracketed number
-	// before a time's colon is read as a label, so (24):00 answers 0, the 00
-	// after the colon. Reported with this batch; the fix turns this red.
-	test.failing("found bug: (24):00 reads (24) as a label and answers 0", () => {
-		expect(outcome("(24):00")).not.toBe("0");
+	// Was open, found by this sweep: a bracketed number before a time's colon
+	// was read as a label. Fixed in FoundBug_bracketedFigureLabel.
+	test("found bug, fixed: (24):00 is refused, not read as the label (24)", () => {
+		expect(outcome("(24):00")).toMatch(/^LABEL_NOT_A_NAME: /);
 	});
 
-	// Open, found by this sweep and not this change's: a direction override
-	// before a time in 0 to 9 makes the pair a word and a label, so the line
-	// answers 0, where the same override before a figure in another script's
-	// digits is refused. Reported with this batch; the fix turns this red.
-	test.failing("found bug: a direction override before 24:00 makes it a label that answers 0", () => {
-		expect(outcome("\u202E24:00")).not.toBe("0");
+	// Was open, found by this sweep: a direction override before a time in 0
+	// to 9 made the pair a label. Fixed in FoundBug_hiddenFigureLabel.
+	test("found bug, fixed: a direction override before 24:00 is refused, not read as a label", () => {
+		expect(outcome("\u202E24:00")).toMatch(/^DIRECTION_CONTROL_IN_NAME: /);
 	});
 });

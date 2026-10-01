@@ -31,6 +31,12 @@
  *   the label `٢٤` and answered 0. A figure in operand position before the
  *   colon, by the rule a number follows there, is refused by name and
  *   spelled in 0 to 9 (`OTHER_SCRIPT_DIGITS`).
+ * - **A figure with an invisible character in it.** A direction override or a
+ *   zero-width joiner in `24` makes the lexer read it as a word, so
+ *   `<U+202E>24:00` was the label `<U+202E>24` and answered 0. In operand
+ *   position it is refused by name: a direction control as any name holding
+ *   one is (`DIRECTION_CONTROL_IN_NAME`), any other such character as
+ *   `INVISIBLE_CHARACTER_IN_NUMBER`.
  * - **A choice written with `?` and `:`.** There is no such operator; a choice
  *   is `if ... then ... else`, and the refusal spells the reader's own line
  *   that way.
@@ -38,7 +44,9 @@
  *   make the text a condition, not a name, so `a > b: 1` is refused rather
  *   than answered 1 whatever `a` and `b` are. The same words written as
  *   words (`Orders over $100: 12`) are prose and stay a label.
- * - **A calculation with no word in it.** `(1+2): 5` names nothing.
+ * - **A calculation with no word in it.** `(1+2): 5` names nothing, and nor
+ *   does a bracketed figure, so `(24):00` and `[24]:00` are refused rather
+ *   than answered 0.
  *
  * The boundary: arithmetic between words stays a label (`Food + drink: $40`,
  * `Year-end: 5`, `Q1-Q2: 40`), since those are how ledgers name things and
@@ -50,6 +58,7 @@
 
 import type { Token } from "@solve-js/lexer/Token";
 import { isLabelWord } from "@solve-js/engine/WordLabel";
+import { directionControlRefusal, isDirectionControl } from "@solve-js/engine/DirectionControls";
 
 /** Why the text before a colon is not a label: the code and the reader's message. */
 export interface ColonLabelFault {
@@ -78,6 +87,9 @@ const COMPARISON: ReadonlySet<string> = new Set(["EQUALITY", "NEQ", "GT", "GTE",
 
 /** Arithmetic tokens, for a label that holds no word at all. */
 const ARITHMETIC: ReadonlySet<string> = new Set(["PLUS", "MINUS", "STAR", "SLASH", "CARET"]);
+
+/** Bracket tokens, which with no word beside them make the label a bracketed expression. */
+const BRACKETS: ReadonlySet<string> = new Set(["LPAREN", "RPAREN", "LBRACKET", "RBRACKET"]);
 
 /** A token whose text is a word (letters), as opposed to a symbol. */
 const LETTERS = /\p{L}/u;
@@ -247,6 +259,36 @@ export function otherScriptFigure(text: string): string | null {
 export function otherScriptFigureAtColon(tokens: readonly Token[], colon: number): { written: string; reading: string } | null {
 	const last = tokens[colon - 1];
 	if (last === undefined || tokens[colon + 1] === undefined || otherScriptFigure(last.text) === null) return null;
+	const found = figureRunAtColon(tokens, colon, otherScriptFigure);
+	return found === null ? null : { written: found.written, reading: found.reading };
+}
+
+/** A figure the lexer read as a word, standing before a colon: its tokens, its text as typed and its reading in 0 to 9. */
+export interface FigureRun {
+	readonly run: readonly Token[];
+	readonly written: string;
+	readonly reading: string;
+}
+
+/**
+ * The run of tokens before the colon at `colon` that make one figure, ending at
+ * the colon, when it stands where a number would be an operand; or null.
+ *
+ * The run is numbers in 0 to 9 and words `readWord` reads as figures, with the
+ * multiplication the normaliser puts between a number and a word that touches
+ * it (`2٤`) passed over, since it has no text of the reader's. The rule for
+ * where it stands is {@link timeAtColon}'s for a number: the line's start, or
+ * after an operator, a bracket, a comma or a label's colon. After a word it is
+ * part of a name. The caller checks the token before the colon first.
+ *
+ * Linear in the length of the run.
+ *
+ * @param tokens - The line's normalised tokens.
+ * @param colon - The index of a COLON token, at least 1.
+ * @param readWord - A word's text as a figure in 0 to 9, or null when it is not one.
+ * @returns The figure, or null.
+ */
+export function figureRunAtColon(tokens: readonly Token[], colon: number, readWord: (text: string) => string | null): FigureRun | null {
 	const run: Token[] = [];
 	const readings: string[] = [];
 	let k = colon - 1;
@@ -256,16 +298,111 @@ export function otherScriptFigureAtColon(tokens: readonly Token[], colon: number
 		// The multiplication the normaliser puts in `2٤` stands where the
 		// figure after it starts, and has no text of the reader's.
 		if (token.type === "STAR" && next !== undefined && token.offset === next.offset) continue;
-		const reading = token.type === "NUMBER" ? token.text : otherScriptFigure(token.text);
+		const reading = token.type === "NUMBER" ? token.text : readWord(token.text);
 		if (reading === null) break;
 		const gap = next !== undefined && tokenEnd(token) < next.offset ? " " : "";
 		run.unshift(token);
 		readings.unshift(`${reading}${gap}`);
 	}
 	const lead = tokens[k];
-	if (lead !== undefined && !OPERAND_BEFORE.has(lead.type)) return null;
+	if (run.length === 0 || (lead !== undefined && !OPERAND_BEFORE.has(lead.type))) return null;
 	const written = run.map((token, j) => (j + 1 < run.length && tokenEnd(token) < run[j + 1].offset ? `${token.text} ` : token.text)).join("");
-	return { written, reading: readings.join("") };
+	return { run, written, reading: readings.join("") };
+}
+
+/** A figure in the digits 0 to 9, with the decimal point, thousands commas and exponent a number is written with. */
+const PLAIN_FIGURE = /^[0-9][0-9.,]*(?:[eE][+-]?[0-9]+)?$/;
+
+/** One invisible formatting character, the first a text holds. */
+const FORMAT_CHARACTER = /\p{Cf}/u;
+
+/**
+ * A figure in the digits 0 to 9 that holds an invisible formatting character,
+ * which made the lexer read it as a word: a direction override (`<U+202E>24`),
+ * a zero-width joiner or non-joiner, a word joiner, a soft hyphen. Returns the
+ * figure without the character and the first such character's code, or null
+ * when the text holds none, or is not a figure once they are read past.
+ *
+ * The zero-width space and the byte-order mark never reach here: the lexer
+ * reads them as a space.
+ *
+ * @param text - A token's text.
+ * @returns The figure and the character, or null.
+ */
+export function hiddenFigure(text: string): { reading: string; code: number } | null {
+	const found = FORMAT_CHARACTER.exec(text);
+	if (found === null) return null;
+	const reading = text.replace(FORMAT_CHARACTERS, "");
+	if (!PLAIN_FIGURE.test(reading)) return null;
+	return { reading, code: found[0].codePointAt(0) ?? 0 };
+}
+
+/** The reading {@link figureRunAtColon} takes of a word that is a hidden figure. */
+function hiddenFigureReading(text: string): string | null {
+	return hiddenFigure(text)?.reading ?? null;
+}
+
+/**
+ * A text with every invisible formatting or control character written as its
+ * code point in angle brackets (`<U+202E>`), so a message shows what was typed
+ * and is not itself turned round by it.
+ *
+ * @param text - A piece of the reader's line.
+ */
+export function visibleText(text: string): string {
+	return text.replace(INVISIBLE_CHARACTERS, (ch) => `<U+${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}>`);
+}
+
+/** Every invisible formatting or control character, for {@link visibleText}. */
+const INVISIBLE_CHARACTERS = /[\p{Cf}\p{Cc}]/gu;
+
+/** Unicode's names for the invisible formatting characters a figure is likeliest to carry, in lower case for a sentence. */
+const INVISIBLE_NAMES: ReadonlyMap<number, string> = new Map([
+	[0x00ad, "soft hyphen"],
+	[0x200c, "zero width non-joiner"],
+	[0x200d, "zero width joiner"],
+	[0x2060, "word joiner"],
+	[0x2061, "function application"],
+	[0x2062, "invisible times"],
+	[0x2063, "invisible separator"],
+	[0x2064, "invisible plus"],
+]);
+
+/**
+ * The refusal for a figure in 0 to 9 standing before a colon where a number
+ * would be an operand, when an invisible character in it made the lexer read
+ * it as a word, so the label reading took it as a name: `<U+202E>24:00`
+ * answered the 00 after the colon. A direction control gets the refusal any
+ * name holding one gets (`DIRECTION_CONTROL_IN_NAME`); any other invisible
+ * character gets `INVISIBLE_CHARACTER_IN_NUMBER`, with the figure in plain
+ * digits. Null when no such figure stands there.
+ *
+ * @param tokens - The line's normalised tokens.
+ * @param colon - The index of a COLON token, at least 1.
+ * @returns The refusal's code and message, or null.
+ */
+export function hiddenFigureAtColon(tokens: readonly Token[], colon: number): ColonLabelFault | null {
+	const last = tokens[colon - 1];
+	// The figure may end on a plain number: `<U+202E>1.5` is the word
+	// `<U+202E>1` and the number `.5`.
+	if (last === undefined || tokens[colon + 1] === undefined || (last.type !== "NUMBER" && hiddenFigure(last.text) === null)) return null;
+	const found = figureRunAtColon(tokens, colon, hiddenFigureReading);
+	if (found === null) return null;
+	for (const token of found.run) {
+		const hidden = token.type === "NUMBER" ? null : hiddenFigure(token.text);
+		if (hidden === null) continue;
+		if (isDirectionControl(hidden.code)) {
+			const error = directionControlRefusal({ offset: token.offset, text: token.text, code: hidden.code });
+			return { code: error.code, message: error.message };
+		}
+		const point = `U+${hidden.code.toString(16).toUpperCase().padStart(4, "0")}`;
+		const name = INVISIBLE_NAMES.get(hidden.code);
+		return {
+			code: "INVISIBLE_CHARACTER_IN_NUMBER",
+			message: `"${visibleText(quoted(found.written))}" holds ${name === undefined ? point : `${point} (${name})`}, an invisible character, so it is read as a word and not as the number ${quoted(found.reading)}. A number cannot hold one: delete it and type the number again.`,
+		};
+	}
+	return null;
 }
 
 /**
@@ -326,6 +463,9 @@ export function colonLabelFault(tokens: readonly Token[], colon: number): ColonL
 		};
 	}
 
+	const hidden = hiddenFigureAtColon(tokens, colon);
+	if (hidden !== null) return hidden;
+
 	// Only the text since the previous colon is this colon's label: in
 	// `Note: a > b: 1` the label `Note` has already been set aside.
 	let from = 0;
@@ -344,8 +484,12 @@ export function colonLabelFault(tokens: readonly Token[], colon: number): ColonL
 			};
 		}
 	}
-	const hasWord = label.some((t) => isLabelWord(t) || LETTERS.test(t.text) || t.type === "DATETIME_LITERAL");
-	if (!hasWord && label.some((t) => ARITHMETIC.has(t.type))) {
+	// A number's letters (the e of `1e308`, the x of `0xff`) are not a word.
+	const hasWord = label.some((t) => isLabelWord(t) || (t.type !== "NUMBER" && LETTERS.test(t.text)) || t.type === "DATETIME_LITERAL");
+	// A bracket with no word in the label is a bracketed expression: `(24)`
+	// in `(24):00`, `[24]` in `[24]:00`. It names nothing, and read as a label
+	// the line answered the 00 after the colon.
+	if (!hasWord && label.some((t) => ARITHMETIC.has(t.type) || BRACKETS.has(t.type))) {
 		return {
 			code: "LABEL_NOT_A_NAME",
 			message: `${labelSubject(label)} is a calculation, not a label: a label names the figure in words`,
@@ -363,7 +507,7 @@ export function colonLabelFault(tokens: readonly Token[], colon: number): ColonL
  */
 export function labelSubject(label: readonly Token[]): string {
 	const text = textOf(label);
-	return text === null ? "The text before the colon" : `"${quoted(text)}" before the colon`;
+	return text === null ? "The text before the colon" : `"${visibleText(quoted(text))}" before the colon`;
 }
 
 /**

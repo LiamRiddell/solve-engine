@@ -379,11 +379,9 @@ describe("adversarial: edge cases", () => {
 		expect(both(["sqrt([4, 9])\r", ""])).toEqual(["[2, 3]", ""]);
 	});
 
-	// Open, found by this sweep and not this change's: a percentage added to a
-	// list adds the percentage as a fraction to each cell, so [100, 200] + 10%
-	// answers [100.10, 200.10] where 100 + 10% is 110. Reported with this
-	// batch; the fix turns this red.
-	test.failing("found bug: [100, 200] + 10% adds 0.10 to each cell", () => {
+	// Was open, found by this sweep: a percentage added to a list added the
+	// percentage as a fraction to each cell. Fixed in FoundBug_listPercentage.
+	test("found bug, fixed: [100, 200] + 10% adds a tenth of each cell", () => {
 		expect(outcome("[100, 200] + 10%")).toBe("[110, 220]");
 	});
 });

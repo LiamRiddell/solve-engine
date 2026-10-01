@@ -106,7 +106,18 @@ colon is refused, with what it is instead, when it is:
 - **A comparison.** `>`, `<`, `>=`, `<=`, `==` or `!=` written as a symbol make
   the text a condition, not a name. The same idea written in words
   (`Orders over $100`) is a name and stays a label.
+- **A figure with an invisible character in it.** Some characters take up no
+  space on screen: the direction marks and overrides that tell a display which
+  way text runs (used for right-to-left scripts such as Arabic and Hebrew), a
+  zero-width joiner, a soft hyphen. Typed against a number, one makes it a word
+  the engine cannot read as a number, so stood where a number would start, it
+  is not a name either: `<U+202E>24:00` is the time 24:00 with a right-to-left
+  override in front of it. It is refused by name, with the character written as
+  its code point, so the reader can delete it. A direction mark or override
+  gets the same refusal it gets in any name.
 - **A calculation with no word in it**, such as `(1+2)`, which names nothing.
+  A bracketed figure such as `(24)` or `[24]` is one too: brackets with no word
+  beside them are an expression, not a name.
 
 ```solve-doc
 1 + 24:00 // ERROR: "24:00" is not a valid time
@@ -116,7 +127,30 @@ Total: 1000:1002 // ERROR: "1000:1002" is not a valid time
 true ? 25 : 30 // ERROR: There is no choice written with "?" and ":": write if true then 25 else 30
 a > b: 1 // ERROR: "a > b" before the colon is a comparison, not a label: a label names the figure in words, and a choice is written if ... then ... else
 (1+2): 5 // ERROR: "(1+2)" before the colon is a calculation, not a label: a label names the figure in words
+(24):00 // ERROR: "(24)" before the colon is a calculation, not a label: a label names the figure in words
+Total (2026): 500 // 500
 ```
+
+A bracketed figure before a time's colon used to be read as a label: `(24):00`
+was the label `(24)` and answered the 0 after the colon, and `[24]:00` and
+`(9):30` did the same. A bracket beside a word is still part of a name, as in
+`Total (2026)` above, and `(net): 5` is a label too.
+
+A figure with an invisible character in it was read the same way, since the
+character made the figure a word: a right-to-left override in front of
+`24:00` answered 0. Each is now refused with the character named, as the
+zero-width joiner here:
+
+```solve-doc
+‍24:00 // ERROR: "<U+200D>24" holds U+200D (zero width joiner), an invisible character, so it is read as a word and not as the number 24. A number cannot hold one: delete it and type the number again.
+```
+
+The boundary: a label of words keeps these characters, since a label is text,
+and a right-to-left label needs the direction marks to show correctly, so
+`Rent` followed by a right-to-left mark and `: 5` is still 5. A figure after a
+word is part of the name, as it is for a number in 0 to 9. The zero-width space
+and the byte-order mark are read as spaces wherever they stand, so a time with
+one in front is the time it looks like.
 
 The figure after a label is the start of the expression, so `Total: 24:00` is
 the time 24:00 and is refused as `24:00` alone is. It used to be read as a second
