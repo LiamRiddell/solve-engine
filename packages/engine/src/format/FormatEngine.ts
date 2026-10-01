@@ -14,6 +14,7 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { isIso4217 } from "@solve-js/uom/Iso4217";
 import { isCryptoCurrency, moneyDisplayPlaces, trimFractionZeros, type MoneyPlaces } from "@solve-js/uom/CurrencyMinorUnits";
 import { matAt } from "@solve-js/vm/MatrixOps";
+import { cellDecimal } from "@solve-js/vm/ListRounding";
 import { formatSymbolic, type Rational, type SymbolicNode } from "@solve-js/symbolic";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 import { decodeFixedOffsetMinutes, isFixedOffset, isNamedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
@@ -1009,8 +1010,39 @@ export function listTakesSignificantForm(m: MatrixData, settings: FormattingSett
   return false;
 }
 
-function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings, unit?: string, locale?: ILocale, significantBelowOne?: boolean): string {
+/**
+ * The places a list's cell at `row`, `col` is shown to, when the list was
+ * rounded (see MatrixData.places), or undefined for the ordinary form.
+ */
+function cellPlacesAt(m: MatrixData, row: number, col: number): number | undefined {
+  return m.places?.[row + col * m.rows];
+}
+
+/**
+ * A rounded list cell written to the places its rounding set, as the same
+ * number rounded on its own line is: `0.0010` for `0.001` at four places, with
+ * the digits taken from the cell's decimal (see cellDecimal), so twenty places
+ * of 0.1 are 0.1 and zeros, not the double's tail.
+ *
+ * @param entry - The cell's number.
+ * @param places - The places it was rounded to.
+ * @param settings - The resolved formatting settings.
+ * @param unit - The list's unit, if any.
+ * @param locale - The display locale.
+ */
+function formatRoundedCell(entry: number, places: number, settings: FormattingSettings, unit: string | undefined, locale: ILocale): string {
+  const exact = cellDecimal(entry);
+  const text = unit === undefined
+    ? formatNumber(entry, locale, settings, places, exact)
+    : formatUom(entry, unit, locale, settings, exact, undefined, places);
+  return text.startsWith(locale.display.resultPrefix) ? text.slice(locale.display.resultPrefix.length) : text;
+}
+
+function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings, unit?: string, locale?: ILocale, significantBelowOne?: boolean, places?: number): string {
   if (typeof entry === "boolean") return entry ? "true" : "false";
+  if (places !== undefined && typeof entry === "number" && Number.isFinite(entry)) {
+    return formatRoundedCell(entry, places, settings, unit, locale ?? getLocale(settings.numberResult.decimalSeparatorLocale || "en"));
+  }
   // A cell of a list with a unit is written as the quantity it stands for, so
   // `[1 km, 500 m]` shows as `[1.00 km, 0.50 km]` and money as money (#745).
   if (unit !== undefined && locale !== undefined && typeof entry === "number") {
@@ -1107,7 +1139,7 @@ function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettin
   for (let r = 0; r < shownRows; r++) {
     const cells: string[] = [];
     for (let c = 0; c < shownCols; c++) {
-      cells.push(formatMatrixEntry(matAt(m, r, c), settings, m.unit, locale, significant));
+      cells.push(formatMatrixEntry(matAt(m, r, c), settings, m.unit, locale, significant, cellPlacesAt(m, r, c)));
     }
     rows.push(cells.join(", "));
   }
@@ -1150,7 +1182,7 @@ export function formatMatrixAligned(m: MatrixData, settings?: FormattingOverride
   for (let r = 0; r < shownRows; r++) {
     const row: string[] = [];
     for (let c = 0; c < shownCols; c++) {
-      row.push(formatMatrixEntry(matAt(m, r, c), us, m.unit, locale, significant));
+      row.push(formatMatrixEntry(matAt(m, r, c), us, m.unit, locale, significant, cellPlacesAt(m, r, c)));
     }
     cells.push(row);
   }

@@ -1,4 +1,5 @@
-import { Value, ValueType, numberValue, bigIntValue, boolValue, errorValue, ipCidrValue, type IpCidrData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, bigIntValue, boolValue, errorValue, ipCidrValue, matrixValue, type IpCidrData, type MatrixData } from "@solve-js/vm/Value";
+import { roundEachCell } from "@solve-js/vm/ListRounding";
 import { usableHosts, netmask, networkAddress, broadcastAddress, addressInBlock } from "./IpMath";
 import { roundExactQuantityToWhole, roundExactToWhole } from "@solve-js/vm/ExactDecimals";
 import { exactIntegerValue } from "@solve-js/vm/ExactIntegers";
@@ -170,13 +171,22 @@ export function ipInCidr(args: Value[]): Value {
  * `<cidr> as int`: the address as its integer, 32 bits for IPv4 and 128 for
  * IPv6 (a bigint once it is past what a double holds exactly). A non-IP value
  * truncates to a whole number instead (see {@link truncateToWhole}), so `as
- * int` is also a general integer converter.
+ * int` is also a general integer converter. A list is cut cell by cell, as
+ * `int(...)` cuts one, into plain whole numbers (see roundEachCell in
+ * vm/ListRounding.ts); it used to read as one 0.
  */
 export function ipAsInt(value: Value): Value {
 	if (value.type === ValueType.IpCidr) {
 		const ip = value.value as IpCidrData;
 		if (ip.addr6 !== undefined) return wholeNumber(ip.addr6);
 		return numberValue(ip.addr ?? 0);
+	}
+	const cells = roundEachCell(value, truncateToWhole, "cut to whole numbers");
+	if (cells !== null) {
+		// `as int` answers plain numbers, so a list drops its unit as a quantity does.
+		if (cells.type !== ValueType.Matrix) return cells;
+		const m = cells.value as MatrixData;
+		return m.unit === undefined ? cells : matrixValue(m.rows, m.cols, m.data);
 	}
 	return truncateToWhole(value);
 }

@@ -18,9 +18,10 @@
  *
  * - **A time of day the clock rules refused.** A colon between two numbers is
  *   a clock time's. When the number before it starts the line, or follows an
- *   operator, a bracket or a comma with the colon touching both numbers as a
- *   time is written, it is an operand and the pair is a time, so `24:00`,
- *   `1 + 24:00` and `9:30 + 24:00` are refused as times that do not exist. A
+ *   operator, a bracket, a comma or a label's colon with the colon touching
+ *   both numbers as a time is written, it is an operand and the pair is a
+ *   time, so `24:00`, `1 + 24:00`, `9:30 + 24:00` and `Total: 24:00` are
+ *   refused as times that do not exist. A
  *   clock time with a third field written straight after it, `1:23:99`, is one
  *   too: its seconds are out of range. A number that follows a word is part of
  *   a name (`Week 12: 75`, `Week 12:75`), and a colon with a space after it
@@ -51,10 +52,16 @@ export interface ColonLabelFault {
 	readonly message: string;
 }
 
-/** Tokens after which a number is an operand, never part of a name. */
-const OPERAND_BEFORE: ReadonlySet<string> = new Set([
+/**
+ * Tokens after which a number is an operand, never part of a name. A label's
+ * colon is one: the figure after it starts an expression, so in
+ * `Total: 24:00` the `24` begins the answer and `24:00` is a time, where it
+ * was read as a second label `24` and the line answered 0.
+ */
+export const OPERAND_BEFORE: ReadonlySet<string> = new Set([
 	"PLUS", "MINUS", "STAR", "SLASH", "CARET", "EQUALS", "EQUALITY", "NEQ", "GT", "GTE", "LT", "LTE",
 	"LPAREN", "LBRACKET", "COMMA", "QUESTION", "PLUS_EQUALS", "MINUS_EQUALS", "STAR_EQUALS", "SLASH_EQUALS",
+	"COLON",
 ]);
 
 /**
@@ -145,8 +152,8 @@ export function timeAtColon(tokens: readonly Token[], colon: number): string | n
 	}
 	if (before.type !== "NUMBER") return null;
 	// A number that follows a word is part of a name (`Week 12: 75`); one that
-	// starts the line, or follows an operator, a bracket or a comma, is an
-	// operand, so the pair around the colon is a time.
+	// starts the line, or follows an operator, a bracket, a comma or a label's
+	// colon, is an operand, so the pair around the colon is a time.
 	const lead = tokens[colon - 2];
 	if (lead !== undefined && !OPERAND_BEFORE.has(lead.type)) return null;
 	if (lead !== undefined && (!touching(before, tokens[colon]) || !touching(tokens[colon], after))) return null;
@@ -337,4 +344,29 @@ export function ternaryMessage(before: string | null, condition: string | null, 
 		code: "TERNARY_UNSUPPORTED",
 		message: `There is no choice written with "?" and ":": write ${written}`,
 	};
+}
+
+/**
+ * The error to report for a line that did not parse whole, when the parse
+ * stopped at a label's colon and the expression after the label was retried
+ * and failed as well: that retry's error, or undefined to keep the line's own.
+ *
+ * The line is then `<label>: <expression>`, and the expression's error is the
+ * specific one: `Total: average(10:12)` is refused because 10:12 is a clock
+ * time, which the reader can act on, where the whole line's error only said
+ * an operator was expected at the colon after `Total`. Two shapes keep the
+ * line's own error: a parse that stopped somewhere other than a colon, where
+ * the line is not a label's, and a colon followed by `=` (`x := 5`), whose
+ * own wording says to assign with `=` alone.
+ *
+ * @param leftover - The token the whole-line parse stopped at.
+ * @param next - The token after it, if any.
+ * @param retryError - The error the rightmost labelled retry raised, if one ran and failed.
+ * @returns The error to report, or undefined.
+ */
+export function labelledRetryError<E>(leftover: Pick<Token, "type">, next: Pick<Token, "type"> | undefined, retryError: E | undefined): E | undefined {
+	if (retryError === undefined) return undefined;
+	if (leftover.type !== "COLON") return undefined;
+	if (next?.type === "EQUALS") return undefined;
+	return retryError;
 }

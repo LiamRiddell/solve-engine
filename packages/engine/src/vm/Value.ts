@@ -39,6 +39,15 @@ export interface MatrixData {
 	 * cell, as the comma aggregates take theirs.
 	 */
 	readonly unit?: string;
+	/**
+	 * The decimal places each cell is shown to, in the order of `data`, when
+	 * the list was rounded (`[0.001, 0.006] to 4 dp`, `round(v, 2)`, `to 3 sf`):
+	 * the list's own form of a number's `decimalPlaces`. A cell with no entry
+	 * (undefined) is shown the ordinary way. A display sidecar like that one, so
+	 * arithmetic on the list builds a new matrix without it and re-decides the
+	 * precision.
+	 */
+	readonly places?: readonly (number | undefined)[];
 }
 
 /** A first-class integer range `min:max`, both bounds inclusive. */
@@ -1361,9 +1370,10 @@ export function timecodeFps(unit: string): number {
  *
  * `unit`, when given, is the unit every numeric cell is read in (see
  * {@link MatrixData.unit}); the caller has already converted the cells into
- * it.
+ * it. `places`, when given, is the place count each cell is shown to (see
+ * {@link MatrixData.places}), one entry per cell of `data`.
  */
-export function matrixValue(rows: number, cols: number, data: readonly MatrixEntry[], unit?: string): Value {
+export function matrixValue(rows: number, cols: number, data: readonly MatrixEntry[], unit?: string, places?: readonly (number | undefined)[]): Value {
 	// Every matrix in the engine is born here, which makes this the one place
 	// that can charge for one without each producer having to remember to. The
 	// charge lands after `data` exists, so it is a backstop rather than a
@@ -1383,7 +1393,8 @@ export function matrixValue(rows: number, cols: number, data: readonly MatrixEnt
 	// MatrixOps.ts's symbolicToEntry() shows up as a wrong result rather than as
 	// a matrix that silently believes it is symbolic.
 	const hasSymbolic = data.some(cell => typeof cell === "object" && cell !== null && "kind" in cell);
-	const m: MatrixData = unit === undefined ? { rows, cols, data, hasSymbolic } : { rows, cols, data, hasSymbolic, unit };
+	const base: MatrixData = unit === undefined ? { rows, cols, data, hasSymbolic } : { rows, cols, data, hasSymbolic, unit };
+	const m: MatrixData = places === undefined ? base : { ...base, places };
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Matrix, m);
 	return new Value(ValueType.Matrix, m);
 }
