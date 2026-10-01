@@ -71,8 +71,40 @@ by name, saying which digits the base has:
 "0x" as number // ERROR: "0x" is not a number: 0x starts a hexadecimal number, and no digits follow it.
 ```
 
+`int` and `float`, which also read a number out of text, read the same
+prefixes and refuse a malformed one with the same message:
+
+```solve
+int("0xFF") // 255
+float("0b101") // 5
+```
+
+```solve-doc
+int("0xZZ") // ERROR: "0xZZ" is not a number: after 0x, a hexadecimal number has only the digits 0 to 9 and the letters A to F.
+```
+
 The boundary: a base number in text is a whole number, so a point in it
-(`"0xFF.8"`) is refused, and `int` and `float` read decimal text only.
+(`"0xFF.8"`) is refused.
+
+A sign before text is arithmetic too. A minus sign turns a number into its
+negative, and text has no number to turn, so `-"abc"` is refused rather than
+read as 0, and so is `-"5"`, whose digits are still text. The minus binds to
+the text before `as number` does, so `-"0xFF" as number` negates the text first
+and is refused, with the line it was meant as in the message: put the
+conversion in brackets, and the minus applies to the number.
+
+```solve-doc
+-"abc" // ERROR: Text cannot be negated: a minus sign works on numbers and quantities, not text. To negate a number held as text, convert it first with "as number", in brackets.
+-"0xFF" as number // ERROR: Text cannot be negated: a minus sign works on numbers and quantities, not text. To negate the number "0xFF" holds, convert it first, in brackets: -("0xFF" as number).
+```
+
+```solve
+-("0xFF" as number) // -255
+"-5" as number // -5
+```
+
+A plus sign before text is refused the same way, since it is not a conversion
+either: `+"5"` points at `"5" as number`.
 
 Earlier
 versions read the text as a number instead, its leading digits or 0, so

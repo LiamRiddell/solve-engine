@@ -309,6 +309,20 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"(X) * 1e22 m",
 		"(X) / 0 as %",
 	],
+	// A typed hex literal past 2^53, a sign before text, a base prefix read by
+	// int and float, the difference of two dates, and an ISO duration with no
+	// digit before its decimal mark (the seventh found-bug batch).
+	baseLiteralsSignsAndDateDifferences: [
+		"0xFFFFFFFFFFFFFFFFFFFF + X",
+		"-(\"0xFF\" as number) + X",
+		"-\"X\"",
+		"int(\"0xFF\") + X",
+		"float(\"0b101\") * X",
+		"(25/12/2026 - 24/12/2026) * X",
+		"2026-12-24 + (2026-12-25 - 2026-12-24) * X",
+		"P.5D + X",
+		"P * .5 + X",
+	],
 };
 
 describe("every form stays honest over the numeric edges", () => {
@@ -463,6 +477,9 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"X == \"X\"",
 		"\"X\" < 1",
 		"\"X\" as number",
+		"-\"X\"",
+		"int(\"0xX\")",
+		"P.5X",
 		"hosts in X",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {

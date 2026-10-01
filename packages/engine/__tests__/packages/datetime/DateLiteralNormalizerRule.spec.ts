@@ -325,12 +325,13 @@ describe("Date literal parsing (DateLiteralNormalizerRule + DateLiteralParselet)
       expect(result.toNumber()).toBe(localMidnight(2023, 12, 26));
     });
 
-    test("subtracting two date literals yields a duration in ms: 2023-12-25 - 2023-12-24", () => {
+    test("subtracting two date literals yields a duration in days: 2023-12-25 - 2023-12-24", () => {
+      // Two calendar dates are a day count, not a span on a clock (FoundBug_dateDifferenceInDays).
       const engine = newTrackedEngine();
       const result = engine.evaluateExpression("2023-12-25 - 2023-12-24");
       expect(result.type).toBe(ValueType.Uom);
-      expect(result.unit).toBe("ms");
-      expect(result.toNumber()).toBe(localMidnight(2023, 12, 25) - localMidnight(2023, 12, 24));
+      expect(result.unit).toBe("day");
+      expect(result.toNumber()).toBe(1);
     });
   });
 });

@@ -1952,6 +1952,22 @@ days since 01/01/2023 // 1,165.50 days
 ```
 
 ```
+25/12/2026 - 24/12/2026 // 1 day
+2026-12-25 - 2026-01-01 // 358 days
+24/12/2026 - 25/12/2026 // -1 day
+(2026-12-25 - 2026-01-01) in weeks // 51.14 weeks
+```
+
+```
+31/03/2024 - 30/03/2024 // 1 day
+2026-12-24 + (2026-12-25 - 2026-12-24) // Friday, December 25, 2026
+```
+
+```
+2026-12-25 09:00 - 2026-12-24 // 33:00
+```
+
+```
 fridays between 01/06/2026 and 31/08/2026 // 13
 how many fridays between 01/06/2026 and 31/08/2026 // 13
 mondays between 01/06/2026 and 31/08/2026 // 14
@@ -3277,6 +3293,12 @@ https://liamriddell.github.io/solve-engine/syntax/number-bases/
 ```
 
 ```
+0xFFFFFFFFFFFFFFFFFFFF // 1,208,925,819,614,629,174,706,175
+0x20000000000001 // 9,007,199,254,740,993
+0xFFFFFFFFFFFFFFFFFFFF + 1 // 1,208,925,819,614,629,174,706,176
+```
+
+```
 255 as hex // 0xFF
 255 as binary // 0b11111111
 255 as octal // 0o377
@@ -3375,6 +3397,8 @@ sqrt("abc") // sqrt takes a number, not text. To use a number held as text, conv
 round("3.5") // round takes a number, not text. To use a number held as text, convert it first with "as number".
 sqrt("16" as number) // 4
 int("42.9") // 42
+int("0xFF") // 255
+float("0o17") // 15
 ```
 
 ```
@@ -5156,6 +5180,16 @@ https://liamriddell.github.io/solve-engine/syntax/text-operations/
 ```
 
 ```
+int("0xFF") // 255
+float("0b101") // 5
+```
+
+```
+-("0xFF" as number) // -255
+"-5" as number // -5
+```
+
+```
 length of "hello" // 5
 words in "the quick brown fox" // 4
 characters in "hello" // 5
@@ -5224,6 +5258,17 @@ length of "a\nb" // 4
 "0xZZ" as number // ERROR: "0xZZ" is not a number: after 0x, a hexadecimal number has only the digits 0 to 9 and the letters A to F.
 "0b102" as number // ERROR: "0b102" is not a number: after 0b, a binary number has only the digits 0 and 1.
 "0x" as number // ERROR: "0x" is not a number: 0x starts a hexadecimal number, and no digits follow it.
+```
+
+```
+(one document)
+int("0xZZ") // ERROR: "0xZZ" is not a number: after 0x, a hexadecimal number has only the digits 0 to 9 and the letters A to F.
+```
+
+```
+(one document)
+-"abc" // ERROR: Text cannot be negated: a minus sign works on numbers and quantities, not text. To negate a number held as text, convert it first with "as number", in brackets.
+-"0xFF" as number // ERROR: Text cannot be negated: a minus sign works on numbers and quantities, not text. To negate the number "0xFF" holds, convert it first, in brackets: -("0xFF" as number).
 ```
 
 ## time
@@ -5356,6 +5401,7 @@ $15/hr // $15.00/hr
 (one document)
 P1H // ERROR: P1H is not an ISO 8601 duration: H is a time part, and time parts come after a T, as in PT1H.
 P1D1D // ERROR: P1D1D is not an ISO 8601 duration: 1D is out of place: the parts run from the largest to the smallest, each once.
+P.5D // ERROR: P.5D is not an ISO 8601 duration: a decimal mark needs a digit before it, as in P0.5D.
 ```
 
 ## time-zones

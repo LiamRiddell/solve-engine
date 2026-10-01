@@ -20,7 +20,8 @@ import { valuesEqual, valuesOrdered } from "@solve-js/vm/Comparisons";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { QueryClient } from "@tanstack/query-core";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
-import { multiplierRefused, numberFromBaseText } from "@solve-js/vm/PlainNumberForms";
+import { multiplierRefused, numberFromBaseText, textSignRefused } from "@solve-js/vm/PlainNumberForms";
+import { dateDifference } from "@solve-js/vm/DateDifference";
 import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
@@ -3840,6 +3841,10 @@ export function executeBytecode(
               // with how extractDurationMs() reads durations elsewhere.
               // Marked as a span so the formatter shows it as a clock. An
               // ordinary `40ms` carries no mark and shows as a quantity.
+              // Two calendar dates are a count of days instead; see
+              // dateDifference().
+              const days = dateDifference(l, r, vm.context.calendar);
+              if (days !== null) { stack.push(days); break; }
               const span = uomValue(l.toNumber() - r.toNumber(), "ms");
               span.datetimeSpan = true;
               stack.push(span);
@@ -4254,6 +4259,8 @@ export function executeBytecode(
           // A list is negated cell by cell, its unit kept: `-[1, 2]` read the
           // zero a list's toNumber() reports and answered 0 (#745).
           else if (v.type === ValueType.Matrix) stack.push(unitListArithmetic("mul", v, numberValue(-1)));
+          // Text has no number to negate: `-"abc"` read 0 through toNumber().
+          else if (v.type === ValueType.String) stack.push(textSignRefused(v.value as string, "minus"));
           else stack.push(negatedPlain(v));
           break;
         }
@@ -4276,6 +4283,8 @@ export function executeBytecode(
           // And it keeps a decimal literal's exact decimal, so "+1.005" is still
           // exactly 1.005 for a later "to 2 dp".
           else if (v.type === ValueType.Number && v.exact !== undefined) stack.push(numberValueExact(v.toNumber(), v.exact));
+          // Nor is a plus sign a conversion: `+"abc"` read 0 through toNumber().
+          else if (v.type === ValueType.String) stack.push(textSignRefused(v.value as string, "plus"));
           else stack.push(numberValue(v.toNumber()));
           break;
         }

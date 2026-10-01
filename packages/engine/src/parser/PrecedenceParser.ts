@@ -8,7 +8,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower, buildBindingPowerTable } from "@solve-js/parser/BindingPower";
 import { getLocale } from "@solve-js/constants/locales";
 import { bigIntLiteralDigits } from "@solve-js/parser/BigIntLiteral";
-import { isPastSafeWholeLiteral } from "@solve-js/parser/WholeLiteral";
+import { isPastSafeWholeLiteral, pastSafeBaseLiteralDigits } from "@solve-js/parser/WholeLiteral";
 import { localeLiteralRefusal, unreadableInLocale } from "@solve-js/parser/LocaleNumberLiteral";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
@@ -472,8 +472,9 @@ export class PrecedenceParser {
         // can be pushed as PUSH_DECIMAL and keep its precision where it later
         // meets money, or for a whole number past 2^53, which a double cannot
         // hold, so it keeps its exact value rather than the nearest double.
-        // Stays null for every other integer shape (hex/bin/oct, and a whole
-        // number within the safe range), which push the ordinary PUSH_NUMBER.
+        // A hex, binary or octal literal past 2^53 takes its exact digits the
+        // same way. Stays null for every other integer shape, which pushes the
+        // ordinary PUSH_NUMBER.
         let decimalText: string | null = null;
         const raw = token.value;
 
@@ -523,16 +524,21 @@ export class PrecedenceParser {
           if (Number.isNaN(v)) {
             throw ErrorFactory.parsing({ code: "INVALID_NUMBER_LITERAL", message: `Invalid hex literal: "${raw}"`, context: { raw }, span: this.spanOf(token) });
           }
+          // Past 2^53 the double invents its last digits; the exact ones go
+          // through PUSH_DECIMAL as a long decimal literal's do.
+          decimalText = pastSafeBaseLiteralDigits(raw, v);
         } else if (raw.startsWith("0b") || raw.startsWith("0B")) {
           v = parseInt(raw.slice(2), 2);
           if (Number.isNaN(v)) {
             throw ErrorFactory.parsing({ code: "INVALID_NUMBER_LITERAL", message: `Invalid binary literal: "${raw}"`, context: { raw }, span: this.spanOf(token) });
           }
+          decimalText = pastSafeBaseLiteralDigits(raw, v);
         } else if (raw.startsWith("0o") || raw.startsWith("0O")) {
           v = parseInt(raw.slice(2), 8);
           if (Number.isNaN(v)) {
             throw ErrorFactory.parsing({ code: "INVALID_NUMBER_LITERAL", message: `Invalid octal literal: "${raw}"`, context: { raw }, span: this.spanOf(token) });
           }
+          decimalText = pastSafeBaseLiteralDigits(raw, v);
         } else if (CHAINED_DOT_THOUSANDS_GROUPS.test(raw)) {
           // Under a dot-grouping locale a first group past three digits is not
           // grouped (`12345.678.901`, #806); refused as the single-dot case is.
