@@ -55,9 +55,13 @@ export function endsNamedTime(tokens: readonly Token[], at: number): boolean {
  * @param pos - The position of the time's last token.
  */
 export function zoneAfterNameAt(tokens: readonly Token[], pos: number): boolean {
-	return endsNamedTime(tokens, pos)
+	// The `in` first: it is one comparison, and it rejects almost every
+	// position this rule is tried at (every word of running prose), before the
+	// table lookup and the value-position check, which cost far more. All four
+	// tests are pure, so their order changes nothing but the cost.
+	return tokens[pos + 2]?.type === "IN"
+		&& endsNamedTime(tokens, pos)
 		&& namesListedZone(tokens[pos + 1])
-		&& tokens[pos + 2]?.type === "IN"
 		&& startsZoneReference(tokens[pos + 3]);
 }
 
