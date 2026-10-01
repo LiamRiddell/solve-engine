@@ -15,7 +15,7 @@ Past 2^53 a double holds no fraction, so the literal `9007199254740993.5` is the
 | `3.7 as int` | `3` | `3` |
 | `10.0.0.0/8 as int` | `167,772,160` | `167,772,160` |
 
-The boundary: a value with no exact decimal or exact integer keeps the double, exactly as `floor` and `int` do, so a quantity (`9007199254740993.5 m as int` is 9,007,199,254,740,994) and an exact fraction that is not a decimal (`(2^60 + 0.5) as int`, which `floor` also reads from its double) are unchanged. An address still converts to its own integer. The big integers page gains the conversion beside the literal.
+The boundary: a value with no exact decimal or exact integer keeps the double, exactly as `floor` and `int` do, so a quantity (`9007199254740993.5 m as int` is 9,007,199,254,740,994) is unchanged. An exact fraction that is not a decimal (`(2^60 + 0.5) as int`) is rounded from its fraction, with `floor` and `int`, by the fix for exact fractions past 2^53 (see `rounding-exact-fractions.md`). An address still converts to its own integer. The big integers page gains the conversion beside the literal.
 
 ## Verification
 

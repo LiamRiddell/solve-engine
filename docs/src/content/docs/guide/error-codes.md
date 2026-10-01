@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 533 codes, grouped below by the part
+ship. The engine and its built-in packages ship 534 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -331,6 +331,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `AGGREGATE_NON_NUMERIC` | as a value | A list aggregate (`total of`, `average of`, a line range) meeting something that is not a number or a quantity. The message names what it found. |
 | `PERCENTAGE_OF_QUANTITY` | as a value | A value written as a percentage that is not a proportion, such as a length. |
 | `PERCENTAGE_NOT_FINITE` | as a value | A value written as a percentage that is not a finite number, which is what a division by zero gives. |
+| `PERCENTAGE_OVERFLOW` | as a value | A value written as a percentage that is finite but too large for its percentage, a hundred times it, to be held, as in `1e308 as %`. |
 | `PERCENT_CHANGE_FROM_ZERO` | as a value | A percentage change from zero, which no percentage reaches. The message suggests the difference instead. |
 | `PERCENT_CHANGE_NEGATIVE_BASE` | as a value | A percentage change from a negative base, which has two readings. The message shows how to write the one meant. |
 | `PERCENT_CHANGE_FAILED` | as a value | A percentage change that could not be worked out from its two values. |

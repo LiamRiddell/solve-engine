@@ -1,7 +1,6 @@
 import { Value, ValueType, numberValue, bigIntValue, boolValue, errorValue, ipCidrValue, type IpCidrData } from "@solve-js/vm/Value";
 import { usableHosts, netmask, networkAddress, broadcastAddress, addressInBlock } from "./IpMath";
-import { wholeNumberUnchanged } from "@solve-js/vm/ExactIntegers";
-import { roundExactDecimalToWhole } from "@solve-js/vm/ExactDecimals";
+import { roundExactToWhole } from "@solve-js/vm/ExactDecimals";
 import { IPV6_BITS, ipv6AddressCount, ipv6InBlock, ipv6LastAddress, ipv6Netmask, ipv6Network } from "./Ipv6Math";
 
 /** The IP/CIDR payload of a value, or a coded error when it is not one. */
@@ -190,13 +189,16 @@ export function ipAsInt(value: Value): Value {
  * truncating that double answered 9,007,199,254,740,994 where `floor` and
  * `int` read the exact decimal and answered 9,007,199,254,740,993. A number
  * carrying an exact integer (`2^53 + 1`) is handed back as it is, one carrying
- * an exact decimal is truncated in base ten (so `-9007199254740993.5` is
- * -9,007,199,254,740,993), and anything else (text that reads as a number, a
- * quantity, a result with no exact reading) truncates its double, as before.
+ * an exact fraction is divided out in whole numbers (so `(2^60 + 0.5) as int`
+ * is 1,152,921,504,606,846,976), one carrying an exact decimal is truncated in
+ * base ten (so `-9007199254740993.5` is -9,007,199,254,740,993), and anything
+ * else (text that reads as a number, a quantity, a result with no exact
+ * reading) truncates its double, as before. The chain is `roundExactToWhole`
+ * in vm/ExactDecimals.ts, the one `int`, `trunc`, `floor`, `ceil` and `round` take.
  *
  * @param value - The value to truncate.
  * @returns A whole number.
  */
 export function truncateToWhole(value: Value): Value {
-	return wholeNumberUnchanged(value, false) ?? roundExactDecimalToWhole(value, "trunc") ?? numberValue(Math.trunc(value.toNumber()));
+	return roundExactToWhole(value, "trunc") ?? numberValue(Math.trunc(value.toNumber()));
 }
