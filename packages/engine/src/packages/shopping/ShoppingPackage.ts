@@ -6,6 +6,7 @@ import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { Value, ValueType, stringValue, errorValue } from "@solve-js/vm/Value";
 import { canConvert, convertUnit } from "@solve-js/uom/UomConverter";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `A vs B`: which is cheaper, and by how much. The two sides are compared as
@@ -22,7 +23,7 @@ function vsInfixParselet(pluginName: string): InfixParselet {
 		bindingPower: BindingPower.Conditional,
 		parse(parser: Parser, _left: Token, _token: Token, builder: BytecodeBuilder): void {
 			parser.parseExpression(BindingPower.Conditional, builder);
-			builder.emitPluginCall(pluginName, 2);
+			emitBuiltinPluginCall(builder, pluginName, 2);
 		},
 	};
 }

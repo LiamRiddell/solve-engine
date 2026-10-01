@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { COOKING_CONVERT_FN } from "./CookingPluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `<mass-or-volume> <substance> in <target-unit>`, cooking mass<->volume
@@ -45,6 +46,6 @@ export class CookingConversionParselet implements InfixParselet {
     builder.emitString(ingredientName);
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(targetToken.value);
-    builder.emitPluginCall(COOKING_CONVERT_FN, 3);
+    emitBuiltinPluginCall(builder, COOKING_CONVERT_FN, 3);
   }
 }

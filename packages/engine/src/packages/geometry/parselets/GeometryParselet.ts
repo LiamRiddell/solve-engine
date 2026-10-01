@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { SHAPES, DIMENSIONS } from "../GeometryMath";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 const SHAPE_SET = new Set(SHAPES);
 const DIM_SET = new Set(DIMENSIONS);
@@ -70,7 +71,7 @@ export function geometryParselet(measure: string): PrefixParselet {
 				if (parser.peek()?.type === "COMMA") parser.consume(); // pair separator
 			}
 
-			builder.emitPluginCall("geometryCompute", argCount);
+			emitBuiltinPluginCall(builder, "geometryCompute", argCount);
 		},
 	};
 }

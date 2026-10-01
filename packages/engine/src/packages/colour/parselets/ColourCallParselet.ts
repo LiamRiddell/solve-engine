@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { COLOUR_FUNCTION_HANDLERS } from "../ColourPluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * A colour function call with parenthesised arguments: `rgb(255, 0, 0)`,
@@ -42,6 +43,6 @@ export class ColourCallParselet implements PrefixParselet {
 		}
 		parser.consume("RPAREN");
 
-		builder.emitPluginCall(name, argCount);
+		emitBuiltinPluginCall(builder, name, argCount);
 	}
 }

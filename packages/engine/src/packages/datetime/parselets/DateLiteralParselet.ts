@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { iso8601Grain } from "@solve-js/packages/datetime/Iso8601";
 import { wallTimeOn } from "@solve-js/calendar/WallTime";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** The plugin function name the grained branch below compiles to. See `DatetimeTimestampPluginFunctions.ts`. */
 export const DATETIME_GRAIN_FN = "datetimeLiteralGrain";
@@ -96,7 +97,7 @@ export class DateLiteralParselet implements PrefixParselet {
         builder.emitString("datetime");
         builder.emitOpcode(OpCode.PUSH_STRING);
         builder.emitString("");
-        builder.emitPluginCall(DATETIME_GRAIN_FN, 3);
+        emitBuiltinPluginCall(builder, DATETIME_GRAIN_FN, 3);
         return;
       }
       builder.emitOpcode(OpCode.DATE_LITERAL);
@@ -111,6 +112,6 @@ export class DateLiteralParselet implements PrefixParselet {
     builder.emitString(grain);
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(zone ?? "");
-    builder.emitPluginCall(DATETIME_GRAIN_FN, 3);
+    emitBuiltinPluginCall(builder, DATETIME_GRAIN_FN, 3);
   }
 }

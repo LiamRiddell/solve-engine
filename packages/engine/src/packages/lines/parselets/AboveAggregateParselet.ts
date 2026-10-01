@@ -2,6 +2,7 @@ import { PrefixParselet } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `total above` / `sum above` / `average above` -- aggregate every line's
@@ -28,6 +29,6 @@ export class AboveAggregateParselet implements PrefixParselet {
   constructor(private readonly mode: "total" | "average" | "count" | "min" | "max" | "median") {}
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-    builder.emitPluginCall(`${this.mode}Above`, 0);
+    emitBuiltinPluginCall(builder, `${this.mode}Above`, 0);
   }
 }

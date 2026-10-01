@@ -3,6 +3,7 @@ import type { Parser } from "@solve-js/parser/Parser";
 import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The binding power a place is parsed at: that of the `in` unit conversion
@@ -62,7 +63,7 @@ export class GeoQueryParselet implements PrefixParselet {
 		parser.consume();
 
 		this.parsePlace(parser, builder);
-		builder.emitPluginCall(this.fn, 2);
+		emitBuiltinPluginCall(builder, this.fn, 2);
 	}
 
 	/** One place: an expression, or two joined by a bare comma into a latitude and longitude. */
@@ -71,7 +72,7 @@ export class GeoQueryParselet implements PrefixParselet {
 		if (parser.peek()?.type === "COMMA") {
 			parser.consume();
 			parser.parseExpression(PLACE_BINDING_POWER, builder);
-			builder.emitPluginCall("geoPlace", 2);
+			emitBuiltinPluginCall(builder, "geoPlace", 2);
 		}
 	}
 }

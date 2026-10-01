@@ -320,3 +320,26 @@ variable named `x` defined elsewhere in the document.
 double(x) = x * 2
 double(5) // 10
 ```
+
+A function's formula can use any built-in that works its answer out from what
+it is given: the text functions, the hashes, colours, image sizes, statistics
+and the rest. So a function can shout a word, fingerprint a string or lighten a
+colour, and it is called like any other:
+
+```solve-doc
+shout(s) = upper(s)
+shout("hello") // HELLO
+fingerprint(t) = sha256(t)
+fingerprint("hello") // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+paler(c) = lighten(c, 10%)
+paler(#336699) // #407fbf
+printed(p) = p at 300 dpi in mm
+printed(4000px) // 338.67 mm
+```
+
+The boundary is a value the formula would have to fetch, or find elsewhere in
+the note. A function is worked out away from the line that wrote it, each time
+it is called, so a lookup that waits for the network (the weather, a share
+price, an exchange rate on a past date) and a reference to another line
+(`prev`, `line 1`, a tag or a table column) cannot be part of one, and such a
+definition is refused. Work the value out on a line of its own and pass it in.

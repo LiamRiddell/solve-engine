@@ -3081,6 +3081,18 @@ map(10*x, 0:3) // [0, 10, 20, 30]
 ```
 
 ```
+sum(1,000:2,000) // 1,501,500
+sum(1,000:1,005) // 6,015
+map(x * 2, 1,000:1,002) // [2,000, 2,002, 2,004]
+sum(1,000:1) // A range's min (1000) cannot be greater than its max (1). Did you mean "1:1000"?
+```
+
+```
+sum(1, 100:200) // 101
+max(1,000, 2) // 2
+```
+
+```
 map(10*x, [1,2,3]) // [10, 20, 30]
 map(x^2, [4, 5, 6]) // [16, 25, 36]
 ```
@@ -5431,6 +5443,12 @@ int("0xZZ") // ERROR: "0xZZ" is not a number: after 0x, a hexadecimal number has
 -"0xFF" as number // ERROR: Text cannot be negated: a minus sign works on numbers and quantities, not text. To negate the number "0xFF" holds, convert it first, in brackets: -("0xFF" as number).
 ```
 
+```
+(one document)
+shout(s) = upper(s) + "!"
+shout("hello") // HELLO!
+```
+
 ## time
 
 https://liamriddell.github.io/solve-engine/syntax/time/
@@ -6377,6 +6395,18 @@ the Smiths' rent / 3 // £300.00
 (one document)
 Alice‘s food = 3 // ERROR: "Alice‘s food" cannot be a name: "‘" in "Alice‘s" is a quotation mark, not an apostrophe. Write the apostrophe as ' or ’.
 ’tis rate = 5 // ERROR: "’tis rate" cannot be a name: "’tis" starts with an apostrophe, and a word in a name starts with a letter.
+```
+
+```
+(one document)
+shout(s) = upper(s)
+shout("hello") // HELLO
+fingerprint(t) = sha256(t)
+fingerprint("hello") // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+paler(c) = lighten(c, 10%)
+paler(#336699) // #407fbf
+printed(p) = p at 300 dpi in mm
+printed(4000px) // 338.67 mm
 ```
 
 ## vectors-and-matrices

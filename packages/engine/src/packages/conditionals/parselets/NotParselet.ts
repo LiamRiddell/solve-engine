@@ -4,6 +4,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * Logical negation (#751), in its two spellings.
@@ -37,7 +38,7 @@ export class NotParselet implements PrefixParselet {
 		parser.parseExpression(this.bindingPower, builder);
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(this.spelling);
-		builder.emitPluginCall("logicalNot", 2);
+		emitBuiltinPluginCall(builder, "logicalNot", 2);
 	}
 }
 

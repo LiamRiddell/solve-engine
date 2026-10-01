@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `total of section "Travel"` / `sum of section` / `average of section` /
@@ -21,6 +22,6 @@ export class SectionAggregateParselet implements PrefixParselet {
   parse(_parser: Parser, token: Token, builder: BytecodeBuilder): void {
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(token.value);
-    builder.emitPluginCall(this.pluginFnName, 1);
+    emitBuiltinPluginCall(builder, this.pluginFnName, 1);
   }
 }
