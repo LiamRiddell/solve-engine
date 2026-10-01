@@ -77,6 +77,50 @@ export function numberFormatFor(
 	return format;
 }
 
+/**
+ * The magnitude from which `Number.prototype.toFixed` stops writing digits and
+ * writes the number as `String` does, in exponent form (`1e+21`).
+ */
+const FIXED_EXPONENT_FROM = 1e21;
+
+/**
+ * A number written to exactly `places` places, in ASCII digits with a `.`
+ * mark and no grouping, as `toFixed` writes it, at every magnitude.
+ *
+ * `toFixed` writes a number of 1e21 or more the way `String` does, in
+ * JavaScript's exponent form, so `1e306 as %` showed `1e+308%` and `1e22 m`
+ * showed `1e+22 m` while a plain `1e22` showed every digit. Past that
+ * magnitude the digits come from the same `Intl` formatter a plain number is
+ * written with, so a quantity, a percentage and money read as a number does.
+ * Below it, and for a value that is not finite, this is `toFixed` itself, one
+ * comparison and nothing more.
+ *
+ * @param value - The number.
+ * @param places - The places after the point, a whole number from 0 to 100.
+ * @returns The digits (`"-12.50"`, `"10000000000000000000000.00"`), or `toFixed`'s text for an infinity or NaN.
+ */
+export function fixedDecimalText(value: number, places: number): string {
+	if (!(value >= FIXED_EXPONENT_FROM || value <= -FIXED_EXPONENT_FROM) || value === Number.POSITIVE_INFINITY || value === Number.NEGATIVE_INFINITY) {
+		return value.toFixed(places);
+	}
+	return numberFormatFor("en-US", false, places, places).format(value);
+}
+
+/**
+ * A number in its shortest form, as `String` writes it, except that a number
+ * of 1e21 or more either way is written in full digits rather than in
+ * JavaScript's exponent form (`1e+22`), as a plain number's answer is. A
+ * double that large is always whole, so no place is lost. A small number keeps
+ * `String`'s form (`1e-7`), the exponent form the engine writes for a value
+ * too small to show in places.
+ *
+ * @param n - The number.
+ * @returns Its text (`"0.25"`, `"10000000000000000000000"`, `"Infinity"`).
+ */
+export function shortestText(n: number): string {
+	return n >= FIXED_EXPONENT_FROM || n <= -FIXED_EXPONENT_FROM ? fixedDecimalText(n, 0) : String(n);
+}
+
 /** How many digits of a too-small value are worth showing: enough to read it, not enough to imply precision. */
 const SIGNIFICANT_DIGITS = 3;
 

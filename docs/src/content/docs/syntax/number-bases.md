@@ -101,6 +101,34 @@ check (0.5 in hex) == 0 // ✓
 
 To keep the fraction, keep the number in decimal: `255.7 + 1` is 256.70.
 
+The cut is made on the number exactly as it was typed. A decimal past about
+nine thousand million million (2^53) has no fraction left in an ordinary
+number, and its nearest ordinary number can be a few units away from it, so the
+digits come from the decimal itself: `12345678901234567890.5` is cut to
+12,345,678,901,234,567,890 before it is written in hex.
+
+```solve
+12345678901234567890.5 in hex // 0xAB54A98CEB1F0AD2
+12345678901234567890 in hex // 0xAB54A98CEB1F0AD2
+```
+
+A number in a base is a figure like any other in a column, so `total above`,
+`average above`, a line range and a section or tag total add it as the number it
+is. The total is a plain number, in decimal, since the lines above can be in
+different bases; to see it in a base, convert it:
+
+```solve-doc
+255 in hex // 0xFF
+0b1010 as binary // 0b1010
+5 // 5
+total above // 270
+total above in hex // 0x10E
+```
+
+The boundary: a column total reads a whole number past 2^53 as the nearest
+ordinary number, as it does when the same number is written in decimal, so a
+base adds no digits a total would not otherwise keep.
+
 A whole number too large for an ordinary number to hold exactly (past about
 nine thousand million million, 2^53) keeps every digit when it is written in
 another base, and when that base is converted on again. A chain of conversions

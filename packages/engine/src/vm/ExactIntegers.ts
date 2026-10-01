@@ -33,6 +33,7 @@
 
 import { Value, ValueType, numberValue, numberValueRational, errorValue, hexValue, bigIntValue, type IpCidrData, type DisplayBase } from "@solve-js/vm/Value";
 import { rational, rationalNeg } from "@solve-js/symbolic";
+import { infiniteResult } from "@solve-js/vm/IndeterminateQuotient";
 
 /**
  * `base ** exponent` for bigints, by repeated squaring.
@@ -113,7 +114,8 @@ export function exactIntegerValue(n: bigint): Value {
  * finite.
  */
 export function exactIntegerArithmetic(l: Value, r: Value, approx: number, op: "add" | "sub" | "mul" | "pow"): Value {
-    if (!Number.isFinite(approx)) return numberValue(approx);
+    // An infinity keeps the mark of one a division by zero gave; see infiniteResult().
+    if (!Number.isFinite(approx)) return approx === approx ? infiniteResult(l, r, approx) : numberValue(approx);
     const a = exactIntegerOf(l, true);
     if (a === null) return numberValue(approx);
     const b = exactIntegerOf(r, true);
@@ -189,8 +191,45 @@ export function baseConversionOperand(v: Value): number | bigint {
         if (addr6 !== undefined) return addr6;
     }
     const r = v.rational;
-    if (r !== undefined && r.d === 1n && !Number.isSafeInteger(v.value as number)) return r.n;
+    if (r !== undefined) {
+        if (r.d !== 1n) return wholeOfBig(r.n / r.d);
+        if (!Number.isSafeInteger(v.value as number)) return r.n;
+    }
+    // A decimal typed past 2^53 has no fraction left in its double, which can
+    // also sit on the far side of the whole number: `12345678901234567890.5`
+    // is the double ...0800, so its digits are taken from the decimal, cut
+    // toward zero as a base cuts them (see wholeForBase).
+    if (v.exact !== undefined) {
+        const whole = truncatedDecimal(v.exact.coef, v.exact.scale);
+        if (whole !== null) return wholeOfBig(whole);
+    }
     return v.toNumber();
+}
+
+/**
+ * The most places a decimal's point is moved to cut it to a whole number. A
+ * scale past it is a number below 1e-340 or above 1e340, whose whole part is
+ * zero or whose double is already infinite, so its double's path decides it.
+ */
+const MOST_TRUNCATED_PLACES = 340;
+
+/**
+ * The whole number `coef * 10^-scale` cuts to toward zero, or null when the
+ * scale is past {@link MOST_TRUNCATED_PLACES} either way.
+ *
+ * @param coef - The decimal's coefficient.
+ * @param scale - The places after its point; negative for trailing zeros.
+ */
+export function truncatedDecimal(coef: bigint, scale: number): bigint | null {
+    if (!Number.isInteger(scale) || scale > MOST_TRUNCATED_PLACES || scale < -MOST_TRUNCATED_PLACES) return null;
+    if (scale <= 0) return coef * bigIntPow(10n, BigInt(-scale));
+    // BigInt division truncates toward zero, which is the cut a base makes.
+    return coef / bigIntPow(10n, BigInt(scale));
+}
+
+/** A whole number as a base reads it: a double within the safe range, where it is exact, and the bigint past it. */
+function wholeOfBig(n: bigint): number | bigint {
+    return n <= MAX_SAFE_BIG && n >= -MAX_SAFE_BIG ? Number(n) : n;
 }
 
 /** How a base is named after `in`, for a message: "in hex", "in binary", "in octal". */
@@ -290,6 +329,30 @@ export function bigBaseInteger(v: Value): bigint | null {
  */
 export function wholeFromBase(n: bigint): Value {
     return Number.isFinite(Number(n)) ? exactIntegerValue(n) : bigIntValue(n);
+}
+
+/**
+ * A figure in a column, read as the number it is: a value written in a base
+ * (`255 in hex`, `0b101 as binary`) becomes its plain number, exact past the
+ * safe range (see {@link wholeFromBase}), carrying the sources it had; any
+ * other value is returned as it is.
+ *
+ * The span aggregates (`total above`, a line range, a section, a tag) took a
+ * number and a quantity and refused everything else, so a number shown in a
+ * base was refused as "not a plain number or unit value", though `in hex`
+ * changes only how a number is written. Reading it here, before their type
+ * test, lets each add it as the number it is.
+ *
+ * @param v - A line's value.
+ * @returns The plain number for a value in a base, and `v` otherwise.
+ */
+export function numberOfBase(v: Value): Value {
+    if (v.type !== ValueType.Hex) return v;
+    const n = v.value;
+    if (typeof n !== "bigint" && typeof n !== "number") return v;
+    const plain = typeof n === "bigint" ? wholeFromBase(n) : numberValue(n === 0 ? 0 : n);
+    if (v.sources !== undefined) plain.sources = v.sources;
+    return plain;
 }
 
 /**

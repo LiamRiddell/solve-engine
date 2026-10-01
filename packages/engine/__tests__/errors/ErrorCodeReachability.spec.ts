@@ -345,6 +345,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	TAG_NO_DOCUMENT: "sum of #a",
 	TEXT_ARGUMENT_COUNT: "match()",
 	TEXT_ARITHMETIC: "9 / \"\"",
+	TEXT_COMPARISON: "\"5\" > 3",
 	TEXT_EXPECTED: "42 as upper",
 	TEXT_FIELD_INEXACT_NUMBER: "field(\"{\\\"a\\\": 12345678901234567890}\", \"a\")",
 	TEXT_FIELD_NOT_FOUND: "field(\"{\\\"a\\\": 1}\", \"b\")",

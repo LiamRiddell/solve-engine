@@ -57,7 +57,7 @@ describe("the lines that exposed it", () => {
 	test.each([
 		[
 			"check (255 in hex) == \"0xFF\"",
-			"check: \"0xFF\" on the right is text and 0xFF is a number, so they cannot be compared",
+			"check: \"0xFF\" on the right is text and 0xFF is a number, so they cannot be compared. To read the text as a number, write \"0xFF\" as number",
 		],
 		[
 			"check 255 == \"255\"",
@@ -174,7 +174,9 @@ describe("textCheck, the part that changed", () => {
 		expect(hint("1,000")).toBe(true);
 		expect(hint("1e3")).toBe(true);
 		expect(hint("-3")).toBe(true);
-		expect(hint("0xFF")).toBe(false);
+		// `as number` reads a base prefix (FoundBug_baseTextAsNumber), so the hint is offered for it too.
+		expect(hint("0xFF")).toBe(true);
+		expect(hint("0xZZ")).toBe(false);
 		expect(hint("")).toBe(false);
 		expect(hint("abc")).toBe(false);
 		expect(hint("255", uomValue(5, "m"))).toBe(false);
@@ -222,7 +224,7 @@ describe("adversarial", () => {
 	});
 
 	test("realistic: the number held as text in a line above, a what-if over it, and the check count", () => {
-		expect(doc("code = \"0xFF\"\ncheck code == 255")[1]).toBe("ERROR check: \"0xFF\" on the left is text and 255 is a number, so they cannot be compared");
+		expect(doc("code = \"0xFF\"\ncheck code == 255")[1]).toBe("ERROR check: \"0xFF\" on the left is text and 255 is a number, so they cannot be compared. To read the text as a number, write \"0xFF\" as number");
 		expect(doc("n = 255\ncheck n == \"255\"\nline 2 with n = 7")[2]).toBe(
 			"ERROR check: \"255\" on the right is text and 7 is a number, so they cannot be compared. To read the text as a number, write \"255\" as number",
 		);

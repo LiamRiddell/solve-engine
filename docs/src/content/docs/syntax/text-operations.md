@@ -48,6 +48,32 @@ reads text only when the whole of it is a number:
 "11:00 PM" as number // ERROR: "11:00 PM" is not a number: "as number" reads text that is a number and nothing else.
 ```
 
+Text can hold a number written in another base, as a colour code or a log line
+does: hexadecimal (base 16) after `0x`, binary (base 2) after `0b`, octal (base
+8) after `0o`. `as number` reads the same prefixes a number typed in a line
+does (see [number bases](/syntax/number-bases/)), in either case and after a
+sign, and keeps every digit of a large one:
+
+```solve
+"0xFF" as number // 255
+"0b101" as number // 5
+"0o17" as number // 15
+"-0xff" as number // -255
+"0x20000000000001" as number // 9,007,199,254,740,993
+```
+
+A prefix with nothing after it, or a digit its base does not have, is refused
+by name, saying which digits the base has:
+
+```solve-doc
+"0xZZ" as number // ERROR: "0xZZ" is not a number: after 0x, a hexadecimal number has only the digits 0 to 9 and the letters A to F.
+"0b102" as number // ERROR: "0b102" is not a number: after 0b, a binary number has only the digits 0 and 1.
+"0x" as number // ERROR: "0x" is not a number: 0x starts a hexadecimal number, and no digits follow it.
+```
+
+The boundary: a base number in text is a whole number, so a point in it
+(`"0xFF.8"`) is refused, and `int` and `float` read decimal text only.
+
 Earlier
 versions read the text as a number instead, its leading digits or 0, so
 `"11:00 PM" + 2` answered 13, which is why it is now an error rather than a

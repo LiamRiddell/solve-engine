@@ -78,7 +78,8 @@ describe("every operation on a large value in a base", () => {
 	});
 
 	test("the boundary: a quantity, a percentage, a tolerance, text and a power past a double's range", () => {
-		expect(shown("(2^100+1) in hex * 1 km")).toBe("1.2676506002282294e+30 km");
+		// In full digits, as a plain number is written (FoundBug_exponentTextInAResult).
+		expect(shown("(2^100+1) in hex * 1 km")).toBe("1,267,650,600,228,229,400,000,000,000,000.00 km");
 		expect(shown("(2^100+1) in hex ^ 20")).toBe("∞");
 		expect(shown("(2^100+1) in hex ^ (2 m)")).toMatch(/^UNIT_IN_EXPONENT: /);
 		expect(shown("(2^100+1) in hex + \"a\"")).toMatch(/^TEXT_ARITHMETIC: /);

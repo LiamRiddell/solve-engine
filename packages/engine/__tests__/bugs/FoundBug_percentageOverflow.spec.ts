@@ -5,6 +5,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { ValueType, bigIntValue, boolValue, numberValue, numberValueExact, numberValueRational, stringValue, uomValue } from "@solve-js/vm/Value";
 import { rational } from "@solve-js/symbolic";
 import { hasFiniteExactReading, percentageNotFinite, percentageTooLarge, toPercentage } from "@solve-js/vm/VMConversion";
+import { zeroDivisorQuotient } from "@solve-js/vm/IndeterminateQuotient";
 
 /**
  * Found bug: `1e308 as %` answered `Infinity%`. 1e308 is an ordinary finite
@@ -74,9 +75,11 @@ describe("the lines that exposed it", () => {
 		expect(outcome("9007199254740993.5 as percent")).toBe("900,719,925,474,099,350.00%");
 	});
 
-	test("the boundary: a number that is itself past the largest double is not finite, and says so", () => {
-		expect(outcome("2^2000 as %")).toMatch(/^PERCENTAGE_NOT_FINITE: /);
-		expect(outcome("1e309 as %")).toMatch(/^PERCENTAGE_NOT_FINITE: /);
+	test("the boundary: a number that is itself past the largest double is too large as well, and says so", () => {
+		// It was told "what dividing by zero gives"; see FoundBug_percentageOfAnInfinity.
+		expect(outcome("2^2000 as %")).toMatch(/^PERCENTAGE_OVERFLOW: This is too large to write as a percentage: the number is past/);
+		expect(outcome("1e309 as %")).toMatch(/^PERCENTAGE_OVERFLOW: /);
+		expect(outcome("1/0 as %")).toMatch(/^PERCENTAGE_NOT_FINITE: /);
 	});
 });
 
@@ -98,12 +101,13 @@ describe("toPercentage", () => {
 		expect(toPercentage(numberValue(Number.MIN_VALUE)).type).toBe(ValueType.Percentage);
 	});
 
-	test("boundary: the largest doubles, either sign, overflow; the infinities and NaN are not finite", () => {
+	test("boundary: the largest doubles, either sign, overflow, and so does an unmarked infinity; a division by zero's infinity and NaN are not finite", () => {
 		expect(toPercentage(numberValue(Number.MAX_VALUE)).errorCode).toBe("PERCENTAGE_OVERFLOW");
 		expect(toPercentage(numberValue(-Number.MAX_VALUE)).errorCode).toBe("PERCENTAGE_OVERFLOW");
 		expect(toPercentage(numberValue(1e307)).errorCode).toBe("PERCENTAGE_OVERFLOW");
-		expect(toPercentage(numberValue(Number.POSITIVE_INFINITY)).errorCode).toBe("PERCENTAGE_NOT_FINITE");
-		expect(toPercentage(numberValue(Number.NEGATIVE_INFINITY)).errorCode).toBe("PERCENTAGE_NOT_FINITE");
+		expect(toPercentage(numberValue(Number.POSITIVE_INFINITY)).errorCode).toBe("PERCENTAGE_OVERFLOW");
+		expect(toPercentage(numberValue(Number.NEGATIVE_INFINITY)).errorCode).toBe("PERCENTAGE_OVERFLOW");
+		expect(toPercentage(zeroDivisorQuotient(Number.POSITIVE_INFINITY)).errorCode).toBe("PERCENTAGE_NOT_FINITE");
 		expect(toPercentage(numberValue(Number.NaN)).errorCode).toBe("PERCENTAGE_NOT_FINITE");
 		expect(toPercentage(uomValue(1e308, "permille")).errorCode).toBe("PERCENTAGE_OVERFLOW");
 		expect(toPercentage(bigIntValue(1n << 2000n)).errorCode).toBe("PERCENTAGE_OVERFLOW");

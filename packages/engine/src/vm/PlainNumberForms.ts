@@ -1,5 +1,6 @@
 import { Value, ValueType, numberValue, errorValue } from "@solve-js/vm/Value";
 import { describeQuantity, nonNumericKind, datetimeConversionRefused } from "@solve-js/vm/VMConversion";
+import { exactIntegerValue } from "@solve-js/vm/ExactIntegers";
 
 /**
  * The two forms that take a plain number and nothing else: `float(x)` and
@@ -107,4 +108,66 @@ export function multiplierRefused(v: Value): Value | null {
 		"MULTIPLIER_TAKES_NUMBER",
 		`A multiplier is a plain number or a percentage, as in "0.5 as multiplier" or "50% as multiplier", not ${kind}.`,
 	);
+}
+
+/** A base a typed number can name with a prefix: what a refusal calls it, the digits it has and the bits one digit carries. */
+interface PrefixedBase {
+	/** The base's name with its article: "a hexadecimal", "an octal". */
+	readonly name: string;
+	readonly digits: RegExp;
+	readonly allowed: string;
+	readonly bits: number;
+}
+
+const HEX_TEXT: PrefixedBase = { name: "a hexadecimal", digits: /^[0-9a-f]+$/i, allowed: "the digits 0 to 9 and the letters A to F", bits: 4 };
+const BINARY_TEXT: PrefixedBase = { name: "a binary", digits: /^[01]+$/, allowed: "the digits 0 and 1", bits: 1 };
+const OCTAL_TEXT: PrefixedBase = { name: "an octal", digits: /^[0-7]+$/, allowed: "the digits 0 to 7", bits: 3 };
+
+/** A sign, then `0` and a base letter, as a typed number writes them: `0x`, `0X`, `0b`, `0B`, `0o`, `0O`. */
+const BASE_PREFIX = /^([+-]?)0([xXbBoO])/;
+
+/** The bits of the largest double (about 1.8e308); a whole number with more is past it, so its digits need not be read. */
+const MOST_BASE_TEXT_BITS = 1024;
+
+/**
+ * The number a piece of text writes with a base prefix (`"0xFF"`, `"0b101"`,
+ * `"0o17"`), the prefixes a typed number reads, or null when the text has no
+ * such prefix and is left to the decimal reading.
+ *
+ * `as number` read decimal digits only, so `"0xFF" as number` was refused
+ * though `0xFF` typed as a number is 255. The prefix is read as a typed
+ * number reads it, in either case, after an optional sign. The digits are
+ * read exactly, so `"0x20000000000001" as number` is 2^53 + 1 and not the
+ * double beside it; a number past about 1.8e308 is the infinity a double
+ * holds there, as `"1e400" as number` is. A prefix with no digits after it,
+ * or with a digit its base does not have (`"0xZZ"`, `"0b102"`, `"0o19"`), is
+ * refused by name, saying which digits the base allows.
+ *
+ * @param trimmed - The text, spaces at either end already removed.
+ * @param written - The text as the reader wrote it, for the refusal.
+ * @returns The number, the refusal, or null for text with no base prefix.
+ */
+export function numberFromBaseText(trimmed: string, written: string): Value | null {
+	const match = BASE_PREFIX.exec(trimmed);
+	if (match === null) return null;
+	const letter = match[2].toLowerCase();
+	const base = letter === "x" ? HEX_TEXT : letter === "b" ? BINARY_TEXT : OCTAL_TEXT;
+	const prefix = `0${letter}`;
+	const digits = trimmed.slice(match[0].length);
+	const quoted = written.length > QUOTED_TEXT_LIMIT ? `${written.slice(0, QUOTED_TEXT_LIMIT)}...` : written;
+	if (digits === "") {
+		return errorValue("TEXT_NOT_A_NUMBER", `"${quoted}" is not a number: ${prefix} starts ${base.name} number, and no digits follow it.`);
+	}
+	if (!base.digits.test(digits)) {
+		return errorValue("TEXT_NOT_A_NUMBER", `"${quoted}" is not a number: after ${prefix}, ${base.name} number has only ${base.allowed}.`);
+	}
+	const negative = match[1] === "-";
+	// Leading zeros add no size, so they are left out of the size test.
+	const significant = digits.replace(/^0+/, "");
+	if (significant === "") return numberValue(0);
+	if ((significant.length - 1) * base.bits >= MOST_BASE_TEXT_BITS) {
+		return numberValue(negative ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY);
+	}
+	const magnitude = BigInt(`${prefix}${significant}`);
+	return exactIntegerValue(negative ? -magnitude : magnitude);
 }
