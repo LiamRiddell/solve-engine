@@ -1474,7 +1474,10 @@ export function toPercentage(value: Value): Value {
     const fraction = value.toNumber();
     // One multiplication: the percentage is what the formatter writes, and a
     // fraction past about 1.8e306 is finite while a hundred times it is not.
-    if (!Number.isFinite(fraction * 100)) return Number.isNaN(fraction) || (!Number.isFinite(fraction) && !hasFiniteExactReading(value)) ? percentageNotFinite() : percentageTooLarge();
+    // A difference with itself is zero only for a finite number, which tests
+    // finiteness without reading the global `Number` on every percentage.
+    const hundredfold = fraction * 100;
+    if (hundredfold - hundredfold !== 0) return Number.isNaN(fraction) || (!Number.isFinite(fraction) && !hasFiniteExactReading(value)) ? percentageNotFinite() : percentageTooLarge();
     const percentage = percentageValue(fraction);
     const exact = percentageExact(value);
     if (exact !== undefined) percentage.exact = exact;
@@ -1488,6 +1491,16 @@ export function toPercentage(value: Value): Value {
  * digits well before the double's run out.
  */
 const PERCENTAGE_EXACT_PLACES = 6;
+
+/**
+ * A magnitude below which no fraction needs an exact decimal, so
+ * {@link percentageExact} turns it away with two comparisons. The test it
+ * stands in front of passes only from about 2.25e7, where a hundred times the
+ * fraction, scaled by the double's precision, reaches half of the sixth place;
+ * 2e7 sits safely under that, so a fraction this turns away is one the full
+ * test would have turned away too.
+ */
+const PERCENTAGE_EXACT_FLOOR = 2e7;
 
 /**
  * The exact decimal a percentage keeps beside its double, or undefined: the
@@ -1514,6 +1527,10 @@ const PERCENTAGE_EXACT_PLACES = 6;
 export function percentageExact(value: Value): DecimalData | undefined {
     if (value.type !== ValueType.Number) return undefined;
     const fraction = value.value as number;
+    // The ordinary percentage (`50%`, `0.25 as %`) is far below the floor.
+    // Inside a `vm` context, which the benchmarks run in, each read of `Math`
+    // or `Number` below costs hundreds of nanoseconds, so it is answered first.
+    if (fraction < PERCENTAGE_EXACT_FLOOR && fraction > -PERCENTAGE_EXACT_FLOOR) return undefined;
     if (!Number.isFinite(fraction) || Math.abs(fraction * 100) * Number.EPSILON < 0.5 * 10 ** -PERCENTAGE_EXACT_PLACES) return undefined;
     if (value.exact !== undefined) return value.exact;
     const r = value.rational;
