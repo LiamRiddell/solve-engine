@@ -24,9 +24,8 @@ import type { ParsedLine } from "@solve-js/types/ParsingResult";
  *
  * Refusal is the smaller honest change, and it was chosen over storing the
  * equation under every unknown: that would turn every `a + b = c` line, a
- * parse error today, into a stored equation, and would answer the Calca line
- * with the algebra's unsimplified `net/(1/1200salary)`, not the
- * `1200net/salary` Calca documents.
+ * parse error today, into a stored equation. `solve` answers the Calca line
+ * with `1200*net/salary`, the formula Calca documents as `1200net/salary`.
  */
 
 /** A line's answer, or `THROWS <message>`. */
@@ -86,7 +85,7 @@ describe("the lines that exposed it", () => {
 
 	test("the two ways the refusal offers both answer", () => {
 		expect(both(["salary = 60000", "net = 1000", CALCA, "rate =>"])).toEqual(["60,000", "1,000", 'rate stored as an equation: solve with "rate =>"', "20"]);
-		expect(shown("solve((salary / 12) * rate / 100 = net, rate)")).toBe("net/(1/1200salary)");
+		expect(shown("solve((salary / 12) * rate / 100 = net, rate)")).toBe("1200*net/salary");
 	});
 
 	test.each([

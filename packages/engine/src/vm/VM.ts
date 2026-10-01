@@ -3,7 +3,7 @@ import { Value, ValueType, numberValue, numberValueExact, numberValueRational, n
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-js/symbolic";
-import { symbolicPow, symbolicNeg, symbolicBuiltin, unknownNameIn, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
+import { symbolicPow, symbolicNeg, symbolicBuiltin, unknownNameIn, symbolicPercentChange, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { resolveStoredFormulaIn } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
 import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues, ReduceForm, reduceFormCall } from "@solve-js/vm/MatrixOps";
@@ -233,8 +233,8 @@ export function createVM(
       deleteUserFunction(name: string) { userFunctions.delete(name); },
       getVariableEntries() { return Array.from(variables.entries()); },
       getUserFunctionDefs() { return Array.from(userFunctions.values()); },
-      defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram) {
-        equations.set(variable, { variable, factorNames, rhsProgram });
+      defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram, text?: string) {
+        equations.set(variable, text === undefined ? { variable, factorNames, rhsProgram } : { variable, factorNames, rhsProgram, text });
       },
       getEquation(variable: string) { return equations.get(variable); },
       hasEquation(variable: string) { return equations.has(variable); },
@@ -1399,6 +1399,9 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
     // A percentage on the right of something concrete scales it. Uom covers
     // money and every other unit, and the unit has to survive: "$300 + 15%"
     // is $345.00, not a bare 345.
+    // An unknown is scaled the same way: `foo + 10%` is `1.1foo`, where it
+    // added the bare fraction. See symbolicPercentChange().
+    if (l.type === ValueType.Symbolic) return symbolicPercentChange(l, r.toNumber(), sign);
     const factor = 1 + sign * r.toNumber();
     if (l.type === ValueType.Number) {
         // A scalar multiply scales a carried tolerance by the same factor, so a
@@ -4774,14 +4777,17 @@ export function executeBytecode(
             // values they hold now, so one line never holds a name as a number
             // in one term and as an unknown in another (#732).
             stack.push(val.type === ValueType.Symbolic ? resolveStoredFormulaIn(val, varName, vm) : val);
-          } else if (symbolicTolerant) {
-            stack.push(symbolicValue(varSymbolicNode(varName)));
           } else if (varName === ANSWER_NAME) {
-            // `ans` is the line above when nothing is named that (#668).
+            // `ans` is the line above when nothing is named that (#668). Read
+            // before the arrow's unknown below, as `pi` and `e` are (they never
+            // reach this opcode): under the arrow `π km =>` was refused naming
+            // π, and `π + 1 =>` kept π as an unknown, where `π km` is 3.14 km.
             stack.push(previousLineAnswer(context));
           } else if (varName === PI_NAME) {
             // `π` is the constant when nothing is named that (#669).
             stack.push(numberValue(Math.PI));
+          } else if (symbolicTolerant) {
+            stack.push(symbolicValue(varSymbolicNode(varName)));
           } else {
             throwUndefinedVariable(varName, vm);
           }

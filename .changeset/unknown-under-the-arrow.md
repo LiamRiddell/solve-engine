@@ -18,7 +18,7 @@ The arrow (`=>`) evaluates with every name that has no value kept as a formula, 
 | `foo + 1 =>` | `foo+1` | `foo+1` |
 | `foo = 12`, then `foo percent =>` | `12.00%` | `12.00%` |
 
-The boundary: arithmetic between an unknown and a quantity is still algebra on the numbers alone, so `foo * 5 km =>` is `5foo` with the unit dropped, as before; carrying units through a formula is a feature of its own. `foo + 10% =>` is still `foo+0.1`, the percentage read as its fraction, where `200 + 10%` adds a tenth of 200. Under the arrow `π` and `ans` are kept as unknowns before their constant readings are tried, so `π km =>` is refused naming `π`. The other-apps parity spec's pinned case (`foo percent =>`) moves from `test.failing` into the passing set.
+The boundary: this covers the operations that need one amount. Arithmetic between an unknown and a quantity, a percentage added to an unknown, and `π` and `ans` under the arrow each had a fault of their own, fixed in their own entries of this release. The other-apps parity spec's pinned case (`foo percent =>`) moves from `test.failing` into the passing set.
 
 ## Verification
 

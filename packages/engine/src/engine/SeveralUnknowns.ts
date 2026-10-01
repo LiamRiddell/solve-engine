@@ -15,10 +15,8 @@
  * the lines above, which leaves one, or name the unknown with `solve`.
  *
  * Supporting the line instead (storing it under every unknown) was weighed and
- * not done. Every `a + b = c` line, a parse error today, would become a stored
- * equation; and the answer to the Calca example would be the algebra's
- * unsimplified `net/(1/1200salary)` rather than the `1200net/salary` Calca
- * documents, a formula the bounded simplifier does not tidy.
+ * not done: every `a + b = c` line, a parse error today, would become a stored
+ * equation. `solve(..., rate)` gives the Calca example's `1200*net/salary`.
  */
 
 import type { Token } from "@solve-js/lexer/Token";
@@ -97,4 +95,25 @@ export function severalUnknownsRefusal(unknowns: readonly string[], tokens: read
 		suggestion: `solve(${equation}, ${unknowns[0]})`,
 		context: { unknowns: [...unknowns] },
 	});
+}
+
+/**
+ * The refusal for a stored product equation (`a*x = b`) asked for its last name
+ * while a factor before it has no value.
+ *
+ * A product of names is stored as an equation on sight and solved by
+ * multiplying out its factors' values, which is how a matrix system is solved;
+ * a factor with no value leaves nothing to multiply. Solving for `x` in terms
+ * of `a` is a different question, the one `solve` answers, so the refusal
+ * names both ways forward: give the factor a value above, or ask `solve`.
+ *
+ * @param variable - The name asked for (`x`).
+ * @param factor - The first factor with no value (`a`).
+ * @param text - The equation as typed, when it was stored with it.
+ * @returns The message, with `solve(<text>, <variable>)` when the text is known.
+ */
+export function undefinedFactorMessage(variable: string, factor: string, text: string | undefined): string {
+	const asked = `Cannot solve for "${variable}": "${factor}" is not yet defined.`;
+	if (text === undefined || text.trim() === "") return `${asked} Give "${factor}" a value on a line above.`;
+	return `${asked} Give "${factor}" a value on a line above, or solve for "${variable}" in terms of it with solve(${text}, ${variable}).`;
 }

@@ -414,8 +414,13 @@ export function formatRational(r: Rational): string {
 		const magnitude = r.n < 0n ? -r.n : r.n;
 		if (magnitude <= MAX_FRACTION_COMPONENT && r.d <= MAX_FRACTION_COMPONENT) return `${r.n}/${r.d}`;
 		// Too large to read as a fraction, so fall back to the same rounded
-		// decimal the previous double-based formatter produced.
-		return String(Math.round(rationalToNumber(r) * 1e10) / 1e10);
+		// decimal the previous double-based formatter produced. Below 1e-4 that
+		// rounding to ten places keeps too few figures (1/735134400 printed as
+		// 1.4e-9, wrong in its second digit), so a small one keeps ten
+		// significant figures instead.
+		const value = rationalToNumber(r);
+		if (Math.abs(value) < 1e-4) return String(Number(value.toPrecision(10)));
+		return String(Math.round(value * 1e10) / 1e10);
 	}
 
 	const scaled = (r.n < 0n ? -r.n : r.n) * bigintPow(10n, BigInt(decimals)) / r.d;

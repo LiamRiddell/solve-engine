@@ -275,7 +275,7 @@ der(x*y, x) // y
 ```
 
 ```
-integral(x^2, x) // 1/3x^3
+integral(x^2, x) // x^3/3
 integral(3x^2+2x+1, x) // x^3+x^2+x
 integral(cos(x), x) // sin(x)
 integral(1/x, x) // log(x)
@@ -337,8 +337,8 @@ limit(sqrt(x), x, 0) // 0
 ```
 
 ```
-taylor(exp(x), x=0, 4) // 1/24x^4+1/6x^3+0.5x^2+x+1
-taylor(sin(x), x=0, 5) // 1/120x^5-1/6x^3+x
+taylor(exp(x), x=0, 4) // x^4/24+x^3/6+0.5x^2+x+1
+taylor(sin(x), x=0, 5) // x^5/120-x^3/6+x
 ```
 
 ```
@@ -2211,7 +2211,7 @@ https://liamriddell.github.io/solve-engine/syntax/exact-coefficients/
 
 ```
 0.1x + 0.2x => // 0.3x
-x/3 + x/3 => // 2/3x
+x/3 + x/3 => // 2x/3
 ```
 
 ## expanding
@@ -4429,6 +4429,15 @@ n => // 5
 ```
 
 ```
+2x = π
+x => // 1.5707963268
+```
+
+```
+solve(x + 10% = 220, x) // 200
+```
+
+```
 solve(x^2-2=0, x) // [-sqrt(2), sqrt(2)]
 ```
 
@@ -4510,6 +4519,13 @@ solve(a*x+b=0, x) // -b/a
 ```
 :factor = 1.5
 :factor * 2 // 3
+```
+
+```
+(one document)
+a*x = b // x stored as an equation: solve with "x =>"
+x => // ERROR: Cannot solve for "x": "a" is not yet defined. Give "a" a value on a line above, or solve for "x" in terms of it with solve(a*x = b, x).
+solve(a*x = b, x) // b/a
 ```
 
 ```
@@ -4743,6 +4759,25 @@ foo + 1 => // foo+1
 ```
 
 ```
+π km => // 3.14 km
+pi + x => // x+3.1415926536
+```
+
+```
+foo + 10% => // 1.1foo
+foo - 10% => // 0.9foo
+200 + 10% // 220
+```
+
+```
+x*(1/3) => // x/3
+x/(1/y) => // x*y
+-x/-y => // x/y
+-(x^2) => // -(x^2)
+solve(salary/1200 * rate = net, rate) // 1200*net/salary
+```
+
+```
 x/3 => // x/3
 2^10 + x => // x+1024
 ```
@@ -4771,6 +4806,37 @@ foo as hex => // ERROR: Undefined variable: foo
 foo = 12 // 12
 foo percent => // 12.00%
 foo km => // 12.00 km
+```
+
+```
+(one document)
+2 + 3 // 5
+ans km => // 5.00 km
+```
+
+```
+(one document)
+foo * 5 km => // ERROR: A formula keeps no units, so combining "foo" with an amount in km would drop the km. Give "foo" a value on a line above, or write the formula without the unit.
+```
+
+```
+(one document)
+foo = 3 // 3
+foo * 5 km => // 15.00 km
+```
+
+```
+(one document)
+y = x + 10% // 1.1x
+x = 200 // 200
+y // 220
+```
+
+```
+(one document)
+a*x = b // x stored as an equation: solve with "x =>"
+x => // ERROR: Cannot solve for "x": "a" is not yet defined. Give "a" a value on a line above, or solve for "x" in terms of it with solve(a*x = b, x).
+solve(a*x = b, x) // b/a
 ```
 
 ## table-columns
