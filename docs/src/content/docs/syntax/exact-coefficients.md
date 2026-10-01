@@ -20,7 +20,7 @@ fraction all the way through the algebra.
 
 ```solve
 0.1x + 0.2x => // 0.3x
-x/3 + x/3 =>   // 2/3x
+x/3 + x/3 =>   // 2x/3
 ```
 
 A coefficient that cannot be written as a short decimal stays a fraction rather

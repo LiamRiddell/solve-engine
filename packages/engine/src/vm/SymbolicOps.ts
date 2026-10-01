@@ -36,6 +36,8 @@ import {
 	rational,
 	rationalFromNumber,
 	rationalToNumber,
+	rationalAdd,
+	rationalNeg,
 } from "@solve-js/symbolic";
 
 /**
@@ -117,6 +119,10 @@ export const SYMBOLIC_NATIVE_BUILTINS: ReadonlySet<number> = new Set([67, 68, 69
 export function valueToSymbolic(v: Value): SymbolicNode | null {
 	if (v.type === ValueType.Symbolic) return v.value as SymbolicNode;
 	if (v.type === ValueType.Error || v.type === ValueType.Pending) return null;
+	// An exact fraction the arithmetic already holds (`1/1200`) joins as itself.
+	// Read through its double it became 0.000833... to seventeen digits, which
+	// prints rounded as `0.0008333333rate`, a different number from the one typed.
+	if (v.type === ValueType.Number && v.rational !== undefined) return constNode(v.rational);
 	const numeric = v.toNumber();
 	if (!Number.isFinite(numeric)) return null;
 	return constNode(rationalFromNumber(numeric));
@@ -170,6 +176,73 @@ export function unknownNameIn(v: Value): string | null {
 	return null;
 }
 
+/**
+ * The refusal for arithmetic between an unknown and a quantity, or null when
+ * neither operand is a quantity with a unit.
+ *
+ * A formula is algebra on numbers: its tree has nowhere to keep a unit. The
+ * arithmetic read the quantity as its bare number, so `foo * 5 km =>` answered
+ * `5foo` with the kilometres dropped and nothing to say so. The line is refused
+ * by name instead, naming the unknown and the unit it would lose.
+ *
+ * Called from the symbolic branch of `binaryOp()` and from {@link symbolicPow},
+ * after the operand types are known to include a formula, so ordinary
+ * arithmetic never reaches it.
+ *
+ * @param l - The left operand; at least one of the two is a formula.
+ * @param r - The right operand.
+ * @returns An error Value with the code `SYMBOLIC_QUANTITY_OPERAND`, or null.
+ */
+export function symbolicQuantityRefused(l: Value, r: Value): Value | null {
+	if (l.type === ValueType.Uom && l.unit !== undefined) return quantityRefusal(l.unit, unknownNameIn(r));
+	if (r.type === ValueType.Uom && r.unit !== undefined) return quantityRefusal(r.unit, unknownNameIn(l));
+	return null;
+}
+
+/**
+ * The refusal {@link symbolicQuantityRefused} gives, for a unit and the unknown
+ * it would join.
+ *
+ * @param unit - The quantity's unit, as the engine spells it.
+ * @param name - The first unknown of the formula, or null when it has none to name.
+ */
+function quantityRefusal(unit: string, name: string | null): Value {
+	const unknown = name === null ? "an unknown" : `"${name}"`;
+	return errorValue(
+		"SYMBOLIC_QUANTITY_OPERAND",
+		`A formula keeps no units, so combining ${unknown} with an amount in ${unit} would drop the ${unit}. Give ${name === null ? "the unknown" : unknown} a value on a line above, or write the formula without the unit.`,
+	);
+}
+
+/**
+ * `foo + 10%` and `foo - 10%` under the arrow: the percentage is a share of the
+ * unknown, as `200 + 10%` is a share of 200, so the answer is the unknown
+ * scaled by `1 + 10%` (`1.1foo`) and `0.9foo` for the difference. The
+ * arithmetic used to add the bare fraction, `foo+0.1`, which reads a tenth of
+ * one where the line meant a tenth of foo.
+ *
+ * A percentage on the left (`10% + foo`) is not this: the engine reads
+ * `10% + 5` as the percentage 510%, whose value `foo+0.1` already matches.
+ *
+ * @param formula - The left operand, a formula.
+ * @param fraction - The percentage as a fraction (0.1 for 10%).
+ * @param sign - `1` for addition, `-1` for subtraction.
+ * @returns The scaled formula, or an error Value when the fraction has no
+ * exact number (NaN or infinity).
+ */
+export function symbolicPercentChange(formula: Value, fraction: number, sign: 1 | -1): Value {
+	const node = valueToSymbolic(formula);
+	if (node === null || !Number.isFinite(fraction)) {
+		return errorValue(
+			"SYMBOLIC_NONFINITE_OPERAND",
+			"A symbolic expression cannot combine with a value that has no exact number (NaN or infinity).",
+		);
+	}
+	const share = rationalFromNumber(fraction);
+	const factor = rationalAdd(rational(1n), sign === 1 ? share : rationalNeg(share));
+	return symbolicToValue({ kind: "mul", left: constNode(factor), right: node });
+}
+
 /** The error returned whenever a symbolic operand reaches something with no symbolic meaning, in place of the old silent zero. */
 function unsupported(what: string | undefined): Value {
 	// A builtin with no symbolic name is described rather than shown by its
@@ -191,6 +264,9 @@ function unsupported(what: string | undefined): Value {
  * exact rational image.
  */
 export function symbolicPow(l: Value, r: Value): Value {
+	// `(5 km)^foo` would drop the kilometres as `foo * 5 km` did.
+	const quantity = symbolicQuantityRefused(l, r);
+	if (quantity) return quantity;
 	const base = valueToSymbolic(l);
 	const exponent = valueToSymbolic(r);
 	if (base === null || exponent === null) return unsupported("^");
@@ -231,6 +307,8 @@ export function symbolicBuiltin(index: number, args: readonly Value[]): Value {
 		// arrived yet.
 		const faulted = faultedOperand(arg);
 		if (faulted) return faulted;
+		// `hypot(foo, 3 km)` would drop the kilometres; see symbolicQuantityRefused().
+		if (arg.type === ValueType.Uom && arg.unit !== undefined) return quantityRefusal(arg.unit, firstUnknownOf(args));
 		const node = valueToSymbolic(arg);
 		if (node === null) return unsupported(SYMBOLIC_BUILTIN_NAMES[index]);
 		nodes.push(node);
@@ -251,6 +329,15 @@ export function symbolicBuiltin(index: number, args: readonly Value[]): Value {
 	const name = SYMBOLIC_BUILTIN_NAMES[index];
 	if (name === undefined) return unsupported(undefined);
 	return symbolicToValue(callNode(name, nodes));
+}
+
+/** The first unknown among a call's arguments, for a refusal to name. */
+function firstUnknownOf(args: readonly Value[]): string | null {
+	for (const arg of args) {
+		const name = unknownNameIn(arg);
+		if (name !== null) return name;
+	}
+	return null;
 }
 
 /**
@@ -356,6 +443,10 @@ function solveOutcomeToValue(outcome: SolveOutcome): Value {
  * value to solve with.
  */
 export function solveEquationValues(lhsValue: Value, rhsValue: Value, variable: string, range?: SearchRange): Value {
+	// `solve(2x = 4 km, x)` answered 2 with the kilometres dropped, as `foo * 5
+	// km` did; see symbolicQuantityRefused().
+	if (lhsValue.type === ValueType.Uom && lhsValue.unit !== undefined) return quantityRefusal(lhsValue.unit, variable);
+	if (rhsValue.type === ValueType.Uom && rhsValue.unit !== undefined) return quantityRefusal(rhsValue.unit, variable);
 	const lhs = valueToSymbolic(lhsValue);
 	const rhs = valueToSymbolic(rhsValue);
 	if (lhs === null || rhs === null) {

@@ -163,7 +163,7 @@ describe("integral with bounds is the definite integral", () => {
 	});
 
 	test("the indefinite form is unchanged", () => {
-		expect(shown("integral(x^2, x)")).toBe("1/3x^3");
+		expect(shown("integral(x^2, x)")).toBe("x^3/3");
 	});
 });
 

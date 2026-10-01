@@ -51,6 +51,20 @@ export const ANSWER_NAME = "ans";
 export const PI_NAME = "\u03C0";
 
 /**
+ * Whether a name that holds no value still reads as one: `π` as the constant
+ * and `ans` as the line above. Such a name is not an unknown, under the arrow or
+ * in an equation, so `π km =>` is 3.14 km and `2x = π` is solved for `x` alone.
+ * A note that gives either name a value of its own is read with that value, so
+ * callers ask this only of a name with none.
+ *
+ * @param name - A variable name.
+ * @returns True for `π` and `ans`.
+ */
+export function readsWithoutValue(name: string): boolean {
+	return name === ANSWER_NAME || name === PI_NAME;
+}
+
+/**
  * The line above's answer, as `prev` reads it: what `ans` means when no
  * variable of that name is defined (#668).
  *

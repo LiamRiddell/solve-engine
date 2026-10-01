@@ -470,6 +470,90 @@ function foldComplexCall(name: string, args: readonly SymbolicNode[]): SymbolicN
 	}
 }
 
+/**
+ * How far into a product or quotient {@link absorbNegation} looks for a sign to
+ * cancel. A sign further in is left where it is: the tree is still the same
+ * value, and the search stays a short walk rather than a second pass over a
+ * deep tree.
+ */
+const MAX_ABSORB_DEPTH = 4;
+
+/**
+ * The negation of `node` with one sign cancelled rather than a minus added: a
+ * negative coefficient made positive, or an inner minus removed. `-(-2x*y)`
+ * is `2x*y` and `-(-a/b)` is `a/b`. Only the leading factors of a product or a
+ * quotient are searched, left first, then right.
+ *
+ * Deliberately never pushes a minus into a positive coefficient: that would be
+ * a rewrite of the same size, and the other rules here rely on a leading `neg`
+ * to cancel through (`-(a*b)/a`).
+ *
+ * @param node - A simplified tree.
+ * @param depth - How many products and quotients have been entered; 0 from a caller.
+ * @returns A tree equal to `-node` with one fewer node, or `null` when `node`
+ * has no sign within reach.
+ */
+export function absorbNegation(node: SymbolicNode, depth: number): SymbolicNode | null {
+	switch (node.kind) {
+		case "const":
+			return node.value.n < 0n ? constNode(rationalNeg(node.value)) : null;
+		case "neg":
+			return node.operand;
+		case "mul":
+		case "div": {
+			if (depth >= MAX_ABSORB_DEPTH) return null;
+			const left = absorbNegation(node.left, depth + 1);
+			if (left !== null) return { kind: node.kind, left, right: node.right };
+			const right = absorbNegation(node.right, depth + 1);
+			if (right !== null) return { kind: node.kind, left: node.left, right };
+			return null;
+		}
+		default:
+			return null;
+	}
+}
+
+/**
+ * A quotient rewritten so its denominator reads plainly, or `null` when it
+ * already does. Each rewrite keeps the value and the node count, or lowers it:
+ *
+ *   x/-3          -x/3, as the coefficient -1/3 on x (or the sign cancelled)
+ *   x/(-y)        -(x/y), or the sign cancelled against one in x
+ *   x/(y/z)       x*z/y, so x/(1/y) is x*y
+ *   x/(y/1200)    1200x/y, a fractional coefficient moved to the numerator
+ *
+ * The solver builds these shapes when it divides through by a coefficient,
+ * and printed as they are they read as a different formula: `net/(1/1200salary)`
+ * looks like one over 1200 salaries. A whole-number coefficient stays in the
+ * denominator (`x/(2y)`), which is how it is written by hand.
+ *
+ * @param left - The simplified numerator.
+ * @param right - The simplified denominator, not zero or one.
+ */
+export function reshapeQuotient(left: SymbolicNode, right: SymbolicNode): SymbolicNode | null {
+	if (right.kind === "const" && right.value.n < 0n) {
+		const positive = constNode(rationalNeg(right.value));
+		const absorbed = absorbNegation(left, 0);
+		if (absorbed !== null) return { kind: "div", left: absorbed, right: positive };
+		return { kind: "mul", left: constNode(rationalDiv(RATIONAL_ONE, right.value)), right: left };
+	}
+	if (right.kind === "neg") {
+		const absorbed = absorbNegation(left, 0);
+		if (absorbed !== null) return { kind: "div", left: absorbed, right: right.operand };
+		return { kind: "neg", operand: { kind: "div", left, right: right.operand } };
+	}
+	if (right.kind === "div") {
+		return { kind: "div", left: { kind: "mul", left, right: right.right }, right: right.left };
+	}
+	if (right.kind === "mul") {
+		const [coefficient, rest] = right.left.kind === "const" ? [right.left, right.right] : right.right.kind === "const" ? [right.right, right.left] : [null, null];
+		if (coefficient !== null && rest !== null && coefficient.kind === "const" && coefficient.value.d !== 1n && !isRationalZero(coefficient.value)) {
+			return { kind: "div", left: { kind: "mul", left: constNode(rationalDiv(RATIONAL_ONE, coefficient.value)), right: left }, right: rest };
+		}
+	}
+	return null;
+}
+
 /** Recursive worker for {@link simplifySymbolic}, past the one-time size guard and under the depth guard in {@link simplifyNode}. */
 function simplifyNodeAt(node: SymbolicNode): SymbolicNode {
 	switch (node.kind) {
@@ -483,6 +567,11 @@ function simplifyNodeAt(node: SymbolicNode): SymbolicNode {
 			if (operand.kind === "const") return constNode(rationalNeg(operand.value));
 			if (operand.kind === "complex") return complexNode(complexNeg(operand.value));
 			if (operand.kind === "neg") return operand.operand;
+			// A minus that a coefficient or a minus inside the operand can take
+			// (`-(-2x*y)` is `2x*y`, `-(-a/b)` is `a/b`) goes there, so a solved
+			// formula does not carry two signs where none is meant.
+			const absorbed = absorbNegation(operand, 0);
+			if (absorbed !== null) return simplifyNode(absorbed);
 			return { kind: "neg", operand };
 		}
 
@@ -521,6 +610,10 @@ function simplifyNodeAt(node: SymbolicNode): SymbolicNode {
 			if (right.kind === "const" && isRationalOne(right.value)) return left;
 			if (left.kind === "const" && isRationalMinusOne(left.value)) return simplifyNode({ kind: "neg", operand: right });
 			if (right.kind === "const" && isRationalMinusOne(right.value)) return simplifyNode({ kind: "neg", operand: left });
+			// A minus beside a coefficient joins it: `1.1*(-x)` is `-1.1x`, one
+			// node fewer, rather than a product that prints as `1.1*-x`.
+			if (left.kind === "const" && right.kind === "neg") return simplifyNode({ kind: "mul", left: constNode(rationalNeg(left.value)), right: right.operand });
+			if (right.kind === "const" && left.kind === "neg") return simplifyNode({ kind: "mul", left: constNode(rationalNeg(right.value)), right: left.operand });
 			// Gather adjacent constant factors: c1*(c2*rest) -> (c1*c2)*rest, and
 			// the mirrored shape. Differentiation builds exactly these, so without
 			// this the second derivative of x^3 stays as 3*(2*x) rather than 6x.
@@ -569,6 +662,8 @@ function simplifyNodeAt(node: SymbolicNode): SymbolicNode {
 			const foldedDiv = foldComplexBinary("div", left, right);
 			if (foldedDiv !== null) return foldedDiv;
 			if (right.kind === "const" && isRationalOne(right.value)) return left;
+			const reshaped = reshapeQuotient(left, right);
+			if (reshaped !== null) return simplifyNode(reshaped);
 			if (left.kind === "const" && isRationalZero(left.value)) return constNode(RATIONAL_ZERO);
 			// Cancel a single common factor: (a*b)/a -> b, (a*b)/b -> a. A narrow,
 			// disclosed exception to "never collects through mul/div", needed for
@@ -584,7 +679,10 @@ function simplifyNodeAt(node: SymbolicNode): SymbolicNode {
 			// always smaller, so the no-growth invariant holds. A rational function
 			// in more than one variable, `vx/sx`, has no univariate gcd and comes
 			// back untouched.
-			const cancelled = cancelSymbolic({ kind: "div", left, right });
+			// A constant denominator shares no factor with anything, so the
+			// multiplying out is skipped: over a deep numerator it was a pass of
+			// its own at every level.
+			const cancelled = right.kind === "const" ? { kind: "div" as const, left, right } : cancelSymbolic({ kind: "div", left, right });
 			if (cancelled.kind !== "div" || cancelled.left !== left || cancelled.right !== right) {
 				return simplifyNode(cancelled);
 			}

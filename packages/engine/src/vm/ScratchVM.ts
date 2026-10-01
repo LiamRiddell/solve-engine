@@ -91,8 +91,8 @@ export function createScratchVM(live: VM): VM {
 			}
 			return [...merged.values()];
 		},
-		defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram): void {
-			equations.set(variable, { variable, factorNames, rhsProgram });
+		defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram, text?: string): void {
+			equations.set(variable, text === undefined ? { variable, factorNames, rhsProgram } : { variable, factorNames, rhsProgram, text });
 		},
 		getEquation(variable: string): EquationDef | undefined {
 			return equations.get(variable) ?? (readsThrough ? live.getEquation(variable) : undefined);

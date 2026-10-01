@@ -94,7 +94,7 @@ describe("what it must not break", () => {
 	});
 
 	test("a name nothing above the reading line defines stays symbolic", () => {
-		expect(both(["y = x + 1", "y * 2"])).toEqual(["x+1", "(x+1)*2"]);
+		expect(both(["y = x + 1", "y * 2"])).toEqual(["x+1", "2(x+1)"]);
 		// A line that is not an assignment reads an undefined name as undefined, as before.
 		expect(both(["y = x + 1", "y + x"])).toEqual(["x+1", "ERROR Undefined variable: x"]);
 	});
@@ -135,7 +135,7 @@ describe("the reading follows every kind of formula", () => {
 	});
 
 	test("a circular pair stays as it is", () => {
-		expect(both(["y = x + 1", "x = y * 2", "y"])).toEqual(["x+1", "(x+1)*2", "x+1"]);
+		expect(both(["y = x + 1", "x = y * 2", "y"])).toEqual(["x+1", "2(x+1)", "x+1"]);
 		expect(both(["y = y + 1", "y"])).toEqual(["y+1", "y+1"]);
 	});
 });
@@ -162,7 +162,7 @@ describe("a value a formula cannot take is refused by name", () => {
 	});
 
 	test("an unknown defined as another formula carries that formula", () => {
-		expect(both(["y = x + 1", "x = nosuchname * 2", "y"])).toEqual(["x+1", "2nosuchname", "2nosuchname+1"]);
+		expect(both(["y = x + 1", "x = nosuchname * 2", "y"])).toEqual(["x+1", "2*nosuchname", "2*nosuchname+1"]);
 	});
 });
 

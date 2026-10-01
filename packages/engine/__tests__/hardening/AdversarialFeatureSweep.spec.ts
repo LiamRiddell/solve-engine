@@ -202,6 +202,26 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"(salary / 12) * rate / X = net",
 		"x + y = X",
 	],
+	// A constant under the arrow, a quantity or a percentage met by an unknown,
+	// a formula the printer must write so it reads back, and a product equation
+	// solved by `solve` (FoundBug_constantUnderTheArrow, FoundBug_unitInAFormula,
+	// FoundBug_percentOfAnUnknown, FoundBug_formulaDisplayRoundTrip,
+	// FoundBug_productEquationUndefinedFactor).
+	formulaArithmetic: [
+		"π X km =>",
+		"X * π + foo =>",
+		"2x = π + X",
+		"foo + X km =>",
+		"hypot(foo, X km) =>",
+		"solve(2x = X km, x)",
+		"foo + X% =>",
+		"foo - X% =>",
+		"solve(x + X% = 220, x)",
+		"solve(net = rate * salary / X, salary)",
+		"-(foo^X) =>",
+		"foo / (1/X) =>",
+		"solve(a*x = X, x)",
+	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,
 	// an inverse trigonometric call to a unit that is not an angle, a quotient
@@ -435,6 +455,15 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "Alice's food = X\nAlice’s food * 2" },
 	{ form: "y = x + X\ny km\ny percent =>" },
 	{ form: "salary = X\nnet = 1000\n(salary / 12) * rate / 100 = net\nrate =>" },
+	// `ans` under the arrow, a percentage of a stored unknown, a quantity met
+	// by one, and a product equation with a factor and without (the ninth
+	// found-bug batch).
+	{ form: "X\nans km =>\nans + x =>" },
+	{ form: "y = x + 10%\nx = X\ny" },
+	{ form: "y = x * 2\ny * X km" },
+	{ form: "a*x = X\nx =>" },
+	{ form: "a = 4\na*x = X\nx =>" },
+	{ form: "x*π = X\nx =>" },
 	// A named scenario and a date sweep (#744).
 	{ form: "a = 1\nb = a * 2\nscenario s with a = X\nline 2 under s" },
 	{ form: "d = 2026-01-01\n(d - 2026-01-01) in days\nline 2 for d from 2026-01-01 to 2026-06-01 step X months" },
@@ -527,6 +556,9 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 			expectHonestDocument(`${word}'s rate = 5\n${word}’s rate * 2`);
 			expectHonestDocument(`${word} percent =>\n${word} km =>`);
 			expectHonestDocument(`${word} + y = 10\n${word} =>`);
+			// Met by a quantity or a percentage, and as a product equation's factor.
+			expectHonestDocument(`${word} * 5 km =>\n${word} + 10% =>`);
+			expectHonestDocument(`${word}*x = 10\nx =>`);
 			expectHonestDocument(`# ${word}\n10\ntotal of section "${word}"`, { agree: false });
 			expectHonestDocument(`| ${word} | cost |\n| --- | --- |\n| food | 10 |\n\ncolumn "${word}" for "food"`, { agree: false });
 		});

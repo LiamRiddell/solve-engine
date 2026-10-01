@@ -169,6 +169,8 @@ export const CoreErrorCodes = {
   SYMBOLIC_NONFINITE_OPERAND: "SYMBOLIC_NONFINITE_OPERAND",
   /** An exact symbolic division by zero, such as `expand((x+1)/0)`: refused where the quotient is written, as a value, and thrown from the rational arithmetic beneath. The zero is exact, so a very small number is not mistaken for one. */
   SYMBOLIC_DIVISION_BY_ZERO: "SYMBOLIC_DIVISION_BY_ZERO",
+  /** Arithmetic between an unknown and an amount with a unit, such as `foo * 5 km =>`: a formula has nowhere to keep the unit, so the line is refused rather than answered with the unit dropped. */
+  SYMBOLIC_QUANTITY_OPERAND: "SYMBOLIC_QUANTITY_OPERAND",
   /** A tree exceeding `SYMBOLIC_MAX_NODES` entering the simplifier. */
   SYMBOLIC_NODE_LIMIT_EXCEEDED: "SYMBOLIC_NODE_LIMIT_EXCEEDED",
   /** A name holding a formula written before one of its unknowns had a value (`y = x + 1` above `x = $5`), read after that unknown was given money, a quantity in a unit, a date or text, which the formula cannot take. Returned by the read rather than a formula mixing the value with the unknown (#732). */
