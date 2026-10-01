@@ -320,6 +320,15 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"gcd([X, 6], 2)",
 		"٢٤:X",
 		"Total: ٢X:00",
+		// A percentage added to a list, a bracketed figure before a colon, and
+		// a figure with an invisible character in it before a colon
+		// (FoundBug_listPercentage, FoundBug_bracketedFigureLabel,
+		// FoundBug_hiddenFigureLabel).
+		"[X, 200] + 10%",
+		"[100 m, 200 m] - X%",
+		"(X):00",
+		"‮X:00",
+		"‍X:00",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,

@@ -1,4 +1,4 @@
-import { type MatrixData, type MatrixEntry, Value, ValueType, matrixValue, uomValue, errorValue, faultedOperand } from "@solve-js/vm/Value";
+import { type MatrixData, type MatrixEntry, Value, ValueType, matrixValue, numberValue, uomValue, errorValue, faultedOperand } from "@solve-js/vm/Value";
 import type { SymbolicNode } from "@solve-js/symbolic";
 import { matrixEntryToValue, matrixCompare, sameShape, unitListAlgebraRefused } from "@solve-js/vm/MatrixOps";
 import { unifyUom, describeMeasure, nonNumericKind, binaryOp, sameUnit } from "@solve-js/vm/VMConversion";
@@ -147,10 +147,16 @@ const VERB: Readonly<Record<UnitListOp, string>> = {
  * quantity added to one of its measure, or a number taken into a quantity.
  * Two quantities multiplied or divided cell by cell (`[1 m, 2 m] * 3 m`) would
  * need the unit algebra of each product, which a list of one unit cannot hold
- * when the cells differ, so that is refused by name, as is a percentage, whose
- * readings (`+ 10%` is a tenth more) are the scalar forms'.
+ * when the cells differ, so that is refused by name. A percentage multiplies
+ * or divides as its fraction (`10% of [$100, $200]` is [$10, $20], as
+ * `10% of $100` is $10); added or taken away it is a share of each cell, which
+ * the VM works out before it reaches here (see vm/ListPercentage.ts), so that
+ * refusal only stands guard.
  */
-function cellArithmetic(op: UnitListOp, a: Value, b: Value): Value {
+function cellArithmetic(op: UnitListOp, left: Value, right: Value): Value {
+	const scales = op === "mul" || op === "div" || op === "mod";
+	const a = scales && left.type === ValueType.Percentage ? numberValue(left.toNumber()) : left;
+	const b = scales && right.type === ValueType.Percentage ? numberValue(right.toNumber()) : right;
 	const aQuantity = a.type === ValueType.Uom;
 	const bQuantity = b.type === ValueType.Uom;
 	if (a.type === ValueType.Percentage || b.type === ValueType.Percentage) {

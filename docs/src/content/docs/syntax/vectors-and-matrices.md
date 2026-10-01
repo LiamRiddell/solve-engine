@@ -92,8 +92,7 @@ neither is an amount in the list's unit:
 The boundary: a list carries one unit, so an operation whose cells would come
 out in different units, or in a unit made from two, is refused rather than
 answered in plain numbers. Multiplying a list of quantities by another quantity
-(`[1 m, 2 m] * 3 m`), dividing a number by one, and adding a percentage to one
-(write the factor as a number instead) are refused by name. So is matrix
+(`[1 m, 2 m] * 3 m`) and dividing a number by one are refused by name. So is matrix
 algebra on quantities (a determinant, an inverse, a matrix product or power, a
 dot product), whose answer would be in a power of the unit; write the list
 without its unit to work on the amounts. A formula cell (an unknown) has no
@@ -118,6 +117,16 @@ are added together.
 ```solve
 [1,2,3] * 10 // [10, 20, 30]
 [1,2,3] + [10,20,30] // [11, 22, 33]
+```
+
+A percentage is a share of each element, as it is of one number, so a 10%
+rise on a list raises every element by a tenth of itself, and a list with a
+unit keeps it (see [a percentage and a list](/syntax/percentages/#a-percentage-and-a-list)):
+
+```solve
+[100, 200] + 10% // [110, 220]
+[1 km, 2 km] + 10% // [1.10 km, 2.20 km]
+10% of [1 km, 2 km] // [0.10 km, 0.20 km]
 ```
 
 ## Functions of a list

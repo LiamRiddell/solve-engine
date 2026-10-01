@@ -9,6 +9,7 @@ import { resolveStoredFormulaIn } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
 import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues, ReduceForm, reduceFormCall } from "@solve-js/vm/MatrixOps";
 import { listFromCells, listCellValue, needsUnitCells, unitListArithmetic, listConverted } from "@solve-js/vm/MatrixUnits";
+import { percentageMeetsList, type PercentageCell } from "@solve-js/vm/ListPercentage";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -1431,6 +1432,32 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
     // stays exact via the base-ten scaling factor.
     if (l.type === ValueType.Uom && l.unit !== undefined) return scaleMoneyByPercent(l, l.unit, r.toNumber(), sign);
     return null;
+}
+
+/** {@link combinePercentage} for `+`, as one cell of a list meets a percentage. */
+const addPercentageCell: PercentageCell = (a, b) => combinePercentage(a, b, 1);
+
+/** {@link combinePercentage} for `-`, as one cell of a list meets a percentage. */
+const subtractPercentageCell: PercentageCell = (a, b) => combinePercentage(a, b, -1);
+
+/**
+ * `+` or `-` with a list on at least one side, worked cell by cell, or null
+ * for the general path (two plain lists, a plain list and a plain number).
+ *
+ * A percentage is a share of each cell, by the rule one number follows, so
+ * `[100, 200] + 10%` is `[110, 220]`; the general path read the percentage as
+ * its bare fraction and answered `[100.10, 200.10]` (see vm/ListPercentage.ts).
+ * A list that carries a unit, or a plain list meeting a quantity, keeps the
+ * unit (#745, see vm/MatrixUnits.ts).
+ *
+ * @param l - The left operand.
+ * @param r - The right operand; at least one of the two is a list.
+ * @param sign - `1` for `+`, `-1` for `-`.
+ */
+function listAddOrSubtract(l: Value, r: Value, sign: 1 | -1): Value | null {
+    const shared = percentageMeetsList(l, r, sign, sign === 1 ? addPercentageCell : subtractPercentageCell);
+    if (shared !== null) return shared;
+    return needsUnitCells(l, r) ? unitListArithmetic(sign === 1 ? "add" : "sub", l, r) : null;
 }
 
 /**
@@ -3761,9 +3788,13 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         case OpCode.ADD: {
           const r = safePop(stack), l = safePop(stack);
-          // A list that carries a unit, or a plain list meeting a quantity, is
-          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
-          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("add", l, r)); break; }
+          // A list meeting a percentage, a list that carries a unit, or a plain
+          // list meeting a quantity, is worked cell by cell. One type test on
+          // the plain path. See listAddOrSubtract().
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) {
+            const listSum = listAddOrSubtract(l, r, 1);
+            if (listSum !== null) { stack.push(listSum); break; }
+          }
           // The plain case first. Two bare numbers with no sidecar are the
           // overwhelming majority of additions, and every helper below would
           // decline them one call at a time. A Number is never a faulted
@@ -3878,9 +3909,11 @@ export function executeBytecode(
         }
         case OpCode.SUB: {
           const r = safePop(stack), l = safePop(stack);
-          // A list that carries a unit, or a plain list meeting a quantity, is
-          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
-          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("sub", l, r)); break; }
+          // As in ADD: a list meeting a percentage or a unit, cell by cell.
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) {
+            const listDifference = listAddOrSubtract(l, r, -1);
+            if (listDifference !== null) { stack.push(listDifference); break; }
+          }
           // The plain case first, as in ADD, exact past the safe range as ADD is.
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined

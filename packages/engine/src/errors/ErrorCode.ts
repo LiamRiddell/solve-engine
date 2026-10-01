@@ -255,10 +255,12 @@ export const CoreErrorCodes = {
   INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
   /** A choice written `condition ? value : other` (`true ? 25 : 30`). There is no such operator; the message spells the line as `if ... then ... else`. Raised by the labelled-line fallback, which used to read `true ? 25` as a label and answer 30. */
   TERNARY_UNSUPPORTED: "TERNARY_UNSUPPORTED",
-  /** Text before a colon that is a comparison, an assignment or a calculation with no word in it (`a > b: 1`, `(1+2): 5`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. */
+  /** Text before a colon that is a comparison, an assignment, or a calculation or bracketed figure with no word in it (`a > b: 1`, `(1+2): 5`, `(24):00`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. */
   LABEL_NOT_A_NAME: "LABEL_NOT_A_NAME",
   /** A figure in digits from another script (`٢٤:00`, `Total: ٢٤:00`, Arabic-Indic for 24) standing before a colon where a number would be an operand. Numbers are read in the digits 0 to 9 only, and the labelled-line fallback used to take the figure as a label and answer with what followed the colon. The message spells the figure in 0 to 9. */
   OTHER_SCRIPT_DIGITS: "OTHER_SCRIPT_DIGITS",
+  /** A figure in 0 to 9 holding an invisible character that is not a direction control (a zero-width joiner or non-joiner, a word joiner, a soft hyphen), standing before a colon where a number would be an operand (`<U+200D>24:00`). The character makes the figure a word, which the labelled-line fallback used to take as a label and answer with what followed the colon. The message names the character by its code point; the reader deletes it. A direction control in the same place is `DIRECTION_CONTROL_IN_NAME`. */
+  INVISIBLE_CHARACTER_IN_NUMBER: "INVISIBLE_CHARACTER_IN_NUMBER",
   /** A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. */
   NETWORK_DISABLED: "NETWORK_DISABLED",
 
@@ -512,8 +514,10 @@ export const CoreErrorCodes = {
   LIST_CONVERSION_UNSUPPORTED: "LIST_CONVERSION_UNSUPPORTED",
   /** A list of several numbers given to a builtin that reads each argument as one number and has no answer for each cell (`gcd([4, 6], 2)`, `root(3, [8, 27])`, `atan2([1, 2], 1)`, `isprime([2, 4])`). The message points at `map`. */
   LIST_ARGUMENT_UNSUPPORTED: "LIST_ARGUMENT_UNSUPPORTED",
-  /** A list given to a function of one number that is worked out for each cell (`sqrt`, `sin`, `ln`, `fact`), when a cell is not a number (a true or false, a formula with an unknown), when a cell has no real answer (`sqrt([4, -9])`), or when the answers come in different units. */
+  /** A list given to a function of one number that is worked out for each cell (`sqrt`, `sin`, `ln`, `fact`), or added to or taken from a percentage (`[true, 2] + 10%`), when a cell is not a number (a true or false, a formula with an unknown), when a cell has no real answer (`sqrt([4, -9])`), or when the answers come in different units. */
   LIST_CELL_UNSUPPORTED: "LIST_CELL_UNSUPPORTED",
+  /** A percentage written before a plain list with `+` or `-` (`10% + [100, 200]`). One number there gives a percentage (`10% + 100` is 10,010%), which a list of plain numbers cannot hold, so the message gives the order that adds the percentage to each number, `[100, 200] + 10%`. */
+  LIST_PERCENTAGE_UNSUPPORTED: "LIST_PERCENTAGE_UNSUPPORTED",
   /** A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. */
   COLLECTION_TOO_LARGE: "COLLECTION_TOO_LARGE",
   /** A list cell that is not a number or a quantity: a list inside a list, text, a date. */

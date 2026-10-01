@@ -48,7 +48,21 @@ function subject(name: string): string {
  */
 export function applyEachCell(source: Value, name: string, applyCell: (cell: Value) => Value): Value | null {
 	if (!isManyCellList(source)) return null;
-	const m = source.value as MatrixData;
+	return eachCellOf(source.value as MatrixData, name, applyCell);
+}
+
+/**
+ * Every cell of a list, of any size, worked out by `applyCell`, in the list's
+ * shape: the walk {@link applyEachCell} makes once it has a list of several
+ * cells, with the same refusals. Arithmetic calls it directly, since a list of
+ * one cell is still a list there (`[100] + 10%` is `[110]`).
+ *
+ * @param m - The list.
+ * @param name - What a refusal calls the calculation, or "" for words of its own.
+ * @param applyCell - Works out one cell.
+ * @returns The list of answers, or the refusal.
+ */
+export function eachCellOf(m: MatrixData, name: string, applyCell: (cell: Value) => Value): Value {
 	const data: number[] = [];
 	let unit: string | undefined;
 	for (let k = 0; k < m.data.length; k++) {
