@@ -1,6 +1,7 @@
 import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import { builtinTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import { compareCompletionItems, mergeRankedCompletions } from "@solve-js/language/completionRanking";
 import type { Token } from "@solve-js/lexer/Token";
 import { knownUnits } from "@solve-js/lexer/units";
 import { getMeasure } from "@solve-js/uom/UomConverter";
@@ -60,19 +61,6 @@ const MAX_PHRASE_WORDS = 6;
 
 /** The trailing run of words before the cursor, one space or more between them, for matching a phrase across them. */
 const TRAILING_WORDS = /(?:[A-Za-z0-9_]+ +){0,5}[A-Za-z0-9_]+$/;
-
-/** Tier ordering for completion results: user-authored variables first, then grammar, then units. */
-const CATEGORY_TIER: Partial<Record<TokenCategory, number>> = {
-	variable: 0,
-	function: 1,
-	keyword: 1,
-	operator: 1,
-	comparison: 1,
-	bitwise: 1,
-	datetime: 1,
-	vector: 1,
-	unit: 2,
-};
 
 /** Bounded cache size. See the eviction-policy note on `LanguageService.cache`. */
 const MAX_CACHED_LINES = 2000;
@@ -267,6 +255,13 @@ export class LanguageService {
 	// conversion tables took it past a thousand, and the warm completion
 	// benchmarks regressed roughly 2.9x until this was added.
 	private staticCompletionIndex: Map<string, IndexedCompletionCandidate[]> | null = null;
+
+	// The first characters whose bucket in the current index has been put in
+	// result order (see rankedStaticBucket). Sorting a bucket on first use
+	// rather than all of them when the index is built keeps the first
+	// completion as cheap as it was: it pays for one bucket, not every one.
+	// Replaced whenever the index is rebuilt.
+	private rankedStaticBuckets = new Set<string>();
 
 	// Built on the first reference query, so a host that only highlights and
 	// completes never constructs it.
@@ -535,13 +530,19 @@ export class LanguageService {
 
 		if (!this.engine) return [];
 
-		const matches: CompletionItem[] = [];
+		// The result is the stable sort of everything matched, in the order it
+		// is gathered here: the document's own names, then the static
+		// vocabulary, then phrases matched across words. The static buckets are
+		// sorted once when the index is built, so only the document's names and
+		// the cross-word phrases are sorted per call, and the three runs are
+		// merged with ties going to the earlier run, as the stable sort would.
+		const documentNames: CompletionItem[] = [];
 
 		// Variables are read fresh every call and there are few of them, so they
 		// stay a linear scan.
 		for (const name of this.variableNameSource()) {
 			if (name.toLowerCase().startsWith(prefix)) {
-				matches.push({ label: name, category: "variable" });
+				documentNames.push({ label: name, category: "variable" });
 			}
 		}
 
@@ -549,19 +550,21 @@ export class LanguageService {
 		// edit, like variables, so they are read fresh and scanned the same way.
 		for (const name of this.engine.userUnitNames()) {
 			if (name.toLowerCase().startsWith(prefix)) {
-				matches.push({ label: name, category: "unit", detail: "defined in this document" });
+				documentNames.push({ label: name, category: "unit", detail: "defined in this document" });
 			}
 		}
 
 		// Static candidates only ever match if they share the prefix's first
-		// character, so consult that bucket alone.
-		const index = this.getStaticCompletionIndex();
-		const bucket = index.get(prefix[0]);
+		// character, so consult that bucket alone. It is already in result
+		// order, so the matches come out in result order too.
+		const staticMatches: CompletionItem[] = [];
+		const bucket = this.rankedStaticBucket(prefix[0]);
 		if (bucket) {
 			for (const candidate of bucket) {
-				if (candidate.lowerLabel.startsWith(prefix)) matches.push(candidate.item);
+				if (candidate.lowerLabel.startsWith(prefix)) staticMatches.push(candidate.item);
 			}
 		}
+		const phraseMatches: CompletionItem[] = [];
 
 		// A phrase can also be matched across the words already typed: `net
 		// pres` is the start of `net present value of`. Each longer run of
@@ -573,11 +576,11 @@ export class LanguageService {
 			let start = 0;
 			for (let n = 0; n < MAX_PHRASE_WORDS && start < typed.length - prefixMatch[0].length; n++) {
 				const tail = typed.slice(start).toLowerCase().replace(/ +/g, " ");
-				const phraseBucket = index.get(tail[0]);
+				const phraseBucket = this.getStaticCompletionIndex().get(tail[0]);
 				if (phraseBucket) {
 					for (const candidate of phraseBucket) {
 						if (candidate.lowerLabel.includes(" ") && candidate.lowerLabel.startsWith(tail)) {
-							matches.push({ ...candidate.item, replaceLength: typed.length - start });
+							phraseMatches.push({ ...candidate.item, replaceLength: typed.length - start });
 						}
 					}
 				}
@@ -588,13 +591,14 @@ export class LanguageService {
 			}
 		}
 
-		matches.sort((a, b) => {
-			const tierDiff = (CATEGORY_TIER[a.category] ?? 3) - (CATEGORY_TIER[b.category] ?? 3);
-			if (tierDiff !== 0) return tierDiff;
-			return a.label.localeCompare(b.label);
-		});
-
-		return matches.slice(0, MAX_COMPLETIONS);
+		// An ordinary keystroke in a word matches nothing the document defines
+		// and no phrase across words, so the static run is the whole answer.
+		if (documentNames.length === 0 && phraseMatches.length === 0) {
+			return staticMatches.length > MAX_COMPLETIONS ? staticMatches.slice(0, MAX_COMPLETIONS) : staticMatches;
+		}
+		documentNames.sort(compareCompletionItems);
+		phraseMatches.sort(compareCompletionItems);
+		return mergeRankedCompletions([documentNames, staticMatches, phraseMatches], MAX_COMPLETIONS);
 	}
 
 	/** Lazily builds and caches the keyword/unit/package-item candidate list. See `staticCompletionCandidates`. */
@@ -660,7 +664,25 @@ export class LanguageService {
 		}
 
 		this.staticCompletionIndex = index;
+		this.rankedStaticBuckets = new Set<string>();
 		return index;
+	}
+
+	/**
+	 * The static candidates whose label starts with `firstCharacter`, in result
+	 * order: sorted the first time a prefix asks for them and kept that way, so
+	 * a keystroke reads its matches off in order instead of sorting them. The
+	 * sort is stable, so two candidates that tie keep the order they were
+	 * gathered in. Undefined when no candidate starts with it.
+	 *
+	 * @param firstCharacter - The lowercased first character of the prefix.
+	 */
+	private rankedStaticBucket(firstCharacter: string): readonly IndexedCompletionCandidate[] | undefined {
+		const bucket = this.getStaticCompletionIndex().get(firstCharacter);
+		if (bucket === undefined || this.rankedStaticBuckets.has(firstCharacter)) return bucket;
+		bucket.sort((a, b) => compareCompletionItems(a.item, b.item));
+		this.rankedStaticBuckets.add(firstCharacter);
+		return bucket;
 	}
 
 	// ── Reference-aware editing ─────────────────────────────────────────────

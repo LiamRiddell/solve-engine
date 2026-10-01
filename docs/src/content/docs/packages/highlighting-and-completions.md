@@ -67,6 +67,15 @@ When a word reaches the list by two routes, a function your package defines that
 is also a call word, your `completionItems` entry is the one kept, so its
 `detail` (a signature, say) is what the editor shows.
 
+Suggestions come in a fixed order, at most 50 of them: the document's own
+variables first, then the grammar (functions, keywords, operators and the other
+built-in categories), then units, then every category the table does not list,
+your own (`my-plugin-item` above) among them. Within a group they are
+alphabetical in the default locale's collation, and two with the same label keep
+the order they were gathered in, your `completionItems` before the built-in
+vocabulary. A category named after a property every object inherits
+(`constructor`, `toString`) is an unlisted one like any other.
+
 A phrase matched across the words already typed carries `replaceLength`, the
 number of characters before the cursor the label replaces (8 for `net pres`). An
 editor that replaces only the word under the cursor would otherwise write `net
