@@ -902,6 +902,54 @@ function operandExactDecimal(v: Value): DecimalData | null {
 }
 
 /**
+ * The exact result of arithmetic on a quantity that is not money but carries
+ * an exact value past 2^53 (see `exactPastTheDouble` in vm/MoneyExact.ts), or
+ * null when the op cannot stay exact.
+ *
+ * Two quantities in the same unit add and subtract exactly, and a quantity
+ * multiplied or divided by a plain number keeps its unit and its exactness:
+ * `(2^60 + 0.5) m + 1 m` is ...977.50 m, where the doubles answered ...976.00 m.
+ * Anything that changes or reconciles the unit (`m + km`, `m * m`) reads the
+ * doubles as before, and so does an op where neither side carries an exact
+ * value, which is every quantity below 2^53.
+ *
+ * @param l - The left operand.
+ * @param r - The right operand.
+ * @param op - The arithmetic op.
+ * @returns The exact quantity, or null.
+ */
+export function exactLargeQuantityOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div"): Value | null {
+    const lQuantity = l.type === ValueType.Uom && l.unit !== undefined;
+    const rQuantity = r.type === ValueType.Uom && r.unit !== undefined;
+    if (!(lQuantity && l.exact !== undefined) && !(rQuantity && r.exact !== undefined)) return null;
+    let unit: string;
+    if (lQuantity && rQuantity) {
+        if (l.unit !== r.unit || (op !== "add" && op !== "sub")) return null;
+        unit = l.unit!;
+    } else if (lQuantity && r.type === ValueType.Number && (op === "mul" || op === "div")) {
+        unit = l.unit!;
+    } else if (rQuantity && l.type === ValueType.Number && op === "mul") {
+        unit = r.unit!;
+    } else {
+        return null;
+    }
+    const ld = operandExactDecimal(l);
+    const rd = operandExactDecimal(r);
+    if (ld === null || rd === null) return null;
+    let result: DecimalData;
+    switch (op) {
+        case "add": result = decimalAdd(ld, rd); break;
+        case "sub": result = decimalSubtract(ld, rd); break;
+        case "mul": result = decimalMultiply(ld, rd); break;
+        case "div":
+            if (decimalIsZero(rd)) return null;
+            result = decimalDivide(ld, rd);
+            break;
+    }
+    return uomValueExact(decimalToNumber(result), unit, result);
+}
+
+/**
  * The exact result of a money arithmetic op, or null when it cannot be exact.
  *
  * Exactness is preserved only when the currency stays put: two amounts in the
@@ -914,7 +962,7 @@ function operandExactDecimal(v: Value): DecimalData | null {
 function exactMoneyOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div"): Value | null {
     const lMoney = l.type === ValueType.Uom && l.unit !== undefined && l.exact !== undefined && sharedCurrencyExchange.isCurrency(l.unit);
     const rMoney = r.type === ValueType.Uom && r.unit !== undefined && r.exact !== undefined && sharedCurrencyExchange.isCurrency(r.unit);
-    if (!lMoney && !rMoney) return null;
+    if (!lMoney && !rMoney) return exactLargeQuantityOp(l, r, op);
 
     let ld: DecimalData | null;
     let rd: DecimalData | null;

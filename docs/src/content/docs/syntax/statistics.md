@@ -55,6 +55,20 @@ element and then gives the list is [map-reduce](/syntax/map-reduce-and-aggregate
 `mean = 4` is still a variable; a function of your own under one of those three
 names is refused by name, since the call would never reach it.
 
+A range is not one of the readings. `1:3` is the run of whole numbers 1, 2 and 3
+only as the list of `sum`, `prod`, `map` or `reduce` (see
+[ranges](/syntax/map-reduce-and-aggregates/#ranges)); everywhere else a colon
+between two numbers is a clock time, so `average(1:3)` would be the average of
+1:03 AM. Rather than answer that, or ask for the line reference it was never
+given, the call says what the colon is here and how to write the values. `sum`
+is the one aggregate that reads a range.
+
+```solve-doc
+average(1:3) // ERROR: In average(...), 1:3 is a clock time, not a range, and a time cannot be averaged: a colon between two numbers is a range only as the list of sum, prod, map or reduce. To average numbers, list them with commas, as in average(1, 2, 3).
+average(1, 2, 3) // 2
+sum(1:3) // 6
+```
+
 ## A list that carries units
 
 A list of quantities answers in a unit rather than as a bare number, and the

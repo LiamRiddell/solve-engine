@@ -114,12 +114,12 @@ interface CacheEntry {
 	text: string;
 	tokens: SemanticToken[];
 	// When set, `tokens` is a single bare-identifier token whose validity
-	// depends on document-wide DAG state (see the bare-word gate in
+	// depends on the names the whole document defines (see the bare-word gate in
 	// getSemanticTokens), not just this line's own text, so it can't be
 	// cached as a plain pass/fail result the way every other line can. The
 	// lex+parse work that produced `tokens` is still cached normally; only
-	// the DAG membership check is re-run on every lookup (cache hit or
-	// miss alike), since it's cheap (a Set lookup) and the alternative
+	// the defined-name check is re-run on every lookup (cache hit or
+	// miss alike), since it's cheap (one lookup by default) and the alternative
 	// caching the gated result, would go stale the moment some OTHER
 	// line's edit changes what variables exist, with nothing to trigger a
 	// re-check of this untouched line.
@@ -132,16 +132,22 @@ export interface LanguageServiceOptions {
 	 * Overrides how the service discovers "variable names known in this
 	 * document", used to legitimize a lone bare identifier line (see
 	 * `getSemanticTokens`'s single-token gate) and variable-name
-	 * completions (`getCompletions`). Defaults to reading
-	 * `engine.getDag().keysInUse()`, which works for any consumer
-	 * sharing one `ExpressionEngine` between evaluation and the language
-	 * service (the real Obsidian editor).
+	 * completions (`getCompletions`). Defaults to
+	 * `engine.documentVariableNames()`: the variables (names of several words
+	 * included) and functions the document's lines define, after whichever
+	 * pass ran (`parseDocument`, `evaluateLines`, `evaluateDocument` or a
+	 * live incremental evaluator), so the default serves any host sharing one
+	 * `ExpressionEngine` between evaluation and the language service. A name
+	 * a line only reads is not offered, nor one set outside a document
+	 * (`evaluateExpression`), and `engine.clear()` takes them all away.
 	 *
-	 * Required for consumers whose language service is backed by a
-	 * *different*, non-evaluating engine than the one that actually runs
-	 * the document (the playground's dedicated lexing-only engine, whose
-	 * own DAG is always empty), pass a function reading the real
-	 * evaluation engine's DAG snapshot instead.
+	 * Required for hosts whose language service is backed by a *different*,
+	 * non-evaluating engine than the one that runs the document (the
+	 * playground's lexing-only engine, which never defines a name): pass a
+	 * function returning the evaluating engine's names, such as
+	 * `() => evaluatingEngine.documentVariableNames()`. It is called on every
+	 * completion and every lone-word line, so it should return names it
+	 * already holds rather than build them.
 	 */
 	variableNameSource?: () => Iterable<string>;
 
@@ -217,6 +223,9 @@ export interface LanguageServiceOptions {
 export class LanguageService {
 	private engine: ExpressionEngine | null;
 	private variableNameSource: () => Iterable<string>;
+	// Whether the host passed its own source. Without one the bare-word gate
+	// asks the engine about the one name rather than walking every name.
+	private readonly customVariableNames: boolean;
 	private readonly normalizeForHighlighting: boolean;
 
 	// Bounded cache keyed by line number ALONE, not `${lineNumber}:${lineText}`
@@ -282,14 +291,18 @@ export class LanguageService {
 	constructor(engine?: ExpressionEngine | null, options?: LanguageServiceOptions) {
 		this.engine = engine ?? null;
 		this.variableNameSource = options?.variableNameSource ?? (() => this.defaultVariableNames());
+		this.customVariableNames = options?.variableNameSource !== undefined;
 		this.normalizeForHighlighting = options?.normalizeForHighlighting ?? false;
 	}
 
 	private defaultVariableNames(): Iterable<string> {
 		if (!this.engine) return [];
-		// The graph's keys, not a snapshot of it: a snapshot spells out every
-		// positional edge, which a long ledger has millions of (#733).
-		return this.engine.getDag().keysInUse();
+		// The engine's table of defined names, which every pass fills. Not the
+		// dependency graph: only the incremental pass records a plain
+		// assignment there, and it also holds every name a line merely reads.
+		// Never a graph snapshot either, which spells out every positional
+		// edge, and a long ledger has millions of them (#733).
+		return this.engine.documentVariableNames();
 	}
 
 	/**
@@ -774,6 +787,7 @@ export class LanguageService {
 	}
 
 	private isKnownVariable(name: string): boolean {
+		if (!this.customVariableNames) return this.engine?.isDocumentVariableName(name) ?? false;
 		for (const known of this.variableNameSource()) {
 			if (known === name) return true;
 		}
