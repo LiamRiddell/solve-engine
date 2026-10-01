@@ -4686,7 +4686,12 @@ export function executeBytecode(
           const builtinRefused = builtinArgumentRefused(fnIdx, args);
           if (builtinRefused) { stack.push(builtinRefused); break; }
           carry = sourcesOfValues(args);
-          const fn = builtinFunctions[fnIdx];
+          // Read as the registry's own entry and checked to be a function, so
+          // an index from the bytecode never reaches an inherited property or
+          // calls something that is not a builtin (CodeQL's unvalidated dynamic
+          // call, raised once the call went on to listBuiltinCall()).
+          const entry = Object.prototype.hasOwnProperty.call(builtinFunctions, fnIdx) ? builtinFunctions[fnIdx] : undefined;
+          const fn = typeof entry === "function" ? entry : undefined;
           if (fn) {
             const ordered = args.reverse();
             // A list is worked out for each number, or refused by name, where

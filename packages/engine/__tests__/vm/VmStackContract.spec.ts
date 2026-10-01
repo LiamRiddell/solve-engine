@@ -18,6 +18,7 @@ import { createEngineContext } from "@solve-js/engine/EngineContext";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ValueType, numberValue } from "@solve-js/vm/Value";
+import { builtinArityError, builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { EngineError } from "@solve-js/errors/EngineError";
 
 /** A VM with a small stack and an empty plugin table. */
@@ -74,6 +75,44 @@ describe("a call to nothing", () => {
 		expect(result.value.type).toBe(ValueType.Error);
 		expect(result.value.value).toBe("UNKNOWN_BUILTIN_FUNCTION");
 		expect(String(result.value.unit)).toContain("250");
+	});
+
+	test("adversarial: CALL_BUILTIN never calls a function the registry inherits rather than owns", () => {
+		// An index the registry does not hold is looked up as its own entry, so
+		// a function planted on Object.prototype under that key is not called.
+		let called = false;
+		const proto = Object.prototype as unknown as Record<number, unknown>;
+		proto[250] = () => {
+			called = true;
+			return 0;
+		};
+		try {
+			const result = run((b) => {
+				b.emitOpcode(OpCode.PUSH_NUMBER);
+				b.emitNumber(7);
+				b.emitOpcode(OpCode.CALL_BUILTIN);
+				b.emitIndex(250);
+				b.emitIndex(1);
+			});
+			expect(called).toBe(false);
+			expect(result.type === "value" && result.value.value).toBe("UNKNOWN_BUILTIN_FUNCTION");
+		} finally {
+			delete proto[250];
+		}
+	});
+
+	test("adversarial: an arity entry planted on Object.prototype is not read as a builtin's", () => {
+		const proto = Object.prototype as unknown as Record<number, unknown>;
+		proto[250] = { name: "planted", min: 2, max: 2 };
+		try {
+			expect(builtinArityError(250, 1)).toBeUndefined();
+			expect(builtinFunctionName(250)).toBe("");
+			// A registered builtin still reads its own entry.
+			expect(builtinFunctionName(0)).toBe("sqrt");
+			expect(builtinArityError(0, 2)?.code).toBe("BUILTIN_ARITY_MISMATCH");
+		} finally {
+			delete proto[250];
+		}
 	});
 
 	test("CALL_PLUGIN on an unregistered index is an Error, not 0", () => {
