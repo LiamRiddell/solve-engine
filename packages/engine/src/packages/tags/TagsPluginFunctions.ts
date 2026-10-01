@@ -2,6 +2,7 @@ import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from
 import { unifyQuantities } from "@solve-js/vm/VMConversion";
 import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
 import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
+import { numberOfBase } from "@solve-js/vm/ExactIntegers";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { lineCarriesTag, memberTagsOf, tagEdgesOf } from "./TagScanner";
@@ -98,10 +99,12 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
     if (mode !== "count") {
       // `count of #tag` is "how many lines carry the tag", so a non-numeric
       // tagged line still counts; only sum and average need a number to add.
-      if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
+      // A number written in a base is added as the number it is.
+      const figure = numberOfBase(v!);
+      if (figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
         return errorValue("TAG_NON_NUMERIC", `Line ${n}, tagged #${tag}, is not a plain number or unit value.`);
       }
-      values.push(v!);
+      values.push(figure);
     }
     count++;
   }
@@ -330,10 +333,12 @@ function computeBreakdown(
   // Read in document order, so the first line that cannot be used is the one
   // named, as the walk named it.
   for (const n of members) {
-    const v = valueAt.get(n);
-    const err = checkLineValue(v, n);
+    const err = checkLineValue(valueAt.get(n), n);
     if (err) return err;
-    if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
+    // A number written in a base is shared out as the number it is.
+    const v = numberOfBase(valueAt.get(n)!);
+    valueAt.set(n, v);
+    if (v.type !== ValueType.Number && v.type !== ValueType.Uom) {
       const first = tagEdgesOf(getText(n) ?? "").members[0] ?? "";
       return errorValue("TAG_NON_NUMERIC", `Line ${n}, tagged #${first}, is not a plain number or unit value.`);
     }

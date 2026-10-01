@@ -396,6 +396,21 @@ describe("line references across entry points", () => {
     expect(incremental(doc).slice(2)).toEqual(["0.30", "true", "true", "true"]);
   });
 
+  test("a number written in a base is a figure in a column, through every span form, both passes (FoundBug_baseValueInAColumn)", () => {
+    const doc = ["255 in hex", "0b1010 as binary", "5", "total above", "average(line 1 : line 3)", "sum(line 1 : line 3) in hex", "max above"];
+    const expected = ["0xFF", "0b1010", "5", "270", "90", "0x10E", "255"];
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(batch(doc));
+    const big = ["(2^100 + 1) in hex", "1", "total above"];
+    // A column total reads a whole number past 2^53 as the plain number's own column does.
+    expect(batch(big)[2]).toBe(batch(["2^100 + 1", "1", "total above"])[2]);
+    expect(incremental(big)).toEqual(batch(big));
+    const tagged = ["255 in hex #dev", "10 #dev", "total of #dev"];
+    expect(batch(tagged)[2]).toBe("265");
+    expect(incremental(tagged)).toEqual(batch(tagged));
+    expectNeedsDocument("255 in hex + total above");
+  });
+
   test("the single-expression path refuses with a document error", () => {
     expectNeedsDocument("prev");
     expectNeedsDocument("ans * 2");

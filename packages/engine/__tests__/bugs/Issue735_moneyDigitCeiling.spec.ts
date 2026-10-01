@@ -158,7 +158,9 @@ describe("a chain of multiplications costs the same on every line", () => {
 
 	test("the amount past a decillion is held as a double, and read as one", () => {
 		const out = both(chain("$1", "1.123456789", 4_000));
-		expect(out[out.length - 1]).toBe("$1.6807070918084162e+202");
+		// Its digits are the double's, written in full as a plain number's are
+		// (FoundBug_exponentTextInAResult), not in JavaScript's exponent form.
+		expect(out[out.length - 1]).toMatch(/^\$16,807,070,918,084,162(?:,000)+\.00$/);
 	});
 
 	test("thirty years of 5% growth still shows $432.19, as the one-line form does", () => {
@@ -202,10 +204,11 @@ describe("adversarial: edge cases", () => {
 			// A whole-number literal past 2^53 keeps its digits
 			// (FoundBug_wholeLiteralPastSafeRange), so a 33-digit amount times
 			// ten is exact, where it once showed its double's invented digits,
-			// and a 35-digit product is the nearest double to the true one.
+			// and a 35-digit product is the nearest double to the true one,
+			// written in full digits as a plain number's double is.
 			"$1,234,567,890,123,456,789,012,345,678,901,230.00",
-			"$1.234567890123457e+34",
-			"$1e+40",
+			"$12,345,678,901,234,570,000,000,000,000,000,000.00",
+			"$10,000,000,000,000,000,000,000,000,000,000,000,000,000.00",
 		]);
 	});
 

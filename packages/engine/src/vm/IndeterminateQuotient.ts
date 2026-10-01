@@ -14,7 +14,41 @@
  * cell, since a cell of a list holds a number and has no room for a refusal.
  */
 
-import { Value, ValueType, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, errorValue, numberValue } from "@solve-js/vm/Value";
+
+/**
+ * The quotient of a division whose divisor is zero, as a Value: the infinity
+ * the double gives, marked as one a division by zero gave (see
+ * `Value.divisionByZero`), so a refusal further on can say so rather than call
+ * it a number too large to hold. A quotient that is not infinite (NaN, which
+ * {@link indeterminateQuotient} refuses before this is reached) is unmarked.
+ *
+ * @param q - The double quotient, `a / 0` for some `a`.
+ * @returns The Number Value.
+ */
+export function zeroDivisorQuotient(q: number): Value {
+	const v = numberValue(q);
+	if (q === Number.POSITIVE_INFINITY || q === Number.NEGATIVE_INFINITY) v.divisionByZero = true;
+	return v;
+}
+
+/**
+ * An infinite result of `+`, `-`, `*` or `^`, carrying the mark of an operand
+ * that came from a division by zero (see {@link zeroDivisorQuotient}), so
+ * `1 - 40/0` is still an infinity a division by zero gave. Unmarked when no
+ * operand is marked: two finite numbers whose result is infinite grew past
+ * the largest double.
+ *
+ * @param l - The left operand.
+ * @param r - The right operand.
+ * @param approx - The infinite result.
+ * @returns The Number Value.
+ */
+export function infiniteResult(l: Value, r: Value, approx: number): Value {
+	const v = numberValue(approx);
+	if ((l.divisionByZero === true || r.divisionByZero === true) && (approx === Number.POSITIVE_INFINITY || approx === Number.NEGATIVE_INFINITY)) v.divisionByZero = true;
+	return v;
+}
 
 /**
  * A plain number, an amount in a unit, or a percentage: the operands whose

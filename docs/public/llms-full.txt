@@ -168,6 +168,8 @@ round(2^60 + 1/3) // 1,152,921,504,606,846,976
 sqrt(2^106) + 0.5 // 9,007,199,254,740,992
 2^1024 // ∞
 (2^53 + 1) kg // 9,007,199,254,740,992.00 kg
+floor($9007199254740993.5) // $9,007,199,254,740,993.00
+ceil($9007199254740993.5) // $9,007,199,254,740,994.00
 ```
 
 ```
@@ -1133,7 +1135,7 @@ check "a " == "a" // check failed: "a " is not equal to "a"
 
 ```
 check 255 == "255" // check: "255" on the right is text and 255 is a number, so they cannot be compared. To read the text as a number, write "255" as number
-check (255 in hex) == "0xFF" // check: "0xFF" on the right is text and 0xFF is a number, so they cannot be compared
+check (255 in hex) == "0xFF" // check: "0xFF" on the right is text and 0xFF is a number, so they cannot be compared. To read the text as a number, write "0xFF" as number
 check "255" as number == 255 // ✓
 ```
 
@@ -1367,6 +1369,18 @@ if not 5 > 3 then 1 else 2 // 2
 ```
 not 5 // "not" works on true or false, and 5 is a number: compare it first, as in not (x > 3).
 !1 > 2 // "!" works on true or false, and 1 is a number: compare it first, as in not (x > 3).
+```
+
+```
+"paid" == "paid" // true
+255 == "255" // false
+255 != "255" // true
+"255" as number == 255 // true
+```
+
+```
+"5" > 3 // "5" on the left is text and the other side is a number, so they cannot be put in order. To read the text as a number, write "5" as number.
+"a" < "b" // Text has no order: two pieces of text can only be compared with == or !=, not <.
 ```
 
 ```
@@ -2972,7 +2986,7 @@ $0.0049999999999999999999999999999999 // $0.00
 ```
 
 ```
-$1234567890123456789012345678901234 * 10 // $1.234567890123457e+34
+$1234567890123456789012345678901234 * 10 // $12,345,678,901,234,570,000,000,000,000,000,000.00
 ```
 
 ```
@@ -3144,6 +3158,11 @@ check (0.5 in hex) == 0 // ✓
 ```
 
 ```
+12345678901234567890.5 in hex // 0xAB54A98CEB1F0AD2
+12345678901234567890 in hex // 0xAB54A98CEB1F0AD2
+```
+
+```
 (2^100 + 1) in binary as hex // 0x10000000000000000000000001
 (2^100 + 1) in hex in octal // 0o2000000000000000000000000000000001
 (2^100 + 1) in hex as number // 1,267,650,600,228,229,401,496,703,205,377
@@ -3160,6 +3179,15 @@ check (0.5 in hex) == 0 // ✓
 (1/0) in hex // An infinite value has no digits to write in hex. An ordinary number past about 1.8e308 is infinite; a whole number written with n, as in 2n^4000, keeps every digit.
 2^4000 in binary as hex // An infinite value has no digits to write in binary. An ordinary number past about 1.8e308 is infinite; a whole number written with n, as in 2n^4000, keeps every digit.
 2n^200 in hex // 0x100000000000000000000000000000000000000000000000000
+```
+
+```
+(one document)
+255 in hex // 0xFF
+0b1010 as binary // 0b1010
+5 // 5
+total above // 270
+total above in hex // 0x10E
 ```
 
 ## number-functions
@@ -3737,6 +3765,20 @@ $60 as a % on $50 // 20.00%
 ```
 1e308 as % // This is too large to write as a percentage: a percentage is a hundred times the number, and that is past about 1.8e308, the largest number that can be held.
 -1e308 in % // This is too large to write as a percentage: a percentage is a hundred times the number, and that is past about 1.8e308, the largest number that can be held.
+```
+
+```
+1e22 as % // 1,000,000,000,000,000,000,000,000.00%
+```
+
+```
+2^2000 as % // This is too large to write as a percentage: the number is past about 1.8e308, the largest number that can be held.
+1e309 as % // This is too large to write as a percentage: the number is past about 1.8e308, the largest number that can be held.
+```
+
+```
+1/0 as % // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
+40 is what % of 0 // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
 ```
 
 ```
@@ -4877,6 +4919,14 @@ https://liamriddell.github.io/solve-engine/syntax/text-operations/
 ```
 
 ```
+"0xFF" as number // 255
+"0b101" as number // 5
+"0o17" as number // 15
+"-0xff" as number // -255
+"0x20000000000001" as number // 9,007,199,254,740,993
+```
+
+```
 length of "hello" // 5
 words in "the quick brown fox" // 4
 characters in "hello" // 5
@@ -4938,6 +4988,13 @@ length of "a\nb" // 4
 ```
 (one document)
 "11:00 PM" as number // ERROR: "11:00 PM" is not a number: "as number" reads text that is a number and nothing else.
+```
+
+```
+(one document)
+"0xZZ" as number // ERROR: "0xZZ" is not a number: after 0x, a hexadecimal number has only the digits 0 to 9 and the letters A to F.
+"0b102" as number // ERROR: "0b102" is not a number: after 0b, a binary number has only the digits 0 and 1.
+"0x" as number // ERROR: "0x" is not a number: 0x starts a hexadecimal number, and no digits follow it.
 ```
 
 ## time

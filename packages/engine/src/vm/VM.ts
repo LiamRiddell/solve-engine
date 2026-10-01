@@ -20,13 +20,13 @@ import { valuesEqual, valuesOrdered } from "@solve-js/vm/Comparisons";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { QueryClient } from "@tanstack/query-core";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
-import { multiplierRefused } from "@solve-js/vm/PlainNumberForms";
+import { multiplierRefused, numberFromBaseText } from "@solve-js/vm/PlainNumberForms";
 import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { safeText } from "@solve-js/parser/ParseMessages";
-import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageNotFinite, percentageTooLarge, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused, bigBaseArithmetic } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageRefusal, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused, bigBaseArithmetic } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -38,7 +38,7 @@ import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } f
 import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf, rateThroughQuantity, unitQuotientUnsupported } from "@solve-js/vm/UnitAlgebra";
 import { rateForm } from "@solve-js/uom/RateForms";
 import { bigIntPow, exactWholeLiteral, valueInBase, bigBaseInteger, wholeFromBase } from "@solve-js/vm/ExactIntegers";
-import { indeterminateQuotient } from "@solve-js/vm/IndeterminateQuotient";
+import { indeterminateQuotient, infiniteResult, zeroDivisorQuotient } from "@solve-js/vm/IndeterminateQuotient";
 import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
@@ -1388,7 +1388,7 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
         const fraction = l.toNumber() + sign * r.toNumber();
         // `50% + 1e308` is a fraction a double holds, but not a hundred times
         // it, so it is refused as `1e308 as %` is; see toPercentage().
-        if (!Number.isFinite(fraction * 100)) return Number.isNaN(fraction) ? percentageNotFinite() : percentageTooLarge();
+        if (!Number.isFinite(fraction * 100)) return percentageRefusal(l.divisionByZero === true ? l : r, fraction);
         return percentageValue(fraction);
     }
     if (r.type !== ValueType.Percentage) return null;
@@ -2014,11 +2014,14 @@ function plainPower(l: Value, r: Value): Value {
 /**
  * The NEG opcode's answer for a value no earlier branch took: its negated
  * double, except for a value written in a base past 2^53, whose whole number
- * is negated exactly (see bigBaseInteger()). Kept out of the dispatch loop.
+ * is negated exactly (see bigBaseInteger()), and an infinity a division by
+ * zero gave, which stays marked as one (see infiniteResult()). Kept out of
+ * the dispatch loop.
  *
  * @param v - The value, already checked for a fault.
  */
 function negatedPlain(v: Value): Value {
+    if (v.divisionByZero === true) return infiniteResult(v, v, -v.toNumber());
     const inBase = bigBaseInteger(v);
     return inBase === null ? numberValue(-v.toNumber()) : wholeFromBase(-inBase);
 }
@@ -2147,12 +2150,16 @@ const NUMBER_TEXT = /^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?
 /**
  * The number a piece of text spells, or the Error that says it spells none.
  * The whole text must be the number, spaces at either end aside, so `"12abc"`
- * is refused rather than read as 12.
+ * is refused rather than read as 12. A number written with a base prefix
+ * (`"0xFF"`) is read as a typed one is.
  *
  * @param text - The text to read.
  */
 function numberFromText(text: string): Value {
     const trimmed = text.trim();
+    // A base prefix reads as a typed number's does; see numberFromBaseText().
+    const based = numberFromBaseText(trimmed, text);
+    if (based !== null) return based;
     if (!NUMBER_TEXT.test(trimmed)) {
         return errorValue(
             "TEXT_NOT_A_NUMBER",
@@ -3947,7 +3954,8 @@ export function executeBytecode(
             const q = a / b;
             // NaN from two numbers that are not NaN is 0/0 or ∞/∞, which has
             // no single answer. See vm/IndeterminateQuotient.ts.
-            stack.push(q !== q ? indeterminateQuotient(l, r) ?? numberValue(q) : numberValue(q));
+            // A zero divisor marks the infinity it gives; see zeroDivisorQuotient().
+            stack.push(q !== q ? indeterminateQuotient(l, r) ?? numberValue(q) : b === 0 ? zeroDivisorQuotient(q) : numberValue(q));
             break;
           }
           const noSingleQuotient = indeterminateQuotient(l, r);
