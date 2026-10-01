@@ -4512,6 +4512,19 @@ solve(a*x+b=0, x) // -b/a
 :factor * 2 // 3
 ```
 
+```
+(one document)
+(salary / 12) * rate / 100 = net // ERROR: This equation has 3 unknowns, salary, rate and net, and an equation on a line of its own is solved for its one unknown. Give the others values on the lines above it, or name the one to solve for, as in solve((salary / 12) * rate / 100 = net, salary).
+```
+
+```
+(one document)
+salary = 60000 // 60,000
+net = 1000 // 1,000
+(salary / 12) * rate / 100 = net // rate stored as an equation: solve with "rate =>"
+rate => // 20
+```
+
 ## splitting-a-bill
 
 https://liamriddell.github.io/solve-engine/syntax/splitting-a-bill/
@@ -4726,6 +4739,10 @@ sqrt(x) => // sqrt(x)
 ```
 
 ```
+foo + 1 => // foo+1
+```
+
+```
 x/3 => // x/3
 2^10 + x => // x+1024
 ```
@@ -4740,6 +4757,20 @@ expand((x*0)^-1) // This expression divides by zero, so it has no value, whateve
 a = [1, 2; 3, 4]
 a*x = [60; 70]
 x => // [-50.00; 55.00]
+```
+
+```
+(one document)
+foo percent => // ERROR: Undefined variable: foo
+foo km => // ERROR: Undefined variable: foo
+foo as hex => // ERROR: Undefined variable: foo
+```
+
+```
+(one document)
+foo = 12 // 12
+foo percent => // 12.00%
+foo km => // 12.00 km
 ```
 
 ## table-columns
@@ -5942,6 +5973,28 @@ hourly rate = $50 // $50.00
 (one document)
 take home = 5 // ERROR: "take home" cannot be a name: "take" is a spelling of minus. Choose other words, or join them as take_home. For the equation, write -home = 5.
 tax on = 5 // ERROR: "tax on" cannot be a name: "tax on" is a phrase the engine reads. Choose other words, or join them as tax_on.
+```
+
+```
+(one document)
+monthly take = 4000 // ERROR: "monthly take" cannot be a name: "take" is a spelling of minus. Choose other words, or join them as monthly_take.
+monthly_take = 4000 // 4,000
+monthly pay = 4000 // 4,000
+```
+
+```
+(one document)
+Alice's food = £30 // £30.00
+Bob’s food = £20 // £20.00
+Alice’s food + Bob's food // £50.00
+the Smiths' rent = £900 // £900.00
+the Smiths' rent / 3 // £300.00
+```
+
+```
+(one document)
+Alice‘s food = 3 // ERROR: "Alice‘s food" cannot be a name: "‘" in "Alice‘s" is a quotation mark, not an apostrophe. Write the apostrophe as ' or ’.
+’tis rate = 5 // ERROR: "’tis rate" cannot be a name: "’tis" starts with an apostrophe, and a word in a name starts with a letter.
 ```
 
 ## vectors-and-matrices

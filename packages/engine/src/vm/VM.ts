@@ -3,7 +3,7 @@ import { Value, ValueType, numberValue, numberValueExact, numberValueRational, n
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-js/symbolic";
-import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
+import { symbolicPow, symbolicNeg, symbolicBuiltin, unknownNameIn, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { resolveStoredFormulaIn } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
 import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues, ReduceForm, reduceFormCall } from "@solve-js/vm/MatrixOps";
@@ -3255,6 +3255,21 @@ function throwUndefinedVariable(varName: string, vm: VM): never {
     throw undefinedVariable(varName, vm);
 }
 
+/**
+ * An unknown met by an operation that needs one amount (a unit after it, a
+ * percentage, a base, a fraction, `as number`, a tolerance). Each read the
+ * formula as 0, so `foo percent =>` answered `0.00%` and `foo km =>` `0.00 km`
+ * where `foo percent` said `Undefined variable: foo`. The line is refused with
+ * that same error, naming the formula's first unknown (see unknownNameIn()).
+ * The arms test the type themselves, so a value that is not a formula pays one
+ * comparison and no call.
+ */
+function throwUnknownAmount(v: Value, vm: VM): never {
+    const name = unknownNameIn(v);
+    if (name !== null) throw undefinedVariable(name, vm);
+    throw ErrorFactory.execution("UNDEFINED_VARIABLE", "This needs a number, and the expression is a formula with no value yet.");
+}
+
 /** CALL_USER_FUNCTION on a name no function has, with the nearest real ones. */
 function throwUndefinedFunction(name: string, vm: VM): never {
     const nearFunctions = nearestNames(name, functionNameCandidates(vm), 3, builtinNameIndex());
@@ -4272,9 +4287,10 @@ export function executeBytecode(
           if (posFault) { stack.push(posFault); break; }
           carry = v.sources;
           // Unary plus is a no-op, so money keeps its exact decimal too, and a
-          // list, an IPv6 address or a colour is itself rather than the reading
-          // its toNumber() reports (zero for a list, none for an address).
-          if (v.type === ValueType.Matrix || hasNoNumber(v)) stack.push(v);
+          // list, an IPv6 address, a colour or a formula is itself rather than
+          // the reading its toNumber() reports (zero for a list or a formula,
+          // none for an address): `+foo =>` answered 0.
+          if (v.type === ValueType.Matrix || v.type === ValueType.Symbolic || hasNoNumber(v)) stack.push(v);
           else if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(v.toNumber(), v.unit!, v.exact));
           else if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
           // Unary plus is a no-op, so it has to leave the type alone too.
@@ -4297,6 +4313,7 @@ export function executeBytecode(
           const spread = safePop(stack), center = safePop(stack);
           const uncFault = faultedOperand(center, spread);
           if (uncFault) { stack.push(uncFault); break; }
+          if (center.type === ValueType.Symbolic) throwUnknownAmount(center, vm);
           // The center is the measured value, the spread its one-sigma tolerance.
           // The spread is taken as a magnitude, so "5 +/- -2" reads the same as
           // "5 +/- 2". A percentage spread is relative to the center and a spread
@@ -4830,6 +4847,8 @@ export function executeBytecode(
           const v = safePop(stack);
           const toNumberFault = faultedOperand(v);
           if (toNumberFault) { stack.push(toNumberFault); break; }
+          // An unknown has no amount to read, here or below (see throwUnknownAmount()).
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           if (v.type === ValueType.String) {
             // Text reads as a number only when it is one, whole. Through
             // `toNumber()` it went by `parseFloat`: `"11:00 PM" as number` was
@@ -4846,6 +4865,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toHexFault = faultedOperand(v);
           if (toHexFault) { stack.push(toHexFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           // A colour keeps its channels and a bigint its digits; see inBase().
           stack.push(inBase(v, "hex"));
           break;
@@ -4854,6 +4874,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toPercentageFault = faultedOperand(v);
           if (toPercentageFault) { stack.push(toPercentageFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toPercentageDate = datetimeConversionRefused(v, "a percentage");
           if (toPercentageDate) { stack.push(toPercentageDate); break; }
           const toPercentageOpaque = noNumberRefused(v, "written as a percentage");
@@ -4867,6 +4888,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toFractionFault = faultedOperand(v);
           if (toFractionFault) { stack.push(toFractionFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toFractionDate = datetimeConversionRefused(v, "a fraction");
           if (toFractionDate) { stack.push(toFractionDate); break; }
           const toFractionOpaque = noNumberRefused(v, "written as a fraction");
@@ -4890,6 +4912,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toSciFault = faultedOperand(v);
           if (toSciFault) { stack.push(toSciFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toSciDate = datetimeConversionRefused(v, "scientific notation");
           if (toSciDate) { stack.push(toSciDate); break; }
           const toSciOpaque = noNumberRefused(v, "written in scientific notation");
@@ -4903,6 +4926,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toBinaryFault = faultedOperand(v);
           if (toBinaryFault) { stack.push(toBinaryFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           stack.push(inBase(v, "bin"));
           break;
         }
@@ -4910,6 +4934,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toOctalFault = faultedOperand(v);
           if (toOctalFault) { stack.push(toOctalFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           stack.push(inBase(v, "oct"));
           break;
         }
@@ -4943,6 +4968,7 @@ export function executeBytecode(
           const operand = safePop(stack);
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          if (operand.type === ValueType.Symbolic) throwUnknownAmount(operand, vm);
           carry = operand.sources;
           // A second unit written straight after a quantity used to relabel it:
           // `5 kg m` was 5 m, the kilograms discarded without a word, and
@@ -4997,6 +5023,7 @@ export function executeBytecode(
           // carried its fault everywhere except through here.
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          if (operand.type === ValueType.Symbolic) throwUnknownAmount(operand, vm);
           carry = operand.sources;
           // The same second-unit refusal as UOM_CONVERT, for the literal with a
           // conversion attached: `5 kg m in cm` read the five kilograms as five
@@ -5072,6 +5099,7 @@ export function executeBytecode(
           const operand = safePop(stack);
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          if (operand.type === ValueType.Symbolic) throwUnknownAmount(operand, vm);
           carry = operand.sources;
           const { value, unit: bestUnit } = getBestUnit(operand.toNumber(), unit);
           stack.push(uomValue(value, bestUnit));

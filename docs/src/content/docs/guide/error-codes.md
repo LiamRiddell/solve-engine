@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 538 codes, grouped below by the part
+ship. The engine and its built-in packages ship 540 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -394,6 +394,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `EQUATION_FACTOR_UNDEFINED` | as a value | A matrix equation (`A * x = b`) naming a factor no line defines yet. |
 | `EQUATION_FACTOR_NOT_MATRIX` | as a value | A matrix equation whose factor is not a matrix. |
 | `EQUATION_RHS_NOT_MATRIX` | as a value | A matrix equation whose right-hand side is not a matrix. |
+| `EQUATION_SEVERAL_UNKNOWNS` | thrown | An equation on a line of its own with two or more unknowns, as in `(salary / 12) * rate / 100 = net`. An equation line is solved for its one unknown, so the message says to give the others values above it or to name one with `solve`. |
 
 **Goal seek, as the engine runs it**
 
@@ -1118,7 +1119,8 @@ In the package as `ERROR_CODE_CATALOGUES.VariablesErrorCodes`.
 | Code | Arrives | When it arises |
 | --- | --- | --- |
 | `EXPECTED_IDENTIFIER` | thrown | A `:` or `global :` not followed by a name, as in `:= 5`. |
-| `NAME_HAS_RESERVED_WORD` | thrown | A name of several words holding a word the engine already reads: an operator spelled as a word (`take home = 5`) or a phrase (`tax on = 5`). The message names the word. |
+| `NAME_HAS_RESERVED_WORD` | thrown | A name of several words holding a word the engine already reads: an operator spelled as a word, first or last (`take home = 5`, `monthly take = 4000`), or a phrase (`tax on = 5`). The message names the word. |
+| `NAME_HAS_QUOTE_MARK` | thrown | A name of several words with a quote mark that is not an apostrophe in a word (`Alice‘s food = 3`), or an apostrophe before a word's first letter (`’tis rate = 5`). The message names the mark. |
 
 ## Weather
 

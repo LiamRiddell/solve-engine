@@ -177,6 +177,23 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	negation: ["not (X > 0)", "!(X > 0)", "not X", "!X", "if not X > 0 then 1 else 2"],
 	wordLabels: ["Rent $X", "Petrol X l", "Flight to Paris X EUR", "Chapter X", "take home $X"],
 	multiWordNames: ["hourly rate = X", "take home = X", "tax on = X"],
+	// An unknown given a unit or a percentage under the arrow, a possessive
+	// name with either apostrophe, an operator word ending a name, and an
+	// equation line with several unknowns (FoundBug_unknownUnderTheArrow,
+	// FoundBug_possessiveName, FoundBug_operatorWordEndingAName,
+	// FoundBug_equationWithSeveralUnknowns).
+	unknownsAndNames: [
+		"X percent =>",
+		"(X + foo) km =>",
+		"foo * X km =>",
+		"$(foo + X) =>",
+		"Alice's food = X",
+		"Alice’s food = X",
+		"the Smiths' rent = X",
+		"monthly take = X",
+		"(salary / 12) * rate / X = net",
+		"x + y = X",
+	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,
 	// an inverse trigonometric call to a unit that is not an angle, a quotient
@@ -404,6 +421,12 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "Rent $X\nFood $300\nsum" },
 	{ form: "total = X\ntotal" },
 	{ form: "hourly rate = X\nhours = 8\nhourly rate * hours" },
+	// A possessive name read with the other apostrophe, a stored formula given
+	// a unit, and an equation left with one unknown once the others have
+	// values (the eighth found-bug batch).
+	{ form: "Alice's food = X\nAlice’s food * 2" },
+	{ form: "y = x + X\ny km\ny percent =>" },
+	{ form: "salary = X\nnet = 1000\n(salary / 12) * rate / 100 = net\nrate =>" },
 	// A named scenario and a date sweep (#744).
 	{ form: "a = 1\nb = a * 2\nscenario s with a = X\nline 2 under s" },
 	{ form: "d = 2026-01-01\n(d - 2026-01-01) in days\nline 2 for d from 2026-01-01 to 2026-06-01 step X months" },
@@ -492,6 +515,10 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 			// As a label, before a lone total, and in a name of several words.
 			expectHonestDocument(`${word} $5\nsum`);
 			expectHonestDocument(`${word} rate = 5\n${word} rate * 2`);
+			// With a possessive, under the arrow, and in an equation of several unknowns.
+			expectHonestDocument(`${word}'s rate = 5\n${word}’s rate * 2`);
+			expectHonestDocument(`${word} percent =>\n${word} km =>`);
+			expectHonestDocument(`${word} + y = 10\n${word} =>`);
 			expectHonestDocument(`# ${word}\n10\ntotal of section "${word}"`, { agree: false });
 			expectHonestDocument(`| ${word} | cost |\n| --- | --- |\n| food | 10 |\n\ncolumn "${word}" for "food"`, { agree: false });
 		});
