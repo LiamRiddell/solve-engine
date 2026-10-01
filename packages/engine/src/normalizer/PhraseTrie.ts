@@ -139,7 +139,8 @@ export class PhraseTrie {
 			return;
 		}
 
-		// Walk/insert remaining words
+		// Walk/insert remaining words, giving a node its children map only
+		// when a phrase first continues past it.
 		for (let i = 1; i < words.length; i++) {
 			const word = words[i];
 			node.children ??= new Map();
@@ -213,11 +214,13 @@ export class PhraseTrie {
 		}
 
 		// Walk deeper for multi-word phrases
-		for (let i = pos + 1; i < tokens.length && node?.children; i++) {
+		for (let i = pos + 1; i < tokens.length; i++) {
+			const children: Map<string, TrieNode> | null = node.children;
+			if (children === null) break; // a leaf: no phrase continues past it
 			const contType = tokens[i].type;
 			if (contType === "TAG" || contType.startsWith("TAG_")) break; // a tag token can't continue a phrase (#197, #213)
 			const word = lowerCased(tokens[i].value);
-			node = node.children.get(word);
+			node = children.get(word);
 			if (!node) break; // dead end
 			depth++;
 
