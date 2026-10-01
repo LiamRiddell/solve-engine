@@ -178,10 +178,12 @@ $0.0049999999999999999999999999999999 // $0.00
 
 An amount whose whole part alone is longer than 34 digits, more than a
 decillion, has no 34-digit form to keep, and is held as a floating-point
-number, shown in scientific notation.
+number. It is written in full, as a plain number that large is, and its digits
+are the floating-point number's: about the first sixteen are the amount's, and
+the zeros after them only fill the places.
 
 ```solve
-$1234567890123456789012345678901234 * 10 // $1.234567890123457e+34
+$1234567890123456789012345678901234 * 10 // $12,345,678,901,234,570,000,000,000,000,000,000.00
 ```
 
 A plain number past the ceiling falls back to floating point instead (see

@@ -43,7 +43,7 @@
  * operation takes the plain fast path again.
  */
 
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, uomValueExact, errorValue } from "@solve-js/vm/Value";
 import { DECIMAL_DIGIT_CEILING, decimalCompare, decimalToString, type DecimalData } from "@solve-js/decimal";
 import { rational, rationalToNumber, type Rational } from "@solve-js/symbolic";
 import { bigIntPow, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemainder, wholeNumberUnchanged } from "@solve-js/vm/ExactIntegers";
@@ -573,8 +573,10 @@ export type WholeRounding = "floor" | "ceil" | "trunc" | "round";
  * 2^60, which the formatter wrote as 1,152,921,504,606,847,000. The exact
  * integer comes first (handed back as it is, see `wholeNumberUnchanged` in
  * vm/ExactIntegers.ts), then the exact fraction ({@link roundExactRationalToWhole}),
- * then the exact decimal ({@link roundExactDecimalToWhole}). Null for a value
- * with none of these (a quantity, a `sqrt` result, a double past the safe
+ * then the exact decimal ({@link roundExactDecimalToWhole}). A quantity that
+ * carries an exact decimal, which is an amount of money, is rounded from it
+ * and keeps its unit ({@link roundExactQuantityToWhole}). Null for a value
+ * with none of these (a length, a `sqrt` result, a double past the safe
  * range), which keeps its double; a plain double is turned away on its first
  * two reads, so the common path allocates nothing.
  *
@@ -583,8 +585,38 @@ export type WholeRounding = "floor" | "ceil" | "trunc" | "round";
  * @returns The whole-number result, or null.
  */
 export function roundExactToWhole(v: Value, mode: WholeRounding): Value | null {
-	if (v.type !== ValueType.Number || (v.rational === undefined && v.exact === undefined)) return null;
+	if (v.rational === undefined && v.exact === undefined) return null;
+	if (v.type === ValueType.Uom) return roundExactQuantityToWhole(v, mode);
+	if (v.type !== ValueType.Number) return null;
 	return wholeNumberUnchanged(v, false) ?? roundExactRationalToWhole(v, mode) ?? roundExactDecimalToWhole(v, mode);
+}
+
+/**
+ * Round a quantity carrying an exact decimal to a whole number of its unit,
+ * from the decimal, or null when it carries none.
+ *
+ * An amount of money keeps the decimal it was typed as (see
+ * `uomValueExact`), but `floor`, `ceil`, `trunc` and `round` read its double,
+ * which past 2^53 holds no fraction: `floor($9007199254740993.5)` answered
+ * $9,007,199,254,740,994.00, a dollar above the amount. The decimal is
+ * rounded by the rules of {@link roundExactDecimalToWhole} and the unit kept,
+ * with the whole number as the new exact decimal.
+ *
+ * The boundary: a quantity with no exact decimal (a length, a converted
+ * amount) has nothing exact to round, and is null here, keeping its double.
+ *
+ * @param v - The operand.
+ * @param mode - Which rounding.
+ * @returns The rounded quantity in the same unit, or null.
+ */
+export function roundExactQuantityToWhole(v: Value, mode: WholeRounding): Value | null {
+	if (v.type !== ValueType.Uom || v.exact === undefined || v.unit === undefined) return null;
+	const { coef, scale } = v.exact;
+	const whole = scale <= 0 ? coef * pow10(-scale) : wholeOfQuotientBig(coef, pow10(scale), mode);
+	const approx = Number(whole);
+	// A whole amount that is zero keeps the sign the value had, as a number's does.
+	const shown = whole === 0n && (coef < 0n || Object.is(v.value, -0)) ? -0 : approx;
+	return uomValueExact(shown, v.unit, { coef: whole, scale: 0 });
 }
 
 /**
@@ -641,24 +673,32 @@ export function roundExactDecimalToWhole(v: Value, mode: WholeRounding): Value |
  * @param negative - Whether the value is below zero (or a negative zero), so a zero result keeps that sign.
  */
 function wholeOfQuotient(numerator: bigint, divisor: bigint, mode: WholeRounding, negative: boolean): Value {
+	return wholeResult(wholeOfQuotientBig(numerator, divisor, mode), negative);
+}
+
+/**
+ * The whole number `numerator / divisor` rounds to.
+ *
+ * @param numerator - The signed numerator.
+ * @param divisor - The divisor, strictly positive.
+ * @param mode - Which rounding: `floor` down, `ceil` up, `trunc` toward zero, `round` a half away from zero.
+ */
+export function wholeOfQuotientBig(numerator: bigint, divisor: bigint, mode: WholeRounding): bigint {
 	// BigInt division truncates towards zero; the remainder takes the numerator's sign.
 	const truncated = numerator / divisor;
 	const remainder = numerator % divisor;
-	if (remainder === 0n) return wholeResult(truncated, negative);
-	let whole: bigint;
+	if (remainder === 0n) return truncated;
 	switch (mode) {
-		case "trunc": whole = truncated; break;
-		case "floor": whole = remainder < 0n ? truncated - 1n : truncated; break;
-		case "ceil": whole = remainder > 0n ? truncated + 1n : truncated; break;
+		case "trunc": return truncated;
+		case "floor": return remainder < 0n ? truncated - 1n : truncated;
+		case "ceil": return remainder > 0n ? truncated + 1n : truncated;
 		case "round": {
 			// A half goes away from zero: 2.5 is 3 and -2.5 is -3.
 			const doubled = 2n * remainder;
-			if (remainder > 0n) whole = doubled >= divisor ? truncated + 1n : truncated;
-			else whole = -doubled >= divisor ? truncated - 1n : truncated;
-			break;
+			if (remainder > 0n) return doubled >= divisor ? truncated + 1n : truncated;
+			return -doubled >= divisor ? truncated - 1n : truncated;
 		}
 	}
-	return wholeResult(whole, negative);
 }
 
 /** A whole number as a Value, a zero carrying the sign of the value it came from. */

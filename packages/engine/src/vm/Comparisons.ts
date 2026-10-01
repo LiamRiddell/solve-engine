@@ -1,5 +1,5 @@
-import { Value, ValueType, boolValue, faultedOperand, type MatrixData } from "@solve-js/vm/Value";
-import { compareUom, incomparableUnitsError, compareBigIntOperands, compareRationalOperands, ipEqual, ipv6Order, colourEqual, colourRefused } from "@solve-js/vm/VMConversion";
+import { Value, ValueType, boolValue, errorValue, faultedOperand, type MatrixData } from "@solve-js/vm/Value";
+import { compareUom, incomparableUnitsError, compareBigIntOperands, compareRationalOperands, ipEqual, ipv6Order, colourEqual, colourRefused, valueKindName } from "@solve-js/vm/VMConversion";
 import { unitListCompare } from "@solve-js/vm/MatrixUnits";
 import { bigBaseInteger } from "@solve-js/vm/ExactIntegers";
 
@@ -84,7 +84,9 @@ export function orderHoldsFor(op: Order, order: -1 | 0 | 1): boolean {
  * or decimal compares on its exact value; a bigint digit for digit; two pieces
  * of text as text; two quantities once put in one unit; two lists cell by cell
  * (a list of answers, so NEQ is not EQ negated there); two colours on their
- * channels; and a colour or an IP value never equals anything else.
+ * channels; and a colour or an IP value never equals anything else. Text
+ * never equals a value that is not text, however alike the two read (see
+ * {@link textAgainstOther}).
  *
  * @param l - The left operand.
  * @param r - The right operand.
@@ -94,6 +96,7 @@ export function orderHoldsFor(op: Order, order: -1 | 0 | 1): boolean {
 export function valuesEqual(l: Value, r: Value, negate: boolean): Value {
 	const fault = faultedOperand(l, r);
 	if (fault) return fault;
+	if (textAgainstOther(l, r)) return boolValue(negate);
 	const ip = ipEqual(l, r);
 	if (ip !== null) return boolValue(ip !== negate);
 	if (hasExactSide(l, r)) {
@@ -125,6 +128,60 @@ export function valuesEqual(l: Value, r: Value, negate: boolean): Value {
 }
 
 /**
+ * Whether one side is text and the other is not.
+ *
+ * Text and a number are two kinds of thing even when they read alike, and a
+ * comparison read the text through `toNumber()`, so `255 == "255"` was true
+ * while `check 255 == "255"` refused the pair, and `"abc" == 0` was true
+ * because text that is not a number read as 0. `==` now answers false for
+ * such a pair and `!=` true, as it does for a length beside a mass; an order
+ * between them is refused (see {@link textOrderRefused}).
+ *
+ * @param l - The left operand.
+ * @param r - The right operand.
+ */
+export function textAgainstOther(l: Value, r: Value): boolean {
+	return (l.type === ValueType.String) !== (r.type === ValueType.String);
+}
+
+/** The operators an order comparison is written with, by {@link Order}. */
+const ORDER_SYMBOLS: readonly string[] = ["<", "<=", ">", ">="];
+
+/** Text that `as number` reads, decimal or after a base prefix, for the hint a refusal gives. */
+const NUMBER_AS_TEXT = /^\s*[-+]?(?:\d[\d,]*(?:\.\d+)?(?:e[-+]?\d+)?|0x[0-9a-f]+|0b[01]+|0o[0-7]+)\s*$/i;
+
+/** The longest piece of text a refusal quotes back. */
+const MOST_QUOTED = 40;
+
+/**
+ * The refusal for an order (`<`, `<=`, `>`, `>=`) with text on either side.
+ *
+ * Text has no order a note would mean, and it was read through `toNumber()`:
+ * `"5" > 3` was true, `"abc" < 1` was true because the text read as 0, and
+ * `"a" < "b"` and `"b" > "a"` were both false. Between two pieces of text the
+ * message says they can only be equal or not; between text and a value of
+ * another kind it says which side is text, and when the text holds a number
+ * it points at `as number`, as a check's refusal does.
+ *
+ * @param l - The left operand.
+ * @param r - The right operand; one of the two is text.
+ * @param op - The operator.
+ * @returns The `TEXT_COMPARISON` error Value.
+ */
+export function textOrderRefused(l: Value, r: Value, op: Order): Value {
+	const symbol = ORDER_SYMBOLS[op] ?? ">";
+	if (l.type === ValueType.String && r.type === ValueType.String) {
+		return errorValue("TEXT_COMPARISON", `Text has no order: two pieces of text can only be compared with == or !=, not ${symbol}.`);
+	}
+	const [text, other] = l.type === ValueType.String ? [l, r] : [r, l];
+	const side = l.type === ValueType.String ? "left" : "right";
+	const written = String(text.value);
+	const quoted = `"${written.length > MOST_QUOTED ? `${written.slice(0, MOST_QUOTED)}...` : written}"`;
+	const hint = NUMBER_AS_TEXT.test(written) ? `. To read the text as a number, write ${quoted} as number` : "";
+	return errorValue("TEXT_COMPARISON", `${quoted} on the ${side} is text and the other side is ${valueKindName(other)}, so they cannot be put in order${hint}.`);
+}
+
+/**
  * `l < r`, `l <= r`, `l > r` or `l >= r` for any pair the plain-number fast
  * path passed over. A faulted operand propagates; two IPv6 addresses order by
  * their 128 bits and one against anything else is refused (see ipv6Order()); a
@@ -141,6 +198,7 @@ export function valuesEqual(l: Value, r: Value, negate: boolean): Value {
 export function valuesOrdered(l: Value, r: Value, op: Order): Value {
 	const fault = faultedOperand(l, r);
 	if (fault) return fault;
+	if (l.type === ValueType.String || r.type === ValueType.String) return textOrderRefused(l, r, op);
 	const ipv6 = ipv6Order(l, r);
 	if (ipv6 !== null) return ipv6 instanceof Value ? ipv6 : boolValue(orderHoldsFor(op, ipv6));
 	if (l.type === ValueType.Colour || r.type === ValueType.Colour) return colourRefused("put in order");

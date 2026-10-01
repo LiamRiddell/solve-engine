@@ -14,6 +14,7 @@ import {
 import { type DecimalData, decimalFromInteger, decimalToFixed, decimalToNumber, decimalToString } from "@solve-js/decimal";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { valueKindName } from "@solve-js/vm/VMConversion";
+import { fixedDecimalText } from "@solve-js/utilities/Number";
 import { decimalOfNumber, internalRateOfReturn, netPresentValue, paybackPeriod } from "../CashFlowMath";
 
 /** A series read off the arguments: exact amounts and the one currency they share, if any. */
@@ -118,7 +119,7 @@ function describe(value: Value): string {
 
 /** A rate as a percentage with two decimals, for the messages. */
 function percent(rate: number): string {
-	return `${(rate * 100).toFixed(2)}%`;
+	return `${fixedDecimalText(rate * 100, 2)}%`;
 }
 
 /**

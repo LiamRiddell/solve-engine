@@ -396,6 +396,8 @@ export const CoreErrorCodes = {
   // ── Arithmetic and functions (vm/VM.ts, vm/VMBuiltins.ts, vm/ExactDecimals.ts) ──
   /** Text used in arithmetic with a number, or given to a numeric function (`sqrt("abc")`). The message points at `as number` for text that holds a number. */
   TEXT_ARITHMETIC: "TEXT_ARITHMETIC",
+  /** Text in an order comparison (`"5" > 3`, `"a" < "b"`): text has no order a note would mean. Against a number the message says which side is text and, for text that holds a number, points at `as number`. */
+  TEXT_COMPARISON: "TEXT_COMPARISON",
   /** A colour in arithmetic, a numeric function, an order or a conversion to a form of a number (`#ff0000 + 2`, `sqrt(#ff0000)`, `#ff0000 < 3`). A colour is three channels, not one number; the message points at reading a channel out, as in `red(#3366cc)`. */
   COLOUR_ARITHMETIC: "COLOUR_ARITHMETIC",
   /** An IPv6 address in arithmetic, a numeric function, a comparison with a number or a conversion with no whole-number reading (`fe80::1 + 2`). Its 128 bits are past what a number holds exactly; the message points at `as int`. */
@@ -446,9 +448,9 @@ export const CoreErrorCodes = {
   AGGREGATE_NON_NUMERIC: "AGGREGATE_NON_NUMERIC",
   /** A value written as a percentage that is not a proportion, such as a length. */
   PERCENTAGE_OF_QUANTITY: "PERCENTAGE_OF_QUANTITY",
-  /** A value written as a percentage that is not a finite number, which is what a division by zero gives. */
+  /** A value written as a percentage that is not a finite number: an infinity a division by zero gave (`1/0 as %`), or a value that is no number at all. */
   PERCENTAGE_NOT_FINITE: "PERCENTAGE_NOT_FINITE",
-  /** A value written as a percentage that is finite but too large for its percentage, a hundred times it, to be held, as in `1e308 as %`. */
+  /** A value written as a percentage that is too large for its percentage, a hundred times it, to be held, as in `1e308 as %`, or that is itself past the largest number that can be held, as in `2^2000 as %`. */
   PERCENTAGE_OVERFLOW: "PERCENTAGE_OVERFLOW",
   /** A percentage change from zero, which no percentage reaches. The message suggests the difference instead. */
   PERCENT_CHANGE_FROM_ZERO: "PERCENT_CHANGE_FROM_ZERO",

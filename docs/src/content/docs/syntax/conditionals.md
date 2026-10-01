@@ -76,6 +76,37 @@ not = 3 // 3
 not + 1 // 4
 ```
 
+## Comparing text
+
+Text is anything in quotes, such as `"255"` or `"paid"`. Two pieces of text are
+equal when they are the same characters. Text and a number are two kinds of
+thing, even when they read alike, so `==` between them is false and `!=` is
+true. To compare the number a piece of text holds, turn it into a number first
+with `as number`:
+
+```solve
+"paid" == "paid" // true
+255 == "255" // false
+255 != "255" // true
+"255" as number == 255 // true
+```
+
+Text has no order that a note would mean (is `"apple"` less than `"pear"`?), so
+`<`, `<=`, `>` and `>=` with text on either side are refused by name, and the
+message points at `as number` when the text holds a number:
+
+```solve
+"5" > 3 // "5" on the left is text and the other side is a number, so they cannot be put in order. To read the text as a number, write "5" as number.
+"a" < "b" // Text has no order: two pieces of text can only be compared with == or !=, not <.
+```
+
+The boundary: `==` gives an answer rather than a refusal, as it does for a
+length beside a mass (`1 m == 1 kg` is false), so a condition such as `if x ==
+"yes"` still works whatever `x` holds. A [check](/syntax/checks/) is stricter,
+and refuses a check between text and a number, since a check that cannot hold
+is a mistake in the note. Earlier versions read the text as a number, or as 0
+when it was not one, so `"abc" == 0` was true.
+
 ## Conditional expression
 
 A conditional expression picks one of two values depending on a condition: `if`

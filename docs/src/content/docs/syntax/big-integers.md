@@ -125,12 +125,17 @@ The other limits:
   m, and `as int` of it is 9,007,199,254,740,994). So does a percentage written
   with `%` after a number that large (`900719925474099350%`); `as percent` of the
   number is the exact form. Money is the exception: an amount of money keeps its
-  exact decimal at any size.
+  exact decimal at any size, and `floor`, `ceil`, `round`, `trunc` and `int`
+  round it from that decimal and keep the currency, so
+  `floor($9007199254740993.5)` is $9,007,199,254,740,993.00, where the nearest
+  double would round from $9,007,199,254,740,994.
 
 ```solve
 sqrt(2^106) + 0.5 // 9,007,199,254,740,992
 2^1024 // ∞
 (2^53 + 1) kg // 9,007,199,254,740,992.00 kg
+floor($9007199254740993.5) // $9,007,199,254,740,993.00
+ceil($9007199254740993.5) // $9,007,199,254,740,994.00
 ```
 
 For a program embedding the engine, the value of such a result is still the
