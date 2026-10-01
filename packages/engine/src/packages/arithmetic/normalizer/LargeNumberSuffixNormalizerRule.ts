@@ -159,15 +159,16 @@ export function largeNumberSuffixNormalizerRule(priority = 65): NormalizerRule {
     match(tokens, pos): NormalizerMatch | null {
       const numberToken = tokens[pos];
       if (numberToken.type !== "NUMBER") return null;
-      if (!PLAIN_DECIMAL.test(numberToken.text)) return null;
 
       const suffixToken = tokens[pos + 1];
       if (!suffixToken) return null;
       // Suffix must be a word-shaped token (IDENT for k/M/G/T, or UNIT for
       // bare "B", already a registered unit symbol, see the collision
       // note on SUFFIX_MAGNITUDE above) sitting immediately adjacent to
-      // the number, with no whitespace in between.
+      // the number, with no whitespace in between. Checked before the
+      // number's own pattern, which most numbers (`12 + 34`) never need.
       if (suffixToken.type !== "IDENT" && suffixToken.type !== "UNIT") return null;
+      if (!PLAIN_DECIMAL.test(numberToken.text)) return null;
 
       const adjacent = numberToken.offset + numberToken.text.length === suffixToken.offset;
       // A word magnitude never comes from a UNIT token. The words are matched

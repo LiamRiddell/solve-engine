@@ -2,6 +2,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { getMeasure } from "@solve-js/uom/UomConverter";
+import { lowerCased } from "@solve-js/normalizer/RuleIndex";
 
 /**
  * The three words that put a duration in front of a date, and which way each
@@ -10,11 +11,26 @@ import { getMeasure } from "@solve-js/uom/UomConverter";
  * `before` is not a lexer keyword and arrives as an ordinary identifier, which
  * is why it is matched by value here rather than by token type.
  */
-const CONNECTORS: Readonly<Record<string, "DATE_OFFSET_AFTER" | "DATE_OFFSET_BEFORE">> = {
-	FROM: "DATE_OFFSET_AFTER",
-	AFTER: "DATE_OFFSET_AFTER",
-	before: "DATE_OFFSET_BEFORE",
-};
+const CONNECTORS: ReadonlyMap<string, "DATE_OFFSET_AFTER" | "DATE_OFFSET_BEFORE"> = new Map([
+	["FROM", "DATE_OFFSET_AFTER"],
+	["AFTER", "DATE_OFFSET_AFTER"],
+	["before", "DATE_OFFSET_BEFORE"],
+] as const);
+
+/**
+ * The offset token a connector after a time unit opens, or undefined: `from`
+ * and `after` by their keyword type, `before` by its word in any case.
+ *
+ * A `Map`, which holds only its own keys: read as an object, a word naming an
+ * inherited property (`5 days constructor 3`) found `Object` itself and made
+ * it the fused token's type, which the next pass could not read.
+ *
+ * @param connector - The token after the unit.
+ */
+export function offsetConnectorOf(connector: Token): "DATE_OFFSET_AFTER" | "DATE_OFFSET_BEFORE" | undefined {
+	return CONNECTORS.get(connector.type) ??
+		(connector.type === "IDENT" ? CONNECTORS.get(lowerCased(connector.value ?? "")) : undefined);
+}
 
 /**
  * `30 days from 3 March 2026`, a date offset written the way a person says it.
@@ -55,6 +71,13 @@ export function dateOffsetNormalizerRule(priority = 62): NormalizerRule {
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const unitToken = tokens[pos];
 			if (unitToken?.type !== "UNIT") return null;
+			// The connector first, a lookup by type: most units are followed by
+			// no connector at all (`120 km/h`), and the unit's measure is a
+			// second lookup.
+			const connector = tokens[pos + 1];
+			if (connector === undefined) return null;
+			const fused = offsetConnectorOf(connector);
+			if (fused === undefined) return null;
 			if (getMeasure(unitToken.value ?? "") !== "time") return null;
 			// After `line N for`, the word is a sweep's input name, not a unit:
 			// `line 2 for d from 1 to 3 step 1` sweeps a variable `d`, and read
@@ -69,13 +92,6 @@ export function dateOffsetNormalizerRule(priority = 62): NormalizerRule {
 			if (isFor && lineRefBefore) return null;
 			// Or already opened as a sweep, whose token stands for `line N for`.
 			if (before?.type === "SWEEP") return null;
-
-			const connector = tokens[pos + 1];
-			if (connector === undefined) return null;
-			const fused =
-				CONNECTORS[connector.type] ??
-				(connector.type === "IDENT" ? CONNECTORS[(connector.value ?? "").toLowerCase()] : undefined);
-			if (fused === undefined) return null;
 
 			// There has to be something to offset from.
 			if (tokens[pos + 2] === undefined) return null;

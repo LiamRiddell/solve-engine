@@ -1,27 +1,45 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { lowerCased, lowersTo } from "@solve-js/normalizer/RuleIndex";
 
-/** The lowercased written form of a token, tolerant of `text` vs `value`. */
-function wordOf(token: Token | undefined): string {
+/** The written form of a token, tolerant of `text` vs `value`. */
+function writtenOf(token: Token | undefined): string {
   if (token === undefined) return "";
-  return (token.text ?? token.value ?? "").toLowerCase();
+  return token.text ?? token.value ?? "";
 }
 
 /** The fused math-phrase triggers, and the section aggregate each opens. */
-const FUSED_TRIGGER: Readonly<Record<string, string>> = {
-  TOTAL_OF: "SECTION_SUM",
-  COUNT_OF: "SECTION_COUNT",
-  AVERAGE_OF: "SECTION_AVERAGE",
-};
+const FUSED_TRIGGER: ReadonlyMap<string, string> = new Map([
+  ["TOTAL_OF", "SECTION_SUM"],
+  ["COUNT_OF", "SECTION_COUNT"],
+  ["AVERAGE_OF", "SECTION_AVERAGE"],
+]);
 
-/** The same aggregates spelled as a bare word before a separate `of`. */
-const WORD_TRIGGER: Readonly<Record<string, string>> = {
-  total: "SECTION_SUM",
-  sum: "SECTION_SUM",
-  count: "SECTION_COUNT",
-  average: "SECTION_AVERAGE",
-};
+/**
+ * The same aggregates spelled as a bare word before a separate `of`.
+ *
+ * A `Map`, which holds only its own keys: read as an object, a word naming an
+ * inherited property (`constructor of section "x"`) found `Object` itself and
+ * made it the fused token's type, which the next pass could not read.
+ */
+const WORD_TRIGGER: ReadonlyMap<string, string> = new Map([
+  ["total", "SECTION_SUM"],
+  ["sum", "SECTION_SUM"],
+  ["count", "SECTION_COUNT"],
+  ["average", "SECTION_AVERAGE"],
+]);
+
+/**
+ * The section aggregate a bare word before `of` opens, in any case, or
+ * undefined. The rule asks it at every word of a line, so a word in lower case
+ * is looked up as it stands rather than copied first.
+ *
+ * @param token - The word.
+ */
+export function sectionTriggerOf(token: Token): string | undefined {
+  return WORD_TRIGGER.get(lowerCased(writtenOf(token)));
+}
 
 /**
  * `total of section "Travel"` / `sum of section "Travel"` / `average of section
@@ -51,20 +69,20 @@ export function sectionAggregateNormalizerRule(priority = 80): NormalizerRule {
       const head = tokens[pos];
       if (head === undefined) return null;
 
-      let fused = FUSED_TRIGGER[head.type];
+      let fused = FUSED_TRIGGER.get(head.type);
       let wordAt = pos + 1;
       if (fused === undefined) {
         if (head.type !== "IDENT") return null;
-        fused = WORD_TRIGGER[wordOf(head)];
+        fused = sectionTriggerOf(head);
         // Standalone "of" lexes to an `OF` token, not an IDENT, so it is
         // matched on the written word.
-        if (fused === undefined || wordOf(tokens[pos + 1]) !== "of") return null;
+        if (fused === undefined || !lowersTo(writtenOf(tokens[pos + 1]), "of")) return null;
         wordAt = pos + 2;
       }
 
       const word = tokens[wordAt];
       const name = tokens[wordAt + 1];
-      if (word?.type !== "IDENT" || wordOf(word) !== "section") return null;
+      if (word?.type !== "IDENT" || !lowersTo(writtenOf(word), "section")) return null;
       if (name?.type !== "STRING") return null;
       return {
         consumed: wordAt + 2 - pos,
