@@ -12,7 +12,7 @@
  * property `worker/serialize.ts` is built to guarantee.
  */
 
-import type { ValueType, ColourFormat, DatetimeGrain, CalendarName } from "@solve-js/vm/Value";
+import type { ValueType, ColourFormat, DatetimeGrain, CalendarName, TimePrecision, ZoneDifference } from "@solve-js/vm/Value";
 import type { ValueSource, FrozenMark } from "@solve-js/vm/Provenance";
 import type { DiagnosticReportJSON } from "@solve-js/diagnostics";
 import type { SourceSpan } from "@solve-js/errors/EngineError";
@@ -165,11 +165,6 @@ export interface SerializedWorkerValue {
 	 */
 	grain?: DatetimeGrain;
 	/**
-	 * For a time of day, an instant on the day it is counted from, in epoch
-	 * milliseconds, present only when recorded. See `Value.timeAnchor`.
-	 */
-	timeAnchor?: number;
-	/**
 	 * The zone a Datetime should be read in, present only when the line named
 	 * one: an IANA name (`"Asia/Tokyo"`) or a fixed offset (`"UTCOFFSET:540"`).
 	 * See `Value.zone`.
@@ -182,6 +177,24 @@ export interface SerializedWorkerValue {
 	 * that renders its own text name the day in its own. See `Value.calendarName`.
 	 */
 	calendarName?: CalendarName;
+	/**
+	 * For a time of day (grain `"time"`), an instant on the day it is counted
+	 * from, in epoch milliseconds, present only when recorded: the day a
+	 * time-zone answer's `(+1 day)` is counted from. See `Value.timeAnchor`.
+	 */
+	timeAnchor?: number;
+	/**
+	 * For a time of day written to the minute, as a time-zone answer is
+	 * (`7:00 PM`), `"minute"`, present only then. See `Value.timePrecision`.
+	 */
+	timePrecision?: TimePrecision;
+	/**
+	 * For a time difference between two places (`Tokyo is 8 hours ahead of
+	 * London`), the two places as the reader named them, present only then.
+	 * The value is the signed gap in hours, positive when `to` is ahead. See
+	 * `Value.zoneDifference`.
+	 */
+	zoneDifference?: ZoneDifference;
 	/**
 	 * Where the live figures behind this value came from, present only when it
 	 * carries any: each record's provider, kind, fetch time, and when relevant

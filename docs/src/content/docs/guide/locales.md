@@ -324,7 +324,10 @@ Weekday and month names follow the tag wherever `Intl` has data for it, in a
 spelled-out date and in the answer to `as weekday` and `as month`. Where
 it has none (`xx`), the names come from the language pack instead, English for
 any code without one, so the answer does not depend on the machine the engine
-happens to run on. A tag `Intl` cannot read at all (`de_DE`, which `Intl` spells
+happens to run on. A time in another zone follows the tag's clock the same way
+(`19:00` under `de` for `10:00 London in Tokyo on 2026-03-10`), and a time
+difference is written as `Tokyo: London + 8 Stunden`; see
+[time-zone answers](/guide/formatting/#time-zone-answers). A tag `Intl` cannot read at all (`de_DE`, which `Intl` spells
 `de-DE`) makes formatting a number throw `Intl`'s own `RangeError`, so a typo in
 the host's configuration is seen rather than hidden behind different output.
 

@@ -317,7 +317,11 @@ describe("what it leaves alone", () => {
 	});
 
 	test("time in a city is the time package's, unchanged", () => {
-		expect(evaluate("time in London").type).toBe(ValueType.String);
+		// The time package answers a time of day in that zone (#757).
+		const value = evaluate("time in London");
+		expect(value.type).toBe(ValueType.Datetime);
+		expect(value.grain).toBe("time");
+		expect(value.zone).toBe("Europe/London");
 	});
 });
 

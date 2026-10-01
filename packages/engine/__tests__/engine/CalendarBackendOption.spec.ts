@@ -150,8 +150,9 @@ describe("plugin functions and converters read it through the execution context"
 
 	test("a timezone form resolves its zones through it", () => {
 		const { engine, calendar } = recordingEngine();
-		expect(engine.evaluateExpression("time difference between Tokyo and Delhi").value).toBe(
-			"Tokyo is 3 hours 30 minutes ahead of Delhi",
+		// A zone difference is a duration that carries its two places (#757).
+		expect(formatValue(engine.evaluateExpression("time difference between Tokyo and Delhi"))).toBe(
+			"= Tokyo is 3 hours 30 minutes ahead of Delhi",
 		);
 		expect(calendar.calls).toContain("zoneOffsetMinutes");
 	});

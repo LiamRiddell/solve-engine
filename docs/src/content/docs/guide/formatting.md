@@ -187,7 +187,7 @@ formatValue(engine.evaluateExpression("£1234.5"), {
 ### The words beside the number
 
 Under a tag that is not English, the words in an answer follow the tag's
-language too, wherever the runtime's `Intl` has them. Three kinds of word move:
+language too, wherever the runtime's `Intl` has them. Four kinds of word move:
 
 - **A unit's long name.** A unit the reader wrote as a word (`miles`, `days`,
   `litres`) is named in the tag's language, in the grammatical form its count
@@ -203,6 +203,12 @@ language too, wherever the runtime's `Intl` has them. Three kinds of word move:
   `März`. The value is still the English text, so
   `(2026-03-10 as weekday) == "Tuesday"` is still true; only what is shown
   changes.
+- **A time in another zone and a time difference.** `10:00 London in Tokyo on
+  2026-03-10` is shown on the tag's clock, `19:00` under `de`, with its day
+  shift in the tag's words (`8:00 (+1 Tag)`). `Intl` has no words for "ahead
+  of", so a time difference is written in a form every language reads, the
+  second place's clock as the first's plus or minus the gap: `Tokyo: London + 8
+  Stunden`, and `±` for two places on one clock.
 
 ```ts
 const de = { numberResult: { decimalSeparatorLocale: "de" } };
@@ -213,6 +219,9 @@ formatValue(engine.evaluateExpression("10 kg"), de);                  // "= 10,0
 formatValue(engine.evaluateExpression("€1234.5"), de);                // "= 1.234,50 €"
 formatValue(engine.evaluateExpression("$5"), de);                     // "= 5,00 $"
 formatValue(engine.evaluateExpression("2026-03-10 as weekday"), de);  // "= Dienstag"
+formatValue(engine.evaluateExpression("10:00 London in Tokyo on 2026-03-10"), de);  // "= 19:00"
+formatValue(engine.evaluateExpression("11pm London in Tokyo on 2026-03-10"), de);   // "= 8:00 (+1 Tag)"
+formatValue(engine.evaluateExpression("time difference between Tokyo and Delhi"), de);  // "= Delhi: Tokyo - 3 Stunden 30 Minuten"
 ```
 
 An English tag (`en-US`, `en-GB`, `en-IN`) writes exactly what it always did,
@@ -234,9 +243,41 @@ formatValue(engine.evaluateExpression("5 km in miles"), forTheNote);  // "= 3,11
 formatValue(engine.evaluateExpression("€5"), forTheNote);            // "= €5,00"
 ```
 
-Only these three kinds of word move. A time in another zone and a time
-difference (`10:00 London in Tokyo`, `time difference between London and
-Tokyo`) are answered as English text and stay English under every tag.
+Only these four kinds of word move. A list of several zones (`3pm London in
+Tokyo, Paris and New York`) is a line of labelled text, and stays English under
+every tag.
+
+### Time-zone answers
+
+A time converted into another zone, and `time in <zone>`, answer a `Datetime`
+with the time-of-day grain: `grain` is `"time"`, `zone` is the zone it is read
+in (an IANA name, or `"UTCNAMED:<minutes>"` for an offset the reader typed),
+`timeAnchor` is an instant on the day the reader named, which the `(+1 day)` is
+counted from, and `timePrecision` is `"minute"`, since these answers have always
+been written to the minute. A time difference answers a duration in `hours`,
+positive when the second place's clock is ahead, with `zoneDifference` naming
+the two places as the reader wrote them. Under an English tag both are written
+exactly as the text they used to be, `7:00 PM` and `Tokyo is 8 hours ahead of
+London`, and the numeric date formats (`dateResult.format` of `"iso"`, `"dmy"`
+or `"mdy"`) write the time on a 24-hour clock, `19:00`. `toJSON`, the worker
+DTO and a snapshot carry every one of these fields.
+
+```ts
+const meet = engine.evaluateExpression("10:00 London in Tokyo on 2026-03-10");
+formatValue(meet);                                             // "= 7:00 PM"
+formatValue(meet, { dateResult: { format: "iso" } });          // "= 19:00"
+meet.grain;                                                    // "time"
+meet.zone;                                                     // "Asia/Tokyo"
+
+const gap = engine.evaluateExpression("time difference between Tokyo and Delhi");
+formatValue(gap);                                              // "= Tokyo is 3 hours 30 minutes ahead of Delhi"
+gap.toNumber();                                                // -3.5, Delhi is behind Tokyo
+gap.zoneDifference?.to;                                        // "Delhi"
+```
+
+Before these were values they were text, and a note may compare one with that
+text or join text to it. Both keep their answer: `meet == "7:00 PM"` is true,
+and `"at " + meet` is `at 7:00 PM`, in English under every tag.
 
 A tag `Intl` has no data for (`xx`) takes its weekday and month names from the
 language pack instead, English for a code with none, so a date does not change
@@ -309,11 +350,15 @@ function render(value: Value): string {
     case ValueType.Uom:
       // A clock duration is held in milliseconds; the formatter writes it as 1:00.
       if (value.datetimeSpan) return formatValue(value).replace(/^= /, "");
+      // A gap between two places' clocks names them; the formatter writes the direction.
+      if (value.zoneDifference) return formatValue(value).replace(/^= /, "");
       return `${value.toNumber().toLocaleString()} ${value.unit}`;
     case ValueType.Percentage:
       // Held as a fraction: 25% is 0.25.
       return `${(value.toNumber() * 100).toLocaleString()}%`;
     case ValueType.Datetime: {
+      // A time of day, such as a time in another zone, is read in its own zone.
+      if (value.grain === "time") return formatValue(value).replace(/^= /, "");
       // Held as an instant; the calendar says which day it falls on.
       const { year, month0, day } = DATE_CALENDAR.fields(value.toNumber());
       return `${day}/${month0 + 1}/${year}`;

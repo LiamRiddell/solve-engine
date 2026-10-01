@@ -70,6 +70,31 @@ t = 5 // 5
 t London in Tokyo // ERROR: A zone after a name converts the time of day it holds, as in "t London in Tokyo" with t = 3pm, and this holds a number.
 ```
 
+### Working with the answer
+
+The answer is a time, not a piece of text, so you can keep calculating with it.
+Add or take away a length of time and the clock in the other place moves on,
+with the day shift updated to match. Write `in` and another place to see the
+same moment on that clock instead.
+
+```solve
+(3pm London on 23 September 2026 in Tokyo) + 1 hour // 12:00 AM (+1 day)
+(3pm London on 23 September 2026 in Tokyo) - 30 minutes // 10:30 PM
+(3pm London on 23 September 2026 in Tokyo) in New York // 10:00 AM
+```
+
+The day shift is always counted from the day you named, so it stays right
+however the time is moved. Because the answer is a value rather than text, a
+reader whose notes are set to another language sees it on their own clock:
+under German settings, `11:00 PM` reads `23:00`. A note written when these
+answers were text still works: comparing the answer with the text it used to
+be, or joining text to it, gives what it always gave.
+
+```solve
+(3pm London on 23 September 2026 in Tokyo) == "11:00 PM" // true
+"call at " + (3pm London on 23 September 2026 in Tokyo) // call at 11:00 PM
+```
+
 ## Several zones at once
 
 A team spread across several places rarely asks about just one of them. List the
@@ -266,6 +291,29 @@ March 2027` is refused, because the clock as it is now, carried to another day,
 answers nothing useful. The two questions it usually means have their own forms:
 a time converted on that day (`2pm London in Tokyo on 1 March 2027`), and the
 gap between two places on it, as above.
+
+### The difference as a number of hours
+
+A time difference is how far one place's clock is set ahead of another's. It is
+written as a sentence, but it is a length of time underneath, measured from the
+first place you name to the second: positive when the second place is ahead,
+negative when it is behind. Add `in hours`, or `in minutes`, to get that length
+on its own, ready to use in a calculation such as moving a time from one clock
+to the other.
+
+```solve
+time difference between Seattle and Moscow in hours // 10 hours
+time difference between Moscow and Seattle in hours // -10 hours
+time difference between London and New Delhi in minutes // 330 minutes
+```
+
+Places that keep the same clock have a difference of nothing, and the answer
+says they share it rather than that one is zero hours ahead.
+
+```solve
+time difference between Paris and Berlin // Berlin and Paris currently share the same UTC offset
+time difference between Paris and Berlin in hours // 0 hours
+```
 
 ## A date or a time in a zone
 

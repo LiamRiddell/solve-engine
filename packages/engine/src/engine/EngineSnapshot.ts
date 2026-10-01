@@ -32,7 +32,7 @@
  * `JSON.parse` unchanged.
  */
 
-import { Value, ValueType, type MatrixData, type MatrixEntry, type DatetimeGrain, type CalendarName } from "@solve-js/vm/Value";
+import { Value, ValueType, copyZoneDifference, type MatrixData, type MatrixEntry, type DatetimeGrain, type CalendarName, type TimePrecision } from "@solve-js/vm/Value";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { DecimalData } from "@solve-js/decimal";
 import type { Rational } from "@solve-js/symbolic";
@@ -147,12 +147,17 @@ export type SerializedValue = SerializedValueSidecars & (
 	| { t: ValueType.Hex; v: SerializedNumber | string; big?: boolean; base?: string }
 	| { t: ValueType.BigInt; v: string }
 	| { t: ValueType.String; v: string; cn?: CalendarName }
-	| { t: ValueType.Datetime; v: SerializedNumber; g?: DatetimeGrain; z?: string; ta?: SerializedNumber }
+	// `ta` and `tp`: a time of day's anchor day and its precision (#757), so a
+	// restored `t = 3pm London in Tokyo` still reads `11:00 PM`. Optional, so no
+	// version bump.
+	| { t: ValueType.Datetime; v: SerializedNumber; g?: DatetimeGrain; z?: string; ta?: SerializedNumber; tp?: TimePrecision }
 	| { t: ValueType.Percentage; v: SerializedNumber }
 	// `ul`: the name a quantity is shown under (Value.unitLabel, #762), so a
 	// restored `x = 5 km in Meile` still reads `3.11 Meile`. Optional, so no
 	// version bump.
-	| { t: ValueType.Uom; v: SerializedNumber; unit: string; exact?: SerializedDecimal; ul?: { name: string; per: number } }
+	// `zd`: the two places a time difference was asked between (#757). Optional,
+	// so no version bump.
+	| { t: ValueType.Uom; v: SerializedNumber; unit: string; exact?: SerializedDecimal; ul?: { name: string; per: number }; zd?: { from: string; to: string; on?: string } }
 	| { t: ValueType.Matrix; rows: number; cols: number; data: (SerializedNumber | boolean)[]; unit?: string }
 	| { t: ValueType.Range; min: SerializedNumber; max: SerializedNumber }
 	| { t: ValueType.Boolean; v: boolean }
@@ -374,6 +379,7 @@ function serializeValueBody(value: Value, where: string): SerializedValue {
 			if (value.grain !== undefined) out.g = value.grain;
 			if (value.zone !== undefined) out.z = value.zone;
 			if (value.timeAnchor !== undefined) out.ta = encodeNumber(value.timeAnchor);
+			if (value.timePrecision !== undefined) out.tp = value.timePrecision;
 			return out;
 		}
 		case ValueType.Percentage:
@@ -382,6 +388,7 @@ function serializeValueBody(value: Value, where: string): SerializedValue {
 			const out: Extract<SerializedValue, { t: ValueType.Uom }> = { t: ValueType.Uom, v: encodeNumber(value.value as number), unit: value.unit ?? "" };
 			if (value.exact !== undefined) out.exact = serializeDecimal(value.exact);
 			if (value.unitLabel !== undefined) out.ul = { name: value.unitLabel.name, per: value.unitLabel.per };
+			if (value.zoneDifference !== undefined) out.zd = copyZoneDifference(value.zoneDifference);
 			return out;
 		}
 		case ValueType.Matrix: {
@@ -451,6 +458,7 @@ function deserializeValueBody(sv: SerializedValue): Value {
 			if (sv.g !== undefined) v.grain = sv.g;
 			if (sv.z !== undefined) v.zone = sv.z;
 			if (sv.ta !== undefined) v.timeAnchor = decodeNumber(sv.ta);
+			if (sv.tp !== undefined) v.timePrecision = sv.tp;
 			return v;
 		}
 		case ValueType.Percentage:
@@ -459,6 +467,7 @@ function deserializeValueBody(sv: SerializedValue): Value {
 			const v = new Value(ValueType.Uom, decodeNumber(sv.v), sv.unit);
 			if (sv.exact !== undefined) v.exact = deserializeDecimal(sv.exact);
 			if (sv.ul !== undefined) v.unitLabel = { name: sv.ul.name, per: sv.ul.per };
+			if (sv.zd !== undefined) v.zoneDifference = copyZoneDifference(sv.zd);
 			return v;
 		}
 		case ValueType.Matrix: {
@@ -894,6 +903,7 @@ function assertValueShape(sv: unknown, where: string): void {
 			}
 			if (sv.z !== undefined && typeof sv.z !== "string") malformed(`${where}.z`, "a zone reference", sv.z);
 			if (sv.ta !== undefined && !isSerializedNumber(sv.ta)) malformed(`${where}.ta`, "a number", sv.ta);
+			if (sv.tp !== undefined && sv.tp !== "minute") malformed(`${where}.tp`, '"minute"', sv.tp);
 			return;
 		case ValueType.Percentage:
 			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
@@ -907,6 +917,13 @@ function assertValueShape(sv: unknown, where: string): void {
 				const label = typeof ul === "object" && ul !== null ? (ul as { name?: unknown; per?: unknown }) : null;
 				if (label === null || typeof label.name !== "string" || label.name.length === 0 || typeof label.per !== "number" || !Number.isFinite(label.per) || label.per <= 0) {
 					malformed(`${where}.ul`, "a unit label (a name and a positive count)", ul);
+				}
+			}
+			if (sv.zd !== undefined) {
+				const zd: unknown = sv.zd;
+				const places = typeof zd === "object" && zd !== null ? (zd as { from?: unknown; to?: unknown; on?: unknown }) : null;
+				if (places === null || typeof places.from !== "string" || typeof places.to !== "string" || (places.on !== undefined && typeof places.on !== "string")) {
+					malformed(`${where}.zd`, "two place names", zd);
 				}
 			}
 			return;
