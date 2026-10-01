@@ -61,7 +61,7 @@ describe("the lines that exposed it", () => {
 		expect(shown("£100 in 1990 pounds")).toBe(shown("what was £100 worth in 1990"));
 		expect(shown("$100 in 1990 dollars")).toBe(shown("what was $100 worth in 1990"));
 		expect(shown("€100 in 2010 euros")).toBe(shown("what was €100 worth in 2010"));
-		expect(shown("£100 in 1990 pounds")).not.toBe(shown("$100 in 1990 dollars").replace("$", "£"));
+		expect(shown("£100 in 1990 pounds")).not.toBe(shown("$100 in 1990 dollars").split("$").join("£"));
 	});
 
 	test("an amount in another currency is refused by name, with the form that reads its own index", () => {
