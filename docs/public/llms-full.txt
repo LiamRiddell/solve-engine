@@ -2129,6 +2129,10 @@ if 0.1 + 0.2 == 0.3 then "equal" else "different" // equal
 ```
 
 ```
+10% + 20% == 30% // true
+```
+
+```
 sqrt(2) * sqrt(2) == 2 // false
 1e-1 + 2e-1 == 3e-1 // false
 1.05 ^ 30 // 4.32
@@ -4249,6 +4253,40 @@ average of 10%, 20% // 15.00%
 ```
 
 ```
+50% * 30 // 15
+100 * 40% // 40
+10% * $5 // $0.50
+```
+
+```
+10% * 20% // 2.00%
+10% of 20% // 2.00%
+product of 10%, 20% and 50% // 1.00%
+6% / 12 // 0.50%
+10% ^ 2 // 1.00%
+```
+
+```
+10% / 20% // 0.50
+200 / 10% // 2,000
+```
+
+```
+10% * 2 // 0.20
+10% + 10% // 20.00%
+(10% * 2) as % // 20.00%
+10% / 0 // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
+```
+
+```
+10% + 20% == 30% // true
+sum(10%, 20%) == 30% // true
+30% - 10% == 20% // true
+10% * 20% == 2% // true
+(average of 10%, 20%, 30%) == 20% // true
+```
+
+```
 (one document)
 5 km as multiplier // ERROR: A multiplier is a plain number or a percentage, as in "0.5 as multiplier" or "50% as multiplier", not a length.
 ```
@@ -4258,6 +4296,22 @@ average of 10%, 20% // 15.00%
 prices = [$19.99, $5.00] // [$19.99, $5.00]
 vat = 20% // 20.00%
 prices + vat // [$23.99, $6.00]
+```
+
+```
+(one document)
+rate = 6% // 6.00%
+monthly = rate / 12 // 0.50%
+$1000 + monthly // $1,005.00
+$1000 * monthly // $5.00
+```
+
+```
+(one document)
+10% // 10.00%
+20% // 20.00%
+total above // 30.00%
+check line 3 == 30% // ✓
 ```
 
 ## probability-distributions
@@ -5064,6 +5118,11 @@ average of 10%, 20% // 15.00%
 max(10%, 20%) // 20.00%
 median of 10%, 20%, 40% // 20.00%
 stdev of 10%, 20% // 5.00%
+```
+
+```
+product of 10%, 20% // 2.00%
+sum(10%, 20%) == 30% // true
 ```
 
 ```
@@ -6902,6 +6961,15 @@ width = 3 m // 3.00 m
 length * width // 6.00 m²
 line 3 for length from 1 m to 3 m step 50 cm // [3.00 m², 4.50 m², 6.00 m², 7.50 m², 9.00 m²]
 line 3 for length from 1 m to 2 m step 30 cm // [3.00 m², 3.90 m², 4.80 m², 5.70 m²]
+```
+
+```
+(one document)
+rate = 10% // 10.00%
+rate * rate // 1.00%
+line 2 for rate from 10% to 30% step 10% // ERROR: With rate at 10%, line 2 answers 1%, a percentage, and a sweep lists its answers in a list, which holds plain numbers, not percentages. To sweep it, add a line that gives the answer as a number, such as "line 2 * 100" for its percentage points, and sweep that line.
+line 2 * 100 // 1
+line 4 for rate from 10% to 30% step 10% // [1, 4, 9]
 ```
 
 ```

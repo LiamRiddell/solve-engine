@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 561 codes, grouped below by the part
+ship. The engine and its built-in packages ship 562 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -1183,6 +1183,7 @@ In the package as `ERROR_CODE_CATALOGUES.WhatIfErrorCodes`.
 | `SWEEP_OVER_BUDGET` | as a value | A sweep whose steps together reached a limit on the work one evaluation may do. |
 | `SWEEP_STEP_FAILED` | as a value | A sweep one of whose steps failed. The message names the input value and the failure. |
 | `SWEEP_ANSWER_NOT_NUMERIC` | as a value | A sweep one of whose answers is not a number or a quantity, which is all a sweep lists. |
+| `SWEEP_ANSWER_PERCENTAGE` | as a value | A sweep of a line that answers a percentage, which a list (a row of plain numbers) cannot hold. |
 | `SWEEP_DATE_STEP_NOT_DURATION` | as a value | A sweep between two dates whose step is not a length of time (`step 5`), or is working days. |
 | `SCENARIO_UNKNOWN` | as a value | `line N under bull` with no `scenario bull with ...` line above it. |
 | `SCENARIO_DUPLICATE` | as a value | `line N under bull` where two lines above both declare a scenario named `bull`. |

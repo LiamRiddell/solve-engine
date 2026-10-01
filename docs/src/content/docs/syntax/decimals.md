@@ -103,6 +103,14 @@ total above // 0.30
 line 3 == 0.3 // true
 ```
 
+A percentage is a decimal too, so its sums, products and totals are worked out
+the same way, and `10% + 20% == 30%` is true (see
+[percentages that add up exactly](/syntax/percentages/#percentages-that-add-up-exactly)).
+
+```solve
+10% + 20% == 30% // true
+```
+
 ## Where exactness ends
 
 Some answers have no exact decimal or fraction to keep, and a few inputs are read

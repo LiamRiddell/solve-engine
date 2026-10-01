@@ -1,7 +1,7 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
 import { unifyQuantities, percentageAnswer, isAggregateFigure } from "@solve-js/vm/VMConversion";
 import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
-import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
+import { exactDecimalTotal, percentTotal } from "@solve-js/vm/ExactDecimals";
 import { numberOfBase } from "@solve-js/vm/ExactIntegers";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { formatValue } from "@solve-js/format/FormatEngine";
@@ -130,10 +130,11 @@ function combineTagged(values: Value[], isAverage: boolean): Value {
   if (exact !== null) return withSources(exact, sourcesOfValues(values));
   const unified = unifyQuantities(values, isAverage ? "averaged" : "added");
   if (unified instanceof Value) return unified;
+  // Tagged percentages total to a percentage, as `sum(10%, 20%)` does, formed
+  // in base ten as that is (see percentTotal()).
+  if (unified.percent) return percentageAnswer(percentTotal(unified.magnitudes, isAverage), unified.sources);
   const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
   const result = isAverage ? sum / values.length : sum;
-  // Tagged percentages total to a percentage, as `sum(10%, 20%)` does.
-  if (unified.percent) return percentageAnswer(result, unified.sources);
   if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
   const combined = withSources(uomValue(result, unified.unit), unified.sources);
   // A total of clock-time spans is still a span; see the same rule in

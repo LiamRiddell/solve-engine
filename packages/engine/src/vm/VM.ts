@@ -44,7 +44,8 @@ import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf, rateThroug
 import { rateForm } from "@solve-js/uom/RateForms";
 import { bigIntPow, exactWholeLiteral, valueInBase, bigBaseInteger, wholeFromBase } from "@solve-js/vm/ExactIntegers";
 import { indeterminateQuotient, infiniteResult, zeroDivisorQuotient } from "@solve-js/vm/IndeterminateQuotient";
-import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
+import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal, percentSum } from "@solve-js/vm/ExactDecimals";
+import { percentageTimesPercentage, percentageOverNumber, percentageToPower } from "@solve-js/vm/PercentArithmetic";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
@@ -1394,7 +1395,9 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
         // Number/Percentage make sense here; anything else (a date, a matrix)
         // falls through to the ordinary error path.
         if (r.type !== ValueType.Percentage && r.type !== ValueType.Number) return null;
-        const fraction = l.toNumber() + sign * r.toNumber();
+        // Formed in base ten, so `10% + 20%` holds the double `30%` does and
+        // `10% + 20% == 30%` is true. See percentSum().
+        const fraction = percentSum(l.toNumber(), r.toNumber(), sign);
         // `50% + 1e308` is a fraction a double holds, but not a hundred times
         // it, so it is refused as `1e308 as %` is; see toPercentage().
         if (!Number.isFinite(fraction * 100)) return percentageRefusal(l.divisionByZero === true ? l : r, fraction);
@@ -1518,7 +1521,8 @@ function multiplyMoneyByScalarExact(l: Value, r: Value): Value | null {
  * An exact product with a scalar, or null: money times a number or a
  * percentage (see {@link multiplyMoneyByScalarExact}), or a plain number times a
  * percentage, `10% of 0.1`, which is exact for the same reason (see
- * vm/ExactDecimals.ts). Every other multiply keeps its own path. One call from
+ * vm/ExactDecimals.ts), or a percentage times a percentage, which is a
+ * percentage (see vm/PercentArithmetic.ts). Every other multiply keeps its own path. One call from
  * MUL, so the dispatch loop does not grow (see the note on the size of
  * `executeBytecode` above the opcode bodies kept out of it).
  */
@@ -1527,16 +1531,19 @@ function multiplyScalarExact(l: Value, r: Value): Value | null {
     if (money !== null) return money;
     if (l.type === ValueType.Percentage && r.type === ValueType.Number) return multiplyByPercentExact(r, l.toNumber());
     if (r.type === ValueType.Percentage && l.type === ValueType.Number) return multiplyByPercentExact(l, r.toNumber());
-    return null;
+    // A share of a share is a share: `10% * 20%` is 2%. See vm/PercentArithmetic.ts.
+    return percentageTimesPercentage(l, r);
 }
 
 /**
  * What DIV asks before anything else on its general path, as
  * {@link multiplyPrelude} does for MUL: the quantity refusal, then a percentage
- * and an uncertain number (see {@link dividePercentWithUncertainty}).
+ * and an uncertain number (see {@link dividePercentWithUncertainty}), then a
+ * percentage over a plain number, which is a percentage (`10% / 2` is 5%, see
+ * vm/PercentArithmetic.ts).
  */
 function dividePrelude(l: Value, r: Value): Value | null {
-    return quantityOperandRefused(l, r, "div") ?? timecodeOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r);
+    return quantityOperandRefused(l, r, "div") ?? timecodeOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r) ?? percentageOverNumber(l, r);
 }
 
 /**
@@ -2113,14 +2120,16 @@ function remainder(l: Value, r: Value): Value {
 
 /**
  * The EXP opcode's answer for a pair no earlier branch took: the double power,
- * except for a value written in a base past 2^53, which is raised on its
- * whole number (see bigBaseArithmetic()). Kept out of the dispatch loop.
+ * except for a percentage raised to a number, which is a percentage (`10% ^ 2`
+ * is 1%, see vm/PercentArithmetic.ts), and a value written in a base past
+ * 2^53, which is raised on its whole number (see bigBaseArithmetic()). Kept
+ * out of the dispatch loop.
  *
  * @param l - The base, already checked for a fault.
  * @param r - The exponent.
  */
 function plainPower(l: Value, r: Value): Value {
-    return bigBaseArithmetic(l, r, "pow") ?? numberValue(power(l.toNumber(), r.toNumber()));
+    return percentageToPower(l, r) ?? bigBaseArithmetic(l, r, "pow") ?? numberValue(power(l.toNumber(), r.toNumber()));
 }
 
 /**

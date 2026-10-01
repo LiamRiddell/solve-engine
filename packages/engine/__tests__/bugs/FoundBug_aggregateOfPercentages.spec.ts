@@ -118,7 +118,8 @@ describe("an aggregate of percentages answers a percentage", () => {
 	test("the answer is a percentage, so it goes on to work as one", () => {
 		expect(newTrackedEngine().evaluateExpression("sum(10%, 20%)").type).toBe(ValueType.Percentage);
 		expect(outcome("200 + sum(10%, 20%)")).toBe("260");
-		expect(outcome("sum(10%, 20%) of 200")).toBe("60.00");
+		// The total is formed in base ten, so its share of 200 is the whole number 60.
+		expect(outcome("sum(10%, 20%) of 200")).toBe("60");
 		expect(outcome("sum(10%, 20%) as number")).toBe("0.30");
 		expect(outcome("max(10%, 20%) == 20%")).toBe("true");
 	});
@@ -376,28 +377,26 @@ describe("adversarial: edge cases", () => {
 	});
 });
 
-describe("found while fixing, pinned until fixed", () => {
-	// `10% * 20%` is the fraction 0.02, and `product of` multiplies with `*`,
-	// so the product of percentages is a plain number where the reader wrote
-	// percentages. The operator's rule is outside this fix.
-	test.failing("product of 10%, 20% is a percentage", () => {
+describe("found while fixing, now fixed (FoundBug_percentageArithmetic)", () => {
+	// A share of a share is a share, so `product of`, which multiplies with
+	// `*`, answers a percentage (see vm/PercentArithmetic.ts).
+	test("product of 10%, 20% is a percentage", () => {
 		expect(outcome("product of 10%, 20%")).toBe("2.00%");
 	});
 
-	// A total of percentages is formed in doubles, 0.1 + 0.2, so it is not
-	// equal to the 30% it shows; `10% + 20% == 30%` is false for the same
-	// reason. A percentage carries no exact decimal yet.
-	test.failing("10% + 20% == 30% is true", () => {
+	// A total of percentages is formed in base ten, so it is the double the
+	// 30% it shows holds (see percentSum and percentTotal in vm/ExactDecimals.ts).
+	test("10% + 20% == 30% is true", () => {
 		expect(outcome("10% + 20% == 30%")).toBe("true");
 	});
 
-	test.failing("sum(10%, 20%) == 30% is true", () => {
+	test("sum(10%, 20%) == 30% is true", () => {
 		expect(outcome("sum(10%, 20%) == 30%")).toBe("true");
 	});
 
-	// A sweep lists its answers in a plain list, so a line that answers a
-	// percentage is listed as fractions: [0.10, 0.20, 0.30].
-	test.failing("a sweep of a line that answers a percentage does not list the fractions", () => {
-		expect(both(["r = 10%", "z = r", "line 2 for r from 10% to 30% step 10%"])[2]).not.toBe("[0.10, 0.20, 0.30]");
+	// A list holds plain numbers, so a sweep of a line that answers a
+	// percentage is refused by name rather than listed as fractions.
+	test("a sweep of a line that answers a percentage does not list the fractions", () => {
+		expect(both(["r = 10%", "z = r", "line 2 for r from 10% to 30% step 10%"])[2]).toMatch(/^ERROR With r at 10%, line 2 answers 10%, a percentage/);
 	});
 });
