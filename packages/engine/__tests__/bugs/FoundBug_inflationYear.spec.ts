@@ -214,9 +214,10 @@ describe("inflationYear", () => {
 
 	test("hostile: nothing, no finite number, and every value that is not a number", () => {
 		expect(yearCode(undefined)).toBe("INFLATION_EXPECTED_YEAR");
-		for (const n of [Infinity, -Infinity, NaN]) {
+		const A_YEAR_IS = "the year of an inflation question is a plain whole number, such as 1990";
+		for (const [n, named] of [[Infinity, "∞"], [-Infinity, "-∞"], [NaN, "not a number"]] as Array<[number, string]>) {
 			const refused = inflationYear(numberValue(n));
-			expect(isYear(refused) ? refused : refused.errorMessage).toMatch(/not a finite number$/);
+			expect(isYear(refused) ? refused : refused.errorMessage).toBe(`${A_YEAR_IS}, and this one is ${named}`);
 		}
 		const notYears: Array<[Value, string]> = [
 			[uomValue(1990, "USD"), "money"],

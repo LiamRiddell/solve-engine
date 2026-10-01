@@ -13,7 +13,7 @@ The flat-rate projection took its year's number whatever the value was (found bu
 | `value of $100 in $2030 assuming 3% inflation` | `$88.85` | `... and this one is money` |
 | `value of $100 in 2030 kg assuming 3% inflation` | `$88.85` | `... and this one is a mass` |
 | `value of $100 in 2030-01-01 assuming 3% inflation` | `$0.00` | `... and this one is a date or time (write its year on its own, such as 1990)` |
-| `value of $100 in 1e400 assuming 3% inflation` | `$0.00` | `... and this one is not a finite number` |
+| `value of $100 in 1e400 assuming 3% inflation` | `$0.00` | `... and this one is ∞` |
 
 The figures are counted from 2026 and move each January.
 

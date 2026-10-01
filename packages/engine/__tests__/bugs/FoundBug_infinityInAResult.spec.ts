@@ -113,7 +113,7 @@ describe("the lines that exposed it", () => {
 		["sum((1/0):3)", "A range's bounds must be whole numbers, got \"∞:3\"."],
 		["∞ as words", "∞ cannot be written as words"],
 		["binompdf(10, 0.5, 1/0)", "binompdf: the number of successes must be a whole number, but was ∞"],
-		["inflationAdjust(£100, 1/0, 2020)", "Year ∞ is outside the bundled UK price index's range (1800-2026)"],
+		["inflationAdjust(£100, 1/0, 2020)", "the year of an inflation question is a plain whole number, such as 1990, and this one is ∞"],
 		["fuel for 300 miles at (1/0) UK mpg", "∞ UK mpg is not an economy a trip can be worked out from"],
 	])("the message for %s names ∞", (line, message) => {
 		expect(shown(line)).toBe(message);
