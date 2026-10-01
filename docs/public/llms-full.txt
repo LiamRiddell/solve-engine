@@ -2961,6 +2961,14 @@ a > b: 1 // ERROR: "a > b" before the colon is a comparison, not a label: a labe
 
 ```
 (one document)
+٢٤:00 // ERROR: "٢٤" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 24
+Total: ٢٤:00 // ERROR: "٢٤" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 24
+Start: ٩:٣٠ // ERROR: "٩" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 9
+Week ٢: 5 // 5
+```
+
+```
+(one document)
 Total: average(10:12) // ERROR: In average(...), 10:12 is a clock time, not a range, and a time cannot be averaged: a colon between two numbers is a range only as the list of sum, prod, map or reduce. To average numbers, list them with commas, as in average(1, 2, 3).
 Total: (1 + 2 // ERROR: The line ends where ")" was expected
 Rent: $1200 + // ERROR: The line ends after "+", where a value was expected
@@ -3629,6 +3637,13 @@ atanh(0.5) // 0.55
 trunc(3.7 m) // 3.00 m
 hypot(3 m, 400 cm) // 5.00 m
 fact(3 m) // ERROR: fact takes a plain number, not a length
+```
+
+```
+(one document)
+sqrt([4, 9]) // [2, 3]
+root(3, [8, 27]) // ERROR: root takes numbers, not a list: a list holds several numbers, and root works on one at a time. To work it out for each number, use map, with x standing for each one.
+map(root(3, x), [8, 27]) // [2, 3]
 ```
 
 ```
@@ -6560,6 +6575,14 @@ det([1 km, 2 km; 3 km, 4 km]) // A determinant of a list in km is not covered: m
 ```
 
 ```
+sqrt([4, 9]) // [2, 3]
+sqrt([4, 9; 16, 25]) // [2, 3; 4, 5]
+sin([30 deg, 90 deg]) // [0.50, 1]
+[3, 4]! // [6, 24]
+sqrt([4 m2, 9 m2]) // [2.00 m, 3.00 m]
+```
+
+```
 [1, 2; 3, 4] * [1; 2] // [5; 11]
 ```
 
@@ -6595,6 +6618,19 @@ det([1,2;3,4]) // -2
 ```
 (one document)
 [(1, 2), 3] // ERROR: A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3].
+```
+
+```
+(one document)
+sqrt([4, -9]) // ERROR: sqrt of -9 in this list has no real answer, and a list holds real numbers. Work that number out on its own line.
+ln([1, 0]) // ERROR: ln(0) has no real value: ln is only defined for positive numbers.
+sqrt([true, 4]) // ERROR: sqrt works on a list only when every cell is a number: this one holds a true or false.
+```
+
+```
+(one document)
+gcd([4, 6], 2) // ERROR: gcd takes numbers, not a list: a list holds several numbers, and gcd works on one at a time. To work it out for each number, use map, with x standing for each one.
+map(gcd(x, 2), [4, 6]) // [2, 2]
 ```
 
 ```

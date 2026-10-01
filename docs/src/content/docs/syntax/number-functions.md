@@ -72,6 +72,18 @@ float("0o17") // 15
 A colour or an IPv6 address has no one number either, and is refused the same
 way (see [colours](/syntax/colours/) and [networking](/syntax/networking/)).
 
+A list, such as `[4, 9]`, holds several numbers. A function of one number with
+an answer for each, such as `sqrt`, `sin` or `ln`, works it out for each number
+and gives back a list; one that reads its inputs as single numbers, such as
+`gcd` or `root`, refuses a list by name and points at `map`. Both used to read a
+list as 0. See [functions of a list](/syntax/vectors-and-matrices/#functions-of-a-list).
+
+```solve-doc
+sqrt([4, 9]) // [2, 3]
+root(3, [8, 27]) // ERROR: root takes numbers, not a list: a list holds several numbers, and root works on one at a time. To work it out for each number, use map, with x standing for each one.
+map(root(3, x), [8, 27]) // [2, 3]
+```
+
 `root(n, x)` is the nth root of x. A negative number has a real root of odd
 degree, since -2 cubed is -8, and none of even degree, which is refused by name
 as `(-1)^0.5` is.
