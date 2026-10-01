@@ -3,6 +3,7 @@ import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/Norma
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { getMeasure } from "@solve-js/uom/UomConverter";
 import { lowerCased } from "@solve-js/normalizer/RuleIndex";
+import { isCalendarLength, readCompoundQuantity } from "@solve-js/uom/CompoundQuantity";
 
 /**
  * The three words that put a duration in front of a date, and which way each
@@ -99,6 +100,75 @@ export function dateOffsetNormalizerRule(priority = 62): NormalizerRule {
 			return {
 				consumed: 2,
 				replacement: [createFusedToken(fused, unitToken.value, [unitToken, connector])],
+				ruleName: RULE,
+			};
+		},
+	};
+}
+
+/**
+ * The token each further part of a length of several units becomes in front
+ * of a date offset, its value `<amount> <unit>` as in `1 day`. Only ever
+ * emitted straight after a `DATE_OFFSET_AFTER` or `DATE_OFFSET_BEFORE`, whose
+ * parselet reads it.
+ */
+export const DATE_OFFSET_PART_TYPE = "DATE_OFFSET_PART";
+
+/**
+ * The fused connector a token stands for (`from`, `after`, `before`), or
+ * undefined when it is not one.
+ *
+ * Read from {@link CONNECTORS}' own properties only: a plain lookup handed
+ * `5 days constructor 3` the inherited `Object` function as a token type, and
+ * the line threw a raw `TypeError` instead of a parse error.
+ */
+export function connectorAt(token: Token | undefined): "DATE_OFFSET_AFTER" | "DATE_OFFSET_BEFORE" | undefined {
+	if (token === undefined) return undefined;
+	const key = token.type === "IDENT" ? (token.value ?? "").toLowerCase() : token.type;
+	return Object.prototype.hasOwnProperty.call(CONNECTORS, key) ? CONNECTORS[key] : undefined;
+}
+
+/**
+ * `1 month 1 day after 31 January 2026`, a date offset whose length is written
+ * in several units led by a day or longer (see `isCalendarLength`).
+ *
+ * The parts are applied to the date one at a time, largest first, as
+ * `31 January 2026 + 1 month + 1 day` applies them: the month is clamped to
+ * February 28 and the day then lands on March 1. Summed into one length first,
+ * the 30-day month of the unit table made it March 3. `before` takes each part
+ * off in the same order.
+ *
+ * The first part becomes the count and the fused connector, as a one-unit
+ * offset does, and each further part a {@link DATE_OFFSET_PART_TYPE} token that
+ * the connector's parselet reads before its date. The rule runs above the
+ * compound-quantity rule, which would otherwise sum the parts before the
+ * connector is seen. A length led by hours or smaller
+ * (`1 hour 30 minutes from 9:00`) is a fixed length, so it is left to that sum.
+ */
+export function compoundDateOffsetNormalizerRule(priority = 64): NormalizerRule {
+	const RULE = "datetime:compound-date-offset";
+	return {
+		name: RULE,
+		priority,
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["NUMBER"] }, { types: ["UNIT"] }],
+		match(tokens: Token[], pos: number): NormalizerMatch | null {
+			const quantity = readCompoundQuantity(tokens, pos);
+			if (quantity === null || !isCalendarLength(quantity)) return null;
+			const fused = connectorAt(tokens[pos + quantity.consumed]);
+			// There has to be something to offset from.
+			if (fused === undefined || tokens[pos + quantity.consumed + 1] === undefined) return null;
+
+			const [first, ...rest] = quantity.parts;
+			const source = tokens.slice(pos, pos + quantity.consumed + 1);
+			return {
+				consumed: quantity.consumed + 1,
+				replacement: [
+					createFusedToken("NUMBER", first.amount, [tokens[pos]]),
+					createFusedToken(fused, first.spelling, [first.unitToken]),
+					...rest.map((part) => createFusedToken(DATE_OFFSET_PART_TYPE, `${part.amount} ${part.spelling}`, source)),
+				],
 				ruleName: RULE,
 			};
 		},

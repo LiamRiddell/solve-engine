@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { DATE_OFFSET_PART_TYPE } from "../normalizer/DateOffsetNormalizerRule";
 
 /**
  * `<duration> from | after | before <date>`, the everyday spelling of a date
@@ -38,18 +39,32 @@ export class DateOffsetParselet implements InfixParselet {
 		builder.emitString(token.value);
 		builder.emitOpcode(OpCode.UOM_CONVERT_IN);
 
+		// The further parts of `1 month 1 day after`, applied after the first.
+		const parts: Token[] = [];
+		while (parser.peek()?.type === DATE_OFFSET_PART_TYPE) parts.push(parser.consume());
+
 		// The anchor date, parsed at `Sum` so a bare date term binds as the
 		// anchor and a trailing `+ <duration>` applies to the result, matching
 		// the working-day spelling.
 		parser.parseExpression(BindingPower.Sum, builder);
 
+		const step = this.direction === "backward" ? OpCode.SUB : OpCode.ADD;
 		if (this.direction === "backward") {
 			// [duration, date] becomes [date, duration], so SUB reads as the date
 			// minus the duration rather than the other way about.
 			builder.emitOpcode(OpCode.SWAP);
-			builder.emitOpcode(OpCode.SUB);
-			return;
 		}
-		builder.emitOpcode(OpCode.ADD);
+		builder.emitOpcode(step);
+		// Each further part moves the date the same way, largest first, so
+		// `1 month 1 day after` is the date plus a month, then plus a day.
+		for (const part of parts) {
+			const space = part.value.indexOf(" ");
+			builder.emitOpcode(OpCode.PUSH_NUMBER);
+			builder.emitNumber(Number(part.value.slice(0, space)));
+			builder.emitOpcode(OpCode.PUSH_STRING);
+			builder.emitString(part.value.slice(space + 1));
+			builder.emitOpcode(OpCode.UOM_CONVERT);
+			builder.emitOpcode(step);
+		}
 	}
 }

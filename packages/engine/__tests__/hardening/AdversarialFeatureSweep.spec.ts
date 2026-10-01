@@ -368,6 +368,16 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"P.5D + X",
 		"P * .5 + X",
 	],
+	// A length of several units led by a day or longer, applied to a date a
+	// part at a time, after a plus or minus and in front of after or before.
+	compoundLengthsOnADate: [
+		"2026-01-31 + 1 month 1 day + X days",
+		"2026-03-31 - 1 month 1 day - X days",
+		"1 month 1 day after 2026-01-31 + X days",
+		"1 month 1 day before 2026-03-31 * X",
+		"X + 1 month 1 day",
+		"(2026-01-31 + 1 year 1 month 1 day) * X",
+	],
 };
 
 describe("every form stays honest over the numeric edges", () => {
@@ -404,6 +414,23 @@ describe("an ISO 8601 duration and a timecode stay honest over the text edges an
 	});
 
 	test.each(PROTOTYPE_WORDS.flatMap((word) => [`P${word}`, `${word} + PT1H`, `PT1H in ${word}`, `01:02:03:04 at 30 fps in ${word}`, `(01:02:03:04 at 30 fps) in ${word}`]))("%s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line);
+		});
+	});
+});
+
+/**
+ * A length of several units is read from the words after its numbers, so the
+ * prototype words go where a unit or the connector of an offset would be, and
+ * the text edges beside the length.
+ */
+describe("a compound length on a date stays honest over the text edges and the prototype words", () => {
+	test.each(fill("2026-01-31 + 1 month 1 day + X", TEXT_EDGES.filter((t) => t.trim() !== "")))("%j", (line) => {
+		expectHonestLine(line);
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`2026-01-31 + 1 month 1 ${word}`, `1 month 1 day ${word} 2026-01-31`, `5 days ${word} 3`]))("%s", (line) => {
 		expectPrototypeUntouched(() => {
 			expectHonestLine(line);
 		});
