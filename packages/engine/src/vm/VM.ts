@@ -49,6 +49,7 @@ import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-
 import type { LineTrace } from "@solve-js/explain/Explanation";
 import { offsetRefusal, resolveUtcOffsetName } from "@solve-js/calendar/UtcOffset";
 import { CALENDAR_MONTHS_PER_UNIT, addCalendarDays, shiftByCalendarUnit } from "@solve-js/vm/CalendarShift";
+import { timecodeConverted, timecodeOperandRefused, timecodeUnitPhrase } from "@solve-js/vm/TimecodeConversion";
 
 /**
  * Create a new VM instance with the given opcode registry and configurable limits.
@@ -1436,7 +1437,7 @@ function multiplyPercentWithUncertainty(l: Value, r: Value): Value | null {
  * {@link multiplyPercentWithUncertainty}). One call from the loop, as before.
  */
 function multiplyPrelude(l: Value, r: Value): Value | null {
-    return quantityOperandRefused(l, r, "mul") ?? multiplyPercentWithUncertainty(l, r);
+    return quantityOperandRefused(l, r, "mul") ?? timecodeOperandRefused(l, r, "mul") ?? multiplyPercentWithUncertainty(l, r);
 }
 
 /**
@@ -1487,7 +1488,7 @@ function multiplyScalarExact(l: Value, r: Value): Value | null {
  * and an uncertain number (see {@link dividePercentWithUncertainty}).
  */
 function dividePrelude(l: Value, r: Value): Value | null {
-    return quantityOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r);
+    return quantityOperandRefused(l, r, "div") ?? timecodeOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r);
 }
 
 /**
@@ -1856,8 +1857,17 @@ function combineTimecode(tc: Value, r: Value, sign: 1 | -1): Value {
         return uomValue(tc.toNumber() + sign * seconds * fps, tc.unit!);
     }
 
-    // Bare Number (or any other Uom), treated as a raw frame count.
-    return uomValue(tc.toNumber() + sign * r.toNumber(), tc.unit!);
+    // A bare number is a count of frames: `01:02:03:04 at 30 fps + 10` is ten
+    // frames on.
+    if (r.type === ValueType.Number) return uomValue(tc.toNumber() + sign * r.toNumber(), tc.unit!);
+
+    // Anything else used to be read as a frame count too, so `+ 5 kg` moved
+    // the timecode five frames: a confident answer to a question with none.
+    const what = r.type === ValueType.Uom && r.unit !== undefined ? describeQuantity(r.unit) : valueKindName(r);
+    return errorValue(
+        "INCOMPATIBLE_UNITS",
+        `${timecodeUnitPhrase(tc.unit)!.replace(/^a/, "A")} moves by frames or by a length of time, such as 10 frames or 2 seconds, not by ${what}.`,
+    );
 }
 
 /**
@@ -2328,7 +2338,7 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
         if (composed) return composed;
         return errorValue(
             "RATE_MUL_MEASURE_MISMATCH",
-            `Cannot multiply a rate per ${denominator} by a quantity in ${multiplier.unit}: they measure different things, and together they make no unit.`
+            `Cannot multiply a rate per ${denominator} by a quantity in ${unitForMessage(multiplier.unit!)}: they measure different things, and together they make no unit.`
         );
     }
     const multiplierInDenominatorUnit = convertUnit(multiplier.toNumber(), multiplier.unit!, denominator);
@@ -2647,6 +2657,9 @@ function convertValueIn(left: Value, writtenTo: string, vm: VM): { value: Value;
     if (membership !== null) return { value: membership };
     const toUnit = left.type === ValueType.Uom ? rateTargetUnit(left.unit!, writtenTo) : writtenTo;
     if (left.type === ValueType.Uom) {
+      // A timecode into frames or a unit of time (#759). See vm/TimecodeConversion.ts.
+      const timecode = timecodeConverted(left, writtenTo);
+      if (timecode !== null) return { value: timecode, table: "measure" };
       const fromUnit = left.unit!;
       const val = left.toNumber();
       const measure = getMeasure(fromUnit);
@@ -3974,7 +3987,7 @@ export function executeBytecode(
               // "$X per €Y" isn't a meaningful derived unit the way
               // "km/day" is, so this stays INCOMPATIBLE_UNITS rather than
               // silently becoming a nonsensical currency-pair rate.
-              stack.push(errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${l.unit} and ${r.unit}`));
+              stack.push(errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${unitForMessage(l.unit!)} and ${unitForMessage(r.unit!)}`));
             } else {
               // A quotient whose dimensions divide onto a named derived unit:
               // `J / s` is a watt, `W / A` a volt (issue #191). Only when it
@@ -4884,7 +4897,7 @@ export function executeBytecode(
           if (operand.type === ValueType.Uom && operand.unit !== undefined && operand.unit !== unit) {
             stack.push(errorValue(
               "UNIT_AFTER_UNIT",
-              `A quantity in ${operand.unit} cannot take a second unit, ${unit}: two units side by side are not a unit. To convert, write "in ${unit}".`,
+              `A quantity in ${unitForMessage(operand.unit)} cannot take a second unit, ${unit}: two units side by side are not a unit. To convert, write "in ${unit}".`,
             ));
             break;
           }
@@ -4935,7 +4948,7 @@ export function executeBytecode(
           if (operand.type === ValueType.Uom && operand.unit !== undefined && operand.unit !== fromUnit) {
             stack.push(errorValue(
               "UNIT_AFTER_UNIT",
-              `A quantity in ${operand.unit} cannot take a second unit, ${fromUnit}: two units side by side are not a unit. To convert, write "in ${toUnit}".`,
+              `A quantity in ${unitForMessage(operand.unit)} cannot take a second unit, ${fromUnit}: two units side by side are not a unit. To convert, write "in ${toUnit}".`,
             ));
             break;
           }

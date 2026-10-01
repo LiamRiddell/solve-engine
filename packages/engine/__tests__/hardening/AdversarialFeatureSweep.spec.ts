@@ -218,6 +218,30 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"map(x * 2, X)",
 		"reduce(acc + x, X)",
 	],
+	// A timecode in its own notation, its arithmetic and its conversions out
+	// (#759), and an ISO 8601 duration beside a value, spread through a date
+	// and written back (#760).
+	timecodes: [
+		"01:02:03:04 at 30 fps + X",
+		"00:00:00:00 at 30 fps - X",
+		"(01:02:03:04 at 30 fps) * X",
+		"(01:02:03:04 at 30 fps) / X",
+		"X frames at 30 fps",
+		"01:02:03:04 at 30 fps + X seconds",
+		"(01:02:03:04 at 30 fps + X) in seconds",
+		"(01:02:03:04 at 30 fps + X) as timespan",
+	],
+	isoDurations: [
+		"PT1H30M + X",
+		"PT1H30M * X",
+		"X * P1DT1H",
+		"X - P1DT1H",
+		"2026-01-31 + P1M1D + X days",
+		"PT1H30M + X minutes",
+		"(PT1H30M * X) as iso8601",
+		"X seconds as iso8601",
+		"X months as iso8601",
+	],
 	// Arithmetic straight on a value written in a base, a base conversion of
 	// a value with no digits, and checks between colours and addresses.
 	basesAndIdentities: [
@@ -264,6 +288,24 @@ describe("text edges are read as text, not acted on", () => {
 
 	test.each(fill("X + 1", TEXT_EDGES.filter((t) => t.trim() !== "")))("inside an expression: %j", (line) => {
 		expectHonestLine(line);
+	});
+});
+
+/**
+ * An ISO 8601 duration is read from an identifier, so the text edges go inside
+ * it as well as beside it, and the prototype words go where a duration's
+ * letters, a converter or a unit would be (#760). A timecode's conversion
+ * target is a word the reader typed too (#759).
+ */
+describe("an ISO 8601 duration and a timecode stay honest over the text edges and the prototype words", () => {
+	test.each([...fill("PTX1H", TEXT_EDGES), ...fill("P1DX", TEXT_EDGES), ...fill("X + PT1H30M", TEXT_EDGES.filter((t) => t.trim() !== ""))])("%j", (line) => {
+		expectHonestLine(line);
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`P${word}`, `${word} + PT1H`, `PT1H in ${word}`, `01:02:03:04 at 30 fps in ${word}`, `(01:02:03:04 at 30 fps) in ${word}`]))("%s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line);
+		});
 	});
 });
 

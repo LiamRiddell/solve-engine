@@ -1,3 +1,4 @@
+import { timecodeUnitPhrase } from "@solve-js/vm/TimecodeConversion";
 import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, isTimecodeUnit, boolValue, type MatrixData, type MatrixEntry, type IpCidrData, type ColourData } from "@solve-js/vm/Value";
 import { convertUnit, convertRate, getMeasure, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { lookupUnit } from "@solve-js/uom/UnitConversion";
@@ -146,7 +147,9 @@ export function valueKindName(v: Value): string {
         case ValueType.Percentage:
             return "a percentage";
         case ValueType.Uom:
-            return v.unit === undefined ? "a number" : `an amount in ${v.unit}`;
+            if (v.unit === undefined) return "a number";
+            // A timecode's unit is an internal spelling (`timecode@30`), never shown (#759).
+            return timecodeUnitPhrase(v.unit) ?? `an amount in ${v.unit}`;
         case ValueType.Boolean:
             return "true or false";
         case ValueType.Pending:
@@ -236,7 +239,7 @@ export function unifyQuantities(values: readonly Value[], verb: string): { magni
             const named = describeMeasureMismatch(anchor.unit, v.unit, verb);
             return errorValue(
                 "INCOMPATIBLE_UNITS",
-                named ?? `Cannot combine incompatible units: ${anchor.unit ?? "?"} and ${v.unit ?? "?"}`,
+                named ?? `Cannot combine incompatible units: ${unitForMessage(anchor.unit ?? "?")} and ${unitForMessage(v.unit ?? "?")}`,
             );
         }
         magnitudes[i] = rv;
@@ -647,6 +650,9 @@ export function describeMeasure(unit: string): string | undefined {
     // unnamed, its internal spelling `mps2` reached the reader (#590).
     // A length over a squared time (`ft/s²`) is one too (#737).
     if (accelerationSize(unit) !== undefined) return "acceleration";
+    // Nor is a timecode, whose unit carries its frame rate (`timecode@30`) and
+    // must not reach a sentence as written (#759).
+    if (isTimecodeUnit(unit)) return "timecode";
     const measure = getMeasure(unit);
     if (measure === undefined) return undefined;
     return measureNoun(measure);
@@ -738,7 +744,7 @@ export function incomparableUnitsError(l: Value, r: Value): Value {
     const lUnit = l.type === ValueType.Uom ? l.unit : undefined;
     const rUnit = r.type === ValueType.Uom ? r.unit : undefined;
     const named = describeMeasureMismatch(lUnit, rUnit, "compared");
-    return errorValue("INCOMPATIBLE_UNITS", named ?? `Cannot compare incompatible units: ${lUnit ?? "?"} and ${rUnit ?? "?"}`);
+    return errorValue("INCOMPATIBLE_UNITS", named ?? `Cannot compare incompatible units: ${unitForMessage(lUnit ?? "?")} and ${unitForMessage(rUnit ?? "?")}`);
 }
 
 /**

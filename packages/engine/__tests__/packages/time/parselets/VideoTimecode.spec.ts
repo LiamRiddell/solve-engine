@@ -21,6 +21,7 @@ import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { formatValue } from "@solve-js/format/FormatEngine";
 
 function evalReal(expr: string) {
   const engine = newTrackedEngine();
@@ -95,15 +96,19 @@ describe("timecode in frames / timecode @ fps in frames", () => {
 });
 
 describe("<N> frames @ <fps> — reverse conversion to HH:MM:SS:FF", () => {
+  // The frame count at a rate is the timecode itself since #759, not its text,
+  // so it still takes arithmetic; it answers in HH:MM:SS:FF notation.
   test('"900 frames @ 30 fps" -> "00:00:30:00" (900 frames / 30fps = 30 seconds)', () => {
     const v = evalReal("900 frames @ 30 fps");
-    expect(v.type).toBe(ValueType.String);
-    expect(v.value).toBe("00:00:30:00");
+    expect(v.type).toBe(ValueType.Uom);
+    expect(v.unit).toBe("timecode@30");
+    expect(formatValue(v)).toBe("= 00:00:30:00 at 30 fps");
   });
 
   test('"111694 frames at 30 fps" round-trips the literal construction example back to HH:MM:SS:FF', () => {
     const v = evalReal("111694 frames at 30 fps");
-    expect(v.value).toBe("01:02:03:04");
+    expect(v.toNumber()).toBe(evalReal("01:02:03:04 at 30 fps").toNumber());
+    expect(formatValue(v)).toBe("= 01:02:03:04 at 30 fps");
   });
 
   test('a bare "<N> frames" with no "@ fps" stays a plain Uom("frames") duration', () => {
@@ -121,8 +126,7 @@ describe("timecode arithmetic — carry/borrow via plain frame-count addition", 
     expect(v.unit).toBe("timecode@30");
     expect(v.toNumber()).toBe(31);
     // Convert back to display notation to show the carry landed correctly.
-    const display = evalReal("31 frames at 30 fps");
-    expect(display.value).toBe("00:00:01:01");
+    expect(formatValue(v)).toBe("= 00:00:01:01 at 30 fps");
   });
 
   test("timecode + duration (10 minutes) converts the duration to frames at the timecode's own fps", () => {
@@ -144,8 +148,7 @@ describe("timecode arithmetic — carry/borrow via plain frame-count addition", 
     expect(v.type).toBe(ValueType.Uom);
     expect(v.unit).toBe("timecode@30");
     expect(v.toNumber()).toBe(1800); // 900 + 900 = 1 minute
-    const display = evalReal("1800 frames at 30 fps");
-    expect(display.value).toBe("00:01:00:00");
+    expect(formatValue(v)).toBe("= 00:01:00:00 at 30 fps");
   });
 
   test("combining timecodes at DIFFERENT frame rates is a clear error, not silently wrong math", () => {

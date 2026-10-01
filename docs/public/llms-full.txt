@@ -4932,6 +4932,31 @@ $15/hr * 37.5 hrs // $562.50
 ```
 
 ```
+PT1H30M // 90 minutes
+P1D // 1 day
+P2W // 2 weeks
+PT0.5S // 0.50 seconds
+PT1H30M in minutes // 90 minutes
+```
+
+```
+2026-01-31 + P1M1D // Sunday, March 1, 2026
+2026-01-01 + P1Y2M10DT2H30M // Thursday, March 11, 2027, 2:30:00 AM
+2026-03-31 - P1M // Saturday, February 28, 2026
+```
+
+```
+90 minutes as iso8601 // PT1H30M
+1.5 days as iso8601 // P1DT12H
+14 months as iso8601 // P14M
+26 hours as iso8601 // PT26H
+```
+
+```
+P1M in days // 30 days
+```
+
+```
 7:30 to 20:45 // 795 minutes
 ```
 
@@ -4941,12 +4966,27 @@ $15/hr * 37.5 hrs // $562.50
 
 ```
 30 fps // 30.00 frames/s
-01:02:03:04 at 30 fps in frames // 111,694.00 frames
-111694 frames at 30 fps // 01:02:03:04
+01:02:03:04 at 30 fps // 01:02:03:04 at 30 fps
+01:02:03:04 @ 25 fps // 01:02:03:04 at 25 fps
 ```
 
 ```
-01:02:03:04 at 30 fps // 111,694.00 timecode@30
+01:02:03:04 at 30 fps + 10 // 01:02:03:14 at 30 fps
+00:00:00:29 at 30 fps + 1 frames // 00:00:01:00 at 30 fps
+01:02:03:04 at 30 fps + 2 seconds // 01:02:05:04 at 30 fps
+01:02:03:04 at 30 fps - 01:02:03:00 at 30 fps // 4.00 frames
+```
+
+```
+01:02:03:04 at 30 fps in frames // 111,694.00 frames
+111694 frames at 30 fps // 01:02:03:04 at 30 fps
+00:00:01:15 at 30 fps in seconds // 1.50 seconds
+01:02:03:04 at 30 fps as timespan // 1 hour 2 minutes 3.133 seconds
+```
+
+```
+00:00:00:00 at 30 fps - 10 // -00:00:00:10 at 30 fps
+00:00:00:00 at 25 fps + 0.5 seconds // 12.5 frames at 25 fps
 ```
 
 ```
@@ -4960,6 +5000,12 @@ $15/hr * 37.5 hrs // $562.50
 hr = 2
 hr * 3 // 6
 $15/hr // $15.00/hr
+```
+
+```
+(one document)
+P1H // ERROR: P1H is not an ISO 8601 duration: H is a time part, and time parts come after a T, as in PT1H.
+P1D1D // ERROR: P1D1D is not an ISO 8601 duration: 1D is out of place: the parts run from the largest to the smallest, each once.
 ```
 
 ## time-zones

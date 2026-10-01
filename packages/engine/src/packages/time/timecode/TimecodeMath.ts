@@ -39,3 +39,60 @@ export function framesToTimecodeString(totalFrames: number, fps: number): string
 
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}:${pad(frames)}`;
 }
+
+/**
+ * A timecode as the reader writes one, with its frame rate: `01:02:03:14 at
+ * 30 fps`. This is how a timecode answers, and the text reads back in as the
+ * same value, which is why the rate is part of it (#759).
+ *
+ * Before this, a timecode had no display of its own and fell to the generic
+ * amount-and-unit rendering, so `01:02:03:04 at 30 fps` answered `111,694.00
+ * timecode@30`: the frame count under the engine's internal unit name.
+ *
+ * Three cases keep the text honest rather than tidy:
+ * - A negative count (a timecode moved back past zero) is the timecode of its
+ *   size with a minus sign, `-00:00:00:10 at 30 fps`, which reads back too.
+ * - A count that is not a whole number of frames (half a second added at
+ *   25 fps is 12.5 frames) has no `HH:MM:SS:FF` spelling, and rounding it
+ *   would show a timecode the value is not. It is written as the count,
+ *   `90012.5 frames at 25 fps`, which reads back as the same timecode.
+ * - A count past 2^53, or one with no finite value, is written as the count
+ *   for the same reason: its frame field could not be exact.
+ *
+ * @param totalFrames - The frame count since 00:00:00:00.
+ * @param fps - The frame rate the timecode is read at.
+ * @returns The display text, without the leading `= `.
+ */
+export function timecodeText(totalFrames: number, fps: number): string {
+  const rate = `${String(fps)} fps`;
+  const whole = Number.isInteger(totalFrames) && Math.abs(totalFrames) <= Number.MAX_SAFE_INTEGER;
+  if (!whole) return `${String(totalFrames)} frames at ${rate}`;
+  // Negative zero is zero frames: `-0` has no minus sign to show.
+  if (totalFrames < 0) return `-${framesToTimecodeString(-totalFrames, fps)} at ${rate}`;
+  return `${framesToTimecodeString(totalFrames, fps)} at ${rate}`;
+}
+
+/**
+ * Whether a frame rate can carry a timecode: a finite rate that rounds to at
+ * least one frame a second. `0 fps` has no frame field at all, and `0.4 fps`
+ * rounds to none, so a timecode at either has no frame it could name.
+ *
+ * @param fps - The rate as written.
+ */
+export function isTimecodeRate(fps: number): boolean {
+  return Number.isFinite(fps) && Math.round(fps) >= 1;
+}
+
+/**
+ * A timecode's length in seconds of real time: its frame count over its frame
+ * rate. At a whole rate this is the clock the fields show (`00:00:01:15 at
+ * 30 fps` is 1.5 seconds); at 29.97 fps it is the elapsed time the frames
+ * take, a little longer than the fields read, which is the gap drop-frame
+ * notation exists to close and this engine does not implement.
+ *
+ * @param totalFrames - The frame count.
+ * @param fps - The frame rate, already checked with {@link isTimecodeRate}.
+ */
+export function timecodeSeconds(totalFrames: number, fps: number): number {
+  return totalFrames / fps;
+}
