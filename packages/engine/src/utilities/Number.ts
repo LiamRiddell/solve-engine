@@ -90,10 +90,14 @@ const FIXED_EXPONENT_FROM = 1e21;
  * `toFixed` writes a number of 1e21 or more the way `String` does, in
  * JavaScript's exponent form, so `1e306 as %` showed `1e+308%` and `1e22 m`
  * showed `1e+22 m` while a plain `1e22` showed every digit. Past that
- * magnitude the digits come from the same `Intl` formatter a plain number is
- * written with, so a quantity, a percentage and money read as a number does.
- * Below it, and for a value that is not finite, this is `toFixed` itself, one
- * comparison and nothing more.
+ * magnitude the digits are the ones `Intl` writes for the number, so a
+ * quantity, a percentage and money read as a plain number does: the shortest
+ * digits that round-trip (the ones `String` writes before its exponent), then
+ * zeros to the decimal point. They are built from `String`'s text rather than
+ * by calling the formatter, which costs about forty times as much and is met
+ * on every line of a long money chain. A double this large is whole, so the
+ * places are zeros. Below it, and for a value that is not finite, this is
+ * `toFixed` itself, one comparison and nothing more.
  *
  * @param value - The number.
  * @param places - The places after the point, a whole number from 0 to 100.
@@ -103,7 +107,28 @@ export function fixedDecimalText(value: number, places: number): string {
 	if (!(value >= FIXED_EXPONENT_FROM || value <= -FIXED_EXPONENT_FROM) || value === Number.POSITIVE_INFINITY || value === Number.NEGATIVE_INFINITY) {
 		return value.toFixed(places);
 	}
-	return numberFormatFor("en-US", false, places, places).format(value);
+	return wholeDigitsOfLargeDouble(value) + (places > 0 ? "." + "0".repeat(places) : "");
+}
+
+/**
+ * The full digits of a finite double of 1e21 or more either way, as `Intl`
+ * writes them: `String` gives `d.ddde+N` for such a number, and the digits are
+ * its mantissa's digits padded with zeros to `N + 1` of them.
+ *
+ * @param value - A finite number whose magnitude is at least 1e21.
+ * @returns The whole digits, with a leading `-` for a negative number.
+ */
+export function wholeDigitsOfLargeDouble(value: number): string {
+	const text = String(value);
+	const sign = text.charCodeAt(0) === 45 ? "-" : "";
+	const body = sign === "" ? text : text.slice(1);
+	const e = body.indexOf("e+");
+	if (e < 0) return text;
+	const mantissa = body.slice(0, e);
+	const exponent = Number(body.slice(e + 2));
+	const point = mantissa.indexOf(".");
+	const digits = point < 0 ? mantissa : mantissa.slice(0, point) + mantissa.slice(point + 1);
+	return sign + digits + "0".repeat(exponent + 1 - digits.length);
 }
 
 /**
