@@ -312,6 +312,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	STOCKS_INVALID_DATE: { line: "stock(AAPL) on 5 banana", stocks: true },
 	STOCKS_INVALID_TICKER: { line: "stock(5)", stocks: true },
 	SWEEP_ANSWER_NOT_NUMERIC: { doc: ["x = 5", "\"a\"", "line 2 for x from 1 to 3 step 1"] },
+	SWEEP_ANSWER_PERCENTAGE: { doc: ["r = 10%", "z = r", "line 2 for r from 10% to 30% step 10%"] },
 	SWEEP_DATE_STEP_NOT_DURATION: { doc: ["start = 2026-01-01", "finish = 2026-12-31", "working days between start and finish", "line 3 for start from 2026-01-01 to 2026-04-01 step 5"] },
 	SCENARIO_UNKNOWN: { doc: ["x = 1", "x * 2", "line 2 under bull"] },
 	SCENARIO_DUPLICATE: { doc: ["x = 1", "scenario a with x = 2", "scenario a with x = 3", "x * 10", "line 4 under a"] },

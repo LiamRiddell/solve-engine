@@ -142,6 +142,16 @@ median of 10%, 20%, 40% // 20.00%
 stdev of 10%, 20% // 5.00%
 ```
 
+A product of percentages is a share of a share, so it is a percentage too, and
+every one of these answers is worked out from the decimals as written, so it
+equals the percentage it shows (see
+[multiplying and dividing percentages](/syntax/percentages/#multiplying-and-dividing-percentages)):
+
+```solve
+product of 10%, 20% // 2.00%
+sum(10%, 20%) == 30% // true
+```
+
 ```solve-doc
 10% // 10.00%
 20% // 20.00%

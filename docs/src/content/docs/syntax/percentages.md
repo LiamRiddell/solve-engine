@@ -370,6 +370,100 @@ one, with an `x` after it. The conversion is read by `CONVERTERS_PACKAGE`, which
 0.5 as multiplier // 0.5x
 ```
 
+## Multiplying and dividing percentages
+
+A percentage times a plain number takes that share of the number, as `of`
+does: `50% * 30` is half of 30. Times an amount of money or a quantity, it is
+that share of the amount, in its unit.
+
+```solve
+50% * 30 // 15
+100 * 40% // 40
+10% * $5 // $0.50
+```
+
+A share of a share is itself a share: ten per cent of twenty per cent is two
+per cent. So a percentage times a percentage is a percentage, with `*`, with
+`of` and with `product of`. Dividing a percentage by a number divides the
+share, which is how a yearly rate becomes a monthly one, and a power of a
+percentage is the share taken that many times over.
+
+```solve
+10% * 20% // 2.00%
+10% of 20% // 2.00%
+product of 10%, 20% and 50% // 1.00%
+6% / 12 // 0.50%
+10% ^ 2 // 1.00%
+```
+
+The answer goes on working as a percentage, so a monthly rate found this way
+raises an amount by that share:
+
+```solve-doc
+rate = 6% // 6.00%
+monthly = rate / 12 // 0.50%
+$1000 + monthly // $1,005.00
+$1000 * monthly // $5.00
+```
+
+A percentage over a percentage is how many times one share goes into the
+other, a plain ratio, and a number over a percentage is a plain number:
+
+```solve
+10% / 20% // 0.50
+200 / 10% // 2,000
+```
+
+The boundary: `10% * 2` is 0.2, a tenth of 2, not 20%. A percentage times a
+number is always read as a share of the number, since that is what `100 * 40%`
+means and the engine cannot tell the two apart by size. To double a rate, add
+it to itself, or write the answer as a percentage with `as %`. A percentage
+over zero has no finite share and is refused, and `10% ^ -1` is read as
+`1 / 10%`, a plain 10. A measurement with an
+[uncertainty](/syntax/uncertainty/) keeps its own arithmetic, so
+`10% / (2 +/- 0.1)` is a plain 0.05 ± 0.0025. These used to be plain numbers:
+`10% * 20%` and `product of 10%, 20%` were 0.02, `10% / 2` was 0.05 and
+`10% ^ 2` was 0.01, so a monthly rate added to an amount was added as a bare
+fraction rather than as a share of it.
+
+```solve
+10% * 2 // 0.20
+10% + 10% // 20.00%
+(10% * 2) as % // 20.00%
+10% / 0 // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
+```
+
+## Percentages that add up exactly
+
+A computer holds most numbers in binary, where a tenth has no exact form, so
+adding 0.1 and 0.2 that way lands a hair past 0.3 (see
+[decimals](/syntax/decimals/)). A percentage is a decimal too, and its sums,
+differences, products, quotients and powers, its totals and its averages are
+worked out from the decimals as written. So a total of percentages equals the
+percentage it shows, and a check of it agrees with `==`:
+
+```solve
+10% + 20% == 30% // true
+sum(10%, 20%) == 30% // true
+30% - 10% == 20% // true
+10% * 20% == 2% // true
+(average of 10%, 20%, 30%) == 20% // true
+```
+
+```solve-doc
+10% // 10.00%
+20% // 20.00%
+total above // 30.00%
+check line 3 == 30% // ✓
+```
+
+The boundary: this covers a percentage written with up to fifteen significant
+digits, which is every one a person types. A percentage worked out from a
+fraction with no end, such as `(1/3) as %`, and a standard deviation of
+percentages are floating point, as a plain number's are. These used to be
+false: `10% + 20% == 30%` and `sum(10%, 20%) == 30%`, while `check 10% + 20%
+== 30%` passed.
+
 ## What it does not cover
 
 - Only `of` reads a parts-per quantity as a rate. `*` keeps its unit, so
