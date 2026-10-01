@@ -145,6 +145,37 @@ or a request that should be tried again after a failure, wants an
 [async data source](/guide/async-data-sources/) built on `createQueryResolver`,
 which pairs the fetch with its own cache and refresh interval.
 
+### When a live lookup wants `createQueryResolver`
+
+A promise-returning handler is the least a package needs to fetch something: it
+suits a value that is fetched once and never changes, such as a record looked up
+by an id that is never reused. A *live* lookup is a value read from a service
+that can change while the document is open, a temperature, a share price, a
+definition, and it usually wants more than a handler gives. For that, prefer
+`createQueryResolver` from `solve-engine/resolvers`, which builds the handler
+and the resolver that feeds it from a single `fetchQuery(query, signal)` you
+write. Reach for it when the lookup should:
+
+- **cache, and let the cache go stale.** Each answer is kept in the engine's
+  cache for `staleTimeMs` (five minutes by default), after which the next
+  evaluation fetches it again, rather than being kept for the life of the engine.
+- **share one fetch between lines.** Every line that asks the same query waits
+  on the one request, and at most six requests run at once
+  (`maxConcurrent`), so a pasted document of a hundred places does not send a
+  hundred requests at once.
+- **refetch.** `refetchIntervalMs` refreshes a value on screen on its own when
+  the host enables background refresh, and a failure is kept only for
+  `failureCooldownMs` (thirty seconds by default) before it is tried again.
+- **cancel.** The `signal` passed to `fetchQuery` fires when the fetch is
+  cancelled or when `timeoutMs` (ten seconds by default) runs
+  out, so a service that never replies does not hold the line pending.
+
+The boundary: the helper reads the query from the line before it runs, so the
+query must be written in the line as quoted text (`rainfall("Oslo")`). A lookup
+whose argument is a variable, or one with two operands, keeps a handler of its
+own, or the fuller contract the guide describes. The worked example is the
+guide's [short path](/guide/async-data-sources/#the-short-path-createqueryresolver).
+
 Check your own arguments, and return an `errorValue(code, message)` rather than
 throwing when they are wrong, as `doubleHandler` does above. A returned error is a
 value the reader sees on that one line; a thrown one is harder for a host to place.

@@ -46,7 +46,7 @@
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, errorValue } from "@solve-js/vm/Value";
 import { DECIMAL_DIGIT_CEILING, decimalCompare, decimalToString, type DecimalData } from "@solve-js/decimal";
 import { rational, rationalToNumber, type Rational } from "@solve-js/symbolic";
-import { bigIntPow, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemainder } from "@solve-js/vm/ExactIntegers";
+import { bigIntPow, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemainder, wholeNumberUnchanged } from "@solve-js/vm/ExactIntegers";
 
 /**
  * How many digits an exact decimal result may carry before it falls back to the
@@ -560,21 +560,68 @@ export function exactDecimalTotal(values: readonly Value[], mean: boolean): Valu
 	return quotientResult(rational(coef, pow10(scale) * toBigInt(values.length)), approx / values.length);
 }
 
+/** The rounding a whole-number function applies: `floor`, `ceil`, `trunc` (`int`, `as int`) or `round`. */
+export type WholeRounding = "floor" | "ceil" | "trunc" | "round";
+
 /**
- * Round a plain number carrying an exact decimal to a whole number, or null.
+ * Round a plain number to a whole number from the exact value it carries, or
+ * null when it carries none.
  *
- * `floor`, `ceil`, `trunc` and `round` read the decimal rather than its double,
- * which can sit on the far side of a whole number from the value typed:
- * 2.99999999999999999 is a double of exactly 3, so its floor was 3. `round`
- * keeps the rule it has always had, a half rounds up (towards positive
- * infinity), so `round(-2.5)` is -2 as before. Null for anything without the
- * sidecar, which keeps its path.
+ * `floor`, `ceil`, `trunc`, `int`, `round` and `as int` read an exact value
+ * before the double, which past 2^53 holds no fraction at all: `2^60 + 0.5` is
+ * the exact fraction 2305843009213693953/2, and its double is the whole number
+ * 2^60, which the formatter wrote as 1,152,921,504,606,847,000. The exact
+ * integer comes first (handed back as it is, see `wholeNumberUnchanged` in
+ * vm/ExactIntegers.ts), then the exact fraction ({@link roundExactRationalToWhole}),
+ * then the exact decimal ({@link roundExactDecimalToWhole}). Null for a value
+ * with none of these (a quantity, a `sqrt` result, a double past the safe
+ * range), which keeps its double; a plain double is turned away on its first
+ * two reads, so the common path allocates nothing.
  *
  * @param v - The operand.
  * @param mode - Which rounding.
  * @returns The whole-number result, or null.
  */
-export function roundExactDecimalToWhole(v: Value, mode: "floor" | "ceil" | "trunc" | "round"): Value | null {
+export function roundExactToWhole(v: Value, mode: WholeRounding): Value | null {
+	if (v.type !== ValueType.Number || (v.rational === undefined && v.exact === undefined)) return null;
+	return wholeNumberUnchanged(v, false) ?? roundExactRationalToWhole(v, mode) ?? roundExactDecimalToWhole(v, mode);
+}
+
+/**
+ * Round a plain number carrying an exact fraction to a whole number, or null.
+ *
+ * The fraction is divided in whole numbers, so nothing is lost to the double:
+ * `floor(2^60 + 0.5)` is 1,152,921,504,606,846,976 where the double's floor
+ * printed 1,152,921,504,606,847,000. The rounding rules are those of
+ * {@link roundExactDecimalToWhole}. Null for anything without the sidecar, and
+ * for a whole fraction (n/1), which `wholeNumberUnchanged` hands back as it is.
+ *
+ * @param v - The operand.
+ * @param mode - Which rounding.
+ * @returns The whole-number result, or null.
+ */
+export function roundExactRationalToWhole(v: Value, mode: WholeRounding): Value | null {
+	const r = v.rational;
+	if (v.type !== ValueType.Number || r === undefined || r.d <= 1n) return null;
+	return wholeOfQuotient(r.n, r.d, mode, r.n < 0n || Object.is(v.value, -0));
+}
+
+/**
+ * Round a plain number carrying an exact decimal to a whole number, or null.
+ *
+ * `floor`, `ceil`, `trunc` and `round` read the decimal rather than its double,
+ * which can sit on the far side of a whole number from the value typed:
+ * 2.99999999999999999 is a double of exactly 3, so its floor was 3. `floor`
+ * goes down and `ceil` up, `trunc` towards zero, and `round` takes a half away
+ * from zero, the rule `to N dp` rounds by (#584): `round(2.5)` is 3 and
+ * `round(-2.5)` is -3. Null for anything without the sidecar, which keeps its
+ * path.
+ *
+ * @param v - The operand.
+ * @param mode - Which rounding.
+ * @returns The whole-number result, or null.
+ */
+export function roundExactDecimalToWhole(v: Value, mode: WholeRounding): Value | null {
 	if (v.type !== ValueType.Number || v.exact === undefined) return null;
 	const { coef, scale } = v.exact;
 	// A negative value rounding to zero is IEEE's negative zero, as Math.ceil,
@@ -582,10 +629,21 @@ export function roundExactDecimalToWhole(v: Value, mode: "floor" | "ceil" | "tru
 	// negative zero rounded; see decimalResult for why that sign is kept.
 	const negative = coef < 0n || Object.is(v.value, -0);
 	if (scale === 0) return wholeResult(coef, negative);
-	const divisor = pow10(scale);
-	// BigInt division truncates towards zero; the remainder takes coef's sign.
-	const truncated = coef / divisor;
-	const remainder = coef % divisor;
+	return wholeOfQuotient(coef, pow10(scale), mode, negative);
+}
+
+/**
+ * The whole number `numerator / divisor` rounds to, as a Value.
+ *
+ * @param numerator - The signed numerator.
+ * @param divisor - The divisor, strictly positive.
+ * @param mode - Which rounding.
+ * @param negative - Whether the value is below zero (or a negative zero), so a zero result keeps that sign.
+ */
+function wholeOfQuotient(numerator: bigint, divisor: bigint, mode: WholeRounding, negative: boolean): Value {
+	// BigInt division truncates towards zero; the remainder takes the numerator's sign.
+	const truncated = numerator / divisor;
+	const remainder = numerator % divisor;
 	if (remainder === 0n) return wholeResult(truncated, negative);
 	let whole: bigint;
 	switch (mode) {
@@ -593,8 +651,7 @@ export function roundExactDecimalToWhole(v: Value, mode: "floor" | "ceil" | "tru
 		case "floor": whole = remainder < 0n ? truncated - 1n : truncated; break;
 		case "ceil": whole = remainder > 0n ? truncated + 1n : truncated; break;
 		case "round": {
-			// A half goes away from zero, the rule `to N dp` rounds by (#584):
-			// 2.5 is 3 and -2.5 is -3.
+			// A half goes away from zero: 2.5 is 3 and -2.5 is -3.
 			const doubled = 2n * remainder;
 			if (remainder > 0n) whole = doubled >= divisor ? truncated + 1n : truncated;
 			else whole = -doubled >= divisor ? truncated - 1n : truncated;

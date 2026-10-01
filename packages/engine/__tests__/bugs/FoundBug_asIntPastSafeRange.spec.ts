@@ -69,7 +69,8 @@ describe("the lines that exposed it", () => {
 		expect(shown("(9007199254740993.5 + 1/3) as int")).toBe(shown("floor(9007199254740993.5 + 1/3)"));
 		expect(shown("sqrt(2^106) + 0.5 as int")).toBe("9,007,199,254,740,992");
 		// An exact fraction past 2^53 (2^60 + 0.5 is 2^61 + 1 halves) is not an
-		// exact decimal, and floor and int read its double too; as int matches them.
+		// exact decimal; floor, int and as int all divide it out exactly (see
+		// FoundBug_roundingExactFractionsPastSafeRange.spec.ts), and agree.
 		expect(shown("(2^60 + 0.5) as int")).toBe(shown("floor(2^60 + 0.5)"));
 		expect(shown("(2^60 + 0.5) as int")).toBe(shown("int(2^60 + 0.5)"));
 	});

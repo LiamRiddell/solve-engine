@@ -26,7 +26,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { safeText } from "@solve-js/parser/ParseMessages";
-import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused, bigBaseArithmetic } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageNotFinite, percentageTooLarge, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused, bigBaseArithmetic } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -1385,7 +1385,11 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
         // Number/Percentage make sense here; anything else (a date, a matrix)
         // falls through to the ordinary error path.
         if (r.type !== ValueType.Percentage && r.type !== ValueType.Number) return null;
-        return percentageValue(l.toNumber() + sign * r.toNumber());
+        const fraction = l.toNumber() + sign * r.toNumber();
+        // `50% + 1e308` is a fraction a double holds, but not a hundred times
+        // it, so it is refused as `1e308 as %` is; see toPercentage().
+        if (!Number.isFinite(fraction * 100)) return Number.isNaN(fraction) ? percentageNotFinite() : percentageTooLarge();
+        return percentageValue(fraction);
     }
     if (r.type !== ValueType.Percentage) return null;
 

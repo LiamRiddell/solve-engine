@@ -38,7 +38,7 @@ import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } fr
 import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan, loanTermsRefused, rateAtOrBelowMinusHundred, compoundingRefused } from "@solve-js/vm/FinanceFormulas";
 import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, valueInBase, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
-import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactDecimalToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
+import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
 
 /**
  * A duration in seconds, shown in the largest whole time unit that keeps the
@@ -912,15 +912,15 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         ?? numberValue(logToBase(args[0].toNumber(), args[1].toNumber())),
     113: (args) => quantityRefused("ln", args[0], false) ?? outsideDomain("ln", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
-    6: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "ceil") ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
-    7: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "floor") ?? keepUnit(args[0], Math.floor(args[0].toNumber())),
+    6: (args) => roundExactToWhole(args[0], "ceil") ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
+    7: (args) => roundExactToWhole(args[0], "floor") ?? keepUnit(args[0], Math.floor(args[0].toNumber())),
     8: (args) =>
         args.length >= 2
             ? // round(x, n): round to n decimal places and display at that precision.
               roundToPlaces(args[0], args[1].toNumber())
             : // round(x): the nearest whole number, a half away from zero as
               // round(x, n) and `to N dp` round one (#584); see roundHalfAwayFromZero().
-              wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "round") ?? keepUnit(args[0], roundHalfAwayFromZero(args[0].toNumber())),
+              roundExactToWhole(args[0], "round") ?? keepUnit(args[0], roundHalfAwayFromZero(args[0].toNumber())),
     // min/max: see extremum() for why the winner is carried around as a Value
     // rather than as a running number.
     9: (args) => extremum(args, false),
@@ -1015,7 +1015,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     32: (_args, context) => numberValue(drawRandom(context)), // takes no arguments, unlike its neighbours
     33: (args) => numberValue(Math.sign(args[0].toNumber())),
     // trunc keeps a unit, as the rest of the rounding family does (#592).
-    34: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
+    34: (args) => roundExactToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
     // An angle quantity is read in its own unit; see degreeArgumentInRadians().
     35: (args) => quantityRefused("degtorad", args[0], true) ?? numberValue(degreeArgumentInRadians(args[0])),
     36: (args) => quantityRefused("radtodeg", args[0], true) ?? numberValue(angleInRadians(args[0]) * 180 / Math.PI),
@@ -1236,7 +1236,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // which only strips a unit/percentage wrapper and keeps any decimal
     // part (e.g. "5.7 as number" -> 5.7), int() additionally truncates.
     // Text is read only when it spells a number whole; see intOfText().
-    50: (args) => args[0].type === ValueType.String ? intOfText(args[0].value as string) : wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
+    50: (args) => args[0].type === ValueType.String ? intOfText(args[0].value as string) : roundExactToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
 
     // ── Finance (packages/finance/) ──────────────────────────────────────
     // All finance builtins preserve the principal/amount argument's Uom

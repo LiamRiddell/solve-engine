@@ -217,6 +217,14 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"X + 0.5 as percent",
 		"map(x * 2, X)",
 		"reduce(acc + x, X)",
+		// The fifth: an exact fraction past 2^53 through each rounding, and a
+		// number whose percentage, a hundred times it, overflows.
+		"floor((X) + 2^60 + 1/2)",
+		"round(-(X) - 2^60 - 1/2)",
+		"(X) + 2^60 + 1/3 as int",
+		"(X) * 1e306 as %",
+		"-(X) * 1e306 in %",
+		"50% + (X) * 1e308",
 	],
 	// Arithmetic straight on a value written in a base, a base conversion of
 	// a value with no digits, and checks between colours and addresses.
