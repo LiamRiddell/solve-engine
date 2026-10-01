@@ -163,7 +163,7 @@ version "2.41.0".`
 | `lexerVocabulary` | Keywords, operators and units the tokeniser should recognise, and whole-line patterns that take a line as free text | [Units and keywords](/packages/units-and-keywords/) |
 | `prefixParselets` | Parsing rules for tokens that begin an expression, written by hand or built from a phrase's words with `definePhrasePattern` | [Functions and operators](/packages/functions-and-operators/), [Recognising phrases and words](/packages/recognising-phrases/#words-around-their-operands-definephrasepattern) |
 | `infixParselets` | Parsing rules for tokens that combine expressions | [Functions and operators](/packages/functions-and-operators/) |
-| `pluginFunctions` | Functions the virtual machine can call | [Functions and operators](/packages/functions-and-operators/) |
+| `pluginFunctions` | Functions the virtual machine can call, and whether a call is one that never waits (`emitPluginCall(name, argCount, { synchronous: true })`), so a function body or a map can hold it | [Functions and operators](/packages/functions-and-operators/) |
 | `normalizerRules` / `phrases` / `callFusions` | Token-stream rewrites: phrase fusion, `name(` function-call words, the `shape` a rule declares so it is only tried where it can fire, and the engine environment a rule is handed | [Recognising phrases and words](/packages/recognising-phrases/) |
 | `asConverters` | Targets for the `as` conversion form | [Custom as converters](/packages/as-converters/) |
 | `unitAliases` | Words for units the engine already has (`Meile` for the mile), read after a value and as a conversion target, and shown as written | [Words for units](/packages/unit-aliases/) |

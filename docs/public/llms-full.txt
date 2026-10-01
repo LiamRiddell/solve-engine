@@ -1489,6 +1489,14 @@ der(tau*x^2, x) // 12.5663706144x
 ```
 
 ```
+map(x * gravity, [1, 2]) // [9.81 m/s², 19.61 m/s²]
+```
+
+```
+solve(x = gravity * 2, x) // A formula keeps no units, so combining "x" with an amount in m/s² would drop the m/s². Give "x" a value on a line above, or write the formula without the unit.
+```
+
+```
 avogadro // 602,214,076,000,000,000,000,000
 ```
 
@@ -1501,6 +1509,12 @@ boltzmann * 300 K // 4.14e-21 J
 planck * 5e14 // 3.31e-19
 avogadro * 2 // 1,204,428,152,000,000,000,000,000
 planck * 5e14 Hz // A constant measured in J·s and a quantity in Hz cannot be multiplied: the engine cannot spell J·s yet, so the answer would wrongly be in Hz. Leave the unit off the other side and read the result in the unit it should have.
+```
+
+```
+(one document)
+f(m) = m * gravity // f(m) defined
+f(70 kg) as N // 686.47 N
 ```
 
 ## converting-units
@@ -3197,6 +3211,16 @@ $0.70 * 1.10 // $0.77
 $1.005 // $1.01
 $2.675 // $2.68
 $0.10 + 15% // $0.12
+```
+
+```
+$1e-3 // $0.00
+$0.001 // $0.00
+$1.005e0 // $1.01
+$1.5e2 // $150.00
+1e-3 USD // $0.00
+£2.5e-2 // £0.03
+$1e-3 * 1000 // $1.00
 ```
 
 ```

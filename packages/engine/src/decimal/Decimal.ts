@@ -114,6 +114,52 @@ export function decimalFromLiteral(text: string): DecimalData {
 	return { coef, scale: fracPart.length };
 }
 
+/**
+ * The largest exponent, either way, an exponent-form literal is read exactly
+ * at. Past it the nearest double is already infinite or zero, so an exact
+ * value would say something the number cannot, and building it would cost a
+ * coefficient of that many digits: `1e99999999` would be a hundred-million
+ * digit integer.
+ */
+export const EXACT_EXPONENT_LIMIT = 400;
+
+/** An exponent-form literal: digits with an optional point, then `e` and a signed whole exponent. */
+const EXPONENT_LITERAL = /^([+-]?)(\d*)(?:\.(\d*))?[eE]([+-]?\d+)$/;
+
+/**
+ * The exact decimal an exponent-form literal stands for (`"1e-3"` is exactly
+ * 1/1000, `"1.5e2"` exactly 150), or null when the text is not one or its
+ * exponent is past {@link EXACT_EXPONENT_LIMIT}.
+ *
+ * A literal written with a point, `0.001`, has always kept its exact base-ten
+ * value; the same amount written `1e-3` was read as the nearest double and kept
+ * nothing. The digits and the exponent are read straight into a coefficient
+ * and a scale here, with no double in between, so the two spellings are the
+ * same value.
+ *
+ * @param text - A normalized literal: grouping stripped, `.` as the decimal mark.
+ * @returns The exact decimal, or null.
+ */
+export function decimalFromExponentLiteral(text: string): DecimalData | null {
+	const match = EXPONENT_LITERAL.exec(text);
+	if (match === null) return null;
+	const [, sign, intPart, fracPart = "", exponentText] = match;
+	if (intPart === "" && fracPart === "") return null;
+	// The exponent's digits are bounded before any is turned into a number, so
+	// a thousand-digit exponent is refused rather than read as Infinity.
+	const exponentDigits = exponentText.replace(/^[+-]/, "").replace(/^0+(?=\d)/, "");
+	if (exponentDigits.length > String(EXACT_EXPONENT_LIMIT).length) return null;
+	const exponent = Number(exponentText);
+	if (Math.abs(exponent) > EXACT_EXPONENT_LIMIT) return null;
+	let coef = BigInt(intPart + fracPart);
+	let scale = fracPart.length - exponent;
+	if (scale < 0) {
+		coef *= pow10(-scale);
+		scale = 0;
+	}
+	return { coef: sign === "-" ? -coef : coef, scale };
+}
+
 /** Bring two decimals to a shared scale, returning both coefficients and it. */
 function align(a: DecimalData, b: DecimalData): { ca: bigint; cb: bigint; scale: number } {
 	if (a.scale === b.scale) return { ca: a.coef, cb: b.coef, scale: a.scale };

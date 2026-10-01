@@ -18,7 +18,7 @@ A mathematical constant is a number with a name, and `pi` and `e` have always be
 | `f(x) = x * tau`, then `f(2)` | "f(...)"'s body calls an async operation (weather, stocks, currency, ...), and a user-defined function body must be synchronous | `12.57` |
 | `solve(x^2 = 2pi, x)` | `[-2.51, 2.51]` | `[-2.51, 2.51]` |
 
-The boundary: a constant with a unit (`gravity`, `speed of light`) still has its unit attached by the plugin as the line runs, so inside those forms it is still refused as though it were live data; that wording is wrong for it, and it is pinned as a failing test in the spec below rather than fixed here, since a unit cannot be written into the compiled line the way a number can. A bare amount before a dimensioned constant (`2 gravity`) is not read as a product either, since it could as well be read as a count of gravities: the `*` says which.
+The boundary: a constant with a unit (`gravity`, `speed of light`) still has its unit attached by the plugin as the line runs, since a unit cannot be written into the compiled line the way a number can; that call is made synchronous by `unit-constant-in-a-held-expression.md`, in the same release. A bare amount before a dimensioned constant (`2 gravity`) is not read as a product either, since it could as well be read as a count of gravities: the `*` says which.
 
 ## Verification
 

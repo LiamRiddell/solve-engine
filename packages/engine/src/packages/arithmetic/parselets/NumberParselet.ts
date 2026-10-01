@@ -7,6 +7,8 @@ import { getLocale } from "@solve-js/constants/locales";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { localeLiteralRefusal, unreadableInLocale } from "@solve-js/parser/LocaleNumberLiteral";
 import { isPastSafeWholeLiteral, pastSafeBaseLiteralDigits } from "@solve-js/parser/WholeLiteral";
+import { decimalFromExponentLiteral } from "@solve-js/decimal/Decimal";
+import { isMoneyAmount } from "@solve-js/parser/MoneyAmountLiteral";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -113,6 +115,8 @@ export class NumberParselet implements PrefixParselet {
 			}
 			v = parseFloat(normalized);
 			if (PLAIN_DECIMAL.test(normalized) || isPastSafeWholeLiteral(normalized)) decimalText = normalized;
+			// Mirrors PrecedenceParser: scientific notation as the amount of money keeps its exact value.
+			else if (isMoneyAmount(parser.peekAt(-2), parser.peekAt(-3), parser.peek()) && decimalFromExponentLiteral(normalized) !== null) decimalText = normalized;
 		}
 		if (decimalText !== null) {
 			builder.emitOpcode(OpCode.PUSH_DECIMAL);
