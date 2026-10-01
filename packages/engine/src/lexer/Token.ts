@@ -583,6 +583,16 @@ export function tokenTypeId(name: string): number {
 }
 
 /**
+ * The integer ID of a token type name that is already registered, or
+ * `undefined` for one that is not. Unlike {@link tokenTypeId} it never
+ * registers, so asking about a name nothing declared (a typo, a hostile word
+ * such as `__proto__`) leaves the table as it was.
+ */
+export function knownTokenTypeId(name: string): number | undefined {
+	return _tokenTypeNameToId.get(name);
+}
+
+/**
  * Get the string name for a token type ID (for error messages and debugging).
  * Returns `UNKNOWN_${id}` if the ID is not registered.
  */

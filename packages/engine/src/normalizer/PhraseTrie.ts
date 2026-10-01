@@ -52,8 +52,13 @@ import { lowerCased } from "./RuleIndex";
  * to a node spells out a partial or complete phrase.
  */
 interface TrieNode {
-	/** Child nodes keyed by next word (all lowercase). */
-	children: Map<string, TrieNode>;
+	/**
+	 * Child nodes keyed by next word (all lowercase), or `null` for a node no
+	 * longer phrase continues from. Most nodes are such leaves (the last word of
+	 * one phrase), and an empty `Map` is not free: built eagerly, the leaves'
+	 * maps came to about a fifth of the trie, which every engine builds afresh.
+	 */
+	children: Map<string, TrieNode> | null;
 	/**
 	 * If this node completes a phrase, the terminal metadata.
 	 * A node can be both terminal AND have children. This handles
@@ -124,7 +129,7 @@ export class PhraseTrie {
 		if (this.root.has(firstWord)) {
 			node = this.root.get(firstWord)!;
 		} else {
-			node = { children: new Map(), terminal: null };
+			node = { children: null, terminal: null };
 			this.root.set(firstWord, node);
 		}
 
@@ -134,13 +139,17 @@ export class PhraseTrie {
 			return;
 		}
 
-		// Walk/insert remaining words
+		// Walk/insert remaining words, giving a node its children map only
+		// when a phrase first continues past it.
 		for (let i = 1; i < words.length; i++) {
 			const word = words[i];
-			if (!node.children.has(word)) {
-				node.children.set(word, { children: new Map(), terminal: null });
+			const children: Map<string, TrieNode> = node.children ?? (node.children = new Map());
+			let child = children.get(word);
+			if (child === undefined) {
+				child = { children: null, terminal: null };
+				children.set(word, child);
 			}
-			node = node.children.get(word)!;
+			node = child;
 		}
 
 		node.terminal = { tokenType, phrase, consumed: words.length };
@@ -205,11 +214,13 @@ export class PhraseTrie {
 		}
 
 		// Walk deeper for multi-word phrases
-		for (let i = pos + 1; i < tokens.length && node?.children; i++) {
+		for (let i = pos + 1; i < tokens.length; i++) {
+			const children: Map<string, TrieNode> | null = node.children;
+			if (children === null) break; // a leaf: no phrase continues past it
 			const contType = tokens[i].type;
 			if (contType === "TAG" || contType.startsWith("TAG_")) break; // a tag token can't continue a phrase (#197, #213)
 			const word = lowerCased(tokens[i].value);
-			node = node.children.get(word);
+			node = children.get(word);
 			if (!node) break; // dead end
 			depth++;
 
@@ -250,6 +261,7 @@ export class PhraseTrie {
 			if (node.terminal) {
 				result[path.join(' ')] = node.terminal.tokenType;
 			}
+			if (node.children === null) return;
 			for (const [word, child] of node.children) {
 				collect(child, [...path, word]);
 			}
