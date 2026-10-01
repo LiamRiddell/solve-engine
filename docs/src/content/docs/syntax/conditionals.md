@@ -107,6 +107,25 @@ and refuses a check between text and a number, since a check that cannot hold
 is a mistake in the note. Earlier versions read the text as a number, or as 0
 when it was not one, so `"abc" == 0` was true.
 
+## Comparing a list
+
+A list (a row of numbers in square brackets) is compared one element at a
+time, so the answer is a list of `true` and `false`, one per element, and `and`,
+`or` and `not` combine such lists element by element. [Comparing a
+list](/syntax/vectors-and-matrices/#comparing-a-list) has the details.
+
+```solve
+[100, 200] > 150 // [false, true]
+[100, 200] > 150 and true // [false, true]
+```
+
+The boundary: an `if` needs one answer, so a list as its condition is refused
+by name rather than read as false.
+
+```solve
+if [100, 200] > 150 then 1 else 0 // "if" needs one true or false, and this is a list of 2 cells. Compare one cell, as in v[0] > 5, or choose for each cell with map, as in map(if x > 5 then 1 else 0, v).
+```
+
 ## Conditional expression
 
 A conditional expression picks one of two values depending on a condition: `if`

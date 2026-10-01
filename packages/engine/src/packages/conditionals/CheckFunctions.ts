@@ -386,6 +386,14 @@ export function checkComparison(args: Value[]): Value {
 		if (same === (op !== "!=")) return stringValue("✓");
 		return errorValue("CHECK_FAILED", `check failed: ${shown(left)} is ${same ? "equal" : "not equal"} to ${shown(right)}`);
 	}
+	// A list compared with a value answers once per cell (see
+	// vm/ListComparison.ts), and a check gives one verdict, so a list is
+	// refused with the form that does work rather than "cannot be compared".
+	if (left.type === ValueType.Matrix || right.type === ValueType.Matrix) {
+		const list = shown(left.type === ValueType.Matrix ? left : right);
+		const quoted = list.length > MOST_QUOTED ? `${list.slice(0, MOST_QUOTED)}...` : list;
+		return errorValue("CHECK_INCOMPARABLE", `check: ${quoted} is a list, and a check gives one verdict, so it compares one value at a time: check one cell, as in check v[0] ${op} 5`);
+	}
 	const identity = identityCheck(left, right, op, tolerance);
 	if (identity !== null) return identity;
 	if (!numeric(left) || !numeric(right)) {

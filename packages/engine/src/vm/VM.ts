@@ -19,6 +19,7 @@ import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, builtinArgumentRefused, listBuiltinCall, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { valuesEqual, valuesOrdered } from "@solve-js/vm/Comparisons";
+import { listConditionRefused, answersCellByCell, isListOfAnswers, type CellComparison } from "@solve-js/vm/ListComparison";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { QueryClient } from "@tanstack/query-core";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
@@ -1455,6 +1456,13 @@ const subtractPercentageCell: PercentageCell = (a, b) => combinePercentage(a, b,
  * @param sign - `1` for `+`, `-1` for `-`.
  */
 function listAddOrSubtract(l: Value, r: Value, sign: 1 | -1): Value | null {
+    // `and` compiles to ADD, and between two answers it is the conjunction
+    // (`true and false` is false), so a list of answers beside an answer, or
+    // two of them, join cell by cell: `([1, 2] > 1) and true` is
+    // [false, true], where adding the cells as 1 and 0 gave [1, 2].
+    if (sign === 1 && (l.type === ValueType.Boolean || isListOfAnswers(l)) && (r.type === ValueType.Boolean || isListOfAnswers(r))) {
+        return answersCellByCell(l, r, BOTH_TRUE);
+    }
     const shared = percentageMeetsList(l, r, sign, sign === 1 ? addPercentageCell : subtractPercentageCell);
     if (shared !== null) return shared;
     return needsUnitCells(l, r) ? unitListArithmetic(sign === 1 ? "add" : "sub", l, r) : null;
@@ -1951,6 +1959,13 @@ function isTruthy(value: Value): boolean {
     if (value.type === ValueType.Boolean) return value.value as boolean;
     return value.toNumber() !== 0;
 }
+
+/** `&&` for one pair of list cells, by the truthiness one pair of values has. */
+const BOTH_TRUTHY: CellComparison = (l, r) => boolValue(isTruthy(l) && isTruthy(r));
+/** `||` for one pair of list cells, by the truthiness one pair of values has. */
+const EITHER_TRUTHY: CellComparison = (l, r) => boolValue(isTruthy(l) || isTruthy(r));
+/** The word `and` between two answers, for one pair of list cells: both must be true, as `true and false` is false. */
+const BOTH_TRUE: CellComparison = (l, r) => boolValue(l.value === true && r.value === true);
 
 /**
  * The answer a conversion gives when the two units measure different things.
@@ -4639,6 +4654,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const andLogicFault = faultedOperand(l, r);
           if (andLogicFault) { stack.push(andLogicFault); break; }
+          // A list of answers joins cell by cell (see vm/ListComparison.ts).
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) { stack.push(answersCellByCell(l, r, BOTH_TRUTHY)!); break; }
           stack.push(boolValue(isTruthy(l) && isTruthy(r)));
           break;
         }
@@ -4646,6 +4663,7 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const orLogicFault = faultedOperand(l, r);
           if (orLogicFault) { stack.push(orLogicFault); break; }
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) { stack.push(answersCellByCell(l, r, EITHER_TRUTHY)!); break; }
           stack.push(boolValue(isTruthy(l) || isTruthy(r)));
           break;
         }
@@ -4666,6 +4684,8 @@ export function executeBytecode(
           // asked about. A faulted condition selects nothing, so it stands.
           const conditionFault = faultedOperand(condition);
           if (conditionFault) { stack.push(conditionFault); break; }
+          // A list of answers picks no one branch (see vm/ListComparison.ts).
+          if (condition.type === ValueType.Matrix) { stack.push(listConditionRefused(condition, "if")); break; }
           stack.push(isTruthy(condition) ? thenVal : elseVal);
           break;
         }

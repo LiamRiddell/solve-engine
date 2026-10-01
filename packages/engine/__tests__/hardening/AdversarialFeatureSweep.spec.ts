@@ -329,6 +329,17 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"(X):00",
 		"‮X:00",
 		"‍X:00",
+		// A list compared with one value cell by cell, lists of answers joined
+		// and negated, a list as an if's condition, and a percentage as a cell
+		// of a list (FoundBug_listComparison, FoundBug_listOfPercentages).
+		"[X, 200] > 150",
+		"X <= [100 m, 200 m]",
+		"[100, 200] != X",
+		"([X, 2] > 1) and true",
+		"not ([X, 2] > 1)",
+		"if [X, 2] > 1 then 1 else 2",
+		"[X%, 20%]",
+		"[100, 200] + [X%, 20%]",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,
