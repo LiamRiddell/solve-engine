@@ -28,6 +28,7 @@ import { OpRegistry } from "@solve-js/vm/OpRegistry";
 import { FrozenValueStore } from "@solve-js/vm/FrozenValues";
 import { mintScope, type ScopeId } from "@solve-js/vm/CellScope";
 import { resolveCalendar, type CalendarOption } from "@solve-js/calendar/resolveCalendar";
+import { DEFAULT_WEEK, type WeekShape } from "@solve-js/calendar/WeekShape";
 import { PluginCallCache } from "@solve-js/vm/PluginCallCache";
 
 /**
@@ -131,6 +132,15 @@ export interface EngineContext {
 	readonly calendar: CalendarBackend;
 
 	/**
+	 * The shape of this engine's week: its weekend days and the day a week
+	 * starts on (#702), from `date.weekend`, `date.firstDayOfWeek` or the
+	 * locale's region. Held here beside the calendar, since the working-day walk
+	 * the VM runs and the plugin functions that read a week both reach it
+	 * through the context. See `calendar/WeekShape.ts`.
+	 */
+	readonly week: WeekShape;
+
+	/**
 	 * The scope this engine's lines execute under: the owner of every
 	 * `global :name` cell they write, and the default scope a cell read is
 	 * attributed to.
@@ -163,6 +173,8 @@ export interface EngineContextOptions {
 	networkEnabled?: boolean;
 	/** How to pick the calendar backend: `"auto"` (the default: Temporal where the runtime has it), `"temporal"`, `"date"`, or a backend. See {@link CalendarOption}. */
 	calendar?: CalendarOption;
+	/** The shape of the week. Defaults to Saturday and Sunday off, starting on Monday. See `calendar/WeekShape.ts`. */
+	week?: WeekShape;
 }
 
 /**
@@ -179,6 +191,7 @@ export function createEngineContext(options: EngineContextOptions = {}): EngineC
 		pluginCalls: new PluginCallCache(),
 		networkEnabled: options.networkEnabled ?? true,
 		calendar: resolveCalendar(options.calendar),
+		week: options.week ?? DEFAULT_WEEK,
 		scope: mintScope(),
 		frozenValues: new FrozenValueStore(),
 	};

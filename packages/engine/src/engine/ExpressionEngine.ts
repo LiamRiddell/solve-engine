@@ -1,5 +1,6 @@
 //#region Imports
 
+import { unknownOptionWarnings } from "@solve-js/engine/OptionChecks";
 import { declaredFunctionName } from "@solve-js/api/defineFunction";
 import { VM, type EquationDef, type ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { matrixMultiply, inverse } from "@solve-js/vm/MatrixOps";
@@ -22,6 +23,7 @@ import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { BackgroundRefreshManager } from "@solve-js/engine/BackgroundRefreshManager";
 import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
+import { resolveWeekShape } from "@solve-js/calendar/WeekShape";
 import { splitFrozenSuffix, frozenDirectiveFor } from "@solve-js/engine/FrozenSuffix";
 import type { FrozenRecord } from "@solve-js/vm/FrozenValues";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
@@ -264,6 +266,32 @@ export interface EngineOptions {
      * `Math.random` as before. See engine/SeededRandom.ts.
      */
     random?: { seed: number | string };
+
+    /**
+     * Throw when a package fails to register, rather than leave it out (#718).
+     *
+     * By default a package that throws while it registers (an `engineVersion`
+     * the running engine does not satisfy, a keyword a built-in already owns)
+     * is skipped with a console error, and the engine is built without it, so
+     * one bad third-party package cannot take the whole engine down. A host
+     * that shows the reader no console met that as a parse error on every
+     * line using the package. With `strict`, the constructor throws the
+     * package's coded {@link EngineError} instead, after unregistering what it
+     * had already registered, so nothing is left in the shared registries.
+     *
+     * @default false
+     */
+    strict?: boolean;
+
+    /**
+     * Told of each package that fails to register, in order, with its coded
+     * {@link EngineError} (#718). The engine goes on building with the rest,
+     * as it does by default, and the callback replaces the console error. A
+     * callback that throws stops the build as `strict` does: what it throws
+     * is thrown from the constructor, after the packages already registered
+     * are unregistered.
+     */
+    onPackageError?: (pkg: IEnginePackage, error: EngineError) => void;
 }
 
 //#endregion
@@ -1247,6 +1275,7 @@ export class ExpressionEngine {
                 : undefined,
             networkEnabled: this.config.network.enabled,
             calendar: this.context.calendar,
+            week: this.context.week,
             // Read through the engine on every draw rather than captured, since
             // this object serves a whole pass and the line it serves changes.
             random: () => this.drawRandom(),
@@ -2025,6 +2054,9 @@ export class ExpressionEngine {
 
     constructor(options: EngineOptions = {}) {
         const { locale = "en", diagnostics = false, config, packages, calendar } = options;
+        // An option or a setting the engine does not have is dropped, which a
+        // host otherwise never learns of (#719).
+        for (const warning of unknownOptionWarnings(options)) console.warn(`[ExpressionEngine] ${warning}`);
         this.localeCode = locale;
         this.optionRandomSeed = options.random === undefined ? undefined : String(options.random.seed);
         // Per-section merge, not a top-level shallow spread, overriding one
@@ -2047,7 +2079,13 @@ export class ExpressionEngine {
         // Carries the network switch too, since the VM is where a conversion
         // with no rate and a promise-returning plugin function are first seen,
         // and the calendar backend, since the VM is where a date is stepped.
-        this.context = createEngineContext({ networkEnabled: this.config.network.enabled, calendar });
+        this.context = createEngineContext({
+            networkEnabled: this.config.network.enabled,
+            calendar,
+            // Resolved once, like the date order above, and raising
+            // DATE_WEEKDAY_INVALID here for a day that is not one (#702).
+            week: resolveWeekShape(locale, this.config.date.weekend, this.config.date.firstDayOfWeek),
+        });
 
         // Wire the diagnostic pipeline: collect per-stage detail when diagnostics
         // are on, otherwise an empty pipeline whose length check exits with zero
@@ -2126,9 +2164,18 @@ export class ExpressionEngine {
                 this.registerPackage(pkg);
             } catch (e) {
                 const engineError = normalizeUnknownError(e);
+                if (options.strict) this.failConstruction(engineError);
+                if (options.onPackageError) {
+                    try {
+                        options.onPackageError(pkg, engineError);
+                    } catch (hostError) {
+                        this.failConstruction(hostError);
+                    }
+                    continue;
+                }
                 console.error(
-                    `[ExpressionEngine] Failed to register package "${pkg.name}" — skipping it and continuing ` +
-                    `construction with the remaining packages: ${engineError.format()}`
+                    `[ExpressionEngine] Failed to register package "${String(pkg?.name)}", so the engine is built without it: ` +
+                    `${engineError.format()}`
                 );
             }
         }
@@ -2559,6 +2606,34 @@ export class ExpressionEngine {
      * @param pkg - The package to register.
      */
     registerPackage(pkg: IEnginePackage): void {
+        // Every piece of bookkeeping below is keyed by the package's name, so a
+        // second package with no name used to unregister the first (#719).
+        if (typeof pkg?.name !== "string" || pkg.name.trim() === "") {
+            throw ErrorFactory.config({
+                code: "PACKAGE_NAME_MISSING",
+                message: `A package needs a name to register, and this one has ${typeof pkg?.name === "string" ? "an empty one" : "none"}. Give its IEnginePackage a \`name\`, such as "my-package".`,
+                context: { name: pkg?.name },
+            });
+        }
+
+        // A resolver built by name waits for a call to that function; one the
+        // package does not declare never comes, so the line would pend for
+        // ever (#717). Refused here, before anything is written.
+        for (const resolver of pkg.asyncResolvers ?? []) {
+            const fn = resolver.pluginFunction;
+            if (fn === undefined) continue;
+            const declared = fn.package === pkg.name && Object.prototype.hasOwnProperty.call(pkg.pluginFunctions ?? {}, fn.name);
+            if (!declared) {
+                throw ErrorFactory.config({
+                    code: "PACKAGE_RESOLVER_FUNCTION_MISSING",
+                    message: fn.package === pkg.name
+                        ? `Package "${pkg.name}" has a resolver ("${resolver.namespace}") for the plugin function "${fn.name}", which its pluginFunctions does not declare, so the call the resolver waits for would never come. Add "${fn.name}" to pluginFunctions.`
+                        : `Package "${pkg.name}" has a resolver ("${resolver.namespace}") built for the package "${fn.package}", so it would watch for a call this package never makes. Give createQueryResolver this package's name.`,
+                    context: { package: pkg.name, resolver: resolver.namespace, function: fn.name, resolverPackage: fn.package },
+                });
+            }
+        }
+
         // Engine-vs-package version gating, checked FIRST, before the
         // duplicate-name guard below. Unlike checkPackageCompatibility()
         // further down (package-vs-package, always advisory, never blocks
@@ -2746,6 +2821,31 @@ export class ExpressionEngine {
         // compiled before it, and a parse failure remembered before it, are
         // both stale.
         this.clearCompiledCache();
+    }
+
+    /**
+     * The names of the packages this engine has registered, in the order they
+     * registered (#718). A package that failed to register is not among them,
+     * and one unregistered leaves the list. A copy: changing it changes nothing.
+     */
+    getRegisteredPackages(): readonly string[] {
+        return [...this.registeredPackages.keys()];
+    }
+
+    /**
+     * Stop construction: unregister every package registered so far, so the
+     * shared registries hold nothing for an engine that is never returned,
+     * then throw. See {@link EngineOptions.strict}.
+     */
+    private failConstruction(error: unknown): never {
+        for (const name of [...this.registeredPackages.keys()].reverse()) {
+            try {
+                this.unregisterPackage(name);
+            } catch {
+                // Unregistering is best effort here; the throw below is the report.
+            }
+        }
+        throw error;
     }
 
     /**

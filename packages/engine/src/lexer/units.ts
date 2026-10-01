@@ -100,6 +100,12 @@ const GRANDFATHERED_SINGLE_CHARACTER_UNITS = new Set([
   // Newton and joule, so the named forces and energies of dimensional
   // arithmetic can be typed by their symbol (`50 N`, `200 J`). See issue #191.
   "N", "J",
+  // The litre by its capital, the symbol most of the world prints on a bottle
+  // (`2 L`, `1.5L`), so it is no longer refused while `l` and `mL` work (#706).
+  // A variable named `L` keeps its reading everywhere except straight after a
+  // number, which is how `b` and `N` already behave: `L = 3` then `L * 2` is 6,
+  // and `2L` is two litres.
+  "L",
 ]);
 
 /** Whether a base-table spelling should become a lexer token. */
@@ -184,8 +190,12 @@ const WORKDAY_UNITS = ["workday", "workdays"];
  * voltage, parts-per and the other categories the base table has no measure
  * for) come from ExtendedUnits.ts; currencies and workdays are listed above.
  *
- * Note ExtendedUnits deliberately omits bare `V` (collides with the stocks
- * package's Visa ticker), bare `var` (reads as a variable name) and `fps`
+ * Only the base table's spellings pass through {@link isAdmissible}. The
+ * extended table is written by hand as single tokens, so its spellings join as
+ * they are, which is how the ohm's symbol `Ω` (and `kΩ`, `MΩ`) is a unit
+ * although it is not ASCII (#706).
+ *
+ * Note ExtendedUnits deliberately omits bare `var` (reads as a variable name) and `fps`
  * (the Time package needs it for frames per second, so speed uses `ft_s`).
  * Those exclusions live there rather than here because they are properties of
  * that table.

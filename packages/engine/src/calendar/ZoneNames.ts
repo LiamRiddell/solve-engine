@@ -13,19 +13,29 @@
  * the slash as division and does not reach a zone at all. The names below are
  * what a reader actually writes.
  *
+ * Beneath the hand-written tables sits a generated one
+ * (`generated/ZoneNames.generated.ts`, #698): a name for every place in the
+ * IANA time zone database, so `time in Kathmandu` needs no entry here. The
+ * hand-written names take precedence, and carry what the database cannot:
+ * countries, abbreviations, and the name a reader means where the database's
+ * is ambiguous.
+ *
  * @module ZoneNames
  */
+
+import { GENERATED_ZONE_NAMES, GENERATED_MULTI_WORD_ZONE_NAMES } from "./generated/ZoneNames.generated";
 
 
 
 /**
  * City/country/abbreviation name -> IANA timezone identifier.
  *
- * Scoped to ~80 major cities, common standard-time abbreviations, and a
- * handful of countries (mapped to their capital's zone, per SoulverCore's
- * own documented convention for countries spanning multiple zones)
- * deliberately not exhaustive. Additive: extend this table as gaps are
- * found, no other code needs to change.
+ * About 80 major cities, common standard-time abbreviations, and a handful
+ * of countries (mapped to their capital's zone, per SoulverCore's own
+ * documented convention for countries spanning multiple zones). Every other
+ * place in the IANA database comes from the generated table beneath this
+ * one; an entry here is for a name the database lacks or gets wrong for a
+ * reader.
  *
  * Keys are lowercase. Single-word entries are looked up directly against
  * a bare `IDENT` token's text; multi-word entries (see
@@ -188,6 +198,9 @@ export const MULTI_WORD_CITY_ZONES: Record<string, string> = {
   "united kingdom": "Europe/London",
   "united states": "America/New_York",
   "south africa": "Africa/Johannesburg",
+  // The generator leaves out America/Argentina/San_Juan: the San Juan a reader
+  // means is Puerto Rico's capital.
+  "san juan": "America/Puerto_Rico",
 };
 
 /** Standard-time-zone abbreviations. See the doc comment above on ambiguity. */
@@ -210,8 +223,21 @@ export const ZONE_ABBREVIATION_TO_IANA: Record<string, string> = {
   aedt: "Australia/Sydney",
 };
 
-/** Merged single-word lookup table used by `tryConsumeZoneReference`. */
+/**
+ * The generated place names of more than one word that the hand-written table
+ * does not already have, for the time package's phrase fuser to read as one
+ * token, as it reads {@link MULTI_WORD_CITY_ZONES}.
+ */
+export const GENERATED_MULTI_WORD_PLACES: readonly string[] = Object.keys(GENERATED_MULTI_WORD_ZONE_NAMES)
+  .filter((name) => !Object.prototype.hasOwnProperty.call(MULTI_WORD_CITY_ZONES, name));
+
+/**
+ * Merged lookup table used by `tryConsumeZoneReference`: the generated names
+ * first, so every hand-written entry after them takes precedence.
+ */
 export const ZONE_LOOKUP: Record<string, string> = {
+  ...GENERATED_ZONE_NAMES,
+  ...GENERATED_MULTI_WORD_ZONE_NAMES,
   ...CITY_TO_IANA_ZONE,
   ...MULTI_WORD_CITY_ZONES,
   ...ZONE_ABBREVIATION_TO_IANA,

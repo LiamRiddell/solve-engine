@@ -62,3 +62,37 @@ The offset forms, `between`, and `<date> + N workdays` all consult it.
 weekends-only either way: the first has no date to look a holiday up on, and the
 second reports the shape of the week (is this a weekday), not whether a
 particular office is open.
+
+## Which days are the weekend
+
+The weekend is Saturday and Sunday unless the host says otherwise. In much of
+the Middle East it is Friday and Saturday, so one working day after Thursday 1
+January 2026 is Sunday 4 January, not Friday 2 January. A host sets the weekend
+by naming its days, and the first day of the week the same way:
+
+```ts
+createEngine({
+  config: { date: { weekend: ["friday", "saturday"], firstDayOfWeek: "sunday" } },
+});
+```
+
+With that engine, `1 working day after 2026-01-01` is Sunday, January 4, 2026,
+`2026-01-02 is a weekend` is true, and `start of week` is the Sunday before. An
+empty list makes every day a working day. A name that is not a day of the week
+is refused when the engine is built, with `DATE_WEEKDAY_INVALID`, rather than
+quietly ignored.
+
+Left unset, both come from the engine's locale when its tag names a region and
+the runtime reports that region's week (through `Intl.Locale`): `ar-SA` and
+`he-IL` have a Friday and Saturday weekend with the week starting on Sunday,
+`en-US` starts its week on Sunday, and `en-GB` on Monday. A bare language such
+as `en`, the default, names no region, so it keeps Saturday and Sunday and a
+Monday start. Each setting stands on its own: a host can name the weekend and
+let the locale choose the first day.
+
+The weekend is what the working-day arithmetic skips, what `is a weekend` and
+`is a workday` answer from, and the first day is where the week forms on
+[relative dates](/syntax/relative-dates/) begin. Two things do not move with
+it: the ISO week number (`week number of`), which is Monday-based by
+definition, and `workdays in <span>` with the `workday` unit in a rate, which
+stay a fixed five working days to seven.

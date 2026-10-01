@@ -1,5 +1,5 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, dateOutOfRange, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
@@ -33,6 +33,7 @@ import { bigIntPow, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
 import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import type { WeekShape } from "@solve-js/calendar/WeekShape";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
@@ -336,6 +337,13 @@ export interface LineExecutionContext {
      * `calendar/DateCalendar.ts` resolves either case.
      */
     calendar?: CalendarBackend;
+    /**
+     * The shape of the week this engine keeps (`EngineContext.week`): its
+     * weekend days and the day a week starts on. Absent means Saturday and
+     * Sunday off, starting on Monday; `weekOf()` in `calendar/WeekShape.ts`
+     * resolves either case.
+     */
+    week?: WeekShape;
     /**
      * The random source this line draws from, a number in [0, 1) per call, the
      * way `calendar` is the clock. `roll`, `random()`, `pick`, `shuffle`,
@@ -1509,16 +1517,26 @@ function addBusinessDays(epochMs: number, n: number, vm: VM): number {
             { requestedWorkdays: remaining, limitYears, limitWorkdays },
         );
     }
+    // A weekend of all seven days (#702) has no working day to land on, which
+    // is known before the first step: walking the whole limit to find that out
+    // took seconds, a century of days read through the calendar one at a time.
+    if (remaining > 0 && vm.context.week.weekend.size === 7) {
+        throw ErrorFactory.execution(
+            "DATE_OFFSET_LIMIT_EXCEEDED",
+            `A working-day offset of ${remaining.toLocaleString("en-US")} cannot be reached: the configured weekend is every day of the week, so no day is a working day`,
+            { requestedWorkdays: remaining, limitYears },
+        );
+    }
     // Seven calendar days per workday is the floor of a week with only one
     // working day in it, which no real calendar reaches, so a legitimate
     // in-limit offset never trips this. A pathological all-holiday calendar
     // does, and is reported as the same limit error rather than hanging.
     const maxCalendarSteps = limitWorkdays * 7 + 7;
-    const landed = walkBusinessDays(epochMs, n, (ms) => vm.isHoliday(ms), maxCalendarSteps, vm.context.calendar);
+    const landed = walkBusinessDays(epochMs, n, (ms) => vm.isHoliday(ms), maxCalendarSteps, vm.context.calendar, vm.context.week.weekend);
     if (landed === null) {
         throw ErrorFactory.execution(
             "DATE_OFFSET_LIMIT_EXCEEDED",
-            `A working-day offset of ${remaining.toLocaleString("en-US")} could not be reached within the ${limitYears}-year limit; the configured holiday calendar leaves too few working days`,
+            `A working-day offset of ${remaining.toLocaleString("en-US")} could not be reached within the ${limitYears}-year limit; the configured weekend and holiday calendar leave too few working days`,
             { requestedWorkdays: remaining, limitYears, maxCalendarSteps },
         );
     }
@@ -1669,7 +1687,7 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
  * @param sign - +1 to move forward, -1 back.
  * @param vm - The VM, for the workday ceiling and the calendar.
  * @returns The moved Datetime, keeping the date's grain and zone, or an
- * `INVALID_DATETIME_OP` error Value.
+ * `INVALID_DATETIME_OP` or `DATE_OUT_OF_RANGE` error Value.
  */
 function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Value {
     const unit = duration.type === ValueType.Uom ? duration.unit : undefined;
@@ -1691,7 +1709,16 @@ function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Valu
             `A date or time moves by a length of time, such as 5 days, 2 weeks or 3 hours, not by ${what}.`,
         );
     }
-    return datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm), date.grain, date.zone);
+    let moved: number;
+    try {
+        moved = shiftDatetime(date.toNumber(), duration, sign, vm);
+    } catch (e) {
+        // A calendar backend throws a RangeError for a day past its range,
+        // where the arithmetic itself is sound: the answer is only too far.
+        if (e instanceof RangeError) return dateOutOfRange();
+        throw e;
+    }
+    return datetimeValue(moved, date.grain, date.zone, date.timeAnchor);
 }
 
 /** The base types a percentage change reads a size from, and so checks for zero and sign. */
@@ -1891,7 +1918,7 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
             );
     }
     const epochMs = left.toNumber();
-    if (left.grain !== "date" && left.grain !== "datetime") {
+    if (left.grain !== "date" && left.grain !== "datetime" && left.grain !== "time") {
         return datetimeValue(epochMs, "instant", zoneRef);
     }
     const calendar = vm.context.calendar;
@@ -1905,8 +1932,11 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
     if (left.grain === "date") {
         return datetimeValue(zonedWallClockToUtcMs(f.year, f.month0, f.day, 0, 0, zoneRef, calendar), "instant", zoneRef);
     }
-    const reanchored = zonedWallClockToUtcMs(f.year, f.month0, f.day, f.hour, f.minute, zoneRef, calendar);
-    return datetimeValue(reanchored + f.second * 1000 + f.millisecond, "instant", zoneRef);
+    const reanchored = zonedWallClockToUtcMs(f.year, f.month0, f.day, f.hour, f.minute, zoneRef, calendar) + f.second * 1000 + f.millisecond;
+    // A time of day stays one: `9am in Tokyo` is nine in Tokyo, shown as the
+    // time, counted from its own day there (#708).
+    if (left.grain === "time") return datetimeValue(reanchored, "time", zoneRef, reanchored);
+    return datetimeValue(reanchored, "instant", zoneRef);
 }
 
 /** `a % b` for two doubles, the MOD opcode's arithmetic. */
@@ -2344,7 +2374,7 @@ function workdaysBetween(stack: Value[], vm: VM): void {
     // Bounded by the full configured offset range in calendar days, so a
     // span of millennia is refused rather than walked a day at a time.
     const spanLimitDays = Math.ceil((vm.getMaxDateOffsetYears() - vm.getMinDateOffsetYears()) * 366);
-    const workdayCount = countBusinessDaysBetween(startValue.toNumber(), endValue.toNumber(), (ms) => vm.isHoliday(ms), spanLimitDays, vm.context.calendar);
+    const workdayCount = countBusinessDaysBetween(startValue.toNumber(), endValue.toNumber(), (ms) => vm.isHoliday(ms), spanLimitDays, vm.context.calendar, vm.context.week.weekend);
     if (workdayCount === null) {
       stack.push(errorValue(
         CoreErrorCodes.WORKDAYS_BETWEEN_RANGE_TOO_LARGE,
@@ -2397,7 +2427,10 @@ function clockTimeToday(stack: Value[], vm: VM): void {
     // A clock time is a wall-clock READING in the backend's own zone, not
     // a fixed instant: "6pm" names six in the evening wherever it is read,
     // which is what lets "6pm in Chicago" mean six in Chicago.
-    stack.push(datetimeValue(clockCalendar.localWallClock(clockToday.year, clockToday.month0, clockToday.day, totalMinutes), "datetime"));
+    // Shown as a time of day, which is what a clock time is to the reader
+    // (#708); the day is kept so a duration added to it can cross midnight.
+    const todayMidnight = clockCalendar.localWallClock(clockToday.year, clockToday.month0, clockToday.day, 0);
+    stack.push(datetimeValue(clockCalendar.localWallClock(clockToday.year, clockToday.month0, clockToday.day, totalMinutes), "time", undefined, todayMidnight));
 }
 
 /** A matrix or list literal (MAT_NEW), moved out of the dispatch loop. */

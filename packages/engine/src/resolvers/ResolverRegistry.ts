@@ -63,6 +63,14 @@ export interface IAsyncResolver {
 	readonly local?: boolean;
 
 	/**
+	 * The plugin function this resolver answers for, when it was built by name
+	 * (`createQueryResolver` with `packageName` and `functionName`). The
+	 * engine refuses to register a package whose resolver names a function the
+	 * package does not declare, since the call it waits for would never come.
+	 */
+	readonly pluginFunction?: { readonly package: string; readonly name: string };
+
+	/**
 	 * The opcodes this resolver's `preflight` keys on, when it keys on any.
 	 *
 	 * A preflight is a scan of a program for the instructions it can act on

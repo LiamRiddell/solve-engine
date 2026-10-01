@@ -23,6 +23,7 @@
  */
 
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import type { WeekdayName } from "@solve-js/calendar/WeekShape";
 
 /**
  * A host's test for whether a calendar date is a public holiday, given the
@@ -177,6 +178,26 @@ export interface DateConfig {
    * the VM cannot see.
    */
   readonly holidays?: HolidayCalendar;
+  /**
+   * The weekend days, by name: `["friday", "saturday"]` where the weekend is
+   * Friday and Saturday (#702). Working-day arithmetic skips them, and `is a
+   * weekend` answers true for them. An empty list makes every day a working
+   * day.
+   *
+   * Unset, the engine's locale decides when its tag names a region
+   * (`createEngine({ locale: "ar-SA" })`) and the runtime reports that
+   * region's week through `Intl.Locale`; otherwise Saturday and Sunday. A name
+   * that is not a day raises `DATE_WEEKDAY_INVALID` at construction. See
+   * `calendar/WeekShape.ts`.
+   */
+  readonly weekend?: readonly WeekdayName[];
+  /**
+   * The day a week starts on, by name, for `this week`, `next week`, `start of
+   * week` and `end of week` (#702). Unset, the locale decides as for
+   * {@link weekend}, and otherwise Monday. The ISO week number (`week number
+   * of`) stays ISO, Monday-based, whatever this says.
+   */
+  readonly firstDayOfWeek?: WeekdayName;
 }
 
 /**

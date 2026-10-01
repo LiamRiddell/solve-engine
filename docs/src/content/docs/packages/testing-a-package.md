@@ -56,8 +56,8 @@ skipped.
 
 ## Checking the package itself
 
-Three mistakes are worth catching before an engine is ever built, and
-`expectPackage` catches them from the package descriptor alone.
+Several mistakes are worth catching before the package ships, and
+`expectPackage` catches them.
 
 ```ts
 import { expectPackage } from "solve-engine/testing";
@@ -71,6 +71,9 @@ expectPackage(myPackage).notToCollideWith(BUILTIN_PACKAGES);
 
 // A declared engineVersion range that never resolves fails at registration.
 expectPackage(myPackage).toDeclareCompatibleEngineVersion();
+
+// Every part the package declares can be reached.
+expectPackage(myPackage).toBeWellFormed();
 ```
 
 `notToShadow` compares the words a package claims (keywords, units, operators,
@@ -83,6 +86,26 @@ can inspect rather than only assert.
 `notToCollideWith` fails on error-severity collisions by default, the ones that
 always break something. Raise the strictness to `"warning"` or `"info"` to fail
 on the overlaps that silently pick a winner or only differ cosmetically.
+
+`toBeWellFormed` checks the mistakes that are accepted when a package is
+registered and then fail, or never run, at the first line that uses them. It
+reports every problem at once:
+
+- the package has a name, and it registers against the built-ins;
+- no parselet claims a token the parser reads itself, such as `NUMBER`, `IDENT`
+  or `+`, where it would never run;
+- every token type of its own has a `tokenCategories` entry, so an editor can
+  colour it;
+- a keyword, operator, phrase or call is not keyed to one token while its
+  parselet waits for another (`twice` making `DOUBLE_KW` beside a parselet
+  for `DOUBLE`);
+- every plugin function a parselet calls by name is in `pluginFunctions`.
+
+The last is found by compiling the package's own words in the shapes a line
+usually puts them in (`word 1`, `word(1)`, `1 op 1`), so a call reached only by
+some other shape is not seen: an expression test is still the proof that a form
+works. A token read inside another parselet's grammar, the `and` of `between X
+and Y`, is not a mistake and is not reported.
 
 ## When an expectation is not met
 

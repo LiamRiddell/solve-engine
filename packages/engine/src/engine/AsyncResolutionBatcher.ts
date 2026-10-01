@@ -776,6 +776,7 @@ export class AsyncResolutionBatcher {
 					lineIndex: lineNumber,
 					networkEnabled: this.vm.context.networkEnabled,
 					calendar: this.vm.context.calendar,
+					week: this.vm.context.week,
 					// This path re-executes lines that WRITE a cell, so it carries
 					// the engine's scope too: a cell re-written when a live value
 					// lands is owned by the same scope the first pass wrote it

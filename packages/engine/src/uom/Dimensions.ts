@@ -16,14 +16,20 @@ import { MEASURE_SYMBOLS, UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.g
  *
  * A unit's dimension comes from its measure in the unit table, so every spelling
  * of a mass, a length, a time, an area, a volume, a force, an energy, a power, a
- * pressure, a voltage or a current takes part: `lb`, `ft`, `days` and `kWh` as
- * well as `kg`, `m`, `s` and `J`. Its size in the base SI units (kg, m, s, A)
- * comes from the same table, by converting one of it into the measure's SI unit.
+ * pressure, a voltage, a current, a charge or a resistance takes part: `lb`,
+ * `ft`, `days` and `kWh` as well as `kg`, `m`, `s` and `J`. Its size in the base
+ * SI units (kg, m, s, A) comes from the same table, by converting one of it into
+ * the measure's SI unit.
  *
  * It is deliberately narrow: it only produces a result when the composition
- * names a derived unit (a newton, a joule, a watt, a pascal, a volt). Anything
- * else, a bare `m * m`, a `kg * m` with no name, is left to the caller's other
- * rules. See `vm/VM.ts`'s multiply and divide for the call sites.
+ * names a derived unit (a newton, a joule, a watt, a pascal, a volt, an ohm, an
+ * amp-hour) or the ampere. Anything else, a bare `m * m`, a `kg * m` with no
+ * name, is left to the caller's other rules. See `vm/VM.ts`'s multiply and
+ * divide for the call sites.
+ *
+ * The mole is not here (#706): amount of substance is a fifth base quantity,
+ * outside the four tracked, and no named unit in this module is made from it,
+ * so `mol` is a conversion unit only (see ExtendedUnits.ts).
  */
 
 /** Exponents of the base quantities [mass, length, time, current]. */
@@ -49,6 +55,10 @@ const MEASURE_DIMENSIONS: Readonly<Record<string, MeasureDimension>> = {
 	power: { dim: [1, 2, -3, 0], si: "W" },
 	pressure: { dim: [1, -1, -2, 0], si: "Pa" },
 	voltage: { dim: [1, 2, -3, -1], si: "V" },
+	// A current for a time, and a voltage over a current (#706). The coulomb is
+	// the charge's SI unit, spelled as a word since `C` is Celsius.
+	charge: { dim: [0, 0, 1, 1], si: "coulomb" },
+	resistance: { dim: [1, 2, -3, -2], si: "ohm" },
 };
 
 /**
@@ -60,14 +70,32 @@ const UNMEASURED_UNITS: Readonly<Record<string, { readonly dim: Dimension; reado
 	mps2: { dim: [0, 1, -2, 0], si: 1 },
 };
 
-/** The named unit a dimension composes onto, if it is a recognised derived one. */
+/**
+ * The named unit a dimension composes onto, if it is a recognised derived one.
+ *
+ * Three joined for #706. The ohm, so `12 V / 2 A` is 6 Ω rather than `V/A`.
+ * The ampere, so Ohm's law runs the other way too: `12 V / 6 Ω` and `24 W / 12 V`
+ * are each 2 A, where they were a `V/Ω` and a `W/V`. And the amp-hour for a
+ * charge, which is the one name here that is not its measure's SI unit: a
+ * charge is almost always a battery's, rated in amp-hours, and the coulomb has
+ * no symbol to print, `C` being Celsius. `in coulombs` gives the SI figure.
+ */
 const NAMED_OUTPUT: Readonly<Record<string, string>> = {
 	"1,1,-2,0": "N",
 	"1,2,-2,0": "J",
 	"1,2,-3,0": "W",
 	"1,-1,-2,0": "Pa",
 	"1,2,-3,-1": "V",
+	"1,2,-3,-2": "Ω", // U+03A9, the Greek capital omega
+	"0,0,0,1": "A",
+	"0,0,1,1": "Ah",
 };
+
+/** The amp-hour, the one named output that is not its measure's SI unit. */
+const AMP_HOUR = "Ah";
+
+/** The amp-hour spellings a charge can be written in: `Ah` and `mAh`. */
+const AMP_HOUR_SPELLINGS: ReadonlySet<string> = new Set(["Ah", "mAh"]);
 
 /** The table's measure kind for power, as keyed in `MEASURE_SYMBOLS`. */
 const POWER_KIND = 11;
@@ -94,7 +122,9 @@ const DIMENSION_CACHE_LIMIT = 1024;
 function dimensionOf(unit: string): DimensionedUnit {
 	const cached = DIMENSION_CACHE.get(unit);
 	if (cached !== undefined) return cached;
-	let found: DimensionedUnit = UNMEASURED_UNITS[unit] ?? null;
+	// Own properties only: a unit spelled `constructor` found Object's
+	// constructor here and composed with a dimension of undefined.
+	let found: DimensionedUnit = Object.prototype.hasOwnProperty.call(UNMEASURED_UNITS, unit) ? UNMEASURED_UNITS[unit] : null;
 	if (found === null) {
 		const measure = getMeasure(unit);
 		const dimension = measure === undefined ? undefined : MEASURE_DIMENSIONS[measure];
@@ -166,14 +196,29 @@ function wattHourName(left: string, right: string, multiply: boolean, siResult: 
 }
 
 /**
+ * The name for the energy of a charge in amp-hours at a voltage, which is a
+ * battery's energy and is read in watt-hours: `3000 mAh * 3.7 V` is `11.10 Wh`,
+ * not 39,960 joules (#706). Always `Wh`, whatever the charge's prefix, since a
+ * phone's battery is quoted in watt-hours although its charge is in mAh. `null`
+ * when the operands are not that shape, so a charge in coulombs stays in joules.
+ */
+function batteryEnergyName(left: string, right: string, siResult: number): Value | null {
+	const [charge, voltage] = AMP_HOUR_SPELLINGS.has(left) ? [left, right] : [right, left];
+	if (!AMP_HOUR_SPELLINGS.has(charge) || getMeasure(voltage) !== "voltage") return null;
+	return uomValue(convertUnit(siResult, "J", "Wh"), "Wh");
+}
+
+/**
  * The product or quotient of two dimensioned quantities, as a named derived
  * unit, or null when either operand is not dimensioned or the result is not a
  * named derived unit (in which case the caller keeps its existing behaviour).
  *
  * A power multiplied by a time of a minute or more is named in watt-hours with
  * the power's own prefix (`2 kW * 3 h` is 6.00 kWh), and a watt-hour energy over
- * such a time in the matching watt (`6 kWh / 3 h` is 2.00 kW); every other
- * energy and power is in joules and watts.
+ * such a time in the matching watt (`6 kWh / 3 h` is 2.00 kW). A charge in
+ * amp-hours at a voltage is named in watt-hours (`3000 mAh * 3.7 V` is 11.10 Wh);
+ * every other energy and power is in joules and watts. A charge is always named
+ * in amp-hours (`2 A * 3 h` is 6.00 Ah, `11.1 Wh / 3.7 V` is 3.00 Ah).
  */
 export function tryDimensionalCompose(left: Value, right: Value, multiply: boolean): Value | null {
 	if (left.type !== ValueType.Uom || right.type !== ValueType.Uom) return null;
@@ -195,11 +240,16 @@ export function tryDimensionalCompose(left: Value, right: Value, multiply: boole
 	const siLeft = left.toNumber() * dl.si;
 	const siRight = right.toNumber() * dr.si;
 	const siResult = multiply ? siLeft * siRight : siLeft / siRight;
+	if (name === "J" && multiply) {
+		const battery = batteryEnergyName(left.unit, right.unit, siResult);
+		if (battery !== null) return battery;
+	}
 	if (name === "J" || name === "W") {
 		const wattHours = wattHourName(left.unit, right.unit, multiply, siResult);
 		if (wattHours !== null) return wattHours;
 	}
 	// Every named unit above is its measure's SI unit, so the base-SI magnitude
-	// reads straight out in it.
+	// reads straight out in it, except the amp-hour, which is 3,600 coulombs.
+	if (name === AMP_HOUR) return uomValue(convertUnit(siResult, "coulomb", AMP_HOUR), AMP_HOUR);
 	return uomValue(siResult, name);
 }

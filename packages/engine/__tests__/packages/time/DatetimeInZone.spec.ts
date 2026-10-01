@@ -74,7 +74,8 @@ describe("a date read in a zone", () => {
 		// clock: what is fixed, and what the row is about, is that Chicago reads
 		// six in the evening.
 		const value = evaluate("6pm in Chicago");
-		expect(value.grain).toBe("instant");
+		// A time of day stays one (#708), counted from its own day in Chicago.
+		expect(value.grain).toBe("time");
 		expect(value.zone).toBe("America/Chicago");
 		const chicago = readingIn("America/Chicago", value);
 		expect(chicago.hour).toBe(18);

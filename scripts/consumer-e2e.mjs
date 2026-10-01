@@ -191,6 +191,44 @@ try {
 }
 check('require("solve-engine/temporal") resolves', temporalCjs === "function", `got ${temporalCjs}`);
 
+// The helpers a package author follows the guides to, each by its public
+// subpath (#717): a live-data package built on createQueryResolver's
+// name-keyed form, registered strictly, answers with what it fetched, and one
+// whose resolver names a function the package does not declare is refused.
+fs.writeFileSync(
+	path.join(scratch, "probe-authoring.mjs"),
+	[
+		'import { createEngine } from "solve-engine";',
+		'import { formatValue } from "solve-engine/format";',
+		'import { createQueryResolver } from "solve-engine/resolvers";',
+		'import { parseRightOperand, definePhrasePattern, OpCode } from "solve-engine/parser";',
+		'import { numberValue, boolValue, percentageValue } from "solve-engine/vm";',
+		"const out = { types: [typeof createQueryResolver, typeof parseRightOperand, typeof definePhrasePattern, typeof boolValue, typeof percentageValue].join(), first: null, answer: null, refused: null };",
+		'const { resolver, pluginFunction } = createQueryResolver({ namespace: "probe-lookup", packageName: "probe-authoring", functionName: "lookup", fetchQuery: async (query) => numberValue(query.length) });',
+		"const parselet = { category: 'Probe', parse(parser, _token, builder) { const word = parser.consume(); builder.emitOpcode(OpCode.PUSH_STRING); builder.emitString(String(word.value)); builder.emitPluginCall('lookup', 1); } };",
+		"const pkg = { name: 'probe-authoring', lexerVocabulary: { keywords: { lookup: 'PROBE_LOOKUP' } }, prefixParselets: { PROBE_LOOKUP: parselet }, pluginFunctions: { lookup: pluginFunction }, asyncResolvers: [resolver], tokenCategories: { PROBE_LOOKUP: 'function' } };",
+		"const engine = createEngine({ extraPackages: [pkg], strict: true });",
+		"engine.getBatcher().onLineResult = () => {};",
+		"out.first = engine.evaluateExpression('lookup hello').type;",
+		"await new Promise((resolve) => setTimeout(resolve, 50));",
+		"out.answer = formatValue(engine.evaluateExpression('lookup hello'));",
+		"const stray = createQueryResolver({ namespace: 'probe-stray', packageName: 'probe-stray', functionName: 'missing', fetchQuery: async () => numberValue(1) });",
+		"try { createEngine({ extraPackages: [{ name: 'probe-stray', asyncResolvers: [stray.resolver] }], strict: true }); out.refused = 'built'; } catch (e) { out.refused = e.code; }",
+		"process.stdout.write(JSON.stringify(out), () => process.exit(0));",
+	].join("\n"),
+);
+
+console.log("\nPackage authoring helpers, by public subpath");
+let authoringProbe = { types: "probe failed to run", first: null, answer: null, refused: null };
+try {
+	authoringProbe = JSON.parse(run("node", ["probe-authoring.mjs"], scratch));
+} catch (error) {
+	console.error(`  the authoring probe did not run: ${error.message}`);
+}
+check("createQueryResolver, parseRightOperand, definePhrasePattern, boolValue and percentageValue resolve", authoringProbe.types === "function,function,function,function,function", `got ${authoringProbe.types}`);
+check("a name-keyed live-data package registered strictly answers with what it fetched", authoringProbe.answer === "= 5", `got ${authoringProbe.answer} (first ${authoringProbe.first})`);
+check("a resolver naming a function its package does not declare is refused", authoringProbe.refused === "PACKAGE_RESOLVER_FUNCTION_MISSING", `got ${authoringProbe.refused}`);
+
 console.log("\nCJS, required by bare specifier");
 let cjsResult;
 try {

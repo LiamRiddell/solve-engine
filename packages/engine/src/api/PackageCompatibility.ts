@@ -1,4 +1,5 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
+import { isFastPathToken } from "@solve-js/parser/BindingPower";
 
 /**
  * Package load-time compatibility checking, the "detect overlapping
@@ -95,7 +96,9 @@ function collectParseletConflicts(
         // since deliberate override is sometimes the intended use (a
         // package explicitly built to replace a built-in's grammar).
         severity: "warning",
-        detail: `Both "${existingPkg.name}" and "${candidate.name}" register a ${fieldName === "prefixParselets" ? "prefix" : "infix"} parselet for token type "${tokenType}" — the later-registered one silently wins.`,
+        detail: isFastPathToken(tokenType, fieldName === "prefixParselets" ? "prefix" : "infix")
+          ? `Both "${existingPkg.name}" and "${candidate.name}" register a ${fieldName === "prefixParselets" ? "prefix" : "infix"} parselet for token type "${tokenType}", which the parser reads itself before it consults the registry, so "${candidate.name}"'s parselet never runs.`
+          : `Both "${existingPkg.name}" and "${candidate.name}" register a ${fieldName === "prefixParselets" ? "prefix" : "infix"} parselet for token type "${tokenType}": the later-registered one replaces the other.`,
         packages: [existingPkg.name, candidate.name],
       });
     }
