@@ -2,6 +2,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { isInsideRangeContext } from "@solve-js/normalizer/BuiltinNormalizerRules";
+import { isLabelColon } from "@solve-js/packages/time/normalizer/LabelColon";
 
 /**
  * Converts an hour[:minute] + optional am/pm marker into total
@@ -39,6 +40,18 @@ function hourAndMinute(text: string): { hour: number; minute: number } | null {
   const spelled = /^(\d{1,2})(?:\.(\d{2}))?$/.exec(text);
   if (spelled === null) return null;
   return { hour: Number(spelled[1]), minute: spelled[2] === undefined ? 0 : Number(spelled[2]) };
+}
+
+/**
+ * Whether a number token is written as the digits of one half of a clock
+ * time (`9`, `09`, `30`): one or two plain digits, with no point, sign or
+ * exponent. `1.5` in `1.5:3` is not, so that line is not a time.
+ *
+ * @param token - The hour or minute token.
+ * @returns `true` for one or two digits as written.
+ */
+export function isClockDigits(token: Pick<Token, "text" | "value">): boolean {
+  return /^\d{1,2}$/.test(token.text || token.value);
 }
 
 function isAmPmToken(token: { type: string; value: string } | undefined): token is { type: string; value: string } {
@@ -90,8 +103,6 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
     match(tokens, pos): NormalizerMatch | null {
       const hourToken = tokens[pos];
       if (hourToken.type !== "NUMBER") return null;
-      const hour = parseInt(hourToken.value, 10);
-      if (isNaN(hour) || hour < 0 || hour > 23) return null;
 
       // The two shapes: `9:00am` (NUMBER COLON NUMBER [am|pm]) and the
       // bare hour `4pm` (NUMBER am|pm). Decided before the range guard below,
@@ -103,6 +114,10 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
       const colonShape = colonToken?.type === "COLON" && minuteToken?.type === "NUMBER";
       const bareShape = !colonShape && isAmPmToken(tokens[pos + 1]);
       if (!colonShape && !bareShape) return null;
+      // The hour is read only for one of those shapes: `parseInt` and `isNaN`
+      // are globals, which cost a lookup each, and most numbers are no time.
+      const hour = parseInt(hourToken.value, 10);
+      if (isNaN(hour) || hour < 0 || hour > 23) return null;
 
       // A clock time inside `[...]` (matrix literal/index/slice) has no
       // legitimate meaning, reserve bare `NUMBER:NUMBER` there for a
@@ -111,6 +126,14 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
 
       // Pattern: NUMBER COLON NUMBER [am|pm]
       if (colonShape) {
+        // Both halves of a clock time are whole numbers as written. `parseInt`
+        // read the whole part of a decimal, so `1.5:3` answered the time 1:03;
+        // a decimal on either side is not a time, and is left for what else
+        // the line can be.
+        if (!isClockDigits(hourToken) || !isClockDigits(minuteToken)) return null;
+        // `Item 2: 45` is a label and its figure, not the time 2:45: a colon
+        // with a space after it, after a name, is a label's (see LabelColon).
+        if (isLabelColon(tokens, pos)) return null;
         const minute = parseInt(minuteToken.value, 10);
         const ampmToken = tokens[pos + 3];
         const hasAmPm = isAmPmToken(ampmToken);

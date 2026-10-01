@@ -42,23 +42,14 @@ function readLines(result: ParsingResult): LineOutcome[] {
 }
 
 /**
- * Evaluate a document through both passes, assert they agree on every line
- * that is not a table row, and hand back the batch outcomes.
- *
- * A table row is not an expression. The two passes report a line that does not
- * parse differently (an error on the line against an error-typed result coded
- * `eval_failed`), which is their own business and not what these tests are
- * about, so the rows are left out and a parse failure is compared by its text.
+ * Evaluate a document through both passes, assert they agree on every line,
+ * table rows included, and hand back the batch outcomes.
  */
 function run(lines: string[]): LineOutcome[] {
   const text = lines.join("\n");
   const batch = readLines(newTrackedEngine().parseDocument(text, { inputType: "markdown" }));
   const incremental = readLines(evaluateDocument(newTrackedEngine(), text, { inputType: "markdown" }));
-  const comparable = (out: LineOutcome[]): LineOutcome[] =>
-    out
-      .filter((_, i) => !lines[i].trimStart().startsWith("|"))
-      .map((o) => (o.code === "eval_failed" ? { text: o.text } : o));
-  expect(comparable(incremental)).toEqual(comparable(batch));
+  expect(incremental).toEqual(batch);
   return batch;
 }
 

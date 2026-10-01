@@ -8,9 +8,13 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower, buildBindingPowerTable } from "@solve-js/parser/BindingPower";
 import { getLocale } from "@solve-js/constants/locales";
 import { bigIntLiteralDigits } from "@solve-js/parser/BigIntLiteral";
+import { isPastSafeWholeLiteral, pastSafeBaseLiteralDigits } from "@solve-js/parser/WholeLiteral";
+import { decimalFromExponentLiteral } from "@solve-js/decimal/Decimal";
+import { isMoneyAmount } from "@solve-js/parser/MoneyAmountLiteral";
 import { localeLiteralRefusal, unreadableInLocale } from "@solve-js/parser/LocaleNumberLiteral";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
+import { endOfLineWording, quoteToken, unexpectedTokenWording, valueExpectedWording } from "@solve-js/parser/ParseMessages";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -321,7 +325,7 @@ export class PrecedenceParser {
   private parseExpressionBody(minBp: number): void {
     const token = this.consume();
     if (!token) {
-      throw ErrorFactory.parsing({ code: "UNEXPECTED_END", message: "Unexpected end of expression", span: this.spanAtEnd() });
+      throw ErrorFactory.parsing({ code: "UNEXPECTED_END", ...endOfLineWording(this.tokens), span: this.spanAtEnd() });
     }
 
     // ── Prefix ──────────────────────────────────────────────────────────────
@@ -466,11 +470,13 @@ export class PrecedenceParser {
       case PrecedenceParser.NUMBER_ID: {
         // Parse number with locale-aware separator normalization
         let v: number;
-        // The exact dot-decimal text for a literal written with a fractional
-        // point, so it can be pushed as PUSH_DECIMAL and keep its precision
-        // where it later meets money. Stays null for every integer shape
-        // (hex/bin/oct, chained-dot grouping, plain integers), which push the
-        // ordinary PUSH_NUMBER and are unchanged.
+        // The exact text for a literal written with a fractional point, so it
+        // can be pushed as PUSH_DECIMAL and keep its precision where it later
+        // meets money, or for a whole number past 2^53, which a double cannot
+        // hold, so it keeps its exact value rather than the nearest double.
+        // A hex, binary or octal literal past 2^53 takes its exact digits the
+        // same way. Stays null for every other integer shape, which pushes the
+        // ordinary PUSH_NUMBER.
         let decimalText: string | null = null;
         const raw = token.value;
 
@@ -501,7 +507,7 @@ export class PrecedenceParser {
             // One dot with digits optional on either side is exactly what
             // PLAIN_DECIMAL matches, so this agrees with it: that is the signal
             // for the exact-decimal opcode rather than a double.
-            if (dots === 1) {
+            if (dots === 1 || isPastSafeWholeLiteral(raw)) {
               builder.emitOpcode(OpCode.PUSH_DECIMAL);
               builder.emitString(raw);
               return;
@@ -520,16 +526,21 @@ export class PrecedenceParser {
           if (Number.isNaN(v)) {
             throw ErrorFactory.parsing({ code: "INVALID_NUMBER_LITERAL", message: `Invalid hex literal: "${raw}"`, context: { raw }, span: this.spanOf(token) });
           }
+          // Past 2^53 the double invents its last digits; the exact ones go
+          // through PUSH_DECIMAL as a long decimal literal's do.
+          decimalText = pastSafeBaseLiteralDigits(raw, v);
         } else if (raw.startsWith("0b") || raw.startsWith("0B")) {
           v = parseInt(raw.slice(2), 2);
           if (Number.isNaN(v)) {
             throw ErrorFactory.parsing({ code: "INVALID_NUMBER_LITERAL", message: `Invalid binary literal: "${raw}"`, context: { raw }, span: this.spanOf(token) });
           }
+          decimalText = pastSafeBaseLiteralDigits(raw, v);
         } else if (raw.startsWith("0o") || raw.startsWith("0O")) {
           v = parseInt(raw.slice(2), 8);
           if (Number.isNaN(v)) {
             throw ErrorFactory.parsing({ code: "INVALID_NUMBER_LITERAL", message: `Invalid octal literal: "${raw}"`, context: { raw }, span: this.spanOf(token) });
           }
+          decimalText = pastSafeBaseLiteralDigits(raw, v);
         } else if (CHAINED_DOT_THOUSANDS_GROUPS.test(raw)) {
           // Under a dot-grouping locale a first group past three digits is not
           // grouped (`12345.678.901`, #806); refused as the single-dot case is.
@@ -549,7 +560,9 @@ export class PrecedenceParser {
           // NumberParselet.parse() (which has the identical fix) never
           // actually runs except via direct unit tests / the "matched
           // parselets" diagnostic display.
-          v = parseFloat(raw.split(".").join(""));
+          const digits = raw.split(".").join("");
+          v = parseFloat(digits);
+          if (isPastSafeWholeLiteral(digits)) decimalText = digits;
         } else {
           const decimalSep = this.decimalSeparator;
           const thousandsSep = this.thousandsSeparator;
@@ -573,10 +586,13 @@ export class PrecedenceParser {
           }
           v = parseFloat(normalized);
           // A plain fractional literal (digits, one dot, digits) is what carries
-          // an exact decimal. Scientific notation like "2.5e-3" has a dot too
-          // but no exact base-ten form worth the trouble, so it stays a
-          // PUSH_NUMBER double, and so does any integer (grouping stripped).
-          if (PLAIN_DECIMAL.test(normalized)) decimalText = normalized;
+          // an exact decimal. Scientific notation like "2.5e-3" stays a
+          // PUSH_NUMBER double, as does any integer (grouping stripped), except
+          // as the amount of money: `$1e-3` is exactly 1/1000 dollars, as
+          // `$0.001` is, so it rounds to the cent (see MoneyAmountLiteral.ts;
+          // the VM reads the exponent form exactly).
+          if (PLAIN_DECIMAL.test(normalized) || isPastSafeWholeLiteral(normalized)) decimalText = normalized;
+          else if (this.isExactMoneyExponent(normalized)) decimalText = normalized;
         }
         if (decimalText !== null) {
           builder.emitOpcode(OpCode.PUSH_DECIMAL);
@@ -657,12 +673,18 @@ export class PrecedenceParser {
 
       // ── Unary operators ───────────────────────────────────────────────────
       case PrecedenceParser.MINUS_ID: {
+        // A word (`subtract`, `take`, `remove`) goes to its parselet, which
+        // reads `subtract A from B` as a difference; the symbol stays here.
+        if (token.text.length > 1 && /^[a-z]+$/i.test(token.text)) break;
         this.parseExpression(BindingPower.Prefix, builder);
         builder.emitOpcode(OpCode.NEG);
         return;
       }
 
       case PrecedenceParser.PLUS_ID: {
+        // The word `add` goes to its parselet, which reads `add A to B` as a
+        // sum (#829); the symbol `+` stays here, on the hot path.
+        if (token.text.length === 3 && token.text.toLowerCase() === "add") break;
         this.parseExpression(BindingPower.Prefix, builder);
         builder.emitOpcode(OpCode.POS);
         return;
@@ -678,9 +700,11 @@ export class PrecedenceParser {
     // ── Tier 2: Plugin/parselet prefix path ──────────────────────────────────
     const prefixParselet = this.registry.getPrefix(typeId);
     if (!prefixParselet) {
+      // The token was consumed to get here, so the one before it is two back.
+      const previous = this.current >= 2 ? this.tokens[this.current - 2] : undefined;
       throw ErrorFactory.parsing({
         code: "NO_PREFIX_PARSELET",
-        message: `No prefix parselet found for token: ${token.type} ("${token.value}")`,
+        ...valueExpectedWording(token, previous, this.tokens[this.current]),
         context: { tokenType: token.type, tokenValue: token.value },
         span: this.spanOf(token),
       });
@@ -879,7 +903,8 @@ export class PrecedenceParser {
     }
     throw ErrorFactory.parsing({
       code: "USER_FUNCTION_INVALID_PARAM_NAME",
-      message: `Expected a parameter name but got "${token?.type ?? "end of input"}"${token ? ` ("${token.value}")` : ""}`,
+      message: token ? `Expected a parameter name, but found ${quoteToken(token)}` : "The line ends where a parameter name was expected",
+      suggestion: "Name each parameter with a word, as in f(x, y) = x + y",
       context: { actualType: token?.type },
       span: token ? this.spanOf(token) : this.spanAtEnd(),
     });
@@ -921,6 +946,19 @@ export class PrecedenceParser {
     this.setBuilder(builder);
 
     const bodyProgram = bodyBuilder.build();
+    // A body that reads other lines (`f(x) = x + prev`, `x + line 1`) waits
+    // for nothing, so it is not refused as asynchronous: it is refused for
+    // what it is. A body is run wherever it is called, away from the line
+    // that wrote it, so there are no lines for it to read.
+    if (bodyProgram.hasAsync && bodyBuilder.readsDocument) {
+      throw ErrorFactory.parsing({
+        code: "FUNCTION_BODY_READS_LINES",
+        message: `"${nameToken.value}(...)"'s body reads other lines of the document, and a function body has no lines to read: pass the value in as an argument instead`,
+        suggestion: `Add a parameter for the line's value, ${nameToken.value}(${[...params, "v"].join(", ")}), and pass prev or line 1 to it when you call it`,
+        context: { name: nameToken.value },
+        span: this.spanOf(nameToken),
+      });
+    }
     if (bodyProgram.hasAsync) {
       // v1 scope decision: a function body calling an async plugin
       // (weather, stocks, currency, ...) isn't supported yet, propagating
@@ -933,7 +971,7 @@ export class PrecedenceParser {
       // addBusinessDays()'s own disclosed holiday-exclusion scope-down).
       throw ErrorFactory.parsing({
         code: "FUNCTION_BODY_MUST_BE_SYNCHRONOUS",
-        message: `"${nameToken.value}(...)"'s body calls an async operation (weather, stocks, currency, ...) — user-defined function bodies must be synchronous`,
+        message: `"${nameToken.value}(...)"'s body calls an async operation (weather, stocks, currency, ...), and a user-defined function body must be synchronous`,
         context: { name: nameToken.value },
         span: this.spanOf(nameToken),
       });
@@ -988,14 +1026,20 @@ export class PrecedenceParser {
   consume(expectedType?: string): Token {
     const token = this.tokens[this.current];
     if (!token) {
-      throw ErrorFactory.parsing({ code: "UNEXPECTED_END_OF_INPUT", message: "Unexpected end of input", span: this.spanAtEnd() });
+      throw ErrorFactory.parsing({ code: "UNEXPECTED_END_OF_INPUT", ...endOfLineWording(this.tokens, expectedType), span: this.spanAtEnd() });
     }
     if (expectedType !== undefined) {
       const expectedId = tokenTypeId(expectedType);
       if (token.typeId !== expectedId) {
+        // A run the normaliser has already refused (a colon pair that is no
+        // clock time, a date naming no real day) is reported for its own
+        // reason, not as a token standing where another was needed.
+        if (token.fault !== undefined) {
+          throw ErrorFactory.parsing({ code: token.fault.code, message: token.fault.message, span: this.spanOf(token) });
+        }
         throw ErrorFactory.parsing({
           code: "UNEXPECTED_TOKEN_TYPE",
-          message: `Expected token type "${expectedType}" but got "${token.type}" ("${token.value}")`,
+          ...unexpectedTokenWording(expectedType, token),
           context: { expectedType, actualType: token.type, actualValue: token.value },
           span: this.spanOf(token),
         });
@@ -1016,6 +1060,19 @@ export class PrecedenceParser {
 
   peek(): Token | undefined {
     return this.tokens[this.current];
+  }
+
+  /**
+   * Whether the exponent-form literal just consumed (`normalized`, the
+   * locale's marks rewritten) is the amount of money and has an exact value
+   * to keep: `$1e-3`, `1e-3 USD`. See parser/MoneyAmountLiteral.ts.
+   *
+   * @param normalized - The literal as the number path normalized it.
+   * @returns `true` to push it as PUSH_DECIMAL.
+   */
+  private isExactMoneyExponent(normalized: string): boolean {
+    const at = this.current - 1;
+    return isMoneyAmount(this.tokens[at - 1], this.tokens[at - 2], this.tokens[at + 1]) && decimalFromExponentLiteral(normalized) !== null;
   }
 
   /**

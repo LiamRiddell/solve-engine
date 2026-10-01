@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `next month` / `this month` / `last month`, the first of the month that many
@@ -25,6 +26,6 @@ export class RelativeMonthParselet implements PrefixParselet {
 		builder.emitOpcode(OpCode.DATE_NOW);
 		builder.emitOpcode(OpCode.PUSH_NUMBER);
 		builder.emitNumber(this.offsetMonths);
-		builder.emitPluginCall("monthAnchorShift", 2);
+		emitBuiltinPluginCall(builder, "monthAnchorShift", 2);
 	}
 }

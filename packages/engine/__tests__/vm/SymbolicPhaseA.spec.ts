@@ -113,13 +113,14 @@ describe("Phase A: exact rational coefficients", () => {
 		expect(evaluate("x/3 =>")).toBe("x/3");
 	});
 
-	test("a purely numeric subexpression is still computed numerically first", () => {
-		// `(1/3)` has two number operands, so the VM's ordinary DIV runs and
-		// produces a double before anything symbolic is involved. Exactness is a
-		// property of the symbolic domain, not a retrofit onto arithmetic that
-		// already happened. Worth pinning: it is the boundary that explains why
-		// `x/3` and `x*(1/3)` do not render alike.
-		expect(evaluate("x*(1/3) =>")).toBe("0.3333333333x");
+	test("a purely numeric subexpression joins with the exact fraction it computed", () => {
+		// `(1/3)` has two number operands, so the VM's ordinary DIV runs first,
+		// and that division keeps the exact fraction beside its double. The
+		// formula takes the fraction, so `x/3` and `x*(1/3)` render alike; read
+		// through the double it printed `0.3333333333x`, which reads back as a
+		// different number.
+		expect(evaluate("x*(1/3) =>")).toBe("x/3");
+		expect(evaluate("x/3 =>")).toBe("x/3");
 	});
 
 	test("a decimal coefficient converts by its written form, not its IEEE expansion", () => {

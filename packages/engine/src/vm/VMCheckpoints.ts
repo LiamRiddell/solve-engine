@@ -90,6 +90,19 @@ export class VMCheckpointer {
 	private checkpoints: VMCheckpoint[] = [];
 	/** The VM instance whose variables are snapshotted/restored. */
 	private vm: VM;
+	/**
+	 * For each variable name, the checkpoints whose own bag holds it, in
+	 * document order. See {@link lookupVariableBefore} for why it exists.
+	 */
+	private variableIndex = new Map<string, VMCheckpoint[]>();
+	/** {@link variableIndex}, for the functions bag. */
+	private functionIndex = new Map<string, VMCheckpoint[]>();
+
+	/**
+	 * The line whose prefix the VM holds for every name the chain records, or
+	 * null when that is not known. See {@link syncTo}.
+	 */
+	private vmLine: number | null = null;
 
 	constructor(vm: VM) {
 		this.vm = vm;
@@ -192,8 +205,13 @@ export class VMCheckpointer {
 			functions,
 			parent,
 		};
-		if (existing >= 0) this.checkpoints[existing] = checkpoint;
-		else this.checkpoints.splice(insertAt, 0, checkpoint);
+		if (existing >= 0) {
+			this.unindexCheckpoint(this.checkpoints[existing]);
+			this.checkpoints[existing] = checkpoint;
+		} else {
+			this.checkpoints.splice(insertAt, 0, checkpoint);
+		}
+		this.indexCheckpoint(checkpoint);
 		// The entry after this one now follows a different object.
 		const next = this.checkpoints[insertAt + 1];
 		if (next !== undefined) next.parent = checkpoint;
@@ -236,6 +254,7 @@ export class VMCheckpointer {
 		// relies on, so a change that broke it would fail there rather than
 		// quietly restoring the wrong state here.
 		const targetIndex = this.nearestCheckpointIndex(lineNumber);
+		this.vmLine = lineNumber;
 
 		this.vm.reset();
 		for (let i = 0; i <= targetIndex; i++) {
@@ -314,11 +333,17 @@ export class VMCheckpointer {
 		for (const name of variableNames) {
 			if (this.vm.hasUserFunction(name)) {
 				const fn = this.vm.getUserFunction(name);
-				if (fn) checkpoint.functions[name] = fn;
+				if (fn) {
+					checkpoint.functions[name] = fn;
+					indexAdd(this.functionIndex, name, checkpoint);
+				}
 				continue;
 			}
 			const value = this.vm.getVar(name);
-			if (value !== undefined) checkpoint.variables[name] = value;
+			if (value !== undefined) {
+				checkpoint.variables[name] = value;
+				indexAdd(this.variableIndex, name, checkpoint);
+			}
 		}
 		return true;
 	}
@@ -339,6 +364,9 @@ export class VMCheckpointer {
 	applyCheckpointAt(lineNumber: number): boolean {
 		const checkpoint = this.getCheckpointAt(lineNumber);
 		if (!checkpoint) return false;
+		// The caller is re-running lines of its own around this, so which
+		// prefix the VM holds is no longer this chain's to say.
+		this.vmLine = null;
 		for (const key of Object.keys(checkpoint.variables)) {
 			this.vm.setVar(key, checkpoint.variables[key]);
 		}
@@ -374,6 +402,7 @@ export class VMCheckpointer {
 	dropCheckpointAt(lineNumber: number): void {
 		const index = this.indexOfCheckpointAt(lineNumber);
 		if (index < 0) return;
+		this.unindexCheckpoint(this.checkpoints[index]);
 		this.checkpoints.splice(index, 1);
 		const next = this.checkpoints[index];
 		if (next !== undefined) next.parent = index > 0 ? this.checkpoints[index - 1] : null;
@@ -403,6 +432,12 @@ export class VMCheckpointer {
 		kept.sort((a, b) => a.lineNumber - b.lineNumber);
 		for (let i = 0; i < kept.length; i++) kept[i].parent = i > 0 ? kept[i - 1] : null;
 		this.checkpoints = kept;
+		// The position the VM was synced to named a line that may have moved.
+		this.vmLine = null;
+		// Rebuilt rather than patched: the positions moved, a deleted line's
+		// entry went, and the sort above is the one order both have to share.
+		// Linear in the recorded bindings, the same as the walk above it.
+		this.rebuildIndex();
 	}
 
 	forget(names: readonly string[]): void {
@@ -412,6 +447,10 @@ export class VMCheckpointer {
 				delete checkpoint.variables[name];
 				delete checkpoint.functions[name];
 			}
+		}
+		for (const name of names) {
+			this.variableIndex.delete(name);
+			this.functionIndex.delete(name);
 		}
 	}
 
@@ -453,38 +492,6 @@ export class VMCheckpointer {
 	}
 
 	/**
-	 * Look up a variable's value through the checkpoint chain.
-	 *
-	 * Walks the prototype chain starting from the most recent checkpoint,
-	 * looking for the variable name as an own property. This is O(depth)
-	 * where depth is the number of checkpoints since the variable was
-	 * last set.
-	 *
-	 * **Note:** This queries the checkpointer's snapshot, not the VM.
-	 * The VM may have been modified since the last snapshot (e.g., by
-	 * Tier 2 execution of non-variable-def lines that don't create checkpoints).
-	 *
-	 * @returns The Value, or undefined if the variable was never set.
-	 */
-	/**
-	 * The value a name held at the end of the line before `lineNumber`, or
-	 * undefined if no line above it had set one.
-	 *
-	 * What a definition that failed leaves behind. A pass from scratch skips
-	 * the store when the right-hand side errors, so the name keeps whatever the
-	 * lines above it had put there: `:x = 1` then `:x = zz` leaves `x` at 1,
-	 * and `:x = zz` on its own leaves it undefined. The incremental path holds
-	 * the value from the previous pass instead, which for the line that failed
-	 * is its own old answer, so the evaluator asks here what the prefix holds
-	 * and puts that back. The chain records what each line wrote, in document
-	 * order, so the entry nearest before the line, followed through its
-	 * parents, is exactly the prefix.
-	 *
-	 * @param name - The variable.
-	 * @param lineNumber - The 1-based line whose own entry is to be excluded.
-	 * @returns The value the lines above set, or undefined.
-	 */
-	/**
 	 * The function a name was bound to at the end of the line before
 	 * `lineNumber`, or undefined if no line above it had defined one.
 	 *
@@ -497,40 +504,100 @@ export class VMCheckpointer {
 	 * @returns The definition the lines above made, or undefined.
 	 */
 	lookupFunctionBefore(name: string, lineNumber: number): UserFunctionDef | undefined {
-		const index = this.nearestCheckpointIndex(lineNumber - 1);
-		let checkpoint: VMCheckpoint | null = index < 0 ? null : this.checkpoints[index];
-		while (checkpoint) {
-			if (Object.prototype.hasOwnProperty.call(checkpoint.functions, name)) {
-				return checkpoint.functions[name];
-			}
-			checkpoint = checkpoint.parent;
-		}
-		return undefined;
+		return lastWriterAtOrBefore(this.functionIndex.get(name), lineNumber - 1)?.functions[name];
 	}
 
+	/**
+	 * The value a name held at the end of the line before `lineNumber`, or
+	 * undefined if no line above it had set one.
+	 *
+	 * What a definition that failed leaves behind. A pass from scratch skips
+	 * the store when the right-hand side errors, so the name keeps whatever the
+	 * lines above it had put there: `:x = 1` then `:x = zz` leaves `x` at 1,
+	 * and `:x = zz` on its own leaves it undefined. The incremental path holds
+	 * the value from the previous pass instead, which for the line that failed
+	 * is its own old answer, so the evaluator asks here what the prefix holds
+	 * and puts that back.
+	 *
+	 * Read from the per-name index, not by following `parent`. The chain from
+	 * the nearest checkpoint back to the root visits exactly the entries of
+	 * the array before it, in reverse, so the first one found holding the name
+	 * is the last entry at or before the line whose own bag holds it. The
+	 * index lists those entries per name in document order, and a binary
+	 * search finds that one directly: O(log k) in the number of lines that
+	 * wrote the name. Following the links cost the distance to the root for a
+	 * name no line above defines, which is every name in an ordinary list of
+	 * assignments, so a repeat pass over bare assignments was quadratic in the
+	 * document (#712).
+	 *
+	 * @param name - The variable.
+	 * @param lineNumber - The 1-based line whose own entry is to be excluded.
+	 * @returns The value the lines above set, or undefined.
+	 */
 	lookupVariableBefore(name: string, lineNumber: number): Value | undefined {
-		const index = this.nearestCheckpointIndex(lineNumber - 1);
-		let checkpoint: VMCheckpoint | null = index < 0 ? null : this.checkpoints[index];
-		while (checkpoint) {
-			if (Object.prototype.hasOwnProperty.call(checkpoint.variables, name)) {
-				return checkpoint.variables[name];
-			}
-			checkpoint = checkpoint.parent;
-		}
-		return undefined;
+		return lastWriterAtOrBefore(this.variableIndex.get(name), lineNumber - 1)?.variables[name];
 	}
 
+	/**
+	 * The value a name holds at the end of the chain, or undefined if no
+	 * checkpoint holds it. Read from the index, as {@link lookupVariableBefore}.
+	 *
+	 * **Note:** This queries the checkpointer's snapshot, not the VM.
+	 * The VM may have been modified since the last snapshot (e.g., by
+	 * Tier 2 execution of non-variable-def lines that don't create checkpoints).
+	 */
 	lookupVariable(name: string): Value | undefined {
-		if (this.checkpoints.length === 0) return undefined;
+		const writers = this.variableIndex.get(name);
+		return writers === undefined ? undefined : writers[writers.length - 1].variables[name];
+	}
 
-		let checkpoint: VMCheckpoint | null = this.checkpoints[this.checkpoints.length - 1];
-		while (checkpoint) {
-			if (Object.prototype.hasOwnProperty.call(checkpoint.variables, name)) {
-				return checkpoint.variables[name];
-			}
-			checkpoint = checkpoint.parent;
+	// ── Per-name index ───────────────────────────────────────────────
+
+	/** Record every name `checkpoint`'s own bags hold. */
+	private indexCheckpoint(checkpoint: VMCheckpoint): void {
+		for (const name of Object.keys(checkpoint.variables)) indexAdd(this.variableIndex, name, checkpoint);
+		for (const name of Object.keys(checkpoint.functions)) indexAdd(this.functionIndex, name, checkpoint);
+	}
+
+	/** Withdraw every name `checkpoint`'s own bags hold. */
+	private unindexCheckpoint(checkpoint: VMCheckpoint): void {
+		for (const name of Object.keys(checkpoint.variables)) indexRemove(this.variableIndex, name, checkpoint);
+		for (const name of Object.keys(checkpoint.functions)) indexRemove(this.functionIndex, name, checkpoint);
+	}
+
+	/** Build both indexes again from the array, which is in document order. */
+	private rebuildIndex(): void {
+		this.variableIndex = new Map();
+		this.functionIndex = new Map();
+		for (const checkpoint of this.checkpoints) {
+			for (const name of Object.keys(checkpoint.variables)) appendWriter(this.variableIndex, name, checkpoint);
+			for (const name of Object.keys(checkpoint.functions)) appendWriter(this.functionIndex, name, checkpoint);
 		}
-		return undefined;
+	}
+
+	/**
+	 * Whether the per-name index says exactly what the chain says: for every
+	 * name, the checkpoints holding it in their own bags, in document order.
+	 * A diagnostic for tests; linear in the chain.
+	 */
+	indexAgreesWithChain(): boolean {
+		const expected = (bag: "variables" | "functions"): Map<string, VMCheckpoint[]> => {
+			const index = new Map<string, VMCheckpoint[]>();
+			for (const checkpoint of this.checkpoints) {
+				for (const name of Object.keys(checkpoint[bag])) appendWriter(index, name, checkpoint);
+			}
+			return index;
+		};
+		const same = (a: Map<string, VMCheckpoint[]>, b: Map<string, VMCheckpoint[]>): boolean => {
+			if (a.size !== b.size) return false;
+			for (const [name, list] of a) {
+				const other = b.get(name);
+				if (other === undefined || other.length !== list.length) return false;
+				for (let i = 0; i < list.length; i++) if (other[i] !== list[i]) return false;
+			}
+			return true;
+		};
+		return same(expected("variables"), this.variableIndex) && same(expected("functions"), this.functionIndex);
 	}
 
 	// ── Lifecycle ────────────────────────────────────────────────────
@@ -541,6 +608,139 @@ export class VMCheckpointer {
 	 */
 	clear(): void {
 		this.checkpoints = [];
+		this.variableIndex = new Map();
+		this.functionIndex = new Map();
+		this.vmLine = null;
+	}
+
+	// ── Keeping the VM at a line ──────────────────────────────────────
+
+	/**
+	 * Put the VM into the state the document has at the end of `lineNumber`,
+	 * for every name the chain records, by moving from the line it was last
+	 * put at rather than rebuilding it.
+	 *
+	 * The evaluator runs a line against the VM, and the VM holds whatever the
+	 * lines that ran last wrote. A pass that skips the clean lines above the
+	 * viewport, or runs only the viewport, therefore handed a line the values
+	 * of lines below it: `x * 2` above `x = 5` answered 10 from the second
+	 * pass on, and `x + 100` between `:x = 1` and `:x = 99` answered 199 once
+	 * the viewport started below line 1, where a pass from scratch answers
+	 * `x` is undefined and 101.
+	 *
+	 * Moving down applies the entries passed on the way, in document order;
+	 * moving up sets each name an entry passed on the way wrote back to what
+	 * the lines above `lineNumber` left it, or removes it. Either costs the
+	 * entries between the two lines, so an edit or a scroll costs the distance
+	 * it moves rather than the length of the document. When the line is not
+	 * known (the first call, after {@link renumber}, or after another caller
+	 * applied entries of its own) every name the chain records is set from it
+	 * instead. A name the chain does not record, a host's own for example, is
+	 * left as it is, and so is anything else the VM holds (a stored equation).
+	 *
+	 * @param lineNumber - The 1-based line, 0 for the state before line 1.
+	 */
+	syncTo(lineNumber: number): void {
+		// A line that is not a number is no line: nothing moves, and the next
+		// call sets every name.
+		if (Number.isNaN(lineNumber)) {
+			this.vmLine = null;
+			return;
+		}
+		const from = this.vmLine;
+		if (from === lineNumber) return;
+		if (from === null) {
+			this.setAllFromChainAt(lineNumber);
+		} else if (lineNumber > from) {
+			// Down: every entry after `from`, up to and including `lineNumber`.
+			const last = this.nearestCheckpointIndex(lineNumber);
+			for (let i = this.nearestCheckpointIndex(from) + 1; i <= last; i++) this.applyOwnBindings(this.checkpoints[i]);
+		} else {
+			// Up: each name an entry after `lineNumber` wrote, back to its prefix.
+			const variables = new Set<string>();
+			const functions = new Set<string>();
+			const last = this.nearestCheckpointIndex(from);
+			for (let i = this.nearestCheckpointIndex(lineNumber) + 1; i <= last; i++) {
+				const checkpoint = this.checkpoints[i];
+				for (const name of Object.keys(checkpoint.variables)) variables.add(name);
+				for (const name of Object.keys(checkpoint.functions)) functions.add(name);
+			}
+			for (const name of variables) this.setVariableFromChainAt(name, lineNumber);
+			for (const name of functions) this.setFunctionFromChainAt(name, lineNumber);
+		}
+		this.vmLine = lineNumber;
+	}
+
+	/**
+	 * Record that `lineNumber` has just run on a VM {@link syncTo} had put at
+	 * the line before it, and recorded what it wrote, so the VM now holds the
+	 * state at the end of `lineNumber`. Any other order leaves the line
+	 * unknown, and the next {@link syncTo} sets every name.
+	 *
+	 * @param lineNumber - The 1-based line that ran.
+	 */
+	noteLineRan(lineNumber: number): void {
+		this.vmLine = this.vmLine === lineNumber - 1 ? lineNumber : null;
+	}
+
+	/**
+	 * Put `names` back to what the chain holds for them at the line the VM is
+	 * at, after something outside the chain changed them (the evaluator
+	 * clearing running totals at the start of a pass). Nothing to do while
+	 * that line is not known: the next {@link syncTo} sets every name.
+	 *
+	 * @param names - The names changed.
+	 */
+	resync(names: Iterable<string>): void {
+		const at = this.vmLine;
+		if (at === null) return;
+		for (const name of names) this.setVariableFromChainAt(name, at);
+	}
+
+	/**
+	 * Forget which line the VM is at, after something outside the chain changed
+	 * it wholesale (another document ran on the same engine). The next
+	 * {@link syncTo} sets every name the chain records.
+	 */
+	desync(): void {
+		this.vmLine = null;
+	}
+
+	/**
+	 * The line {@link syncTo} last put the VM at, or null when that is not
+	 * known. A diagnostic for tests.
+	 */
+	get syncedLine(): number | null {
+		return this.vmLine;
+	}
+
+	/** Apply one entry's own bindings, as {@link restoreTo} does for each entry it replays. */
+	private applyOwnBindings(checkpoint: VMCheckpoint): void {
+		for (const key of Object.keys(checkpoint.variables)) this.vm.setVar(key, checkpoint.variables[key]);
+		for (const key of Object.keys(checkpoint.functions)) {
+			const fn = checkpoint.functions[key];
+			this.vm.defineUserFunction(fn.name, fn.params, fn.program);
+		}
+	}
+
+	/** Set every name the chain records to what it holds at the end of `lineNumber`. */
+	private setAllFromChainAt(lineNumber: number): void {
+		for (const name of this.variableIndex.keys()) this.setVariableFromChainAt(name, lineNumber);
+		for (const name of this.functionIndex.keys()) this.setFunctionFromChainAt(name, lineNumber);
+	}
+
+	/** Set one variable to what the chain holds for it at the end of `lineNumber`, or remove it. */
+	private setVariableFromChainAt(name: string, lineNumber: number): void {
+		const value = lastWriterAtOrBefore(this.variableIndex.get(name), lineNumber)?.variables[name];
+		if (value === undefined) this.vm.deleteVar(name);
+		else this.vm.setVar(name, value);
+	}
+
+	/** {@link setVariableFromChainAt}, for a function. */
+	private setFunctionFromChainAt(name: string, lineNumber: number): void {
+		const fn = lastWriterAtOrBefore(this.functionIndex.get(name), lineNumber)?.functions[name];
+		if (fn === undefined) this.vm.deleteUserFunction(name);
+		else this.vm.defineUserFunction(fn.name, fn.params, fn.program);
 	}
 
 	/** Number of checkpoints stored. */
@@ -557,4 +757,75 @@ export class VMCheckpointer {
 	get vmInstance(): VM {
 		return this.vm;
 	}
+}
+
+// ── Per-name index helpers ──────────────────────────────────────────────
+
+/**
+ * The position in `writers` (ascending line numbers) of the first entry whose
+ * line is at or after `lineNumber`.
+ */
+function lowerBound(writers: readonly VMCheckpoint[], lineNumber: number): number {
+	let low = 0;
+	let high = writers.length;
+	while (low < high) {
+		const mid = (low + high) >> 1;
+		if (writers[mid].lineNumber < lineNumber) low = mid + 1;
+		else high = mid;
+	}
+	return low;
+}
+
+/**
+ * The last of `writers` at or before `lineNumber`, or undefined when there is
+ * none (or no list at all). O(log k).
+ *
+ * @param writers - The checkpoints holding one name, ascending by line.
+ * @param lineNumber - The last 1-based line that may answer.
+ */
+export function lastWriterAtOrBefore(writers: readonly VMCheckpoint[] | undefined, lineNumber: number): VMCheckpoint | undefined {
+	if (writers === undefined || writers.length === 0) return undefined;
+	// NaN compares false with everything, which the search would read as
+	// "after every entry"; a line that is not a number has no prefix.
+	if (Number.isNaN(lineNumber)) return undefined;
+	let low = 0;
+	let high = writers.length;
+	while (low < high) {
+		const mid = (low + high) >> 1;
+		if (writers[mid].lineNumber <= lineNumber) low = mid + 1;
+		else high = mid;
+	}
+	return low > 0 ? writers[low - 1] : undefined;
+}
+
+/** Add `checkpoint` to the writers of `name`, in its line's place, once. */
+function indexAdd(index: Map<string, VMCheckpoint[]>, name: string, checkpoint: VMCheckpoint): void {
+	const writers = index.get(name);
+	if (writers === undefined) {
+		index.set(name, [checkpoint]);
+		return;
+	}
+	const at = lowerBound(writers, checkpoint.lineNumber);
+	if (writers[at] === checkpoint) return;
+	// One checkpoint per line, so a different entry at the same line is the
+	// one this checkpoint replaced.
+	if (writers[at] !== undefined && writers[at].lineNumber === checkpoint.lineNumber) writers[at] = checkpoint;
+	else writers.splice(at, 0, checkpoint);
+}
+
+/** Take `checkpoint` out of the writers of `name`, dropping an emptied list. */
+function indexRemove(index: Map<string, VMCheckpoint[]>, name: string, checkpoint: VMCheckpoint): void {
+	const writers = index.get(name);
+	if (writers === undefined) return;
+	const at = lowerBound(writers, checkpoint.lineNumber);
+	if (writers[at] !== checkpoint) return;
+	writers.splice(at, 1);
+	if (writers.length === 0) index.delete(name);
+}
+
+/** Append, for a build that visits checkpoints in document order already. */
+function appendWriter(index: Map<string, VMCheckpoint[]>, name: string, checkpoint: VMCheckpoint): void {
+	const writers = index.get(name);
+	if (writers === undefined) index.set(name, [checkpoint]);
+	else writers.push(checkpoint);
 }

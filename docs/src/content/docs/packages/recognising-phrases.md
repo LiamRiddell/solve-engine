@@ -211,6 +211,41 @@ bands the built-ins use: around 100 for a long phrase, 80 for a short one, 50 fo
 an implicit operator, 20 for a domain rule, and go lower than the rule whose
 output you read.
 
+## Reading the engine a rule runs in
+
+A rule is one object, and every engine that loads the package runs the same
+object. So a rule never reaches for a module-level registry to learn what an
+engine holds: `match` is handed the engine's environment as its third argument,
+and reads it there.
+
+```ts
+import type { NormalizerRule } from "solve-engine/normalizer";
+
+export const inConverterRule: NormalizerRule = {
+  name: "my-package:in-converter",
+  priority: 20,
+  match(tokens, pos, environment) {
+    const word = tokens[pos + 1];
+    if (tokens[pos]?.type !== "IN" || word?.type !== "IDENT") return null;
+    // Whether this engine, not some other one, has a converter of that name.
+    const found = environment?.asConverters?.match(word.value);
+    if (found !== "exact" && found !== "folded") return null;
+    // Build the replacement here, as the rule above does.
+    return null;
+  },
+};
+```
+
+The environment's type is `NormalizerEnvironment`, exported from
+`solve-engine/normalizer` beside `NormalizerRule`, for a helper that takes it
+apart from a rule.
+
+Today the environment carries the engine's `as` converters, as the built-in
+rule that reads `99 in roman` as `99 as roman` needs them. Every field is
+optional, and a normaliser built on its own, with no engine behind it, hands an
+empty one, which a rule reads as "nothing registered". A rule that reads nothing
+of the engine's, which is most of them, ignores the argument.
+
 ## Name each rule, uniquely
 
 Name a rule `yourpackage:what-it-does`, the way the built-ins do

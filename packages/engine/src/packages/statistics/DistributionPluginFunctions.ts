@@ -13,6 +13,7 @@
  */
 import { Value, numberValue, errorValue, ValueType } from "@solve-js/vm/Value";
 import { argumentCount } from "./StatisticsPluginFunctions";
+import { numberText } from "@solve-js/utilities/Number";
 import {
 	normalCdf, normalPdf, normalInv,
 	binomialPmf, binomialCdf, poissonPmf, poissonCdf,
@@ -60,7 +61,7 @@ function readProbability(name: string, args: readonly Value[], i: number, role: 
 function readCount(name: string, args: readonly Value[], i: number, role: string): number | Value {
 	const k = readNumber(name, args, i, role);
 	if (k instanceof Value) return k;
-	if (!Number.isInteger(k)) return errorValue("STAT_NOT_WHOLE", `${name}: the ${role} must be a whole number, but was ${k}`);
+	if (!Number.isInteger(k)) return errorValue("STAT_NOT_WHOLE", `${name}: the ${role} must be a whole number, but was ${numberText(k)}`);
 	if (k < 0) return errorValue("STAT_COUNT_RANGE", `${name}: the ${role} cannot be negative, but was ${k}`);
 	if (k > Number.MAX_SAFE_INTEGER) {
 		return errorValue("STAT_COUNT_RANGE", `${name}: the ${role} must be at most ${Number.MAX_SAFE_INTEGER}, but was ${k}`);

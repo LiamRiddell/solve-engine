@@ -7,13 +7,22 @@ A new function like `double(x)` or a new operator uses three fields together:
 
 - a **prefix parselet** (or an **infix parselet**) parses the syntax into bytecode,
 - a **plugin function** is the handler the virtual machine runs,
-- and the lexer turns the word into a token in the first place (see
-  [adding units and keywords](/packages/units-and-keywords/)).
+- and something turns the word into a token in the first place: for a function
+  called with brackets, a **call word** (`callFusions`), which makes `double` a
+  token only where a `(` follows it (see
+  [recognising phrases and words](/packages/recognising-phrases/)); for an
+  operator, the lexer (see [adding units and keywords](/packages/units-and-keywords/)).
 
-The flow is: the lexer turns `double` into a token, your parselet parses the
-arguments and emits a call, and the VM runs your handler on the evaluated
-arguments and pushes its result. This page walks a complete `double(x)` through
-it.
+The flow is: the normaliser turns `double(` into a call token, your parselet
+parses the arguments and emits a call, and the virtual machine (the part of the
+engine that runs compiled lines) runs your handler on the evaluated arguments and
+pushes its result. This page walks a complete `double(x)` through it.
+
+A call word rather than a lexer keyword, because a keyword claims its word
+everywhere: with `double` as a keyword, `:double = 4` stops defining a variable
+and is refused (`"double" is a word the engine already reads, so it cannot name a
+variable`). A call word fires only before `(` and never after `:`, so the reader
+keeps the word, and `double(21)` still reaches your function.
 
 ## The whole package
 
@@ -48,13 +57,18 @@ class DoubleParselet implements PrefixParselet {
 // 3. The package wires the word, the parselet and the handler together.
 export const DOUBLE_PACKAGE: IEnginePackage = {
   name: "example-double",
-  lexerVocabulary: { keywords: { double: "DOUBLE_KEYWORD" } },
-  prefixParselets: { DOUBLE_KEYWORD: new DoubleParselet() },
+  callFusions: { double: "DOUBLE_CALL" },       // `double` becomes a token only before "("
+  prefixParselets: { DOUBLE_CALL: new DoubleParselet() },
   pluginFunctions: { [DOUBLE_FN]: doubleHandler },
+  tokenCategories: { DOUBLE_CALL: "function" }, // coloured, and offered, as a function
 };
 ```
 
-`double(21)` now reads `42`. The three pieces agree by name: the parselet calls
+`double(21)` now reads `42`, and the word is still free for a variable:
+`:double = 4` now reads `4`. An editor offers `double` as a function when the
+reader types `doub`, since call words are among the completions (see
+[highlighting and completions](/packages/highlighting-and-completions/)). The
+three pieces agree by name: the parselet calls
 `emitPluginCall("double", 1)`, and `pluginFunctions` registers the handler under
 `"double"`. You never write a numeric index, the engine assigns one when it
 registers the package and stores your handler at it, so the emit site and the call
@@ -100,6 +114,17 @@ need it. A handler that reads or steps a date takes the backend with
 a test passes none) and `calendarOf` answers the built-in `Date` backend in that
 case.
 
+A handler that needs to know what a name holds in the note as it stands, rather
+than an argument, reads `context.getVariable(name)`: the Value the document
+gives that name, or `undefined` when no line has set it. Goal seek uses it to
+learn the unit its unknown is in, so an answer for a price in pounds is an
+amount of pounds, and a line that is only `sum` or `total` reads it to let a
+variable of that name win over the column total. It is present on every entry
+point, the single-expression one and the batch pass included, and reads the
+names as they stand when the line runs. The context itself is optional (a
+direct call from a test passes none), so call it as `context?.getVariable?.(name)`,
+and treat what it returns as read-only.
+
 A handler may return a `Promise<Value>` for data it has to fetch. The line goes
 pending, and when the promise settles the engine announces the line
 (`lines-updated`) and re-evaluates it, calling the handler once more. A handler
@@ -120,9 +145,113 @@ or a request that should be tried again after a failure, wants an
 [async data source](/guide/async-data-sources/) built on `createQueryResolver`,
 which pairs the fetch with its own cache and refresh interval.
 
+### When a live lookup wants `createQueryResolver`
+
+A promise-returning handler is the least a package needs to fetch something: it
+suits a value that is fetched once and never changes, such as a record looked up
+by an id that is never reused. A *live* lookup is a value read from a service
+that can change while the document is open, a temperature, a share price, a
+definition, and it usually wants more than a handler gives. For that, prefer
+`createQueryResolver` from `solve-engine/resolvers`, which builds the handler
+and the resolver that feeds it from a single `fetchQuery(query, signal)` you
+write. Reach for it when the lookup should:
+
+- **cache, and let the cache go stale.** Each answer is kept in the engine's
+  cache for `staleTimeMs` (five minutes by default), after which the next
+  evaluation fetches it again, rather than being kept for the life of the engine.
+- **share one fetch between lines.** Every line that asks the same query waits
+  on the one request, and at most six requests run at once
+  (`maxConcurrent`), so a pasted document of a hundred places does not send a
+  hundred requests at once.
+- **refetch.** `refetchIntervalMs` refreshes a value on screen on its own when
+  the host enables background refresh, and a failure is kept only for
+  `failureCooldownMs` (thirty seconds by default) before it is tried again.
+- **cancel.** The `signal` passed to `fetchQuery` fires when the fetch is
+  cancelled or when `timeoutMs` (ten seconds by default) runs
+  out, so a service that never replies does not hold the line pending.
+
+The boundary: the helper reads the query from the line before it runs, so the
+query must be written in the line as quoted text (`rainfall("Oslo")`). A lookup
+whose argument is a variable, or one with two operands, keeps a handler of its
+own, or the fuller contract the guide describes. The worked example is the
+guide's [short path](/guide/async-data-sources/#the-short-path-createqueryresolver).
+
 Check your own arguments, and return an `errorValue(code, message)` rather than
 throwing when they are wrong, as `doubleHandler` does above. A returned error is a
 value the reader sees on that one line; a thrown one is harder for a host to place.
+
+The code is the part a host's program reads (to underline the line, offer a fix
+or count failures), and the message is the part the person reads. So give each
+failure its own code, beginning with your package's name as `DOUBLE_BAD_ARGS`
+does, and export the codes as one `as const` object with a sentence on each, the
+way every built-in package does (`WeatherErrorCodes`, `TablesErrorCodes`): a host
+then has a list to check against rather than strings found by trial. Once a
+version has shipped, keep a code's name, since a host may have written it into
+its own program; the message can be reworded whenever it reads better. The
+engine's own codes are listed on the [error codes](/guide/error-codes/) page.
+The boundary: `isCataloguedErrorCode` from `solve-engine/packages` knows only the
+codes the engine ships, so it answers `false` for yours, and that is not a fault.
+
+### Reading other lines
+
+A handler that totals or compares other lines of the note, the way `total
+above` and `total of #food` do, reads them through the context. Each read is
+also a promise to the engine: when that line changes, or a live value lands on
+it, this line has to run again. On the incremental path (a live editor, and
+`evaluateDocument`) the engine keeps those promises as a **dependency graph**,
+a record of which lines read which, and it learns of each one from the context.
+
+- `context.getLineResult(n)` is line `n`'s answer, or `undefined` when there is
+  none to read: the line is out of range, is this line, or is below it. A note
+  is read from the top, so a line below is refused on every pass, even though a
+  live editor's second pass finds an answer there from its first. Reading a line
+  records that this line depends on it.
+- `context.noteLineRead(n)` records the dependency without reading. A handler
+  that stops at the first line it cannot use declares every line it would read
+  first, so the graph knows the whole span however far the read got.
+- `context.noteFigureSpanRead(first, last)` declares a whole span of figures as
+  one dependency: every line from `first` to `last` except a summary line (a
+  `total above`, a section or a tag total), which a span of figures passes over.
+  It is what a section total declares, and it costs one entry however long the
+  span, where `noteLineRead` per line costs one per line.
+- `context.getTaggedLines(tag)` is the lines carrying `#tag`, ascending, and
+  `context.getTagGroups()` every tag with its lines. Asking is the declaration:
+  the line depends on the tag, as one entry, however many lines carry it, and a
+  line joining or leaving the group later is covered by it.
+
+A read that a declaration already covers passes `true` as the second argument,
+`context.getLineResult(n, true)`, so the graph records nothing more for it. A
+tag total that reads a thousand members through the tag it asked for costs one
+entry this way, and a thousand without it; a ledger with a running total after
+each entry then costs the square of its length.
+
+```ts
+import { errorValue, numberValue, type Value, type LineExecutionContext } from "solve-engine/vm";
+
+// sumTagged("food"): the sum of the plain numbers on the lines tagged #food.
+function sumTaggedHandler(args: Value[], context?: LineExecutionContext): Value {
+  const members = context?.getTaggedLines?.(String(args[0].value));
+  if (members === undefined || !context?.getLineResult) {
+    return errorValue("SUMTAGGED_NO_DOCUMENT", "sumTagged needs a document.");
+  }
+  let sum = 0;
+  for (const n of members) {
+    if (n === context.lineIndex) continue; // this line, if it carries the tag
+    const v = context.getLineResult(n, true); // covered by the tag
+    if (v === undefined) return errorValue("SUMTAGGED_NOT_READY", `Line ${n} has no answer yet.`);
+    sum += v.toNumber();
+  }
+  return numberValue(sum);
+}
+```
+
+The contract: every one of these is absent where there is no document (the
+single-expression entry point), so answer with an error that says a document
+is needed. `noteLineRead` and `noteFigureSpanRead` are absent in the batch pass
+too, which keeps no graph, and a handler should read on without them. Passing
+`true` for a read nothing declared leaves the graph unaware of it, and a change
+to that line then does not reach this one; pass it only for a line inside a
+span or group the handler declared.
 
 ### Asking what another line would say
 
@@ -172,6 +301,10 @@ The contract, in the order a handler meets it:
   on live data the scratch engine does not fetch. Call it as many times as you
   need; each call is a fresh pass from the top.
 - `close()` releases the scratch engine. Call it once, in a `finally`.
+- The lines a session runs see `context.inWhatIf` set to `true`. The scenario is
+  a batch pass of its own, so a handler that cannot answer there (one that needs
+  to re-run a line itself, as goal seek does) can read the flag and say the
+  what-if is why, rather than naming the batch pass the reader never asked for.
 
 Each `run` re-runs every line above the target, so bound how many a handler
 makes. The sweep form caps itself at 1,000 values and 100,000 line re-runs, and
@@ -179,6 +312,36 @@ refuses past either by name. A handler that re-runs lines should also charge the
 to the pass through `context.spendWork(lineRuns, form)`, as the built-in what-if
 and sweep do: it returns the refusal when the note's budget
 (`vm.maxLineRunsPerPass`) would be crossed, and null once the work is counted.
+
+### Reading a line under a named scenario
+
+A note can keep named sets of inputs (`scenario bull with growth = 8%`, see
+[named scenarios](/syntax/what-if/#named-scenarios)). `context.readScenario(name,
+lineNumber)` answers what line `lineNumber` says under the scenario `name`, the
+same question `line 4 under bull` asks. It finds the declaration among the lines
+above the asking line and runs it as the what-if it stands for, so it takes care
+of the re-run, the checks and the budget itself: the handler passes its answer
+on.
+
+```ts
+import { errorValue, type Value, type LineExecutionContext } from "solve-engine/vm";
+
+// bullCase(4): line 4 under the note's "bull" scenario.
+function bullCaseHandler(args: Value[], context?: LineExecutionContext): Value {
+  if (!context?.readScenario) {
+    return errorValue("NEEDS_DOCUMENT", "bullCase only works inside a document.");
+  }
+  return context.readScenario("bull", args[0].toNumber());
+}
+```
+
+- `readScenario` is absent where there is no document, as `rerunLines` is.
+- It answers the line's value, or an error Value: no scenario of that name above
+  the asking line (`SCENARIO_UNKNOWN`), two of them (`SCENARIO_DUPLICATE`), or
+  any refusal the what-if gives (an input no line uses, a nested re-run, a
+  `global :name` in the span).
+- Every line above the asking line is read, so an edit to any of them re-runs
+  the handler's line.
 
 ## Operators, not just functions
 
@@ -220,9 +383,129 @@ right-associative operator, and at the operator's own power otherwise. The
 registry reports the declaration (`getAllInfix()` carries `associativity`), so
 a precedence table built from it says what the parser does.
 The named ladder (`Sum`, `Product`, `Exponent`, `Call`, and the rest) is what to
-pick a level from. Register it under `infixParselets` keyed by the operator's token
+pick a level from. Two neighbouring rungs matter for a phrase operator:
+`Comparison` (23) is where `==`, `<` and the other comparisons bind, and
+`Conditional` (24), one step tighter, is where the phrase operators bind
+(`as hex`, `to` as a percentage change, `is what % of`). An operator at
+`Conditional` is therefore read on its own side of a comparison:
+`255 in hex == 0xff in hex` compares the two hex values. Parse an operand at
+`Conditional` to stop before a comparison, and at `Comparison` to take in a
+phrase operator but stop at the comparison sign, which is how a `check` reads
+each of its sides. Register it under `infixParselets` keyed by the operator's token
 type. Arithmetic's `+` is the reference; currency's `in` and the conditionals'
 `==` are operators that read differently but hook in the same way.
+
+## A value known when the line is read
+
+Every `emitPluginCall` marks the line as one that may wait for data, since a
+handler is allowed to return a promise (a weather or price lookup), unless the
+call is emitted as synchronous (see [a handler that never waits](#a-handler-that-never-waits)).
+Several forms compile part of a line on its own and run it more than once: the
+expression of `solve`, `der` and `integral`, a function body (`f(x) = ...`), a
+map or reduce transform and a plot. Those cannot pause halfway for data to
+arrive, so each refuses a marked call outright, with
+`SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`, `FUNCTION_BODY_MUST_BE_SYNCHRONOUS`
+or its own code (`FUNCTION_BODY_READS_LINES` and `HELD_EXPRESSION_READS_LINES`
+for a call emitted with `readsDocument`), whatever the handler does.
+
+So a value your parselet already knows when the line is read, a constant above
+all, is not a plugin call. Emit it as a number, the way the built-in `pi` is:
+
+```ts
+import { OpCode, type PrefixParselet } from "solve-engine/parser";
+
+const tauParselet: PrefixParselet = {
+  category: "Constants",
+  parse(_parser, _token, builder) {
+    builder.emitOpcode(OpCode.PUSH_NUMBER);
+    builder.emitNumber(2 * Math.PI);
+  },
+};
+```
+
+The constants package does this for `tau`, `phi` and `golden ratio`, which is
+what lets `solve(x^2 = tau, x)` answer; they were plugin calls once, and every
+held expression refused them as though they were live data.
+
+## A handler that never waits
+
+A value that needs a unit or other metadata attached as the line runs
+(`gravity`, in m/s²) cannot be pushed as a bare number, so it still goes
+through a handler. When that handler answers from its arguments alone and
+never returns a promise, say so when you emit the call, and the call does not
+mark the line as one that may wait for data:
+
+```ts
+import { OpCode, type PrefixParselet } from "solve-engine/parser";
+
+const gravityParselet: PrefixParselet = {
+  category: "Constants",
+  parse(_parser, _token, builder) {
+    builder.emitOpcode(OpCode.PUSH_STRING);
+    builder.emitString("gravity");
+    builder.emitPluginCall("constantValue", 1, { synchronous: true });
+  },
+};
+```
+
+The bytes emitted are the same as any call's; only the mark differs, so a
+function body (`f(m) = m * gravity`), a map or reduce transform and a plot take
+the call. This is how the constants package attaches `gravity`'s unit. The
+option's type is `PluginCallOptions`, exported from `solve-engine/parser`.
+
+Every built-in package whose handler answers at once emits its calls this way:
+the text functions (`f(s) = upper(s)`), the hashes (`sha256`), colours, image
+and screen sizes, IP addresses, statistics, dates and time zones, payroll and
+the rest. Two kinds keep the mark on purpose. A lookup that waits for the
+network (weather, stocks, crypto, the knowledge lookups, an exchange rate on a
+past date) cannot answer in a function body, which is worked out at once. A
+call that reads other lines of the note (`prev`, `line 1`, the totals of a
+section, a tag or a table column, goal seek, what-if) does not wait, but a held
+expression is run away from the line that wrote it, where there is no document
+to read, so it is refused there too. Leave `synchronous` off for either kind in
+your own package.
+
+A call of the second kind says so with the other option, `readsDocument`. The
+call still marks the line, so every held expression still refuses it, but each
+one then refuses it for the reason that applies rather than as a call that
+waits for the weather: a function body with `FUNCTION_BODY_READS_LINES` ("a
+function body has no lines to read: pass the value in as an argument
+instead"), and the expression of `map`, `reduce`, `sum`, `prod`, a plot,
+`solve`, `der`, `integral`, `limit` and `taylor` with
+`HELD_EXPRESSION_READS_LINES`, which tells the reader to name the line's value
+first (`p = prev`) and use the name. A handler of yours that reads other lines
+through its context should be emitted this way:
+
+```ts
+import type { PrefixParselet } from "solve-engine/parser";
+
+const previousRowParselet: PrefixParselet = {
+  category: "Lines",
+  parse(_parser, _token, builder) {
+    builder.emitPluginCall("previousRow", 0, { readsDocument: true });
+  },
+};
+```
+
+`readsDocument` is ignored beside `synchronous`, since a call that reads other
+lines is never one a held expression can take. Builder code can ask whether
+anything it has emitted reads the document since its last reset through
+`builder.readsDocument`. A parselet of your own that holds an expression (it
+compiles part of the line into a builder of its own, to run once for each
+item, say) asks this of that builder after `build()`, and when the program
+`hasAsync` and the builder `readsDocument`, refuses the line for reading other
+lines before it refuses it as one that waits, which is the order the built-in
+held forms check in.
+
+The contract is yours to keep: a handler marked `synchronous` must return a
+`Value`, never a promise. One that breaks it is caught as the line runs: on a
+line of its own the answer waits for the promise as any lookup's does, and
+inside a function body or a map the line is refused, as a call that waits is
+refused there. An asynchronous call anywhere else on the same line still marks
+it, whichever comes first. The boundary: a formula (the expression
+of `solve`, `der` and `integral`) is algebra on plain numbers, so a value with a
+unit is refused there for its unit (`SYMBOLIC_QUANTITY_OPERAND`) however the
+call was emitted.
 
 ## Do not hardcode the index
 

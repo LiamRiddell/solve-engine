@@ -12,9 +12,10 @@
  * property `worker/serialize.ts` is built to guarantee.
  */
 
-import type { ValueType, ColourFormat, DatetimeGrain } from "@solve-js/vm/Value";
+import type { ValueType, ColourFormat, DatetimeGrain, CalendarName, TimePrecision, ZoneDifference } from "@solve-js/vm/Value";
 import type { ValueSource, FrozenMark } from "@solve-js/vm/Provenance";
 import type { DiagnosticReportJSON } from "@solve-js/diagnostics";
+import type { SourceSpan } from "@solve-js/errors/EngineError";
 
 /**
  * A matrix flattened for transport.
@@ -34,6 +35,8 @@ export interface SerializedMatrix {
 	cols: number;
 	cells: Array<number | boolean | string>;
 	hasSymbolic: boolean;
+	/** The unit every numeric cell is in, for a list of quantities (`km` for `[1 km, 500 m]`); absent for plain numbers. */
+	unit?: string;
 }
 
 /**
@@ -75,8 +78,26 @@ export interface SerializedWorkerValue {
 	 * separately because a non-finite number cannot cross `JSON`; see {@link number}.
 	 */
 	nonFinite?: "Infinity" | "-Infinity" | "NaN";
-	/** Unit annotation for unit-of-measurement and non-decimal-base values, when present. */
+	/**
+	 * Unit annotation for unit-of-measurement and non-decimal-base values, when
+	 * present. Never set for an {@link ValueType.Error}: its message is in
+	 * {@link text}, and its code in {@link errorCode}. A timecode crosses as
+	 * `frames`, its count, with the rate in {@link timecodeFps}.
+	 */
 	unit?: string;
+	/**
+	 * Set only for a video timecode (`01:02:03:04 at 30 fps`): its frame rate.
+	 * {@link number} is then the frame count and {@link unit} is `frames`, so a
+	 * host never sees the engine's internal unit name for a timecode (#759).
+	 */
+	timecodeFps?: number;
+	/**
+	 * The name a quantity is shown under when the reader wrote a word for its
+	 * unit that is not the unit's own (`Meile`, `sprints`), and how many of
+	 * {@link unit} one of it is. The {@link text} is already written under it;
+	 * this is for a host that renders the number itself (#762).
+	 */
+	unitLabel?: { name: string; per: number };
 	/**
 	 * The error's code (`INCOMPATIBLE_UNITS`, `UNDEFINED_FUNCTION`), present only for
 	 * {@link ValueType.Error}, so a host branches on the code the way it would on
@@ -122,11 +143,14 @@ export interface SerializedWorkerValue {
 	};
 	/**
 	 * IP/CIDR payload, present only for {@link ValueType.IpCidr}: the 32-bit
-	 * `addr` and/or CIDR `prefix`, plus `text` (the dotted-quad form the answer
-	 * shows). See issue #189.
+	 * IPv4 `addr` or the 128-bit IPv6 `addr6` (as a decimal string, since JSON
+	 * cannot carry a bigint) and its `zone`, and/or the `prefix`, plus `text`
+	 * (the form the answer shows). See issues #189 and #748.
 	 */
 	ipCidr?: {
 		addr?: number;
+		addr6?: string;
+		zone?: string;
 		prefix?: number;
 		text: string;
 	};
@@ -135,8 +159,9 @@ export interface SerializedWorkerValue {
 	/**
 	 * What a {@link ValueType.Datetime} anchors, present only when the engine
 	 * recorded it: `"date"` for a calendar day, `"datetime"` for a wall-clock
-	 * reading, `"instant"` for a fixed point. See `Value.grain`. A plain JSON
-	 * string, so the DTO's `structuredClone`/`JSON` guarantee is unaffected.
+	 * reading, `"instant"` for a fixed point, `"time"` for a time of day. See
+	 * `Value.grain`. A plain JSON string, so the DTO's `structuredClone`/`JSON`
+	 * guarantee is unaffected.
 	 */
 	grain?: DatetimeGrain;
 	/**
@@ -145,6 +170,31 @@ export interface SerializedWorkerValue {
 	 * See `Value.zone`.
 	 */
 	zone?: string;
+	/**
+	 * For a String that is a weekday or month name drawn from a date, which one
+	 * it names (`{ kind: "weekday", index: 2 }` for Tuesday), present only then.
+	 * `text` is already written in the settings' language; this lets a host
+	 * that renders its own text name the day in its own. See `Value.calendarName`.
+	 */
+	calendarName?: CalendarName;
+	/**
+	 * For a time of day (grain `"time"`), an instant on the day it is counted
+	 * from, in epoch milliseconds, present only when recorded: the day a
+	 * time-zone answer's `(+1 day)` is counted from. See `Value.timeAnchor`.
+	 */
+	timeAnchor?: number;
+	/**
+	 * For a time of day written to the minute, as a time-zone answer is
+	 * (`7:00 PM`), `"minute"`, present only then. See `Value.timePrecision`.
+	 */
+	timePrecision?: TimePrecision;
+	/**
+	 * For a time difference between two places (`Tokyo is 8 hours ahead of
+	 * London`), the two places as the reader named them, present only then.
+	 * The value is the signed gap in hours, positive when `to` is ahead. See
+	 * `Value.zoneDifference`.
+	 */
+	zoneDifference?: ZoneDifference;
 	/**
 	 * Where the live figures behind this value came from, present only when it
 	 * carries any: each record's provider, kind, fetch time, and when relevant
@@ -170,6 +220,10 @@ export interface SerializedInlineSolve {
 	columnNumber: number;
 	result: SerializedWorkerValue | null;
 	error: string | null;
+	/** The code of the failure in `error`, as {@link InlineSolvePosition.errorCode}; null when `error` is. */
+	errorCode: string | null;
+	/** Where in the line the failure in `error` is, as {@link InlineSolvePosition.errorSpan}; null when the engine has no position or `error` is null. */
+	errorSpan: SourceSpan | null;
 }
 
 /**
@@ -187,6 +241,19 @@ export interface SerializedParsedLine {
 	expression: string | null;
 	result: SerializedWorkerValue | null;
 	error: string | null;
+	/**
+	 * The code of the failure in `error` (`NO_PREFIX_PARSELET`,
+	 * `UNDEFINED_VARIABLE`), as {@link ParsedLine.errorCode}: what a host behind
+	 * the worker branches on. Null when `error` is. A failure the line returned
+	 * as a value keeps its code on `result.errorCode` instead.
+	 */
+	errorCode: string | null;
+	/**
+	 * Where in the line the failure in `error` is, as {@link ParsedLine.errorSpan}:
+	 * offsets into the line's own text, with the one-based line and column.
+	 * Null when the engine has no position for it, or `error` is null.
+	 */
+	errorSpan: SourceSpan | null;
 }
 
 /**
@@ -202,4 +269,52 @@ export interface SerializedParsingResult {
 	diagnostics?: DiagnosticReportJSON;
 	/** The document's check pass and fail count, as `ParsingResult.checks`. */
 	checks?: { passed: number; failed: number };
+}
+
+/**
+ * One step of a derivation, mirroring {@link ExplanationStep} with its value
+ * serialised.
+ */
+export interface SerializedExplanationStep {
+	/** A short account of the operation, as `ExplanationStep.description` ("80 less 20%"). */
+	description: string;
+	/** The value the step arrives at. */
+	value: SerializedWorkerValue;
+}
+
+/**
+ * A derivation of how a line reached its answer, mirroring {@link Explanation}
+ * (what `ExpressionEngine.explainLine` returns) with every value serialised.
+ */
+export interface SerializedExplanation {
+	/** The expression as given. */
+	expression: string;
+	/** The ordered derivation, one entry per operation, in evaluation order. */
+	steps: SerializedExplanationStep[];
+	/** The final value, the same answer `evaluateExpression` gives. */
+	result: SerializedWorkerValue;
+}
+
+/**
+ * Where a line's answer came from, mirroring {@link LineTrace} (what
+ * `ExpressionEngine.traceLine` returns) with every value serialised and each
+ * input traced the same way.
+ */
+export interface SerializedLineTrace {
+	/** The line's 1-based number. */
+	line: number;
+	/** The variable the line defines, or null. */
+	name: string | null;
+	/** The line's answer, or null when it has none. */
+	value: SerializedWorkerValue | null;
+	/** How the line that read this one reached it (`deposit`, `line 2`, `#food`). Empty at the root. */
+	via: string[];
+	/** The lines this one read, each traced the same way. */
+	inputs: SerializedLineTrace[];
+	/** The line is already on the path above it, so it is not followed again. */
+	cycle: boolean;
+	/** The line is below the line that read it. */
+	forward: boolean;
+	/** The depth or size bound stopped the trace here. */
+	truncated: boolean;
 }

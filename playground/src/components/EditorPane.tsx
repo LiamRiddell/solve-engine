@@ -10,7 +10,7 @@ import {
   type ViewUpdate,
   type DecorationSet,
 } from "@codemirror/view"
-import { EditorState, StateField, RangeSetBuilder, RangeSet, StateEffect } from "@codemirror/state"
+import { EditorState, StateField, RangeSetBuilder, RangeSet, StateEffect, Annotation, type Transaction } from "@codemirror/state"
 import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete"
 import { basicSetup } from "codemirror"
 import { markdown } from "@codemirror/lang-markdown"
@@ -23,6 +23,7 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins"
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage"
 import type { LineResult } from "@bridge/engine"
 import { prepareEvaluationInput } from "@bridge/engineShared"
+import { describeLineShift } from "@bridge/hostCalls"
 import * as engineService from "@/stores/engine"
 import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { useEditorStore } from "@/stores/editor"
@@ -76,9 +77,15 @@ function popoverRow(label: string, value: string | undefined, accent = false): H
  * via `getBoundingClientRect()` on show, so it's never clipped by the
  * editor scroller's `overflow: auto`.
  */
+let nextPopoverId = 0
+
 function buildErrorPopover(detail: ErrorDetail): HTMLDivElement {
   const meta = categoryMeta(detail.category)
   const popover = document.createElement("div")
+  // Named so the chip can point at it with aria-describedby, and a tooltip
+  // role so a screen reader announces it as the chip's description.
+  popover.id = `os-error-popover-${++nextPopoverId}`
+  popover.setAttribute("role", "tooltip")
   popover.className =
     "os-error-popover fixed z-50 w-80 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg " +
     "p-3 flex flex-col gap-2 pointer-events-auto opacity-0 -translate-y-1 transition-all duration-100"
@@ -169,11 +176,29 @@ class ResultWidget extends WidgetType {
     if (this.lineNumber === undefined) return
     const line = this.lineNumber
     el.classList.add("os-result-expandable")
+    el.setAttribute("aria-label", `${el.getAttribute("aria-label") ?? el.textContent ?? ""}, line ${line} details`)
     el.addEventListener("mousedown", (e) => {
       e.preventDefault()
       e.stopPropagation()
       usePipelineStore.getState().toggleLineExpanded(line)
     })
+    // A button answers Enter and Space, so the panel is reachable without a
+    // pointer. Handled on keydown and stopped there, so the editor does not
+    // also read the key as typing.
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return
+      e.preventDefault()
+      e.stopPropagation()
+      usePipelineStore.getState().toggleLineExpanded(line)
+    })
+  }
+
+  /** A result chip: a button, so it takes focus and a key press like any control. */
+  private chip(className: string): HTMLButtonElement {
+    const button = document.createElement("button")
+    button.type = "button"
+    button.className = className
+    return button
   }
   eq(other: ResultWidget) {
     return (
@@ -208,8 +233,9 @@ class ResultWidget extends WidgetType {
     })
     popover.onmouseenter = () => this.cancelHide()
     popover.onmouseleave = () => this.scheduleHide()
+    anchor.setAttribute("aria-describedby", popover.id)
   }
-  private hidePopover() {
+  private hidePopover(anchor?: HTMLElement) {
     if (!this.popover) return
     this.popover.style.opacity = "0"
     this.popover.style.visibility = "hidden"
@@ -217,31 +243,55 @@ class ResultWidget extends WidgetType {
 
   toDOM() {
     if (this.errorDetail) {
-      const span = document.createElement("span")
-      span.className = "os-result-inline os-result-error"
-      span.textContent = `⚠ ${this.errorDetail.code ?? "Error"}`
-      span.addEventListener("mouseenter", () => this.showPopover(span))
-      span.addEventListener("mouseleave", () => this.scheduleHide())
-      this.attachToggle(span)
-      return span
+      // The detail opens on focus as well as on hover, so a keyboard or
+      // screen-reader user reaches the message, the expected and found
+      // tokens and the suggestion; Escape closes it.
+      const chip = this.chip("os-result-inline os-result-error")
+      const warning = document.createElement("span")
+      warning.setAttribute("aria-hidden", "true")
+      warning.textContent = "⚠ "
+      chip.append(warning, document.createTextNode(this.errorDetail.code ?? "Error"))
+      chip.setAttribute("aria-label", `Error: ${this.errorDetail.message}`)
+      this.popover ??= buildErrorPopover(this.errorDetail)
+      chip.setAttribute("aria-describedby", this.popover.id)
+      chip.addEventListener("mouseenter", () => this.showPopover(chip))
+      chip.addEventListener("mouseleave", () => this.scheduleHide())
+      chip.addEventListener("focus", () => this.showPopover(chip))
+      chip.addEventListener("blur", () => this.hidePopover(chip))
+      chip.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return
+        e.preventDefault()
+        e.stopPropagation()
+        this.hidePopover(chip)
+      })
+      this.attachToggle(chip)
+      return chip
     }
 
-    const span = document.createElement("span")
-    span.title = this.pending ? "Awaiting async resolution…" : this.type
-
     if (this.pending) {
+      // The spinner and the dots are decoration; the words are what a screen
+      // reader says and what a reader sees on hover.
+      const span = document.createElement("span")
       span.className = "os-result-inline os-result-pending"
+      span.title = "Waiting for live data"
+      span.setAttribute("role", "status")
       const spinner = document.createElement("span")
       spinner.className = "os-result-inline-spinner"
+      spinner.setAttribute("aria-hidden", "true")
       spinner.textContent = "⟳"
       const label = document.createElement("span")
       label.className = "os-result-inline-pending-label"
+      label.setAttribute("aria-hidden", "true")
       label.textContent = "..."
-      span.appendChild(spinner)
-      span.appendChild(label)
+      const words = document.createElement("span")
+      words.className = "os-visually-hidden"
+      words.textContent = "waiting for live data"
+      span.append(spinner, label, words)
       return span
     }
 
+    const span = this.lineNumber === undefined ? document.createElement("span") : this.chip("")
+    span.title = this.type
     span.className = "os-result-inline"
     // A colour result gets a small swatch before the value, drawn from the
     // engine-supplied CSS string, so a hex/rgb/hsl answer is visible at a glance.
@@ -558,20 +608,58 @@ function createHighlightPlugin(languageService: LanguageService) {
 }
 
 /** Creates the CodeMirror EditorView for one tab, including its own highlighting engine/language service. */
+/** Marks the edit that keeps `line N` references in place, so it is not itself read as a line move. */
+const lineShiftEdit = Annotation.define<boolean>()
+
+/**
+ * The `line N` references an edit moved, as the edits that put them back:
+ * when the edit inserted or deleted whole lines, the language service says
+ * which references now point at the wrong line (a spreadsheet keeps a
+ * reference on its row the same way). Empty for an edit that moved no line,
+ * one made of several separate changes, or the correction itself.
+ */
+function referenceCorrections(tr: Transaction, service: LanguageService): { from: number; to: number; insert: string }[] {
+  if (!tr.docChanged || tr.annotation(lineShiftEdit)) return []
+  const ranges: { fromA: number; toA: number; inserted: string }[] = []
+  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => ranges.push({ fromA, toA, inserted: inserted.toString() }))
+  if (ranges.length !== 1) return []
+  const [{ fromA, toA, inserted }] = ranges
+  const before = tr.startState.doc
+  const fromLine = before.lineAt(fromA)
+  const toLine = before.lineAt(toA)
+  const shift = describeLineShift({
+    oldLineCount: before.lines,
+    newLineCount: tr.state.doc.lines,
+    fromLine: fromLine.number,
+    fromAtLineStart: fromA === fromLine.from,
+    toAtLineStart: toA === toLine.from,
+    insertedEndsWithNewline: inserted.endsWith("\n"),
+  })
+  if (shift === null) return []
+  const doc = tr.state.doc
+  const result = service.shiftLineReferences(doc.toString(), shift)
+  if (!result.ok) return []
+  return result.edits
+    .filter((e) => e.line >= 1 && e.line <= doc.lines)
+    .map((e) => {
+      const line = doc.line(e.line)
+      return { from: line.from + e.from, to: line.from + e.to, insert: e.text }
+    })
+}
+
 function createTabEditor(tabId: string, container: HTMLElement, initialDoc: string): TabEditor {
   // OSRS is an example package, not a built-in — registered explicitly
   // alongside BUILTIN_PACKAGES so "osrs"/game-item tokens still highlight
   // correctly. Keep this in sync with engine.ts's PLAYGROUND_PACKAGES.
   const highlightEngine = new ExpressionEngine({ packages: [...BUILTIN_PACKAGES, OSRS_PACKAGE] })
-  // highlightEngine never evaluates anything, so its own DAG is always
-  // empty — read variable names from the real evaluation engine's
-  // already-computed DAG snapshot instead (the ACTIVE tab's snapshot).
+  // highlightEngine never evaluates anything, so it holds no names of its
+  // own. The names come from the evaluating engine's documentVariableNames(),
+  // read in the worker where that engine lives and carried on the active
+  // tab's report: the names the document defines and the engine still holds.
+  // A graph snapshot also listed names lines only read, and names a deleted
+  // line once wrote.
   const languageService = new LanguageService(highlightEngine, {
-    variableNameSource: () => {
-      const snap = useDiagnosticReportStore.getState().dagSnapshot
-      if (!snap) return []
-      return [...Object.keys(snap.consumers), ...Object.values(snap.writes).flat()]
-    },
+    variableNameSource: () => useDiagnosticReportStore.getState().documentNames,
   })
 
   function solveCompletionSource(context: CompletionContext): CompletionResult | null {
@@ -579,6 +667,8 @@ function createTabEditor(tabId: string, container: HTMLElement, initialDoc: stri
     if (!word || (word.from === word.to && !context.explicit)) return null
 
     const line = context.state.doc.lineAt(context.pos)
+    // The line up to the cursor, so a phrase matched across the words typed
+    // (`net pres`) reads only what is before it.
     const items = languageService.getCompletions(line.text, context.pos - line.from)
     if (items.length === 0) return null
 
@@ -599,6 +689,15 @@ function createTabEditor(tabId: string, container: HTMLElement, initialDoc: stri
         autocompletion({ override: [solveCompletionSource] }),
         placeholder("Enter an expression…  e.g. 10 + 5 * 2"),
         EditorView.updateListener.of((update) => {
+          if (update.docChanged && useUiStore.getState().keepLineReferences) {
+            const corrections = update.transactions.flatMap((tr) => referenceCorrections(tr, languageService))
+            // Dispatched after this update finishes, since CodeMirror refuses
+            // a dispatch from inside one; the annotation keeps the correction
+            // from being read as another line move.
+            if (corrections.length > 0) {
+              queueMicrotask(() => update.view.dispatch({ changes: corrections, annotations: lineShiftEdit.of(true) }))
+            }
+          }
           if (update.docChanged) {
             // The document text must reach the engine unmodified (never
             // .trim()'d) so every line's reported lineNumber stays aligned
@@ -610,7 +709,7 @@ function createTabEditor(tabId: string, container: HTMLElement, initialDoc: stri
           if (update.selectionSet && tabId === useTabsStore.getState().activeTabId) {
             const pos = update.state.selection.main.head
             const line = update.state.doc.lineAt(pos)
-            useEditorStore.getState().updateCursorLine(line.number)
+            useEditorStore.getState().updateCursorLine(line.number, pos - line.from)
           }
         }),
         keymap.of([
@@ -765,6 +864,26 @@ function insertExample(expression: string): void {
   editor.view.dispatch({ changes: { from: 0, to: editor.view.state.doc.length, insert: expression } })
 }
 
+/** Replace the active tab's document with `text`, keeping the cursor where it was when it still fits. */
+function replaceDocument(text: string): void {
+  const editor = tabEditorsSingleton.get(useTabsStore.getState().activeTabId)
+  if (!editor) return
+  const head = Math.min(editor.view.state.selection.main.head, text.length)
+  editor.view.dispatch({ changes: { from: 0, to: editor.view.state.doc.length, insert: text }, selection: { anchor: head } })
+}
+
+/** Put the active tab's cursor at a one-based line and a zero-based character, and bring it into view. */
+function moveCursor(lineNumber: number, character: number): void {
+  const editor = tabEditorsSingleton.get(useTabsStore.getState().activeTabId)
+  if (!editor) return
+  const doc = editor.view.state.doc
+  if (lineNumber < 1 || lineNumber > doc.lines) return
+  const line = doc.line(lineNumber)
+  const anchor = line.from + Math.max(0, Math.min(character, line.length))
+  editor.view.dispatch({ selection: { anchor }, scrollIntoView: true })
+  editor.view.focus()
+}
+
 // Module-level map — CodeMirror EditorViews are imperative, DOM-attached
 // objects that outlive React's render cycle; they're keyed by tabId and
 // managed via effects below, not React state. Mirrors the Vue version's
@@ -801,7 +920,7 @@ export function EditorPane() {
 
   // Register this pane's imperative API for other components (ExamplesMenu) to call.
   useEffect(() => {
-    useEditorStore.getState().setEditorRef({ insertExample })
+    useEditorStore.getState().setEditorRef({ insertExample, replaceDocument, moveCursor })
     return () => useEditorStore.getState().setEditorRef(null)
   }, [])
 

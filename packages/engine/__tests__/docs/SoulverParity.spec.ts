@@ -2,16 +2,16 @@
  * Every example expression Soulver's own documentation states a result for,
  * run against this engine.
  *
- * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
- * by reading the code and asking "do we have something in this area", and the
- * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 104 of the 120 documented
- * examples below produce the documented answer, none do not, and 16 differ only
- * in formatting. It credited `as timespan` and
- * `as laptime` to `packages/time`, where the only occurrence of the word
- * "timespan" is a doc comment. It credited the rounding page to `as decimal`
- * plus the formatter's rounding config, and not one of the ten documented
- * rounding forms parses.
+ * This exists because the first version of
+ * `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written by reading the code
+ * and asking "do we have something in this area", and the answer to that
+ * question is not the same as "does the documented syntax work". It marked 39 of
+ * 40 pages implemented while forms on several of them did not parse, and it
+ * credited `as timespan` to a package where the word appeared only in a doc
+ * comment. Those forms work now and are rows in `SUPPORTED`. The counts the
+ * audits quote are measured here and written to `docs-internal/parity-stats.json`
+ * by `npm run stats:parity`; the last describe block fails when a document or
+ * that file states a figure this run did not measure (#786).
  *
  * An audit that is written once and never executed drifts to fiction. This one
  * runs.
@@ -48,6 +48,15 @@ import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings";
+import * as fs from "fs";
+import {
+	PARITY_QUOTING_DOCUMENTS,
+	committedParityCounts,
+	parityMatches,
+	quotedParityCounts,
+	recordParityCounts,
+	writingParityStats,
+} from "@tools/parity";
 
 /** One documented example: the page it came from, the input, Soulver's answer. */
 type Example = readonly [page: string, expression: string, soulver: string];
@@ -211,7 +220,7 @@ const GAPS: readonly Example[] = [
 	// projection below: they adjust to the CURRENT year, and Soulver's figures
 	// were computed when its documentation was written, which the implied rates
 	// put several years before 2026. No table accuracy makes a fixed string
-	// reproducible. CpiTableAccuracy.spec.ts checks the table against the IMF
+	// reproducible. CpiTableAccuracy.spec.ts checks the table against the BLS
 	// series instead, which is the thing that can actually be wrong.
 	//
 	// "value of $X in <future year> assuming N% inflation" is deliberately not
@@ -242,9 +251,9 @@ const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
 	["3 million + 10%", "3.3M", "3,300,000"],
 	["5 billion", "5G", "5,000,000,000"],
 	["2.5 bn", "2.5G", "2,500,000,000"],
-	// The right number. Soulver renders a return as a multiplier; this keeps
-	// it numeric so it stays composable.
-	["$500 invested $1,500 returned", "2x", "2"],
+	// The right number. Soulver renders a return as a multiplier; this gives
+	// it as a percentage, as every return form here answers (#830).
+	["$500 invested $1,500 returned", "2x", "200.00%"],
 	// Right duration, written out in full rather than abbreviated.
 	["5.5 minutes as timespan", "5 min 30 s", "5 minutes 30 seconds"],
 	// A compound quantity is summed into its smallest unit and rendered as
@@ -267,43 +276,8 @@ const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
 	["workdays in 3 weeks", "15 workdays", "15"],
 ];
 
-/**
- * Soulver's answer against this engine's.
- *
- * Compares the leading number numerically rather than as text, so `10000.00 m`
- * satisfies `10,000 m`, and requires any trailing unit or suffix to appear too.
- * Substring matching was the obvious first attempt and it is wrong in the one
- * place it matters most: `$345.00` contains `45`, so the sales-tax bug, where
- * the engine returns the total and Soulver returns the tax, read as a pass.
- */
-function matches(got: string, soulver: string): boolean {
-	const clean = (s: string) => s.replace(/^=\s*/, "").replace(/[\s,$€£]/g, "").toLowerCase();
-	const a = clean(got);
-	const b = clean(soulver);
-	if (a === b) return true;
-	if (a.startsWith("threw:")) return false;
-
-	const numberOf = (s: string) => {
-		const m = s.match(/-?\d+(?:\.\d+)?/);
-		return m ? Number(m[0]) : null;
-	};
-	const suffixOf = (s: string) => s.replace(/-?\d+(?:\.\d+)?/, "").replace(/^\./, "");
-
-	const wanted = numberOf(b);
-	const actual = numberOf(a);
-	if (wanted === null || actual === null) return a.includes(b);
-
-	// Soulver's docs quote rounded figures, so an exact comparison would fail
-	// on its own published numbers. A relative tolerance keeps `2.5118864315`
-	// meaningful while letting `1.32 cup` match `1.3200`.
-	const tolerance = Math.max(Math.abs(wanted) * 0.001, 0.005);
-	if (Math.abs(actual - wanted) > tolerance) return false;
-
-	// A bare number must not satisfy a unit-bearing expectation: `21` is not
-	// `21 days`, and `2` is not `2x`.
-	const wantedSuffix = suffixOf(b);
-	return wantedSuffix === "" || a.includes(wantedSuffix);
-}
+/** Soulver's answer against this engine's; see {@link parityMatches}. */
+const matches = parityMatches;
 
 /** Evaluates one line, returning the formatted answer or the thrown message. */
 function evaluate(expression: string): string {
@@ -359,10 +333,9 @@ describe("Soulver parity — documented examples that do not", () => {
 	});
 
 	test("the recorded gap count is what the audit claims", () => {
-		// Cross-checked by docs-internal/SOULVERCORE_FEATURE_AUDIT.md, which
-		// quotes this number. A change here without a change there leaves the
-		// audit stating a total it did not measure, which is how the previous
-		// version of that document ended up fictional.
+		// The audits quote these through docs-internal/parity-stats.json, which
+		// the block below holds to what this run measured. Pinned here as well,
+		// so a row moved between lists is a deliberate change to this line.
 		expect(GAPS.length).toBe(0);
 		expect(SUPPORTED.length).toBe(104);
 	});
@@ -373,5 +346,27 @@ describe("Soulver parity — same answer, different formatting", () => {
 		// Asserted so that aligning the formatter with Soulver's output is a
 		// deliberate, visible change rather than a silent one.
 		expect(evaluate(expression)).toContain(ours);
+	});
+});
+
+describe("Soulver parity: the counts the audits quote are the counts measured", () => {
+	const measured = {
+		supported: SUPPORTED.length,
+		gaps: GAPS.length,
+		formattingOnly: FORMATTING_ONLY.length,
+		total: SUPPORTED.length + GAPS.length + FORMATTING_ONLY.length,
+	};
+	recordParityCounts("soulver", measured);
+
+	test("docs-internal/parity-stats.json holds them (npm run stats:parity rewrites it)", () => {
+		expect(committedParityCounts("soulver")).toEqual(measured);
+	});
+
+	test.each(PARITY_QUOTING_DOCUMENTS)("every figure %s quotes for this corpus is the measured one", (file) => {
+		if (writingParityStats()) return;
+		const text = fs.readFileSync(file, "utf8");
+		for (const { name, quoted } of quotedParityCounts(text, "soulver")) {
+			expect({ name, quoted }).toEqual({ name, quoted: (measured as Record<string, number>)[name] });
+		}
 	});
 });

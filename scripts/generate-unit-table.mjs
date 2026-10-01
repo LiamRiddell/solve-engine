@@ -82,6 +82,27 @@ const UPSTREAM_UNIT_CORRECTIONS = [
 			"the cubic decimetre is right at 0.001, so this is one mistyped ratio rather " +
 			"than a different convention about what a decimetre is.",
 	},
+	{
+		units: ["point", "points"],
+		upstream: 0.0003528,
+		corrected: 0.0254 / 72,
+		why:
+			"The typographic point is defined as exactly a 72nd of an inch, 0.3527777... mm, " +
+			"and upstream records it cut to four figures, 0.3528 mm. That is not a rounding " +
+			"convention the table keeps elsewhere: the inch, the foot and the yard are exact, " +
+			"and the cut breaks the relation that defines the unit, so 72 points came to " +
+			"1.00006 inches and a pica to 11.999 points. The typographic point the engine " +
+			"reads after a number already uses the exact 0.0254 / 72.",
+	},
+	{
+		units: ["pica", "picas"],
+		upstream: 0.0042333,
+		corrected: 0.0254 / 6,
+		why:
+			"The pica is defined as exactly a sixth of an inch, twelve points, and upstream " +
+			"records it cut to five figures, 0.0042333 m, the same cut as the point beside " +
+			"it, so a pica read as 11.999 points rather than twelve.",
+	},
 ];
 
 /**

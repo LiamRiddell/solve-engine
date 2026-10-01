@@ -5,6 +5,13 @@ description: Averages, comparisons, proportions and other natural phrasings.
 
 > **Packages:** `MATHPHRASES_PACKAGE` (averages, spread, comparisons) and `STATISTICS_PACKAGE` (correlation, regression, percentile, z-score, and the [probability distributions](/syntax/probability-distributions/)). Both registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
 
+Statistics are the numbers that sum up a list of values: where its middle is,
+how spread out it is, and how two lists move together. The **average** (the
+mean) adds the values and divides by how many there are; the **median** is the
+middle value once they are in order, which a single very large or very small
+value cannot drag away. Write the question the way it is said, with the values
+after `of`:
+
 ```solve
 average of 10, 20, 30 // 20
 median of 1, 5, 3 // 3
@@ -47,6 +54,22 @@ element and then gives the list is [map-reduce](/syntax/map-reduce-and-aggregate
 `median` and `stdev` stay ordinary names wherever no bracket follows them, so
 `mean = 4` is still a variable; a function of your own under one of those three
 names is refused by name, since the call would never reach it.
+
+A range is not one of the readings. `1:3` is the run of whole numbers 1, 2 and 3
+only as the list of `sum`, `prod`, `map` or `reduce` (see
+[ranges](/syntax/map-reduce-and-aggregates/#ranges)); everywhere else a colon
+between two numbers is a clock time, so `average(1:3)` would be the average of
+1:03 AM. Rather than answer that, or ask for the line reference it was never
+given, the call says what the colon is here and how to write the values. `sum`
+is the one aggregate that reads a range, and `total`, its synonym, reads one
+the same way when the range is its only argument.
+
+```solve-doc
+average(1:3) // ERROR: In average(...), 1:3 is a clock time, not a range, and a time cannot be averaged: a colon between two numbers is a range only as the list of sum, prod, map or reduce. To average numbers, list them with commas, as in average(1, 2, 3).
+average(1, 2, 3) // 2
+sum(1:3) // 6
+total(1:3) // 6
+```
 
 ## A list that carries units
 
@@ -102,6 +125,62 @@ its magnitude, which is what a count written beside a column of measurements has
 always done, so `total of 1 km, 500` is `501.00 km`. And `count of` counts, so it
 carries no unit at all.
 
+## A list of percentages
+
+A percentage is a share of something, such as a tax rate or a discount, and a
+set of shares of the same whole adds up to a share as well: a 10% rate and a
+20% rate are 30% between them, and their average is 15%. So every aggregate on
+this page answers a set of percentages with a percentage, whether the values
+are written with commas or brackets, gathered by line, by heading or by tag.
+
+```solve
+sum(10%, 20%) // 30.00%
+total of 10%, 20% // 30.00%
+average of 10%, 20% // 15.00%
+max(10%, 20%) // 20.00%
+median of 10%, 20%, 40% // 20.00%
+stdev of 10%, 20% // 5.00%
+```
+
+A product of percentages is a share of a share, so it is a percentage too, and
+every one of these answers is worked out from the decimals as written, so it
+equals the percentage it shows (see
+[multiplying and dividing percentages](/syntax/percentages/#multiplying-and-dividing-percentages)):
+
+```solve
+product of 10%, 20% // 2.00%
+sum(10%, 20%) == 30% // true
+```
+
+```solve-doc
+10% // 10.00%
+20% // 20.00%
+total above // 30.00%
+average above // 15.00%
+```
+
+A percentage beside a plain number or an amount is refused by name, because the
+two have no reading in common: `100 + 10%` is 110, a tenth more than 100, but a
+list has no order that says the percentage is a share of the number, and adding
+the percentage's fraction (0.1) to 100 would be confidently wrong. The refusal
+names the percentage and the fraction it stands for, so the value can be
+rewritten either way.
+
+```solve
+sum(10%, 100) // A percentage (10%) and a number cannot be added together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 10% as the number 0.1; to raise an amount by a percentage, write it as 100 + 10%.
+average of 10%, $5 // A percentage (10%) and an amount in USD cannot be averaged together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 10% as the number 0.1.
+```
+
+The boundary: a variance of percentages would be in percent squared, which is
+not a percentage, so it is refused, and the standard deviation gives the same
+spread as a percentage. `count of` counts percentages like anything else. A
+table column is the exception to gathering them: its summaries refuse a
+percentage cell (see [table columns](/syntax/table-columns/)). A product of
+percentages is still worked out with `*`, so `product of 10%, 20%` is the
+fraction 0.02. These aggregates used to read each percentage as its fraction,
+so `sum(10%, 20%)` was 0.30 and `sum(10%, 100)` was 100.10, and a line range
+or `total above` over percentages was refused.
+
 ## Spread and shape
 
 `average` and `median` find a list's centre; these four say how spread out it
@@ -118,10 +197,11 @@ mode of 4, 2, 4, 3, 4, 2 // 4
 Standard deviation and variance take the **population** form by default, which
 is what a note over a fixed column of readings usually is: the whole set, not a
 draw from a larger one. The sample form (dividing by one less) is a named
-variant.
+variant, for both.
 
 ```solve
 sample standard deviation of 2, 4, 4, 4, 5, 5, 7, 9 // 2.14
+sample variance of 2, 4, 4, 4, 5, 5, 7, 9 // 4.57
 ```
 
 `spread` is the largest minus the smallest, spelled that way because `range`
@@ -175,7 +255,10 @@ so they need not sum to 1 or to 100%.
 weighted average of 72 at 30%, 88 at 70% // 83.20
 weighted average of 4.0 at 3 credits, 3.0 at 1 credit // 3.75
 weighted average of 10 at 2, 20 at 3 // 16
+weighted mean of 10 at 2, 20 at 3 // 16
 ```
+
+`weighted mean of` is the same form under the other name for an average.
 
 The grade-point case divides by the four credits, giving 3.75; percentages that
 already sum to 100 come out unchanged. A trailing label on a weight (`3 credits`)
@@ -248,19 +331,47 @@ zscore(1, [1, 2, 3], 5) // ERROR: zscore takes 2 arguments, but was given 3, as 
 
 ## Comparisons and fractions
 
+Picking the bigger or the smaller of some values, or the point halfway between
+two, is a question in its own words too. `larger of` and `greater of` give the
+biggest of the values joined by `and`, `smaller of` and `lesser of` the
+smallest. Each takes as many values as are listed, so a third `and` adds a value
+to compare, never to sum, and `gcd of` and `lcm of` read a list the same way.
+`half of` halves one value, and `midpoint between` gives the value exactly
+halfway from one to the other.
+
 ```solve
 larger of 10 and 4 // 10
+larger of 10 and 4 and 12 // 12
+greater of 10 and 4 // 10
 smaller of 10 and 4 // 4
+smaller of 10 and 4 and 12 // 4
+lesser of 10 and 4 // 4
+gcd of 12 and 18 and 8 // 2
 half of 50 // 25
+midpoint between 10 and 20 // 15
 ```
 
+Each value may be a sum, so `larger of 1 + 1 and 3` compares 2 with 3. The
+values are joined by `and`, not commas: for a list with commas, write
+`max(10, 4, 12)` or `min(10, 4, 12)`.
+
 ## Ranges and clamping
+
+Clamping a value holds it inside a range: a value inside is left as it is, and
+one outside is moved to the nearer end. It is how a score is capped at the
+maximum, or a setting kept within its limits. Write `clamp`, the value, and the
+two ends after `between`.
 
 ```solve
 clamp 15 between 1 and 10 // 10
 ```
 
 ## Proportions
+
+A proportion says that two ratios are equal: 2 is to 4 as 5 is to 10, since each
+second number is twice the first. Given three of the four numbers, the engine
+finds the missing one, written `what`, which is the everyday way to scale a
+recipe or a map distance.
 
 ```solve
 2 is to 4 as 5 is to what // 10

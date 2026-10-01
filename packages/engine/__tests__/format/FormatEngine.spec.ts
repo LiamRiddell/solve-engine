@@ -111,9 +111,9 @@ describe("Currency display formatting (formatUom via CURRENCY_DISPLAY)", () => {
     expect(result).toBe("= 100.00 ₴");
   });
 
-  it("formats VND as an unspaced suffix symbol: 100.00₫", () => {
+  it("formats VND as an unspaced suffix symbol, in whole dong: 100₫", () => {
     const result = formatValue(uomValue(100, "VND"));
-    expect(result).toBe("= 100.00₫");
+    expect(result).toBe("= 100₫");
   });
 
   it("formats SEK as a spaced suffix 'kr': 100.00 kr", () => {

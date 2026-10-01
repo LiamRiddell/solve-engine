@@ -30,14 +30,14 @@ function thrownMessage(line: string): string {
 
 describe("each abbreviation is a unit after a number", () => {
 	test.each([
-		["$15/hr", "= 15.00 USD/hr"],
+		["$15/hr", "= $15.00/hr"],
 		["30 mins", "= 30.00 mins"],
 		["2 hrs", "= 2.00 hrs"],
 		["10 sec", "= 10.00 sec"],
 		["10 secs", "= 10.00 secs"],
 		["2 wks", "= 2.00 wks"],
 		["3 yrs", "= 3.00 yrs"],
-		["£12/hr", "= 12.00 GBP/hr"],
+		["£12/hr", "= £12.00/hr"],
 		["100 km/hr", "= 100.00 km/hr"],
 	])("%s", (line, expected) => {
 		expect(shown(line)).toBe(expected);
@@ -124,7 +124,7 @@ describe("what did not change", () => {
 	test.each([
 		["30 min", "= 30.00 min"],
 		["2 wk", "= 2.00 wk"],
-		["$15/hour", "= 15.00 USD/hour"],
+		["$15/hour", "= $15.00/hour"],
 		["5 microseconds", "= 5.00 microseconds"],
 		["90m", "= 90.00 m"],
 	])("%s", (line, expected) => {
@@ -153,12 +153,12 @@ describe("a variable of the same name", () => {
 		// Before #666 these two read the variable: `$15/hr` was $7.50 and
 		// `30 mins` was 120. The changeset names the change.
 		const { batch } = expectHonestDocument("hr = 2\n$15/hr\nmins = 4\n30 mins\nh = 2\n$15/h");
-		expect(batch).toEqual(["= 2", "= 15.00 USD/hr", "= 4", "= 30.00 mins", "= 2", "= 15.00 USD/h"]);
+		expect(batch).toEqual(["= 2", "= $15.00/hr", "= 4", "= 30.00 mins", "= 2", "= $15.00/h"]);
 	});
 
 	test("a global works the same way", () => {
 		const { batch } = expectHonestDocument(":hr = 3\n$10/hr\nhr * 2");
-		expect(batch).toEqual(["= 3", "= 10.00 USD/hr", "= 6"]);
+		expect(batch).toEqual(["= 3", "= $10.00/hr", "= 6"]);
 	});
 
 	test("a quantity in the new spelling carries it through a variable", () => {

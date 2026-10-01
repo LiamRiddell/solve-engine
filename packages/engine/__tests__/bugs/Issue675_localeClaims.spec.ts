@@ -47,8 +47,8 @@ describe("a typed line and pasted text do not read numbers the same way (pasted-
 		expect(shown(newTrackedEngine({ locale: "de" }), 'numbers in "Kaffee 3,20, Mittag 12,50"')).toBe("= [3.20, 12.50]");
 	});
 
-	test("a typed line under de does not yet", () => {
-		expect(shown(newTrackedEngine({ locale: "de" }), "3,20 + 12,50")).toMatch(/^throws: /);
+	test("a typed line under de now reads the decimal comma too (#740)", () => {
+		expect(shown(newTrackedEngine({ locale: "de" }), "3,20 + 12,50")).toBe("= 15.70");
 	});
 });
 

@@ -7,8 +7,8 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 import { isKnownUnit } from "@solve-js/lexer/units";
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
 import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN } from "@solve-js/uom/HistoricalCurrency";
-import { poweredUnit } from "@solve-js/uom/UnitPowers";
-import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { takeUnitPower } from "@solve-js/parser/UnitPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * Resolve `rawUnit` to its canonical ISO 4217 code if it's a recognized
@@ -19,39 +19,6 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  */
 function resolveUnitAlias(rawUnit: string): string {
   return resolveCurrencyAlias(rawUnit) ?? rawUnit;
-}
-
-/**
- * Take a power written on a unit onto the unit itself. Called when the token
- * after the unit is `^`.
- *
- * The power belongs to the unit, not to the number beside it: `5 m^2` is five
- * square metres, not (5 m) squared, which is 25 square metres. The unit literal
- * binds tighter than `^`, so without this the parser built `(5 m)^2` and the
- * power handler, which had no reading for a unit, answered a bare 25. Taking the
- * power here gives `m2`, a unit the table already holds, and everything after it
- * (a conversion, `best`) carries on as for any area or volume.
- *
- * Only a whole power of 2 or 3 on a length the table spells squared or cubed has
- * a unit, so that is all this accepts; a power of 1 leaves the unit as it is.
- * Anything else written on a unit (`5 kg^2`, `5 m^4`, `9.81 ft/s^2`) is refused
- * by name here, where the reading is still known, rather than left to become the
- * number squared.
- */
-function takeUnitPower(parser: Parser, unit: string): string {
-  const exponent = parser.peekAt(1);
-  const power = exponent?.type === "NUMBER" ? Number(exponent.value) : Number.NaN;
-  const spelled = power === 1 ? unit : poweredUnit(unit, power);
-  if (spelled === undefined) {
-    throw ErrorFactory.parsing(
-      "UNIT_POWER_UNSUPPORTED",
-      `"${unit}^${exponent?.value ?? ""}" is not a unit: a power on a unit makes an area or a volume, so it applies only to a length the unit table spells squared or cubed, such as m^2 or ft^3.`,
-      { unit, exponent: exponent?.value },
-    );
-  }
-  parser.consume(); // ^
-  parser.consume(); // the power
-  return spelled;
 }
 
 /**
@@ -116,7 +83,7 @@ export class UomLiteralParselet implements InfixParselet {
           builder.emitString(targetUnit);
           builder.emitOpcode(OpCode.PUSH_STRING);
           builder.emitString(isoDate);
-          builder.emitPluginCall(HISTORICAL_CURRENCY_FN, 3);
+          emitBuiltinPluginCall(builder, HISTORICAL_CURRENCY_FN, 3);
           return;
         }
 

@@ -82,13 +82,13 @@ describe("the six ordering relations agree with each other", () => {
 
 	test("and every one of them is false against NaN", () => {
 		// Including equality, which is what makes NaN detectable at all.
-		expect(bool("0 / 0 == 0 / 0")).toBe(false);
-		expect(bool("0 / 0 < 1")).toBe(false);
-		expect(bool("0 / 0 <= 1")).toBe(false);
-		expect(bool("0 / 0 > 1")).toBe(false);
-		expect(bool("0 / 0 >= 1")).toBe(false);
+		expect(bool("(1 / 0 - 1 / 0) == (1 / 0 - 1 / 0)")).toBe(false);
+		expect(bool("(1 / 0 - 1 / 0) < 1")).toBe(false);
+		expect(bool("(1 / 0 - 1 / 0) <= 1")).toBe(false);
+		expect(bool("(1 / 0 - 1 / 0) > 1")).toBe(false);
+		expect(bool("(1 / 0 - 1 / 0) >= 1")).toBe(false);
 		// `!=` is the exception, and has to be, since it is the negation.
-		expect(bool("0 / 0 != 0 / 0")).toBe(true);
+		expect(bool("(1 / 0 - 1 / 0) != (1 / 0 - 1 / 0)")).toBe(true);
 	});
 });
 

@@ -29,6 +29,23 @@ neither does a remainder of an infinite number, so both are refused by name.
 5 mod 0 // ERROR: 5 mod 0 has no value: nothing is left over from a division by zero, because it never ends.
 ```
 
+Dividing by zero follows the same idea. A number divided by something ever
+closer to zero grows without limit, so `5/0` answers infinity, with the sign the
+division would have. Zero divided by zero has no such limit: every number times
+zero is zero, so every number is an equally good answer, and none is given.
+It is refused by name rather than answered with NaN (not a number), and so is an
+infinity divided by an infinity, for the same reason.
+
+```solve-doc
+5/0 // ∞
+-5/0 // -∞
+0/0 // ERROR: 0 divided by 0 has no single answer: every number times 0 is 0, so no one quotient is right.
+```
+
+The boundary: only a division is refused. An infinity less an infinity (`1/0 -
+1/0`) is still NaN, and a list divided cell by cell (`[0, 1] / 0`) keeps a NaN
+cell, since one cell of a list has no room for a refusal.
+
 `^` is the only operator that groups from the right. A tower of powers is
 worked out from the top down, as in mathematics: `2^3^2` means `2^(3^2)`, which
 is 2^9. Everything else groups from the left, so `10-3-2` is `(10-3)-2`.
@@ -81,11 +98,56 @@ Most operators have a word form, which is often how a line reads more naturally.
 3 multiplied by 4 // 12
 ```
 
+Multiplication and powers have the longer spellings people say aloud as well:
+`times by` and `multiply by` are `*`, and `to the power of` is `^`.
+
+```solve
+6 times by 7 // 42
+6 multiply by 7 // 42
+2 to the power of 10 // 1,024
+```
+
 `with` adds and `without` subtracts, which reads well for a running total.
 
 ```solve
 40 with 2 // 42
 40 without 2 // 38
+```
+
+`add A to B` is the sum written as an instruction. Without its `to`, the word
+`add` is the plus sign it always was. A `to` followed by a unit is still a
+conversion, and `A to B` on its own, with no `add` in front, is the percentage
+change from A to B (see [percentages](/syntax/percentages/)).
+
+```solve
+add 3 to 10 // 13
+add $5 to $10 // $15.00
+add 3 and 4 // 7
+3 to 10 // 233.33%
+```
+
+`subtract A from B` is the difference written the same way, and takes A away
+from B, in the order the sentence says. `take` and `remove` read the same.
+Without a `from`, each of these words is the minus sign it always was.
+
+```solve
+subtract 3 from 10 // 7
+take $5 from $20 // $15.00
+subtract 3 km from 10 km // 7.00 km
+subtract 3 // -3
+```
+
+The boundary: the `from` must stand at the top of the line, outside any
+brackets, since a `from` inside them belongs to what is bracketed.
+
+The words `mul`, `exponent` and `prime` are not operators. They were once
+spellings of `*` and `^`, which made them unusable as names (even as
+`:exponent`), so they are ordinary names now, and `7 is prime` asks whether 7 is
+prime (see [number theory](/syntax/number-theory/)).
+
+```solve-doc
+exponent = 3 // 3
+2 ^ exponent // 8
 ```
 
 ## Symbols pasted from elsewhere
@@ -116,6 +178,22 @@ is the root of sixteen plus nine, and `2√3` is two times the root of three.
 2√3 // 3.46
 2π // 6.28
 1/∞ // 0
+```
+
+An infinity is written `∞` wherever it appears, with a unit or a currency as
+much as on its own: dividing a distance by zero, or multiplying one past about
+1.8e308, the largest number that can be held, gives `∞ km`, and it converts
+like any other distance. It is never written as JavaScript's own word for it,
+`Infinity`, which a note could not read back.
+
+```solve
+∞ km // ∞ km
+-∞ m // -∞ m
+5 km / 0 // ∞ km
+1e308 * 10 km // ∞ km
+∞ km in m // ∞ m
+$1e308 * 10 // $∞
+1 / 0 as sci // ∞
 ```
 
 `π` is pi only while nothing in the note is named `π`, so a note that already

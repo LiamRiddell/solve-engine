@@ -1,16 +1,23 @@
-import { Value, ValueType, numberValue, boolValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, splitValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, boolValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, splitValue, type MatrixData } from "@solve-js/vm/Value";
+import { numberText, shortestText } from "@solve-js/utilities/Number";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, describeQuantity } from "@solve-js/vm/VMConversion";
+import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, percentageOperands, percentageAnswer, describeQuantity, valueKindName, isIpv6Value, ipv6Refused, colourRefused } from "@solve-js/vm/VMConversion";
 import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact, valueInUnit, moneyForCount } from "@solve-js/vm/MoneyExact";
-import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
+import { transpose, determinant, inverse, matrixPower, symbolicToEntry, rowMajorToColumnMajor, dotProduct } from "@solve-js/vm/MatrixOps";
+import { floatOf, intOfText } from "@solve-js/vm/PlainNumberForms";
+import { labelQuantity } from "@solve-js/vm/UnitLabels";
+import type { AsConverter, AsConverterMatch } from "@solve-js/vm/AsConverterRegistry";
+export type { AsConverter, AsConverterMatch } from "@solve-js/vm/AsConverterRegistry";
 import { symbolicToValue, valueToSymbolic, solveEquationValues, definiteIntegralValue, readSearchRange } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
 import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
+import { roundEachCell, isManyCellList } from "@solve-js/vm/ListRounding";
+import { applyEachCell, listArgumentRefused } from "@solve-js/vm/ListArguments";
 import { apartSymbolic } from "@solve-js/symbolic/PartialFractions";
 import { differentiate } from "@solve-js/symbolic/Derivative";
 import { integrate } from "@solve-js/symbolic/Integral";
@@ -26,15 +33,14 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 // link dangling, which is worse than an unused-import warning.
 // eslint-disable-next-line no-unused-vars
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
-import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
-import { inflationAmountRefused } from "@solve-js/packages/finance/data/InflationAmount";
+import { adjustByCurrency, inflationYear, isYear } from "@solve-js/packages/finance/data/InflationAmount";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
-import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure } from "@solve-js/uom/UomConverter";
+import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure, unitForMessage } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } from "@solve-js/vm/QuantityPowers";
-import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan } from "@solve-js/vm/FinanceFormulas";
-import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
+import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan, loanTermsRefused, rateAtOrBelowMinusHundred, compoundingRefused } from "@solve-js/vm/FinanceFormulas";
+import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, valueInBase, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
-import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactDecimalToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
+import { exactDecimalPower, exactDecimalTotal, percentTotal, percentSum, percentWeightedMean, absExactDecimal, roundExactToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
 
 /**
  * A duration in seconds, shown in the largest whole time unit that keeps the
@@ -237,7 +243,7 @@ function exactTangent(radians: number): Value {
  */
 function outsideDomain(name: string, x: number, inDomain: (x: number) => boolean, domain: string): Value | null {
     if (Number.isNaN(x) || inDomain(x)) return null;
-    return errorValue("FUNCTION_DOMAIN", `${name}(${x}) has no real value: ${name} is only defined for ${domain}.`);
+    return errorValue("FUNCTION_DOMAIN", `${name}(${shortestText(x)}) has no real value: ${name} is only defined for ${domain}.`);
 }
 
 /** Whether a number is a valid sine or cosine, the domain of the inverse functions. */
@@ -335,6 +341,10 @@ function extremum(args: Value[], wantLargest: boolean): Value {
     }
     const nonNumeric = nonNumericOperand(args, "compared");
     if (nonNumeric) return nonNumeric;
+    // `max(10%, 20%)` is 20%, the percentage itself, where the magnitude path
+    // answered its fraction; a percentage beside a number is refused.
+    const percent = percentageOperands(args, "compared");
+    if (percent instanceof Value) return percent;
     let best: Value | undefined;
     let hasNaN = false;
     for (const a of args) {
@@ -350,7 +360,7 @@ function extremum(args: Value[], wantLargest: boolean): Value {
             const named = describeMeasureMismatch(bestUnit, otherUnit, "compared");
             return errorValue(
                 "INCOMPATIBLE_UNITS",
-                named ?? `Cannot compare incompatible units: ${bestUnit ?? "?"} and ${otherUnit ?? "?"}`,
+                named ?? `Cannot compare incompatible units: ${unitForMessage(bestUnit ?? "?")} and ${unitForMessage(otherUnit ?? "?")}`,
             );
         }
         // Two decimals are ordered on their exact values, so two that share a
@@ -363,7 +373,7 @@ function extremum(args: Value[], wantLargest: boolean): Value {
     }
     if (hasNaN) return numberValue(NaN);
     if (best === undefined) return numberValue(wantLargest ? -Infinity : Infinity);
-    if (best.type === ValueType.Uom) return best;
+    if (best.type === ValueType.Uom || best.type === ValueType.Percentage) return best;
     // The winner keeps its exact decimal, so `max(0.1, 0.2) + 0.1 == 0.3`.
     const winner = numberValue(best.toNumber());
     if (best.type === ValueType.Number && best.exact !== undefined) winner.exact = best.exact;
@@ -378,7 +388,9 @@ function extremum(args: Value[], wantLargest: boolean): Value {
  * read a whole list in one unit, so `total of $4.99, $12.50` keeps the
  * currency the list opened in.
  */
-function quantity(magnitude: number, unit: string | undefined, sources?: readonly ValueSource[]): Value {
+function quantity(magnitude: number, unit: string | undefined, sources?: readonly ValueSource[], percent = false): Value {
+    // A set of percentages answers a percentage; see percentageOperands().
+    if (percent) return percentageAnswer(magnitude, sources);
     return withSources(unit === undefined ? numberValue(magnitude) : uomValue(magnitude, unit), sources);
 }
 
@@ -416,6 +428,17 @@ function keepUnit(operand: Value, magnitude: number): Value {
  */
 function roundToPlaces(source: Value, places: number): Value {
     const p = Number.isFinite(places) ? Math.min(100, Math.max(0, Math.trunc(places))) : 0;
+    // A quantity shown counted in a name of its own (`84 days in sprints`) is
+    // rounded in that count, which is the number the reader sees, and keeps the
+    // name (#762). One per unit is the quantity itself, rounded below.
+    const label = source.unitLabel;
+    if (label !== undefined && label.per !== 1 && source.type === ValueType.Uom && source.unit !== undefined) {
+        const count = roundToPlaces(uomValue(source.toNumber() / label.per, source.unit), p);
+        const back = uomValue(count.toNumber() * label.per, source.unit);
+        back.decimalPlaces = count.decimalPlaces;
+        back.unitLabel = label;
+        return back;
+    }
     // A whole number carrying its exact value is already at every place count,
     // so it keeps that value: `3^40 to 2 dp` shows all twenty digits, then .00.
     if (source.type === ValueType.Number && source.rational !== undefined && source.rational.d === 1n) {
@@ -440,6 +463,30 @@ function roundToPlaces(source: Value, places: number): Value {
     const scaled = value * scale;
     if (!Number.isFinite(scaled) || Math.abs(scaled) > Number.MAX_SAFE_INTEGER) return withPlaces(source, value, p);
     return withPlaces(source, roundHalfAwayFromZero(scaled) / scale, p);
+}
+
+/** ceil(x) of one number or quantity, exact where the value carries an exact form. */
+function ceilOne(value: Value): Value {
+    return roundExactToWhole(value, "ceil") ?? keepUnit(value, Math.ceil(value.toNumber()));
+}
+
+/** int(x) of one number or quantity: the whole part, exact where the value carries an exact form. */
+function truncOne(value: Value): Value {
+    return roundExactToWhole(value, "trunc") ?? keepUnit(value, Math.trunc(value.toNumber()));
+}
+
+/** floor(x) of one number or quantity, exact where the value carries an exact form. */
+function floorOne(value: Value): Value {
+    return roundExactToWhole(value, "floor") ?? keepUnit(value, Math.floor(value.toNumber()));
+}
+
+/**
+ * round(x) of one number or quantity: the nearest whole number, a half away
+ * from zero as round(x, n) and `to N dp` round one (#584); see
+ * roundHalfAwayFromZero().
+ */
+function roundOne(value: Value): Value {
+    return roundExactToWhole(value, "round") ?? keepUnit(value, roundHalfAwayFromZero(value.toNumber()));
 }
 
 /**
@@ -492,7 +539,7 @@ function notWholeCount(name: string, args: readonly Value[]): Value | null {
     for (const arg of args.slice(0, 2)) {
         const x = arg.toNumber();
         if (!Number.isInteger(x)) {
-            return errorValue("NOT_WHOLE_NUMBER", `${name} counts whole things: ${x} is not a whole number.`);
+            return errorValue("NOT_WHOLE_NUMBER", `${name} counts whole things: ${numberText(x)} is not a whole number.`);
         }
     }
     return null;
@@ -535,6 +582,11 @@ function withPlaces(source: Value, magnitude: number, places: number, exact?: De
     const result = source.type === ValueType.Uom && source.unit !== undefined ? uomValue(magnitude, source.unit) : numberValue(magnitude);
     result.decimalPlaces = places;
     if (exact !== undefined) result.exact = exact;
+    // The same quantity to fewer places keeps the name it is shown under, when
+    // its count is the quantity itself. A count in a name of another size is
+    // rounded as that count in roundToPlaces; one that reaches here was not,
+    // so the name goes rather than show a count nobody rounded (#762).
+    if (source.unitLabel?.per === 1 && result.unit === source.unit) result.unitLabel = source.unitLabel;
     return result;
 }
 
@@ -648,6 +700,15 @@ export function spreadStatistic(args: readonly Value[], verb: string, sample: bo
         );
     }
     const squared = variance(unified.magnitudes, sample);
+    // The spread of percentages is a percentage; their variance would be in
+    // percent squared, which is no percentage, so it is refused as a quantity's is.
+    if (unified.percent) {
+        if (root) return percentageAnswer(Math.sqrt(squared), unified.sources);
+        return errorValue(
+            "UNIT_POWER_UNSUPPORTED",
+            "A variance of percentages would be in percent squared, which is not a percentage. The standard deviation is the same spread as a percentage.",
+        );
+    }
     const unit = unified.unit;
     if (root || unit === undefined) return quantity(root ? Math.sqrt(squared) : squared, unit, unified.sources);
     if (getMeasure(unit) !== "length") {
@@ -696,7 +757,7 @@ export function modeOf(magnitudes: readonly number[], converted: boolean): numbe
  * which ask about order rather than size, and the aggregates, which word their
  * own refusal (see nonNumericOperand()).
  */
-const TAKES_DATETIME: ReadonlySet<number> = new Set([9, 10, 42, 43, 44, 45, 46, 47, 101, 102, 103, 104, 105, 106, 107]);
+const TAKES_DATETIME: ReadonlySet<number> = new Set([9, 10, 42, 43, 44, 45, 46, 47, 101, 102, 103, 104, 105, 106, 107, 116]);
 
 /**
  * The refusal for a builtin given a date or time it has no reading of, or null.
@@ -726,13 +787,196 @@ export function datetimeArgumentRefused(fnIdx: number, args: readonly Value[]): 
 }
 
 /**
+ * The builtins that read an IPv6 address as it is: `hex` and `bin`, which
+ * write out its 128 bits exactly, and those in {@link TAKES_DATETIME}, which
+ * word their own refusal for a value with no numeric reading.
+ */
+const TAKES_IPV6: ReadonlySet<number> = new Set([...TAKES_DATETIME, 48, 49]);
+
+/**
+ * The refusal for a builtin given an IPv6 address, or null (issue #748).
+ *
+ * An IPv6 address has 128 bits, more than a double holds exactly, so its
+ * `toNumber()` reports NaN, and every numeric builtin reads its arguments
+ * through that: `round(fe80::1)` would have answered NaN. The builtin refuses
+ * by name instead and points at `as int`, the address's exact whole number.
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments.
+ * @returns The refusal, or null when no argument is an IPv6 address or the
+ * builtin reads one.
+ */
+export function ipv6ArgumentRefused(fnIdx: number, args: readonly Value[]): Value | null {
+    if (TAKES_IPV6.has(fnIdx)) return null;
+    for (const arg of args) {
+        if (!isIpv6Value(arg)) continue;
+        const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+        return ipv6Refused(name === "" ? "used in this calculation" : `given to ${name}`);
+    }
+    return null;
+}
+
+/**
+ * The builtins that read a text argument as text: the algebra verbs, which
+ * are handed the name of an unknown (`solve`, `der`, `integral`, `taylor`);
+ * the phrase forms handed a unit's name (`in minutes and seconds`, a rate's
+ * denominator, a savings goal's period, a count's label); `float` and `int`,
+ * which read text that is a number and word their own refusal; and those in
+ * {@link TAKES_DATETIME}, which word their own refusal for a value with no
+ * numeric reading.
+ */
+const TAKES_TEXT: ReadonlySet<number> = new Set([...TAKES_DATETIME, 50, 69, 70, 71, 72, 94, 95, 100, 115]);
+
+/**
+ * The builtins that read a colour as it is: none of the numeric ones do (the
+ * colour functions are the colour package's own), so only those in
+ * {@link TAKES_DATETIME}, which word their own refusal.
+ */
+const TAKES_COLOUR: ReadonlySet<number> = TAKES_DATETIME;
+
+/**
+ * The refusal for a numeric builtin given text, or null.
+ *
+ * Every numeric builtin reads its arguments through `toNumber()`, which reads
+ * text through `parseFloat`: `sqrt("abc")` answered 0, `round("3.5")` answered
+ * 4 and `gcd("a", 4)` answered 4, the text's leading digits or 0 passed off as
+ * its value. Arithmetic already refuses text (`TEXT_ARITHMETIC`), and a builtin
+ * now does the same, pointing at `as number` for text that holds a number.
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments.
+ */
+export function textArgumentRefused(fnIdx: number, args: readonly Value[]): Value | null {
+    if (TAKES_TEXT.has(fnIdx)) return null;
+    for (const arg of args) {
+        if (arg.type !== ValueType.String) continue;
+        const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+        return errorValue(
+            "TEXT_ARITHMETIC",
+            `${name === "" ? "This calculation" : name} takes a number, not text. To use a number held as text, convert it first with "as number".`,
+        );
+    }
+    return null;
+}
+
+/**
+ * The refusal for a builtin given a colour, or null: a colour has three
+ * channels and no one number, and its `toNumber()` of 0 made `sqrt(#ff0000)`
+ * answer 0 (see colourRefused()).
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments.
+ */
+export function colourArgumentRefused(fnIdx: number, args: readonly Value[]): Value | null {
+    if (TAKES_COLOUR.has(fnIdx)) return null;
+    for (const arg of args) {
+        if (arg.type !== ValueType.Colour) continue;
+        const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+        return colourRefused(name === "" ? "used in this calculation" : `given to ${name}`);
+    }
+    return null;
+}
+
+/**
+ * The one refusal a builtin's arguments can carry before it runs, or null:
+ * a date or time, an IPv6 address, a colour or text where the builtin reads a
+ * number. The single check the VM makes at `CALL_BUILTIN`, so each numeric
+ * builtin is spared a type test of its own and the dispatch loop a check per
+ * kind.
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments, in any order (the first offending one is named).
+ */
+export function builtinArgumentRefused(fnIdx: number, args: readonly Value[]): Value | null {
+    return datetimeArgumentRefused(fnIdx, args)
+        ?? ipv6ArgumentRefused(fnIdx, args)
+        ?? colourArgumentRefused(fnIdx, args)
+        ?? textArgumentRefused(fnIdx, args);
+}
+
+/**
+ * The builtins of one number with an answer for each number, worked out for
+ * each cell of a list (`sqrt([4, 9])` is `[2, 3]`): the roots, the
+ * exponentials and logarithms, the trigonometric and hyperbolic functions and
+ * their inverses, `sign`, `trunc`, `fact`, the angle conversions, `fround` and
+ * `clz32`. Each takes exactly one argument.
+ */
+export const EACH_CELL_BUILTINS: ReadonlySet<number> = new Set([
+    0, 2, 3, 4, 5, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30,
+    33, 34, 35, 36, 62, 87, 88, 89, 90, 91, 92, 113,
+]);
+
+/**
+ * The builtins that read a list as it is, and so are never refused one: `abs`
+ * (a matrix's determinant, the `|a|` notation), the rounding family and `int`,
+ * which round a list cell by cell themselves, `min`, `max`, `hypot`, the
+ * aggregates and the statistics, which word their own refusal, `pow` (a
+ * square matrix's power), the matrix functions, the algebra verbs, `float`,
+ * which refuses a list by name, and the two phrase forms that carry a list
+ * through: `to N dp` and a count's unit (`[2, 3] days`). A rate, a split and
+ * `in minutes and seconds` read one number, so they are not here.
+ */
+export const TAKES_LIST: ReadonlySet<number> = new Set([
+    1, 6, 7, 8, 9, 10, 26, 31, 42, 43, 44, 45, 50, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 78, 79,
+    97, 101, 102, 103, 104, 105, 106, 107, 108, 115, 116,
+]);
+
+/**
+ * What a builtin answers when an argument is a list of several numbers, or
+ * null to call it as usual: the builtin worked out for each cell when it is
+ * one of {@link EACH_CELL_BUILTINS}, the refusal by name when it reads its
+ * arguments as single numbers, and null when it takes a list as it is
+ * ({@link TAKES_LIST}) or no argument is a list.
+ *
+ * Without this, every one-number builtin read a list through `toNumber()`,
+ * which is 0 for a matrix, and answered the result for 0: `sqrt([4, 9])` was 0.
+ *
+ * @param fnIdx - The builtin's index; each cell goes through {@link callBuiltin}.
+ * @param args - Its arguments, in call order.
+ * @param context - The line context, passed through to it.
+ * @returns The answer or refusal, or null.
+ */
+export function listBuiltinCall(fnIdx: number, args: readonly Value[], context?: LineExecutionContext): Value | null {
+    if (TAKES_LIST.has(fnIdx) || !args.some(isManyCellList)) return null;
+    const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+    if (EACH_CELL_BUILTINS.has(fnIdx) && args.length === 1) {
+        return applyEachCell(args[0], name, (cell) => callBuiltin(fnIdx, [cell], context));
+    }
+    return listArgumentRefused(name, args);
+}
+
+/** The registry's own entries by index, built on first use by {@link callBuiltin}. */
+let builtinsByIndex: Map<number, (args: Value[], context?: LineExecutionContext) => Value> | undefined;
+
+/**
+ * Call the builtin at `fnIdx`, or answer UNKNOWN_BUILTIN_FUNCTION when the
+ * registry holds none there. The entry is looked up in a map of the registry's
+ * own entries, not read off the object by index, so an index never reaches a
+ * property inherited from `Object.prototype` (CodeQL's unvalidated dynamic
+ * call, which an own-property check before the read did not satisfy).
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments, in call order.
+ * @param context - The line context, passed through to it.
+ * @returns What the builtin answers, or the refusal.
+ */
+export function callBuiltin(fnIdx: number, args: Value[], context?: LineExecutionContext): Value {
+    builtinsByIndex ??= new Map(Object.entries(builtinFunctions).map(([index, fn]) => [Number(index), fn]));
+    const entry = builtinsByIndex.get(fnIdx);
+    if (entry === undefined) return errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${fnIdx} is not registered`);
+    return entry(args, context);
+}
+
+/**
  * Whether a reader calls this builtin by its name (`round(...)`, `sqrt(...)`),
  * so a message may use it. The rest are reached through a phrase (`to 2 dp`,
  * `3d6`), and their names (`roundToPlaces`) are the engine's, not the reader's.
- * The ranges follow FunctionCallParselet's name map and the symbolic verbs.
+ * The ranges follow FunctionCallParselet's name map and the symbolic verbs;
+ * `ln`, the two-argument `log` and `float` (113 to 115) are called by name too,
+ * and a refusal given `ln("abc")` said "This calculation" before they were.
  */
-function calledByName(fnIdx: number): boolean {
-    return (fnIdx <= 79 && fnIdx !== 37) || (fnIdx >= 87 && fnIdx <= 92) || (fnIdx >= 109 && fnIdx <= 112);
+export function calledByName(fnIdx: number): boolean {
+    return (fnIdx >= 0 && fnIdx <= 79 && fnIdx !== 37) || (fnIdx >= 87 && fnIdx <= 92) || (fnIdx >= 109 && fnIdx <= 115);
 }
 
 /**
@@ -782,15 +1026,17 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         ?? numberValue(logToBase(args[0].toNumber(), args[1].toNumber())),
     113: (args) => quantityRefused("ln", args[0], false) ?? outsideDomain("ln", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
-    6: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "ceil") ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
-    7: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "floor") ?? keepUnit(args[0], Math.floor(args[0].toNumber())),
-    8: (args) =>
-        args.length >= 2
-            ? // round(x, n): round to n decimal places and display at that precision.
-              roundToPlaces(args[0], args[1].toNumber())
-            : // round(x): the nearest whole number, a half away from zero as
-              // round(x, n) and `to N dp` round one (#584); see roundHalfAwayFromZero().
-              wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "round") ?? keepUnit(args[0], roundHalfAwayFromZero(args[0].toNumber())),
+    // A list is rounded cell by cell; see roundEachCell() in vm/ListRounding.ts.
+    6: (args) => roundEachCell(args[0], ceilOne, "rounded up") ?? ceilOne(args[0]),
+    7: (args) => roundEachCell(args[0], floorOne, "rounded down") ?? floorOne(args[0]),
+    8: (args) => {
+        if (args.length >= 2) {
+            // round(x, n): round to n decimal places and display at that precision.
+            const places = args[1].toNumber();
+            return roundEachCell(args[0], (cell) => roundToPlaces(cell, places), "rounded") ?? roundToPlaces(args[0], places);
+        }
+        return roundEachCell(args[0], roundOne, "rounded") ?? roundOne(args[0]);
+    },
     // min/max: see extremum() for why the winner is carried around as a Value
     // rather than as a running number.
     9: (args) => extremum(args, false),
@@ -836,6 +1082,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const sides = unifyQuantities(args, "combined in a hypotenuse");
         if (sides instanceof Value) return sides;
         const length = Math.hypot(...sides.magnitudes);
+        if (sides.percent) return percentageAnswer(length);
         return sides.unit !== undefined ? uomValue(length, sides.unit) : numberValue(length);
     },
     27: (args) => quantitiesRefused("imul", args) ?? numberValue(Math.imul(args[0].toNumber(), args[1].toNumber())),
@@ -866,7 +1113,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
       // A quantity base answers what `^` answers for it: `pow(3 m, 2)` is 9 m2.
       if (args[0].type === ValueType.Uom && args[0].unit !== undefined) {
         const numericExponent = args[1].type === ValueType.Number || args[1].type === ValueType.BigInt;
-        return numericExponent ? raiseQuantity(args[0], args[1].toNumber()) : unitPowerUnsupported(args[0].unit, ValueType[args[1].type].toLowerCase());
+        return numericExponent ? raiseQuantity(args[0], args[1].toNumber()) : unitPowerUnsupported(args[0].unit, valueKindName(args[1]));
       }
       // The spelled-out form of `^` answers what `^` answers, edge cases
       // included, and a whole-number result past the safe range exactly as
@@ -885,7 +1132,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     32: (_args, context) => numberValue(drawRandom(context)), // takes no arguments, unlike its neighbours
     33: (args) => numberValue(Math.sign(args[0].toNumber())),
     // trunc keeps a unit, as the rest of the rounding family does (#592).
-    34: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
+    34: (args) => roundExactToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
     // An angle quantity is read in its own unit; see degreeArgumentInRadians().
     35: (args) => quantityRefused("degtorad", args[0], true) ?? numberValue(degreeArgumentInRadians(args[0])),
     36: (args) => quantityRefused("radtodeg", args[0], true) ?? numberValue(angleInRadians(args[0]) * 180 / Math.PI),
@@ -1031,8 +1278,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (exactMean !== null) return exactMean;
         const unified = unifyQuantities(args, "averaged");
         if (unified instanceof Value) return unified;
+        // A mean of percentages is formed in base ten, as a mean of decimals is.
+        if (unified.percent) return quantity(percentTotal(unified.magnitudes, true), undefined, unified.sources, true);
         const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
-        return quantity(sum / unified.magnitudes.length, unified.unit, unified.sources);
+        return quantity(sum / unified.magnitudes.length, unified.unit, unified.sources, unified.percent);
     },
     // median(...), middle value; average of the two middle values for an
     // even argument count.
@@ -1042,10 +1291,13 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (unified instanceof Value) return unified;
         const sorted = unified.magnitudes.slice().sort((a, b) => a - b);
         const mid = Math.floor(sorted.length / 2);
+        // The midpoint of two percentages is their mean, formed in base ten.
+        const midpoint = (a: number, b: number): number => unified.percent ? percentTotal([a, b], true) : (a + b) / 2;
         return quantity(
-            sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid],
+            sorted.length % 2 === 0 ? midpoint(sorted[mid - 1], sorted[mid]) : sorted[mid],
             unified.unit,
             unified.sources,
+            unified.percent,
         );
     },
     // total(...), sum of any number of arguments.
@@ -1056,7 +1308,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (exactTotal !== null) return exactTotal;
         const unified = unifyQuantities(args, "added");
         if (unified instanceof Value) return unified;
-        return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit, unified.sources);
+        // A total of percentages is formed in base ten, so `sum(10%, 20%) == 30%`.
+        if (unified.percent) return quantity(percentTotal(unified.magnitudes, false), undefined, unified.sources, true);
+        return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit, unified.sources, unified.percent);
     },
     // count(...), number of arguments passed.
     45: (args) => numberValue(args.length),
@@ -1095,17 +1349,19 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // Python's hex()/JS convention of a function returning display text,
     // not a numeric type.
     // An exact integer past the safe range converts from its own digits, as
-    // `as hex` does; see baseConversionOperand() in vm/ExactIntegers.ts.
-    48: (args) => quantitiesRefused("hex", args) ?? hexValue(baseConversionOperand(args[0])),
+    // `as hex` does, and an infinity is refused; see valueInBase() in vm/ExactIntegers.ts.
+    48: (args) => quantitiesRefused("hex", args) ?? valueInBase(args[0], "hex"),
     // bin(n). Same call-syntax shape as hex() above, e.g. bin(10) -> "0b1010".
-    49: (args) => quantitiesRefused("bin", args) ?? hexValue(baseConversionOperand(args[0]), "bin"),
+    49: (args) => quantitiesRefused("bin", args) ?? valueInBase(args[0], "bin"),
     // int(x), coerce ANY value (Number, Percentage, Uom, String, Hex, ...)
     // to a plain integer Number, truncating any fractional part toward
     // zero (Math.trunc semantics: int(5.7) -> 5, int(-5.7) -> -5). Distinct
     // from the Converters package's `x as number` (TO_NUMBER opcode),
     // which only strips a unit/percentage wrapper and keeps any decimal
     // part (e.g. "5.7 as number" -> 5.7), int() additionally truncates.
-    50: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
+    // Text is read only when it spells a number whole; see intOfText().
+    // A list is cut to whole numbers cell by cell, as the rounding family is.
+    50: (args) => args[0].type === ValueType.String ? intOfText(args[0].value as string) : roundEachCell(args[0], truncOne, "cut to whole numbers") ?? truncOne(args[0]),
 
     // ── Finance (packages/finance/) ──────────────────────────────────────
     // All finance builtins preserve the principal/amount argument's Uom
@@ -1129,7 +1385,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         if (1 + rate <= 0) {
-            return errorValue("INVALID_RATE", `compoundInterest: rate ${rate} makes (1 + rate) non-positive`);
+            return rateAtOrBelowMinusHundred(rate);
         }
         const fv = principal * growthFactor(rate, years);
         return args[0].type === ValueType.Uom ? uomValue(fv, args[0].unit!) : numberValue(fv);
@@ -1143,7 +1399,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         if (1 + rate <= 0) {
-            return errorValue("INVALID_RATE", `interestEarned: rate ${rate} makes (1 + rate) non-positive`);
+            return rateAtOrBelowMinusHundred(rate);
         }
         const interest = principal * (growthFactor(rate, years) - 1);
         return args[0].type === ValueType.Uom ? uomValue(interest, args[0].unit!) : numberValue(interest);
@@ -1159,12 +1415,13 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         if (principal <= 0 || futureValue <= 0) {
-            return errorValue("INVALID_RANGE", `compoundInterestRate: principal and futureValue must both be positive`);
+            return errorValue("INVALID_RANGE", "The starting amount and the amount it grows to must both be more than zero to work out a rate.");
         }
         if (years <= 0) {
-            return errorValue("INVALID_RANGE", `compoundInterestRate: years must be greater than 0`);
+            return errorValue("INVALID_RANGE", "The number of years must be more than zero to work out a rate.");
         }
-        return numberValue(Math.pow(futureValue / principal, 1 / years) - 1);
+        // A rate, so a percentage, as `annual return on` answers (#830).
+        return percentageValue(Math.pow(futureValue / principal, 1 / years) - 1);
     },
     // compoundInterestYears(principal, futureValue, rate) -> the number of
     // years needed to grow principal to futureValue at a fixed rate.
@@ -1174,11 +1431,12 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const futureValue = args[1].toNumber();
         const rate = args[2].toNumber();
         if (principal <= 0 || futureValue <= 0) {
-            return errorValue("INVALID_RANGE", `compoundInterestYears: principal and futureValue must both be positive`);
+            return errorValue("INVALID_RANGE", "The starting amount and the amount it grows to must both be more than zero to work out how many years it takes.");
         }
-        if (1 + rate <= 0 || rate === 0) {
-            return errorValue("INVALID_RATE", `compoundInterestYears: rate ${rate} is not usable (must be > -1 and not 0)`);
+        if (rate === 0) {
+            return errorValue("INVALID_RATE", "At a rate of 0% the amount never grows, so no number of years reaches it.");
         }
+        if (1 + rate <= 0) return rateAtOrBelowMinusHundred(rate);
         return numberValue(Math.log(futureValue / principal) / Math.log(1 + rate));
     },
     // loanRepayment(principal, rate, years, periodsPerYear), standard
@@ -1198,10 +1456,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         const periodsPerYear = args[3].toNumber();
-        if (principal <= 0) return errorValue("INVALID_RANGE", `loanRepayment: principal must be positive`);
-        if (years <= 0) return errorValue("INVALID_RANGE", `loanRepayment: years must be positive`);
-        if (rate < 0) return errorValue("INVALID_RATE", `loanRepayment: rate must not be negative`);
-        if (periodsPerYear < 0) return errorValue("INVALID_RANGE", `loanRepayment: periodsPerYear must not be negative`);
+        const refused = loanTermsRefused(principal, years, rate, periodsPerYear);
+        if (refused) return refused;
         const { totalRepayment } = amortizeLoan(principal, rate, years);
         const result = periodsPerYear === 0 ? totalRepayment : totalRepayment / (years * periodsPerYear);
         return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
@@ -1215,10 +1471,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         const periodsPerYear = args[3].toNumber();
-        if (principal <= 0) return errorValue("INVALID_RANGE", `loanInterest: principal must be positive`);
-        if (years <= 0) return errorValue("INVALID_RANGE", `loanInterest: years must be positive`);
-        if (rate < 0) return errorValue("INVALID_RATE", `loanInterest: rate must not be negative`);
-        if (periodsPerYear < 0) return errorValue("INVALID_RANGE", `loanInterest: periodsPerYear must not be negative`);
+        const refused = loanTermsRefused(principal, years, rate, periodsPerYear);
+        if (refused) return refused;
         const { totalInterest } = amortizeLoan(principal, rate, years);
         const result = periodsPerYear === 0 ? totalInterest : totalInterest / (years * periodsPerYear);
         return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
@@ -1231,9 +1485,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const rate = args[1].toNumber();
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
-        if (principal <= 0) return errorValue("INVALID_RANGE", `monthlyPayment: principal must be positive`);
-        if (years <= 0) return errorValue("INVALID_RANGE", `monthlyPayment: years must be positive`);
-        if (rate < 0) return errorValue("INVALID_RATE", `monthlyPayment: rate must not be negative`);
+        const refused = loanTermsRefused(principal, years, rate);
+        if (refused) return refused;
         const { monthlyPayment } = amortizeLoan(principal, rate, years);
         return args[0].type === ValueType.Uom ? uomValue(monthlyPayment, args[0].unit!) : numberValue(monthlyPayment);
     },
@@ -1260,7 +1513,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const amount = args[0].toNumber();
         const rate = args[1].toNumber();
         if (1 + rate <= 0) {
-            return errorValue("INVALID_RATE", `taxRemove: rate ${rate} makes (1 + rate) non-positive`);
+            return rateAtOrBelowMinusHundred(rate, "A tax rate");
         }
         if (args[0].type === ValueType.Uom) {
             // Money stays exact: `$X / (1 + R)` rounds the half-cent like a till
@@ -1272,10 +1525,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         return numberValue(amount / (1 + rate));
     },
 
-    // inflationAdjust(amount, fromYear, toYear) -- CPI-based inflation
-    // adjustment between two arbitrary years, using the bundled CPI-U
-    // table (packages/finance/data/CpiTable.ts -- see its doc comment for
-    // vintage/accuracy notes). Backs the function-call form
+    // inflationAdjust(amount, fromYear, toYear) -- price-index inflation
+    // adjustment between two arbitrary years, using the bundled index for
+    // the amount's currency (packages/finance/data/PriceIndices.ts, and each
+    // table's doc comment for its source and method). Backs the function-call form
     // inflationAdjust(...) (FunctionCallParselet's builtinNameToIndex map)
     // and the "what is $X in fromYear worth in toYear" phrase form
     // (InflationQueryParselet.ts). The two present-year-relative phrase
@@ -1283,24 +1536,18 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // in year dollars") and the flat-rate future-value projection ("value
     // of $X in year assuming N% inflation") are collision-safe
     // pluginFunctions instead, not indices here -- see
-    // packages/finance/parselets/InflationPluginFunctions.ts. The table is the
-    // US index, so only an amount in US dollars is adjusted (#650); see
-    // inflationAmountRefused().
+    // packages/finance/parselets/InflationPluginFunctions.ts. The amount's
+    // currency picks the index (US dollars, pounds, euros; #650, #756), and
+    // any other amount is refused; see adjustByCurrency().
+    // Each year must be a plain whole number (see inflationYear()).
     60: (args) => {
-        const refused = inflationAmountRefused(args[0]);
-        if (refused) return refused;
-        const amount = args[0].toNumber();
-        const fromYear = args[1].toNumber();
-        const toYear = args[2].toNumber();
-        const ratio = inflationRatio(fromYear, toYear);
-        if (ratio === undefined) {
-            return errorValue(
-                "INFLATION_YEAR_OUT_OF_RANGE",
-                `inflationAdjust: fromYear ${fromYear} or toYear ${toYear} is outside the bundled CPI table's range (${CPI_MIN_YEAR}-${CPI_MAX_YEAR})`,
-            );
-        }
-        const result = amount * ratio;
-        return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
+        const fromYear = inflationYear(args[1]);
+        if (!isYear(fromYear)) return fromYear;
+        const toYear = inflationYear(args[2]);
+        if (!isYear(toYear)) return toYear;
+        const result = adjustByCurrency(args[0], fromYear, toYear);
+        if ("refused" in result) return result.refused;
+        return args[0].type === ValueType.Uom ? uomValue(result.value, args[0].unit!) : numberValue(result.value);
     },
 
     // root(n, x) -- the n-th root of x (Numi's `root n (x)` phrasing maps
@@ -1352,10 +1599,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (factRefused !== null) return factRefused;
         const n = args[0].toNumber();
         if (!Number.isInteger(n) || n < 0) {
-            return errorValue("INVALID_FACTORIAL_INPUT", `fact: ${n} is not a non-negative integer`);
+            return errorValue("INVALID_FACTORIAL_INPUT", `A factorial is only defined for a whole number of zero or more, and ${numberText(n)} is not one.`);
         }
         if (n > 170) {
-            return errorValue("FACTORIAL_OVERFLOW", `fact: ${n}! exceeds the maximum representable double (170! is the largest finite factorial)`);
+            return errorValue("FACTORIAL_OVERFLOW", `${n}! is too large to hold as a number: 170! is the largest factorial that fits.`);
         }
         // Built as a bigint, so 19! onwards, the first factorial past the safe
         // range, keeps every digit: 25! is 15,511,210,043,330,985,984,000,000.
@@ -1393,11 +1640,11 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (args[0].type === ValueType.Uom && args[0].unit !== undefined) return unitPowerUnsupported(args[0].unit, "-1");
         return numberValue(1 / args[0].toNumber());
     },
-    // dot(a, b), matrix product / scalar-broadcast, the SAME dispatch as
-    // the `*` operator between two matrices (vm/VM.ts's MUL case). Plain
-    // Number operands multiply directly; a Number mixed with a Matrix
-    // promotes the Number to a 1x1 Matrix first, so it broadcasts exactly
-    // like matrixMultiply()'s own 1x1-scalar case.
+    // dot(a, b), the dot product of two vectors: one number, the sum of the
+    // products of matching components (#828). It used to be the matrix
+    // product, so two row vectors were refused and a row and a column gave a
+    // one-by-one matrix. Two plain numbers are one-component vectors, so
+    // their dot product is their product. See dotProduct() in MatrixOps.ts.
     66: (args) => {
         const [a, b] = args;
         if (a.type === ValueType.Number && b.type === ValueType.Number) {
@@ -1405,8 +1652,13 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         }
         const toMatrix = (v: Value): MatrixData =>
             v.type === ValueType.Matrix ? (v.value as MatrixData) : { rows: 1, cols: 1, data: [v.toNumber()], hasSymbolic: false };
-        return matrixMultiply(toMatrix(a), toMatrix(b));
+        return dotProduct(toMatrix(a), toMatrix(b));
     },
+    // float(x), the plain number x is (#828); see floatOf() in PlainNumberForms.ts.
+    115: (args) => floatOf(args[0]),
+    // The name a quantity is shown under (#762), emitted after a unit written
+    // as a package alias or a document-defined unit; see vm/UnitLabels.ts.
+    116: (args) => labelQuantity(args[0], String(args[1].value), args[2].toNumber()),
     // ── Symbolic algebra (packages/symbolic/) ──
     // expand(expr), multiplying out every product and power. Reached only
     // through its own parselet, never the builtinNameToIndex name map, so that
@@ -1544,7 +1796,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const amount = args[0].toNumber();
         const rate = args[1].toNumber();
         if (1 + rate <= 0) {
-            return errorValue("INVALID_RATE", `taxIn: rate ${rate} makes (1 + rate) non-positive`);
+            return rateAtOrBelowMinusHundred(rate, "A tax rate");
         }
         const tax = amount - amount / (1 + rate);
         if (args[0].type === ValueType.Uom) {
@@ -1724,12 +1976,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         const perYear = args[3].toNumber();
-        if (perYear <= 0) {
-            return errorValue("INVALID_RATE", `compounding: ${perYear} periods per year is not a period`);
-        }
-        if (1 + rate / perYear <= 0) {
-            return errorValue("INVALID_RATE", `compounding: rate ${rate} makes each period non-positive`);
-        }
+        const refused = compoundingRefused(rate, perYear);
+        if (refused) return refused;
         const fv = principal * periodicGrowthFactor(rate, perYear, years);
         return args[0].type === ValueType.Uom ? uomValue(fv, args[0].unit!) : numberValue(fv);
     },
@@ -1741,9 +1989,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         const perYear = args[3].toNumber();
-        if (perYear <= 0 || 1 + rate / perYear <= 0) {
-            return errorValue("INVALID_RATE", `compounding: rate ${rate} over ${perYear} periods per year is not usable`);
-        }
+        const refused = compoundingRefused(rate, perYear);
+        if (refused) return refused;
         const interest = principal * (periodicGrowthFactor(rate, perYear, years) - 1);
         return args[0].type === ValueType.Uom ? uomValue(interest, args[0].unit!) : numberValue(interest);
     },
@@ -1755,7 +2002,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         if (1 + rate <= 0) {
-            return errorValue("INVALID_RATE", `presentValue: rate ${rate} makes (1 + rate) non-positive`);
+            return rateAtOrBelowMinusHundred(rate);
         }
         const pv = future / growthFactor(rate, years);
         return args[0].type === ValueType.Uom ? uomValue(pv, args[0].unit!) : numberValue(pv);
@@ -1771,7 +2018,18 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (invested === 0) {
             return errorValue("INVALID_RATE", "roi: nothing was invested, so there is no return on it");
         }
-        return numberValue((returned - invested) / invested);
+        // An infinite amount put in is infinity over infinity, which was
+        // answered as NaN%, and an infinite amount out answered Infinity%;
+        // neither has a return to give.
+        if (!Number.isFinite(invested) && !Number.isNaN(invested)) {
+            return errorValue("INVALID_RATE", "roi: the amount invested is not a finite number, so there is no return on it");
+        }
+        if (!Number.isFinite(returned) && !Number.isNaN(returned)) {
+            return errorValue("INVALID_RATE", "roi: the amount returned is not a finite number, so there is no return to give");
+        }
+        // The gain as a share of what went in, so a percentage: a return of
+        // 0.50 read as a bare number was easy to take for fifty pence (#830).
+        return percentageValue((returned - invested) / invested);
     },
     // annualisedReturn(invested, returned, years) -> CAGR, the constant
     // yearly rate that turns `invested` into `returned` over `years`:
@@ -1784,6 +2042,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (typeof years !== "number") return years;
         if (invested <= 0) {
             return errorValue("INVALID_RATE", "annual return: the amount invested must be positive");
+        }
+        if (invested === Infinity || returned === Infinity) {
+            return errorValue("INVALID_RATE", "annual return: an amount is not a finite number, so there is no annual rate");
         }
         if (years <= 0) {
             return errorValue("INVALID_RATE", "annual return: the period must be longer than zero");
@@ -1805,10 +2066,16 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // fractional part to round at all, and the round trip through 1e23 was
     // pure loss. Asking for fewer decimal places than a number has cannot
     // change it, so a value that is already whole is returned untouched.
-    97: (args) => roundToPlaces(args[0], args[1].toNumber()),
+    97: (args) => {
+        const places = args[1].toNumber();
+        return roundEachCell(args[0], (cell) => roundToPlaces(cell, places), "rounded") ?? roundToPlaces(args[0], places);
+    },
     // Not reachable by name, only through `<value> to <n> sf`; see
     // roundToSignificant() and converters/parselets/RoundingParselets.ts.
-    108: (args) => roundToSignificant(args[0], args[1].toNumber()),
+    108: (args) => {
+        const figures = args[1].toNumber();
+        return roundEachCell(args[0], (cell) => roundToSignificant(cell, figures), "rounded") ?? roundToSignificant(args[0], figures);
+    },
     // splitEach(amount, n): a per-person bill split, `split $180 between 4` and
     // `$120 + 18% split 3 ways`. Backs both split spellings (see
     // BillSplitParselets.ts). Money stays exact and the shares add back to the
@@ -1877,7 +2144,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const unified = unifyQuantities(args, "compared");
         if (unified instanceof Value) return unified;
         const nums = unified.magnitudes;
-        return quantity(Math.max(...nums) - Math.min(...nums), unified.unit);
+        const largest = Math.max(...nums), smallest = Math.min(...nums);
+        // The spread of percentages is a difference of two, formed in base ten.
+        return quantity(unified.percent ? percentSum(largest, smallest, -1) : largest - smallest, unified.unit, undefined, unified.percent);
     },
     // mode: the most frequent value. A tie is broken by first appearance, so the
     // result is deterministic for the same list. Quantities are read in the
@@ -1887,13 +2156,18 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (args.length === 0) return numberValue(0);
         const unified = unifyQuantities(args, "counted for a mode");
         if (unified instanceof Value) return unified;
-        return quantity(modeOf(unified.magnitudes, unified.unit !== undefined), unified.unit, unified.sources);
+        return quantity(modeOf(unified.magnitudes, unified.unit !== undefined), unified.unit, unified.sources, unified.percent);
     },
     // weighted average: the arguments arrive interleaved [v1, w1, v2, w2, ...]
     // from WeightedAverageParselet, which has already rejected any value with no
     // weight. Weights are normalised by their own total, so they need not sum to
     // 1 or 100%. See issue #185.
     107: (args) => {
+        // The values, not the weights, say what the average is of: a mean of
+        // percentages is a percentage, and a percentage among plain values is
+        // refused, as `average of` refuses it. Weights may be percentages.
+        const percent = percentageOperands(args.filter((_, i) => i % 2 === 0), "averaged");
+        if (percent instanceof Value) return percent;
         let weightedSum = 0;
         let weightTotal = 0;
         for (let i = 0; i + 1 < args.length; i += 2) {
@@ -1905,6 +2179,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (weightTotal === 0) {
             return errorValue("WEIGHTED_AVERAGE_ZERO_WEIGHT", "weighted average: the weights sum to zero, so there is nothing to divide by");
         }
+        // Formed in base ten, so `weighted average of 10% at 1, 20% at 3` is 17.5%.
+        if (percent) return percentageAnswer(percentWeightedMean(args.map((a) => a.toNumber()), weightedSum / weightTotal));
         return numberValue(weightedSum / weightTotal);
     },
     // Number theory (#514), over exact integers; see vm/NumberTheory.ts.
@@ -2081,61 +2357,65 @@ export function pluginFunctionIndexFor(qualifiedName: string): number {
 }
 
 /**
- * Registry of package-registered `as <name>` converters, the SDK extension
- * point for `IEnginePackage.asConverters` (see ExpressionEngine.registerPackage()).
- *
- * String-keyed rather than index-allocated like {@link pluginFunctionRegistry}:
- * converter names ARE the natural key (there's no bytecode-stream byte-width
- * constraint to economize for, the name is only read at parse time to
- * decide whether it's one of the fixed built-ins with a dedicated fast
- * opcode; anything else falls through to `OpCode.CALL_AS_CONVERTER`, which
- * embeds the name as a string constant and looks it up here at runtime).
+ * The module-level converter registry: the {@link defaultEngineContext}'s,
+ * which no engine reads. An engine keeps its own on its context (#710).
  */
-export const asConverterRegistry = new Map<string, AsConverter>();
+const moduleConverters = defaultEngineContext.asConverters;
 
 /**
- * A package-registered `as <name>` converter: the value on the left of `as`
- * in, the converted value out.
+ * The module-level `as <name>` converters by lower-cased key.
  *
- * The optional `context` is the per-line execution context the VM passes to
- * a plugin function, handed to a converter for the same reason: a converter
- * that reads a date computes through the engine's calendar backend on it
- * rather than a module-level default, so `<date> as weekday` and `weekday on
- * <date>` cannot disagree. A converter that needs nothing from it ignores it.
+ * @deprecated An engine keeps its own converters on its `EngineContext` now
+ * (`engine.getContext().asConverters`), filled from `IEnginePackage.asConverters`,
+ * so a converter registered on one engine answers on that engine alone (#710).
+ * This is the {@link defaultEngineContext}'s map, which no engine reads, kept so
+ * existing imports compile. Removed in 3.0.
  */
-export type AsConverter = (value: Value, context?: LineExecutionContext) => Value;
+export const asConverterRegistry: Map<string, AsConverter> = moduleConverters.folded;
 
 /**
- * Register a custom `as <name>` converter. Called by
- * ExpressionEngine.registerPackage() for each entry in a package's
- * `asConverters`. Warns (does not throw) on a name collision, mirrors
- * ParseletRegistry's collision warning, since two independently-authored
- * packages picking the same converter name is a real possibility with a
- * shared string-keyed registry, and silently overwriting is worse than a
- * visible warning.
+ * The module-level converters whose name carries capitals, by that exact
+ * spelling (#824).
  *
- * Skips the warning when `handler` is REFERENCE-IDENTICAL to what's
- * already registered (mirrors `ParseletRegistry.registerPrefix()`'s own
- * `existing !== parselet` guard), a package's `asConverters` object is a
- * module-level constant, so re-constructing an `ExpressionEngine` (which
- * re-registers every built-in package's converters from scratch each
- * time. This is not a per-instance cache) passes the exact same function
- * reference every time, not a genuine second package claiming the name.
- * Without this, every `iso8601` converter registration warned on every
- * single `new ExpressionEngine()` call after the first in a process
- * pure noise, not a real collision signal, surfaced by
- * `DatetimePackage.ts` becoming this registry's first real consumer.
+ * @deprecated See {@link asConverterRegistry}. Removed in 3.0.
  */
-export function registerAsConverter(name: string, handler: AsConverter): void {
-    const key = name.toLowerCase();
-    const existing = asConverterRegistry.get(key);
-    if (existing && existing !== handler) {
-        console.warn(`[asConverterRegistry] Converter name "${key}" is already registered — overwriting.`);
-    }
-    asConverterRegistry.set(key, handler);
+export const asConverterExactRegistry: Map<string, AsConverter> = moduleConverters.exact;
+
+/**
+ * How `typed` matches the module-level registry; see {@link AsConverterMatch}.
+ *
+ * @deprecated Ask the engine's own registry, `context.asConverters.match(typed)`.
+ * See {@link asConverterRegistry}. Removed in 3.0.
+ */
+export function matchAsConverter(typed: string): AsConverterMatch {
+    return moduleConverters.match(typed);
 }
 
-/** Reverse a {@link registerAsConverter} call, used by unregisterPackage(). */
+/**
+ * The converter an `as` target names in the module-level registry.
+ *
+ * @deprecated Ask the engine's own registry, `context.asConverters.resolve(typed)`.
+ * See {@link asConverterRegistry}. Removed in 3.0.
+ */
+export function resolveAsConverter(typed: string): AsConverter | undefined {
+    return moduleConverters.resolve(typed);
+}
+
+/**
+ * Register a converter in the module-level registry, which no engine reads.
+ *
+ * @deprecated Declare it in `IEnginePackage.asConverters`, which the engine
+ * registers into its own context. See {@link asConverterRegistry}. Removed in 3.0.
+ */
+export function registerAsConverter(name: string, handler: AsConverter): void {
+    moduleConverters.register(name, handler);
+}
+
+/**
+ * Reverse a {@link registerAsConverter} call.
+ *
+ * @deprecated See {@link registerAsConverter}. Removed in 3.0.
+ */
 export function unregisterAsConverter(name: string): void {
-    asConverterRegistry.delete(name.toLowerCase());
+    moduleConverters.unregister(name);
 }

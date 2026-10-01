@@ -28,14 +28,43 @@ const CATEGORY_TO_COMPLETION_TYPE: Partial<Record<TokenCategory, string>> = {
 	vector: "type",
 };
 
+/** The part of a CodeMirror `EditorView` an option's `apply` uses, by structure, so no CodeMirror import is needed. */
+export interface CompletionTargetView {
+	dispatch(spec: { changes: { from: number; to: number; insert: string }; selection: { anchor: number } }): void;
+}
+
+/** A CodeMirror completion option, by structure: CM6's `Completion` accepts it. */
+export interface CompletionOption {
+	label: string;
+	type: string;
+	detail?: string;
+	/**
+	 * Present for a phrase matched across the words already typed: replaces
+	 * those words, not only the last one, and puts the cursor after the label.
+	 */
+	apply?: (view: CompletionTargetView, completion: unknown, from: number, to: number) => void;
+}
+
 /**
  * Convert a completion into CodeMirror's option shape.
  *
  * Kept in an adapter so the language service itself stays editor-agnostic.
+ * An item with `replaceLength` (`net pres` offering `net present value of`)
+ * gets an `apply` that replaces that many characters before the cursor, since
+ * CodeMirror would otherwise replace only the word under it and leave `net
+ * net present value of`.
  *
  * @param item - Completion produced by the language service.
  * @returns The equivalent CodeMirror option.
  */
-export function completionItemToOption(item: CompletionItem): { label: string; type: string; detail?: string } {
-	return { label: item.label, type: CATEGORY_TO_COMPLETION_TYPE[item.category] ?? "text", detail: item.detail };
+export function completionItemToOption(item: CompletionItem): CompletionOption {
+	const option: CompletionOption = { label: item.label, type: CATEGORY_TO_COMPLETION_TYPE[item.category] ?? "text", detail: item.detail };
+	const length = item.replaceLength;
+	if (length !== undefined && Number.isInteger(length) && length > 0) {
+		option.apply = (view, _completion, _from, to) => {
+			const start = Math.max(0, to - length);
+			view.dispatch({ changes: { from: start, to, insert: item.label }, selection: { anchor: start + item.label.length } });
+		};
+	}
+	return option;
 }

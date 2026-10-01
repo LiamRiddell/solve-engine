@@ -41,8 +41,13 @@ expand((x+1)*(x+2))           // x^2+3x+2
 
 Every `solve` example in this file, and every `solve` and `solve-doc` example in
 the documentation, is executed by the test suite. If one of them stops being
-true, the build goes red. The TypeScript snippets, here and in the guides, are
-not yet executed.
+true, the build goes red. A TypeScript snippet in the guides that states its
+result (`formatValue(value); // "= 3,000.00 m"`) is run too, and the few that
+need a network, a worker or a runtime `Temporal` are listed by name with the
+reason. Every TypeScript snippet in the guides and the package-author pages is
+also type-checked under `strict` against the published entry points, and the
+few sketches that elide what they stand for are listed by name with the reason.
+The TypeScript snippets in this file are fragments, and are not checked.
 
 ## Install
 
@@ -100,10 +105,36 @@ increase 100 by 10%           // 110
 ```
 
 **Named values, across lines.** A document is a calculation, not a set of
-unrelated sums.
+unrelated sums: a value named on one line is read by the lines below it, and an
+edit above flows down.
 
-```solve
+```solve-doc
 :subtotal = 240
+:tax = :subtotal * 20%
+:subtotal + :tax              // 288
+```
+
+**A note that knows its own structure.** Tag the lines that belong together and
+total them, state what must stay true, ask what a line would say with a
+different input, and ask which lines fed an answer. The lines are
+[category tags](https://liamriddell.github.io/solve-engine/syntax/category-tags/), a
+[check](https://liamriddell.github.io/solve-engine/syntax/checks/), a
+[what-if](https://liamriddell.github.io/solve-engine/syntax/what-if/) and a
+[trace](https://liamriddell.github.io/solve-engine/syntax/tracing-inputs/); headings split the note into
+[sections](https://liamriddell.github.io/solve-engine/syntax/sections/).
+
+```solve-doc
+# Trip
+nights = 3
+rate = £95
+flights: £420 #travel
+hotel: nights * rate #travel
+total of #travel                 // £705.00
+check total of #travel <= £800   // ✓
+
+# Questions
+line 5 with nights = 4           // £380.00
+inputs of line 6                 // £705.00 (line 6) <- £420.00 (line 4), £285.00 (line 5) <- [nights 3 (line 2), rate £95.00 (line 3)]
 ```
 
 **Matrices, ranges, and symbolic algebra.**
@@ -282,7 +313,8 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 | `packages/playground-bridge` | Shared glue between the engine and the playground |
 | `playground` | The interactive playground, with every pipeline stage exposed |
 | `docs` | The documentation site |
-| `examples/osrs` | A worked example of a third-party package |
+| `examples/package-starter` | A starter for a third-party package: public imports only, built and tested against the packed tarball |
+| `packages/engine/examples/osrs` | An internal fixture package the playground and the engine's tests use |
 
 ```bash
 npm install && npm run verify

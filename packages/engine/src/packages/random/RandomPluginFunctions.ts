@@ -83,6 +83,7 @@ export const RANDOM_PLUGIN_FUNCTIONS: Record<string, (args: Value[], context?: L
 			const j = Math.floor(drawRandom(context) * (i + 1));
 			[data[i], data[j]] = [data[j], data[i]];
 		}
-		return matrixValue(m.rows, m.cols, data);
+		// Only reorders, so a list's unit comes with it (#745).
+		return matrixValue(m.rows, m.cols, data, m.unit);
 	},
 };

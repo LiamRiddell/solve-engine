@@ -6,9 +6,8 @@
  * contributions (plan Task 2).
  */
 
-import { describe, expect, test, jest } from "@jest/globals";
+import { afterEach, describe, expect, test, jest } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { newTrackedEngine } from "@tools/trackedEngine";
@@ -129,19 +128,19 @@ describe("ExpressionEngine.unregisterPackage — token highlight category cleanu
 
 	test("registerPackage makes the category resolvable via getTokenCategory", () => {
 		const engine = newTrackedEngine();
-		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBeUndefined();
+		expect(engine.getTokenCategory(TEST_TOKEN_TYPE)).toBeUndefined();
 
 		engine.registerPackage(makeHighlightPackage());
-		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBe("keyword");
+		expect(engine.getTokenCategory(TEST_TOKEN_TYPE)).toBe("keyword");
 	});
 
 	test("unregisterPackage removes the category again", () => {
 		const engine = newTrackedEngine();
 		engine.registerPackage(makeHighlightPackage());
-		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBe("keyword");
+		expect(engine.getTokenCategory(TEST_TOKEN_TYPE)).toBe("keyword");
 
 		expect(engine.unregisterPackage("test-highlight-unregistration-pkg")).toBe(true);
-		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBeUndefined();
+		expect(engine.getTokenCategory(TEST_TOKEN_TYPE)).toBeUndefined();
 	});
 
 	test("re-registering after unregistration works cleanly", () => {
@@ -152,9 +151,9 @@ describe("ExpressionEngine.unregisterPackage — token highlight category cleanu
 		engine.unregisterPackage(pkg.name);
 		engine.registerPackage(pkg);
 
-		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBe("keyword");
+		expect(engine.getTokenCategory(TEST_TOKEN_TYPE)).toBe("keyword");
 		expect(engine.unregisterPackage(pkg.name)).toBe(true);
-		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBeUndefined();
+		expect(engine.getTokenCategory(TEST_TOKEN_TYPE)).toBeUndefined();
 	});
 });
 
@@ -166,12 +165,12 @@ describe("ExpressionEngine.unregisterPackage — lexer plugin cleanup (OSRS)", (
 		const engine = newTrackedEngine({ packages: [] });
 		engine.registerPackage(OSRS_PACKAGE);
 
-		expect(getTokenCategory("OSRS_KEYWORD")).toBe("keyword");
-		expect(getTokenCategory("GAME_ITEM")).toBe("osrs-item");
+		expect(engine.getTokenCategory("OSRS_KEYWORD")).toBe("keyword");
+		expect(engine.getTokenCategory("GAME_ITEM")).toBe("osrs-item");
 
 		engine.unregisterPackage(OSRS_PACKAGE.name);
-		expect(getTokenCategory("OSRS_KEYWORD")).toBeUndefined();
-		expect(getTokenCategory("GAME_ITEM")).toBeUndefined();
+		expect(engine.getTokenCategory("OSRS_KEYWORD")).toBeUndefined();
+		expect(engine.getTokenCategory("GAME_ITEM")).toBeUndefined();
 	});
 });
 

@@ -23,6 +23,20 @@ said. `percent` and `percentage` after a number are the `%`; after `as`,
 0.25 as percent // 25.00%
 ```
 
+A constant is a number like any other, so the word follows `pi`, `e`, `tau`,
+`phi` and `golden ratio` as the sign does, and follows `prev`, the answer on
+the line above. `pi percent` is pi hundredths, about 3.14%.
+
+```solve
+pi percent // 3.14%
+e percent of 200 // 5.44
+200 + pi percent // 206.28
+tau percent // 6.28%
+```
+
+A constant with a unit, such as `gravity`, is a quantity rather than a number,
+and a quantity has no percentage, so the word after it is not read as one.
+
 ## A discount and a markup
 
 `N% off X` takes N% of X away from X, the way a sale price is worked out, and
@@ -60,12 +74,16 @@ decrease 80 by 25% // 60
 $80 - 25% // $60.00
 ```
 
-The past tense reads the same way, and `reduce` is `decrease`:
+The past tense reads the same way, and `reduce` is `decrease`. The value can
+come first, followed by the change, in either tense:
 
 ```solve
 50 increased by 20% // 60
 50 decreased by 20% // 40
 reduce 50 by 20% // 40
+100 increase by 10% // 110
+100 decrease by 10% // 90
+100 reduced by 20% // 80
 ```
 
 `reduce` is also [map-reduce](/syntax/map-reduce-and-aggregates/)'s call, so it
@@ -120,8 +138,10 @@ a percentage of the other. The word works in place of the sign here too.
 20 is what percent of 80 // 25.00%
 ```
 
+### A number as a percentage
+
 With no base after it, `as %` writes a number as a percentage, and so do
-`to %` and `in %`:
+`to %`, `in %` and `as percent`:
 
 ```solve
 0.5 as % // 50.00%
@@ -129,6 +149,49 @@ With no base after it, `as %` writes a number as a percentage, and so do
 0.25 to % // 25.00%
 20/80 in % // 25.00%
 ```
+
+A percentage is its number a hundred times over, so a number can be an ordinary
+finite one while its percentage is not. The largest number that can be held is
+about 1.8e308, so past about 1.8e306 the percentage would be beyond it. Rather
+than print an infinity with a percent sign, the line is refused and says why,
+below zero as well as above it:
+
+```solve
+1e308 as % // This is too large to write as a percentage: a percentage is a hundred times the number, and that is past about 1.8e308, the largest number that can be held.
+-1e308 in % // This is too large to write as a percentage: a percentage is a hundred times the number, and that is past about 1.8e308, the largest number that can be held.
+```
+
+A large percentage that can be held is written in full, every digit of its
+whole part, as a large number is:
+
+```solve
+1e22 as % // 1,000,000,000,000,000,000,000,000.00%
+```
+
+A number can also be too large to be held at all before it is written as a
+percentage. `2^2000` and a typed `1e309` are both past about 1.8e308, so each is
+held as an infinity (shown `∞`), and its percentage is too large in the same
+way. The refusal says so, in the same terms:
+
+```solve
+2^2000 as % // This is too large to write as a percentage: the number is past about 1.8e308, the largest number that can be held.
+1e309 as % // This is too large to write as a percentage: the number is past about 1.8e308, the largest number that can be held.
+```
+
+A division by zero gives an infinity too, but not because a number grew too
+large: there is no number it could be. That is a different refusal, which names
+the division:
+
+```solve
+1/0 as % // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
+40 is what % of 0 // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
+```
+
+The two infinities look the same once they are made, so the engine records
+which one a division by zero gave, and keeps that record through `+`, `-`, `*`,
+`^` and a minus sign in front (`1 - 40/0` is still a division by zero). The
+boundary: a step that does not carry the record, such as a function
+(`abs(1/0)`), leaves an infinity that is read as a number too large to hold.
 
 ## Change between two values
 
@@ -161,6 +224,23 @@ the engine refuses both rather than pick one:
 Between two dates, `to` gives the span from one to the other instead; see
 [date arithmetic](/syntax/date-arithmetic/).
 
+### A change as a multiplier
+
+`as multiplier` writes a change as how many times something grows: a rise of
+50% is 1.5 times the start, and a plain number is taken as the multiple itself.
+It takes a plain number or a percentage and nothing else, since text has no
+number to grow by and a quantity's unit would be lost without a word:
+
+```solve
+50% as multiplier // 1.5x
+(100 to 150) as multiplier // 1.5x
+0.5 as multiplier // 0.5x
+```
+
+```solve-doc
+5 km as multiplier // ERROR: A multiplier is a plain number or a percentage, as in "0.5 as multiplier" or "50% as multiplier", not a length.
+```
+
 ## Solving for the base
 
 When you know the percentage and the result but not the original: what 5% of
@@ -170,7 +250,11 @@ gives 6, and the price before a 20% markup or a 20% discount.
 5% of what is 6 // 120
 120 is 20% on what // 100
 120 is 20% off what // 150
+20% off what is $80 // $100.00
 ```
+
+The last asks the same question with the rate first: the price that a 20%
+discount brings down to $80.
 
 ## Percent, permille and parts per million
 
@@ -192,12 +276,208 @@ percentage, and is refused:
 5 km as % // A length is not a proportion, so it has no percentage: only a number, a ratio or a parts-per quantity (ppm, permille) can be written as one.
 ```
 
+## A percentage and a list
+
+A list (a row of numbers in square brackets, see
+[vectors and matrices](/syntax/vectors-and-matrices/)) is a set of values
+worked on together, such as a column of prices. A percentage added to a list,
+or taken from one, is a share of each value in it, exactly as it is of one
+number: a 10% rise on a list of prices raises every price by a tenth of
+itself. A list of quantities or money keeps its unit.
+
+```solve
+[100, 200] + 10% // [110, 220]
+[100, 200] - 10% // [90, 180]
+[100 m, 200 m] + 10% // [110.00 m, 220.00 m]
+[$100, $200] - 10% // [$90.00, $180.00]
+```
+
+Every other way of writing a percentage of a value works on a list the same
+way, value by value: `of`, a discount or markup, multiplying and dividing.
+
+```solve
+10% of [100, 200] // [10, 20]
+15% off [$80, $120] // [$68.00, $102.00]
+20% on [50 kg, 60 kg] // [60.00 kg, 72.00 kg]
+[100 m, 200 m] * 10% // [10.00 m, 20.00 m]
+```
+
+Each value is worked out as it would be on a line of its own, so money stays
+exact to the cent, and a percentage held in a variable reads the same way:
+
+```solve-doc
+prices = [$19.99, $5.00] // [$19.99, $5.00]
+vat = 20% // 20.00%
+prices + vat // [$23.99, $6.00]
+```
+
+The boundary: a percentage written before a plain list with `+` or `-` is
+refused by name. For one number, `10% + 100` is the percentage 10,010%, and a
+list holds plain numbers, not percentages, so the answer would be shown as
+fractions nobody meant. The refusal gives the order that adds the percentage
+to each value. Before a list of quantities or money, a percentage reads as it
+does before one amount (`10% + $5` is $5.50), so there it is answered. These
+answers used to be wrong: `[100, 200] + 10%` added 0.1 to each value and
+answered `[100.10, 200.10]`, and a list with a unit refused a percentage.
+
+```solve
+10% + [100, 200] // A percentage plus a list would be a list of percentages, and a list holds plain numbers. To add the percentage to each number, write the list first, as in [100, 200] + 10%.
+10% + [$100, $200] // [$110.00, $220.00]
+```
+
+A percentage cannot be a value inside a list either. A list holds plain
+numbers, so `[10%, 20%]` would keep each percentage as its fraction, 0.1 and
+0.2, and adding that list to prices would add 0.1 and 0.2 rather than a tenth
+and a fifth. A list with a percentage in it is refused by name, with the two
+forms that say what was meant: one percentage outside the list, applied to
+every value, or the fractions written as numbers. To raise each price by its
+own share, work the amounts out and add them as a list.
+
+```solve
+[10%, 20%] // A list holds plain numbers, so it cannot hold 10% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.1 for 10%).
+[100, 200] + [10%, 20%] // A list holds plain numbers, so it cannot hold 10% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.1 for 10%).
+[100, 200] + [10, 40] // [110, 240]
+[0.1, 0.2] // [0.10, 0.20]
+```
+
+The boundary: the refusal covers every way a list is made, so `map(x%, [10,
+20])` is refused as the literal is, and a sum, an average or a product of such a
+list never runs. These used to answer with the fractions: `[10%, 20%]` was
+`[0.10, 0.20]`, `sum([10%, 20%])` was 0.30 rather than 30%, and `[100, 200] +
+[10%, 20%]` was `[100.10, 200.20]`.
+
+To add up or average percentages, list them with commas rather than brackets,
+or put each on a line of its own and total the lines: a set of percentages
+answers a percentage, and a percentage beside a plain number is refused by name
+(see [a list of percentages](/syntax/statistics/#a-list-of-percentages)).
+
+```solve
+sum(10%, 20%) // 30.00%
+average of 10%, 20% // 15.00%
+```
+
+## A percentage as a multiplier
+
+A multiplier is the number a value is multiplied by to apply a change: a 20%
+rise multiplies by 1.2, the factor a spreadsheet formula or a price list uses.
+`as multiplier` turns a percentage into that factor, and shows a plain number as
+one, with an `x` after it. The conversion is read by `CONVERTERS_PACKAGE`, which
+`createEngine()` registers.
+
+```solve
+20% as multiplier // 1.2x
+150% as multiplier // 2.5x
+0.5 as multiplier // 0.5x
+```
+
+## Multiplying and dividing percentages
+
+A percentage times a plain number takes that share of the number, as `of`
+does: `50% * 30` is half of 30. Times an amount of money or a quantity, it is
+that share of the amount, in its unit.
+
+```solve
+50% * 30 // 15
+100 * 40% // 40
+10% * $5 // $0.50
+```
+
+A share of a share is itself a share: ten per cent of twenty per cent is two
+per cent. So a percentage times a percentage is a percentage, with `*`, with
+`of` and with `product of`. Dividing a percentage by a number divides the
+share, which is how a yearly rate becomes a monthly one, and a power of a
+percentage is the share taken that many times over.
+
+```solve
+10% * 20% // 2.00%
+10% of 20% // 2.00%
+product of 10%, 20% and 50% // 1.00%
+6% / 12 // 0.50%
+10% ^ 2 // 1.00%
+```
+
+The answer goes on working as a percentage, so a monthly rate found this way
+raises an amount by that share:
+
+```solve-doc
+rate = 6% // 6.00%
+monthly = rate / 12 // 0.50%
+$1000 + monthly // $1,005.00
+$1000 * monthly // $5.00
+```
+
+A percentage over a percentage is how many times one share goes into the
+other, a plain ratio, and a number over a percentage is a plain number:
+
+```solve
+10% / 20% // 0.50
+200 / 10% // 2,000
+```
+
+The boundary: `10% * 2` is 0.2, a tenth of 2, not 20%. A percentage times a
+number is always read as a share of the number, since that is what `100 * 40%`
+means and the engine cannot tell the two apart by size. To double a rate, add
+it to itself, or write the answer as a percentage with `as %`. A percentage
+over zero has no finite share and is refused, and `10% ^ -1` is read as
+`1 / 10%`, a plain 10. A measurement with an
+[uncertainty](/syntax/uncertainty/) keeps its own arithmetic, so
+`10% / (2 +/- 0.1)` is a plain 0.05 ± 0.0025. These used to be plain numbers:
+`10% * 20%` and `product of 10%, 20%` were 0.02, `10% / 2` was 0.05 and
+`10% ^ 2` was 0.01, so a monthly rate added to an amount was added as a bare
+fraction rather than as a share of it.
+
+```solve
+10% * 2 // 0.20
+10% + 10% // 20.00%
+(10% * 2) as % // 20.00%
+10% / 0 // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
+```
+
+## Percentages that add up exactly
+
+A computer holds most numbers in binary, where a tenth has no exact form, so
+adding 0.1 and 0.2 that way lands a hair past 0.3 (see
+[decimals](/syntax/decimals/)). A percentage is a decimal too, and its sums,
+differences, products, quotients and powers, its totals and its averages are
+worked out from the decimals as written. So a total of percentages equals the
+percentage it shows, and a check of it agrees with `==`:
+
+```solve
+10% + 20% == 30% // true
+sum(10%, 20%) == 30% // true
+30% - 10% == 20% // true
+10% * 20% == 2% // true
+(average of 10%, 20%, 30%) == 20% // true
+```
+
+```solve-doc
+10% // 10.00%
+20% // 20.00%
+total above // 30.00%
+check line 3 == 30% // ✓
+```
+
+The boundary: this covers a percentage written with up to fifteen significant
+digits, which is every one a person types. A percentage worked out from a
+fraction with no end, such as `(1/3) as %`, and a standard deviation of
+percentages are floating point, as a plain number's are. These used to be
+false: `10% + 20% == 30%` and `sum(10%, 20%) == 30%`, while `check 10% + 20%
+== 30%` passed.
+
 ## What it does not cover
 
 - Only `of` reads a parts-per quantity as a rate. `*` keeps its unit, so
   `2 permille * 5000` is 10,000 permille: the same amount as 10, in the unit it
   was written in.
 - A percentage of zero (`40 is what % of 0`), or of any value that is not a
-  finite number, is refused rather than shown as an infinite percentage.
-- A decimal comma in a percentage (`12,5%`) is not read yet, even under a
-  locale that writes one.
+  finite number, is refused rather than shown as an infinite percentage, and so
+  is a number too large for a hundred times it to be held (`1e308 as %`, and
+  `2^2000 as %`, which is too large to hold even before it is a percentage).
+- Adding a percentage multiplies, so an increase can grow past about 1.8e308,
+  the largest number that can be held. The answer is then an infinity, written
+  `∞`, as `2^1024` is: `200 + 1e308%` is `∞`. It is the value the arithmetic
+  reached, not a refusal, and a later line can still compare it (`∞ > 5` is
+  true) or divide by it (`1/∞` is 0).
+- A decimal comma in a percentage (`12,5%`) is read only by an engine whose
+  locale writes one, German or French (see [locales](/guide/locales/#the-decimal-comma));
+  an English engine refuses it, as it refuses `12,5` alone.

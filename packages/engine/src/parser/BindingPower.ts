@@ -42,7 +42,20 @@ export const BindingPower = {
   BitwiseOr: 18,   // `|`
   BitwiseXor: 20,  // the `xor` keyword (`BIT_XOR`), not the `^` exponent token
   BitwiseAnd: 22,  // `&`
-  Conditional: 24, // comparisons (`==`, `<`, `>=`, ...), tighter than the bitwise trio, looser than the shifts
+  // The comparisons (`==`, `!=`, `<`, `>`, `<=`, `>=`) and the two sides of a
+  // `check`. One step below `Conditional`, so every phrase operator at that
+  // level binds to its own side of a comparison rather than to the comparison:
+  // `255 in hex == 0xff in hex` is `(255 in hex) == (0xff in hex)`, and
+  // `check 255 in hex == 255` has a whole conversion on its left. When the two
+  // shared a level, the second conversion took the comparison as its operand
+  // (`((255 in hex) == 0xff) in hex`, the hex form of true) and a check's left
+  // side stopped before its `as`. Tighter than the bitwise trio, as before.
+  Comparison: 23,
+  // The phrase operators that read a whole arithmetic expression on each side:
+  // display conversions (`as hex`, `in binary`), `to` as a percentage change,
+  // `is what % of`, `increase by`, and the rest. Looser than the shifts and
+  // arithmetic, tighter than a comparison.
+  Conditional: 24,
   Shift: 27,       // `<<`, `>>`, `>>>`
   Sum: 30,
   Product: 40,
@@ -82,10 +95,14 @@ export function setBindingPower(name: string, power: number): void {
  * @param name - Operator name.
  * @returns Its binding power, or 0 when the name is unknown, which makes an
  * unregistered operator terminate an expression rather than swallow the rest
- * of it.
+ * of it. Only a level the table holds as its own counts: a name every object
+ * inherits (`constructor`, `toString`) is unknown, where it used to answer the
+ * inherited function in place of a number.
  */
 export function getBindingPower(name: string): number {
-  return (BindingPower as Record<string, number>)[name] ?? 0;
+  if (!Object.prototype.hasOwnProperty.call(BindingPower, name)) return 0;
+  const power = (BindingPower as Record<string, unknown>)[name];
+  return typeof power === "number" ? power : 0;
 }
 
 // ── Built-in Infix Operator Binding Power Table ──────────────────────────────

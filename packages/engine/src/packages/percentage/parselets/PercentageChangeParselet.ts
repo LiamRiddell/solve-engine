@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { isKnownUnit } from "@solve-js/lexer/units";
+import { readsAsRadians, emitRadiansTag, leftIsWholeCall } from "@solve-js/parser/InverseTrigAngle";
 
 /**
  * `100 to 150`, the percentage change between two numbers.
@@ -18,6 +19,8 @@ export class PercentageChangeParselet implements InfixParselet {
 	readonly bindingPower = BindingPower.Conditional;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
+    // Read before anything more is consumed, while `to` is the last token read.
+    const wholeCall = leftIsWholeCall(parser, left);
     // Check if the left operand is a UNIT token
     // If so, this is a UoM conversion, not a percentage change
     if (left.type === "UNIT") {
@@ -68,6 +71,8 @@ export class PercentageChangeParselet implements InfixParselet {
       )
     ) {
       parser.consume();
+      // `asin(0.5) to degrees`: the radians the call answers in, converted (#829).
+      if (readsAsRadians(left, nextToken.value, wholeCall)) emitRadiansTag(builder);
       builder.emitOpcode(OpCode.PUSH_STRING);
       builder.emitString(nextToken.value);
       builder.emitOpcode(OpCode.UOM_CONVERT_IN);

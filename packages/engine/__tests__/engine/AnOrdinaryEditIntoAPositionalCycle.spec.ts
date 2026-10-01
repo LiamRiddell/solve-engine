@@ -145,7 +145,8 @@ describe("an ordinary edit that closes a cycle", () => {
 
 	test("editing the reader below reports it too", () => {
 		const session = editorFor(["line 2 + 1", "7"]);
-		expect(shown(session.doc, 1)).toBe("8");
+		// A forward reference, refused on every pass as the batch pass refuses it.
+		expect(shown(session.doc, 1)).toBe(notEvaluated(2));
 		const text = edit(session, ["line 2 + 1", "7"], 2, "line 1 + 1");
 
 		expect(answersOf(session.doc, 2)).toEqual(settled(text));
@@ -199,7 +200,7 @@ describe("an ordinary edit that closes a cycle", () => {
 
 	test("retargeting a reference into a cycle", () => {
 		const session = editorFor(["line 3 + 5", "prev + 5", "9"]);
-		expect(answersOf(session.doc, 3)).toEqual(["14", "19", "9"]);
+		expect(answersOf(session.doc, 3)).toEqual([notEvaluated(3), "Line 1 has an error", "9"]);
 		const text = edit(session, ["line 3 + 5", "prev + 5", "9"], 1, "line 2 + 5");
 
 		expect(answersOf(session.doc, 3)).toEqual(settled(text));
@@ -241,7 +242,9 @@ describe("a cycle that comes and goes", () => {
 		const text = edit(session, ["line 2 + 5", "prev + 5"], 2, "12");
 
 		expect(answersOf(session.doc, 2)).toEqual(settled(text));
-		expect(answersOf(session.doc, 2)).toEqual(["17", "12"]);
+		// Line 1 still reads the line below it, which is refused, not a cycle.
+		expect(answersOf(session.doc, 2)).toEqual([notEvaluated(2), "12"]);
+		expect(answersOf(session.doc, 2)).toEqual(batch(text));
 		session.evaluator.terminateWorker();
 	});
 
@@ -253,13 +256,15 @@ describe("a cycle that comes and goes", () => {
 		const travel = editorFor(["total of #travel", "line 1 + 1 #travel"]);
 		const travelText = edit(travel, ["total of #travel", "line 1 + 1 #travel"], 2, "12 #travel");
 		expect(answersOf(travel.doc, 2)).toEqual(settled(travelText));
-		expect(answersOf(travel.doc, 2)).toEqual(["12", "12"]);
+		expect(answersOf(travel.doc, 2)).toEqual(["Line 2 has not been evaluated yet", "12"]);
+		expect(answersOf(travel.doc, 2)).toEqual(batch(travelText));
 		travel.evaluator.terminateWorker();
 
 		const four = editorFor(["1", "line 4 + 5", "2", "line 2 + 5"]);
 		const fourText = edit(four, ["1", "line 4 + 5", "2", "line 2 + 5"], 4, "12 #travel");
 		expect(answersOf(four.doc, 4)).toEqual(settled(fourText));
-		expect(answersOf(four.doc, 4)).toEqual(["1", "17", "2", "12"]);
+		expect(answersOf(four.doc, 4)).toEqual(["1", notEvaluated(4), "2", "12"]);
+		expect(answersOf(four.doc, 4)).toEqual(batch(fourText));
 		four.evaluator.terminateWorker();
 	});
 
@@ -271,11 +276,12 @@ describe("a cycle that comes and goes", () => {
 		const session = editorFor(["line 4 + 1", "3", "5", "total above"]);
 		let text = edit(session, ["line 4 + 1", "3", "5", "total above"], 2, "# a heading");
 		expect(answersOf(session.doc, 4)).toEqual(settled(text));
-		expect(answersOf(session.doc, 4)).toEqual(["6", "", "5", "5"]);
+		expect(answersOf(session.doc, 4)).toEqual([notEvaluated(4), "", "5", "5"]);
 
 		text = edit(session, text, 1, "line 4 + 2");
 		expect(answersOf(session.doc, 4)).toEqual(settled(text));
-		expect(answersOf(session.doc, 4)).toEqual(["7", "", "5", "5"]);
+		expect(answersOf(session.doc, 4)).toEqual([notEvaluated(4), "", "5", "5"]);
+		expect(answersOf(session.doc, 4)).toEqual(batch(text));
 		expectStill(session, 4);
 		session.evaluator.terminateWorker();
 	});
@@ -287,7 +293,7 @@ describe("a cycle that comes and goes", () => {
 		// noticed, which they are only because the shrinking run dropped them.
 		const session = editorFor(["line 4 + 1", "5", "3", "total above"]);
 		let text = edit(session, ["line 4 + 1", "5", "3", "total above"], 2, "# a heading");
-		expect(answersOf(session.doc, 4)).toEqual(["4", "", "3", "3"]);
+		expect(answersOf(session.doc, 4)).toEqual([notEvaluated(4), "", "3", "3"]);
 
 		text = edit(session, text, 2, "5");
 		expect(answersOf(session.doc, 4)).toEqual(settled(text));
@@ -309,14 +315,17 @@ describe("a cycle that comes and goes", () => {
 });
 
 describe("what is left alone", () => {
-	test("a plain forward reference is still tolerated", () => {
-		// The incremental path reads a line below on the next pass; that is
-		// not a cycle and is not touched.
+	test("a plain forward reference is refused on every pass", () => {
+		// Not a cycle, and not tolerated either: a note is read from the top,
+		// so the line below has not been evaluated from where line 1 stands.
+		// The incremental path used to read it on the next pass, answering 8
+		// where the batch pass, and its own first pass, refused.
 		const session = editorFor(["5", "7"]);
 		const text = edit(session, ["5", "7"], 1, "line 2 + 1");
 
 		expect(answersOf(session.doc, 2)).toEqual(settled(text));
-		expect(answersOf(session.doc, 2)).toEqual(["8", "7"]);
+		expect(answersOf(session.doc, 2)).toEqual([notEvaluated(2), "7"]);
+		expect(answersOf(session.doc, 2)).toEqual(batch(text));
 		session.evaluator.terminateWorker();
 	});
 
@@ -325,7 +334,8 @@ describe("what is left alone", () => {
 		const text = edit(session, ["line 2 + 5", "prev + 5", "9"], 1, "line 3 + 5");
 
 		expect(answersOf(session.doc, 3)).toEqual(settled(text));
-		expect(answersOf(session.doc, 3)).toEqual(["14", "19", "9"]);
+		expect(answersOf(session.doc, 3)).toEqual([notEvaluated(3), "Line 1 has an error", "9"]);
+		expect(answersOf(session.doc, 3)).toEqual(batch(text));
 		session.evaluator.terminateWorker();
 	});
 
@@ -353,9 +363,8 @@ describe("a pass from scratch is unchanged", () => {
 		// found on the first pass although the walk stops at line 3.
 		{ lines: ["sum(line 3 : line 4)", "", "5", "line 1 + 1"], passes: 2 },
 		{ lines: ["total of #travel", "line 1 + 1 #travel"], passes: 2 },
-		// Not a cycle: a plain forward reference, which the incremental path
-		// resolves by running again and the batch pass does not.
-		{ lines: ["line 2 + 1", "7"], answers: ["8", "7"], passes: 3 },
+		// Not a cycle: a plain forward reference, refused by both paths.
+		{ lines: ["line 2 + 1", "7"], passes: 2 },
 		{
 			lines: ["average above", "line 1 + 2"],
 			answers: ["No lines above to aggregate (hit the top of the document, a blank line, or a heading immediately)", "Line 1 has an error"],

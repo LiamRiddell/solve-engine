@@ -14,23 +14,35 @@
 import { DEFAULT_CONFIG, type EngineConfigOverride } from "@solve-js/constants/Configuration";
 import { resolveDateOrderPolicy } from "@solve-js/packages/datetime/DateReading";
 import type { UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
-import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
+import type { FormattingOverrides } from "@solve-js/format/FormattingSettings";
 import type { EngineError } from "@solve-js/errors";
 import {
 	deserializeEngineError,
+	workerArgumentError,
 	workerCancelledError,
 	workerTerminatedError,
 } from "@solve-js/errors";
+import type { SemanticToken, CompletionItem } from "@solve-js/language/LanguageService";
+import type {
+	DocumentPosition,
+	LineShift,
+	LineShiftResult,
+	RenameResult,
+	VariableReference,
+} from "@solve-js/language/DocumentReferences";
 import type { WorkerTransport } from "./transport";
 import type {
 	WorkerMethod,
 	WorkerRequestArgs,
 	WorkerToMainMessage,
+	WorkerWhatIfOverrides,
 } from "./protocol";
 import type {
 	SerializedWorkerValue,
 	SerializedParsedLine,
 	SerializedParsingResult,
+	SerializedExplanation,
+	SerializedLineTrace,
 } from "./dto";
 
 /** Configuration for {@link createWorkerEngine}. */
@@ -53,8 +65,8 @@ export interface WorkerEngineOptions {
 	 * name.
 	 */
 	packages?: string[];
-	/** Formatting settings the worker uses when it renders a DTO's display text. */
-	formatting?: FormattingSettings;
+	/** Formatting the worker writes a DTO's display text with, merged group by group over the worker engine's own settings (its calendar and its locale's numbers). A calendar backend cannot cross the boundary; give it to the worker runtime instead. */
+	formatting?: FormattingOverrides;
 }
 
 /** Per-call options common to every proxied method. */
@@ -93,11 +105,55 @@ export interface WorkerAsyncError {
  */
 export interface WorkerEngine {
 	/** Parse a whole document off-thread. Mirrors `ExpressionEngine.parseDocument`. */
-	parseDocument(input: string, options?: UnifiedParsingOptions & WorkerCallOptions): Promise<SerializedParsingResult>;
+	parseDocument(input: string, options?: Partial<UnifiedParsingOptions> & WorkerCallOptions): Promise<SerializedParsingResult>;
 	/** Evaluate an array of lines off-thread. Mirrors `ExpressionEngine.evaluateLines`. */
 	evaluateLines(lines: string[], options?: WorkerCallOptions): Promise<SerializedParsedLine[]>;
 	/** Evaluate a single expression off-thread. Mirrors `ExpressionEngine.evaluateExpression`. */
 	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedWorkerValue>;
+	/**
+	 * Evaluate a whole document off-thread through the incremental pass, which
+	 * can re-run a line, so goal seek resolves. Mirrors the `evaluateDocument`
+	 * helper from `solve-engine/engine`, and answers value for value as it does
+	 * on the main thread.
+	 */
+	evaluateDocument(input: string, options?: WorkerCallOptions): Promise<SerializedParsingResult>;
+	/**
+	 * Re-run a document with some inputs changed, off-thread. Mirrors
+	 * `ExpressionEngine.whatIf`. Each override is a finite number or text the
+	 * worker evaluates on its own (`"$120"`); a `Value` cannot cross the
+	 * boundary with its type, so send its text instead.
+	 */
+	whatIf(input: string, overrides: WorkerWhatIfOverrides, options?: WorkerCallOptions): Promise<SerializedParsingResult>;
+	/** The derivation of how a line reached its answer. Mirrors `ExpressionEngine.explainLine`. */
+	explainLine(expression: string, options?: WorkerCallOptions): Promise<SerializedExplanation>;
+	/**
+	 * Where line `lineNumber` of `input` got its answer. Mirrors
+	 * `ExpressionEngine.traceLine`, reading the document through the incremental
+	 * pass (the one just evaluated, when `input` is the same text).
+	 */
+	traceLine(
+		input: string,
+		lineNumber: number,
+		options?: { maxDepth?: number; maxLines?: number } & WorkerCallOptions,
+	): Promise<SerializedLineTrace>;
+	/**
+	 * Wait until the worker's in-flight live values have settled. Mirrors
+	 * `ExpressionEngine.settle`: rejects with `SETTLE_TIMEOUT` at the deadline,
+	 * and the settled values arrive through {@link onResolved} as ever.
+	 */
+	settle(options?: { timeoutMs?: number } & WorkerCallOptions): Promise<void>;
+	/** Highlighting for one line. Mirrors `LanguageService.getSemanticTokens` on the worker's engine. */
+	getSemanticTokens(lineText: string, lineNumber: number, options?: WorkerCallOptions): Promise<SemanticToken[]>;
+	/** Completions at a cursor. Mirrors `LanguageService.getCompletions` on the worker's engine. */
+	getCompletions(lineText: string, cursorOffset: number, options?: WorkerCallOptions): Promise<CompletionItem[]>;
+	/** Every place the variable at `position` is named. Mirrors `LanguageService.findReferences`. */
+	findReferences(text: string, position: DocumentPosition, options?: WorkerCallOptions): Promise<VariableReference[]>;
+	/** The definition the variable at `position` reads. Mirrors `LanguageService.getDefinition`. */
+	getDefinition(text: string, position: DocumentPosition, options?: WorkerCallOptions): Promise<VariableReference | null>;
+	/** Rename the variable at `position`. Mirrors `LanguageService.rename`, refusals included. */
+	rename(text: string, position: DocumentPosition, newName: string, options?: WorkerCallOptions): Promise<RenameResult>;
+	/** The edits that keep `line N` references in place after lines move. Mirrors `LanguageService.shiftLineReferences`. */
+	shiftLineReferences(text: string, change: LineShift, options?: WorkerCallOptions): Promise<LineShiftResult>;
 	/**
 	 * Subscribe to live-data resolutions that land after a request already
 	 * answered.
@@ -185,12 +241,14 @@ class WorkerEngineClient implements WorkerEngine {
 
 	parseDocument(
 		input: string,
-		options?: UnifiedParsingOptions & WorkerCallOptions,
+		options?: Partial<UnifiedParsingOptions> & WorkerCallOptions,
 	): Promise<SerializedParsingResult> {
 		// The signal stays main-side and drives a `cancel`; only the parsing
-		// options cross, so an AbortSignal never reaches `postMessage`.
+		// options cross, so an AbortSignal never reaches `postMessage`. A call
+		// with only a signal, `{ signal }`, sends no options, and one that
+		// leaves out `inputType` gets the engine's own default, markdown.
 		const { signal, ...parsing } = options ?? {};
-		const parseOptions = Object.keys(parsing).length > 0 ? (parsing as UnifiedParsingOptions) : undefined;
+		const parseOptions: UnifiedParsingOptions | undefined = Object.keys(parsing).length > 0 ? { ...parsing, inputType: parsing.inputType ?? "markdown" } : undefined;
 		return this.call<SerializedParsingResult>("parseDocument", [input, parseOptions], signal);
 	}
 
@@ -200,6 +258,56 @@ class WorkerEngineClient implements WorkerEngine {
 
 	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedWorkerValue> {
 		return this.call<SerializedWorkerValue>("evaluateExpression", [expression], options?.signal);
+	}
+
+	evaluateDocument(input: string, options?: WorkerCallOptions): Promise<SerializedParsingResult> {
+		return this.call<SerializedParsingResult>("evaluateDocument", [input], options?.signal);
+	}
+
+	whatIf(input: string, overrides: WorkerWhatIfOverrides, options?: WorkerCallOptions): Promise<SerializedParsingResult> {
+		return this.call<SerializedParsingResult>("whatIf", [input, overrides], options?.signal);
+	}
+
+	explainLine(expression: string, options?: WorkerCallOptions): Promise<SerializedExplanation> {
+		return this.call<SerializedExplanation>("explainLine", [expression], options?.signal);
+	}
+
+	traceLine(
+		input: string,
+		lineNumber: number,
+		options?: { maxDepth?: number; maxLines?: number } & WorkerCallOptions,
+	): Promise<SerializedLineTrace> {
+		const { signal, ...bounds } = options ?? {};
+		return this.call<SerializedLineTrace>("traceLine", [input, lineNumber, bounds], signal);
+	}
+
+	async settle(options?: { timeoutMs?: number } & WorkerCallOptions): Promise<void> {
+		const { signal, ...wait } = options ?? {};
+		await this.call<null>("settle", [wait], signal);
+	}
+
+	getSemanticTokens(lineText: string, lineNumber: number, options?: WorkerCallOptions): Promise<SemanticToken[]> {
+		return this.call<SemanticToken[]>("getSemanticTokens", [lineText, lineNumber], options?.signal);
+	}
+
+	getCompletions(lineText: string, cursorOffset: number, options?: WorkerCallOptions): Promise<CompletionItem[]> {
+		return this.call<CompletionItem[]>("getCompletions", [lineText, cursorOffset], options?.signal);
+	}
+
+	findReferences(text: string, position: DocumentPosition, options?: WorkerCallOptions): Promise<VariableReference[]> {
+		return this.call<VariableReference[]>("findReferences", [text, position], options?.signal);
+	}
+
+	getDefinition(text: string, position: DocumentPosition, options?: WorkerCallOptions): Promise<VariableReference | null> {
+		return this.call<VariableReference | null>("getDefinition", [text, position], options?.signal);
+	}
+
+	rename(text: string, position: DocumentPosition, newName: string, options?: WorkerCallOptions): Promise<RenameResult> {
+		return this.call<RenameResult>("rename", [text, position, newName], options?.signal);
+	}
+
+	shiftLineReferences(text: string, change: LineShift, options?: WorkerCallOptions): Promise<LineShiftResult> {
+		return this.call<LineShiftResult>("shiftLineReferences", [text, change], options?.signal);
 	}
 
 	onResolved(listener: (lines: WorkerAsyncUpdate[]) => void): () => void {
@@ -251,7 +359,16 @@ class WorkerEngineClient implements WorkerEngine {
 			}
 
 			this.pending.set(id, entry);
-			this.transport.postMessage({ kind: "request", id, method, args });
+			try {
+				this.transport.postMessage({ kind: "request", id, method, args });
+			} catch (error) {
+				// `postMessage` copies its argument, and refuses what it cannot copy
+				// (a function, a symbol) by throwing where the caller never sees a
+				// code. Nothing was sent, so the request ends here, coded.
+				this.pending.delete(id);
+				this.unhook(entry);
+				reject(workerArgumentError(method, error instanceof Error ? error.message : String(error)));
+			}
 		});
 	}
 
@@ -262,11 +379,11 @@ class WorkerEngineClient implements WorkerEngine {
 			case "ready":
 			case "result": {
 				const value = message.kind === "result" ? message.value : undefined;
-				this.settle(message.id, (entry) => entry.resolve(value));
+				this.settleRequest(message.id, (entry) => entry.resolve(value));
 				break;
 			}
 			case "error":
-				this.settle(message.id, (entry) => entry.reject(deserializeEngineError(message.error)));
+				this.settleRequest(message.id, (entry) => entry.reject(deserializeEngineError(message.error)));
 				break;
 			case "async-update":
 				// A broadcast, not an answer to a request: fan it out to every
@@ -287,7 +404,7 @@ class WorkerEngineClient implements WorkerEngine {
 	}
 
 	/** Remove a pending request by id and run the settle callback, if it is still pending. */
-	private settle(id: number, apply: (entry: PendingRequest) => void): void {
+	private settleRequest(id: number, apply: (entry: PendingRequest) => void): void {
 		const entry = this.pending.get(id);
 		if (!entry) return;
 		this.pending.delete(id);

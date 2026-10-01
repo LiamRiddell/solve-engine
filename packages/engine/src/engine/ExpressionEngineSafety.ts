@@ -17,6 +17,7 @@ import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 // no behavioural difference.
 import { sharedLexer } from "@solve-js/lexer/Lexer";
 import { globalDagKey } from "@solve-js/vm/GlobalVariableStore";
+import { hasDirectionControl } from "@solve-js/engine/DirectionControls";
 
 // ── Validation config ────────────────────────────────────────────────────
 
@@ -112,7 +113,10 @@ export function checkExpressionComplexity(
  * collides with a known unit (e.g., "b" for bits, "s" for seconds).
  */
 function isVarName(t: Token): boolean {
-    return t.type === "IDENT" || t.type === "UNIT";
+    // A word holding an invisible direction control is refused as a name (see
+    // engine/DirectionControls.ts), so it is never a read or a write: the graph,
+    // and the completions read from it, never hold such a name.
+    return (t.type === "IDENT" || t.type === "UNIT") && !hasDirectionControl(t.value);
 }
 
 /**
@@ -348,7 +352,9 @@ export function extractReadsAndWrites(
         // (#642), so the line reads the name: defining `t` above it, or
         // deleting that line, changes its answer. A function's own parameter
         // is its own, as below.
-        if (t.type === "PER_UNIT" && t.mayNameVariable === true) {
+        // A lone `sum` or `total` (#742) reads a variable of its name the same
+        // way, so the line is recorded as reading it too.
+        if (t.mayNameVariable === true) {
             if (!functionParamNames.has(t.value)) {
                 reads.push(t.value);
                 onName?.(i, t.value, "read");

@@ -92,9 +92,9 @@ describe("French locale — input keywords", () => {
 		expect(engine.evaluateExpression("abs(-5)").toNumber()).toBe(5);
 	});
 
-	test("regression guard: a French-only function name is NOT silently broken — it errors clearly rather than returning a wrong number (builtinNameToIndex is a separate, locale-independent dispatch table)", () => {
+	test("a French function name runs the built-in it names (#833, which replaced the guard that it was refused)", () => {
 		const engine = newTrackedEngine({ locale: "fr" });
-		expect(() => engine.evaluateExpression("racine(16)")).toThrow(/undefined function|unknown function/i);
+		expect(engine.evaluateExpression("racine(16)").toNumber()).toBe(4);
 	});
 
 	test("booleans and conditionals", () => {
@@ -110,8 +110,8 @@ describe("French locale — input keywords", () => {
 		expect((value.value as MatrixData).data).toEqual([1, 2]);
 	});
 
-	test("regression guard: German's pre-existing analogous gap (wurzel/root) is unaffected by this change, confirming it's a pre-existing architectural limitation, not something newly introduced", () => {
-		const engine = newTrackedEngine({ locale: "de" });
-		expect(() => engine.evaluateExpression("wurzel(16)")).toThrow(/undefined function|unknown function/i);
+	test("a German function name runs the built-in it names, and is no function under fr (#833)", () => {
+		expect(newTrackedEngine({ locale: "de" }).evaluateExpression("wurzel(16)").toNumber()).toBe(4);
+		expect(() => newTrackedEngine({ locale: "fr" }).evaluateExpression("wurzel(16)")).toThrow(/undefined function/i);
 	});
 });

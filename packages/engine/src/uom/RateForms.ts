@@ -17,6 +17,7 @@
  */
 
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+import { IMPERIAL_MPG_SPELLINGS } from "@solve-js/uom/ExtendedUnits";
 
 /** A rate as its two halves. */
 export interface RateForm {
@@ -35,6 +36,8 @@ const NAMED_RATES: Readonly<Record<string, RateForm>> = {
 	kph: { numerator: "km", denominator: "h", scale: 1 },
 	mph: { numerator: "mi", denominator: "h", scale: 1 },
 	kn: { numerator: "nmi", denominator: "h", scale: 1 },
+	knot: { numerator: "nmi", denominator: "h", scale: 1 },
+	knots: { numerator: "nmi", denominator: "h", scale: 1 },
 	ft_s: { numerator: "ft", denominator: "s", scale: 1 },
 	// Pace, time per distance.
 	min_km: { numerator: "min", denominator: "km", scale: 1 },
@@ -59,6 +62,10 @@ const NAMED_RATES: Readonly<Record<string, RateForm>> = {
 	mpg: { numerator: "mi", denominator: "gal", scale: 1 },
 	kmpl: { numerator: "km", denominator: "l", scale: 1 },
 	l100km: { numerator: "l", denominator: "km", scale: 0.01 },
+	// Miles per imperial gallon, under each of its spellings (issue #736).
+	...Object.fromEntries(
+		IMPERIAL_MPG_SPELLINGS.map((spelling) => [spelling, { numerator: "mi", denominator: "imperial gallon", scale: 1 }]),
+	),
 };
 
 /**
@@ -73,7 +80,7 @@ const NAMED_RATES: Readonly<Record<string, RateForm>> = {
  * @returns The rate's halves, or `null`.
  */
 export function rateForm(unit: string): RateForm | null {
-	const named = NAMED_RATES[unit];
+	const named = Object.prototype.hasOwnProperty.call(NAMED_RATES, unit) ? NAMED_RATES[unit] : undefined;
 	if (named !== undefined) return named;
 	const slash = unit.indexOf("/");
 	if (slash < 0 || unit.indexOf("/", slash + 1) >= 0) return null;
@@ -89,5 +96,5 @@ export function rateForm(unit: string): RateForm | null {
  * @returns True for a named rate.
  */
 export function isNamedRate(unit: string): boolean {
-	return NAMED_RATES[unit] !== undefined;
+	return Object.prototype.hasOwnProperty.call(NAMED_RATES, unit);
 }

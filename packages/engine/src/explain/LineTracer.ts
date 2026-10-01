@@ -1,7 +1,7 @@
 import type { Token } from "@solve-js/lexer/Token";
-import { ValueType, matrixValue, type MatrixData, type Value } from "@solve-js/vm/Value";
+import { ValueType, type MatrixData, type Value } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
-import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings";
+import { DEFAULT_FORMATTING_SETTINGS, mergeFormattingSettings } from "@solve-js/format/FormattingSettings";
 import { extractReadsAndWrites } from "@solve-js/engine/ExpressionEngineSafety";
 import type { LineTrace } from "./Explanation";
 import { headingOf, isSummaryLine, sectionKey } from "@solve-js/packages/lines/SectionReader";
@@ -86,7 +86,8 @@ interface LineReads {
 const NO_READS: LineReads = { defines: [], writes: new Set(), reads: [] };
 
 /** The aggregate tokens that read a block of lines above them. */
-const ABOVE_TOKENS: ReadonlySet<string> = new Set(["TOTAL_ABOVE", "SUM_ABOVE", "AVERAGE_ABOVE", "COUNT_ABOVE", "MIN_ABOVE", "MAX_ABOVE", "MEDIAN_ABOVE"]);
+// A lone `sum` or `total` (#742) reads the block as `total above` does.
+const ABOVE_TOKENS: ReadonlySet<string> = new Set(["TOTAL_ABOVE", "COLUMN_TOTAL", "SUM_ABOVE", "AVERAGE_ABOVE", "COUNT_ABOVE", "MIN_ABOVE", "MAX_ABOVE", "MEDIAN_ABOVE"]);
 /** The call tokens that read an explicit span, `sum(line 1 : line 3)`. */
 const RANGE_TOKENS: ReadonlySet<string> = new Set(["SUM_RANGE_CALL", "AVERAGE_RANGE_CALL"]);
 /** The what-if and sweep tokens, whose value is the line they re-run (`line 4 with ...`). */
@@ -410,6 +411,9 @@ const MOST_LIST_ELEMENTS = 10;
 const MOST_MATRIX_CELLS = 100;
 const MOST_TEXT_CHARACTERS = 80;
 
+/** The display settings with the list ceiling above, for {@link shown}. */
+const LIST_PREVIEW = mergeFormattingSettings(DEFAULT_FORMATTING_SETTINGS, { matrixResult: { maxElements: MOST_LIST_ELEMENTS } });
+
 /**
  * A line's answer as the display shows it, without the leading `= `; an error
  * reads as `error`. A large value is shown short, and the cut comes before the
@@ -426,14 +430,9 @@ function shown(value: Value | null): string | null {
 		const cells = matrix.data.length;
 		const isList = matrix.rows === 1 || matrix.cols === 1;
 		if (!isList && cells > MOST_MATRIX_CELLS) return `[${matrix.rows}x${matrix.cols} matrix]`;
-		if (isList && cells > MOST_LIST_ELEMENTS) {
-			const first = matrix.data.slice(0, MOST_LIST_ELEMENTS);
-			const preview = matrix.rows === 1 ? matrixValue(1, first.length, first) : matrixValue(first.length, 1, first);
-			const text = bare(preview);
-			const close = text.lastIndexOf("]");
-			const more = `${matrix.rows === 1 ? "," : ";"} and ${(cells - first.length).toLocaleString("en-US")} more`;
-			return close === -1 ? text : text.slice(0, close) + more + text.slice(close);
-		}
+		// The display's own short form (#764), so a trace and a result cut a
+		// long list the same way.
+		if (isList && cells > MOST_LIST_ELEMENTS) return formatValue(value, LIST_PREVIEW).replace(/^=\s*/, "");
 	}
 	if (value.type === ValueType.String) return cut(value.value as string);
 	return cut(bare(value));

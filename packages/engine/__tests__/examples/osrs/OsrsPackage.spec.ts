@@ -831,16 +831,22 @@ describe("ExpressionEngine integration", () => {
     engine.clear();
   });
 
-  test("evaluates price(\"Dragon Hide\") function-call syntax", () => {
+  // `price` is no longer an OSRS keyword (it made `price * qty` an item lookup
+  // for every reader of an engine with this package), so the function-call
+  // form is `ge(...)` or `osrs.price(...)`, and a bare `price` is a variable.
+  test("evaluates osrs.price(\"Dragon Hide\"), and a bare price is the reader's variable", () => {
     const engine = createEngineWithOsrs();
     clearSeededPrices(engine.queryClient);
     seedPrice(engine.queryClient, 1745, 2100, 2000);
-    const result = engine.evaluateLineWithDebug(1, 'price("Dragon Hide")');
+    const result = engine.evaluateLineWithDebug(1, 'osrs.price("Dragon Hide")');
 
     expect(result.error).toBeUndefined();
     expect(result.value.unit).toBe("gp");
     expect(Number(result.value.value)).toBeGreaterThan(2000);
     expect(result.program.strings[0]).toBe("Dragon Hide");
+
+    const doc = engine.parseDocument("price = 5\nqty = 3\nprice * qty");
+    expect(doc.lines[2].result?.toNumber()).toBe(15);
 
     engine.clear();
   });

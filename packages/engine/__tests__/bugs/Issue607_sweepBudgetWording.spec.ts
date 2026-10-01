@@ -21,9 +21,7 @@ function lines(result: ParsingResult): string[] {
 		const v = line.result;
 		if (v == null) return line.error ? `ERROR ${line.error}` : "";
 		if (!v.isError()) return formatValue(v);
-		// The incremental pass reports a line that failed as an `eval_failed`
-		// value, where the batch pass reports it as the line's error.
-		return v.value === "eval_failed" ? `ERROR ${String(v.errorMessage)}` : `ERROR ${String(v.value)}: ${String(v.errorMessage)}`;
+		return `ERROR ${String(v.value)}: ${String(v.errorMessage)}`;
 	});
 }
 

@@ -195,8 +195,10 @@ describe("the incremental path agrees with a fresh pass", () => {
 	});
 
 	test("a sweep definition above the viewport, run out of view after an edit, is charged once", () => {
-		// Tier 3 runs the edited definition and marks it clean as it goes, so
-		// its old record must not be counted on top of its new work.
+		// The pass runs the edited definition above the viewport and marks it
+		// clean as it goes, so its old record must not be counted on top of its
+		// new work. (It ran in Tier 3 before a dirty line above the viewport
+		// ran in full; the tier changed and the rule did not.)
 		const lines = [...sweeps(0), ":s = line 5 for x from 1 to 20 step 1", ":t = line 5 for x from 1 to 20 step 1", "line 5 for x from 1 to 20 step 1"];
 		const doc = new DocumentModel();
 		doc.setDocument(lines.join("\n"));
@@ -205,7 +207,7 @@ describe("the incremental path agrees with a fresh pass", () => {
 			evaluator.evaluate({ startLine: 1, endLine: doc.lineCount });
 			doc.editLine(6, ":s = line 5 for x from 2 to 21 step 1");
 			const pass = evaluator.evaluate({ startLine: 8, endLine: 8 });
-			expect(pass.lines.find((l) => l.lineNumber === 6)?.tier).toBe(EvalTier.Tier3);
+			expect(pass.lines.find((l) => l.lineNumber === 6)?.tier).toBe(EvalTier.Tier1);
 			const last = pass.lines.find((l) => l.lineNumber === 8)!;
 			const fresh = batch(doc.getAllLines().map((l) => l.text), 300);
 			expect(last.result?.errorCode).toBeUndefined();

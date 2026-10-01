@@ -52,7 +52,9 @@ export {
 	nodesEqual,
 	nodeCount,
 	freeVariables,
+	dividesByZero,
 	substitute,
+	substituteAll,
 	complexNode,
 } from "@solve-js/symbolic/SymbolicNode";
 

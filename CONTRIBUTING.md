@@ -70,21 +70,33 @@ On Windows, stop the dev server first. Astro holds a native binary open inside
 
 ### Two TypeScript compilers, on purpose
 
-`npm run typecheck` uses **tsgo**, the native compiler that ships as
-TypeScript 7. It checks the whole engine in about a second, against roughly two
-for the JavaScript compiler.
+`npm run typecheck` uses **TypeScript 7's `tsc`**, the native compiler,
+installed under the alias `typescript7` (`npm:typescript@7.0.2`). It checks
+the whole engine in about a second. It replaced `tsgo` from the dated
+`@typescript/native-preview` build once TypeScript 7 became `latest` on npm.
 
-The `typescript` dependency stays on 5.9 even so, because tsgo cannot replace it
-yet. TypeScript 7 dropped the classic compiler API from its main export, and
-both of the tools that consume that API need it: `ts-jest` peer-declares
-`typescript >=4.3 <7`, and `tsup` uses it to emit the `.d.ts` bundle. So the
-JavaScript compiler still does the emitting and the test transform, and tsgo
-does the checking.
+The `typescript` dependency stays on 5.9 even so, because TypeScript 7 cannot
+replace it yet. Its root export is a version file rather than the classic
+compiler API, and both of the tools that consume that API need it: `ts-jest`
+peer-declares `typescript >=4.3 <7`, and `tsup` uses it to emit the `.d.ts`
+bundle. So TypeScript 5.9 still does the emitting and the test transform, and
+TypeScript 7 does the checking. The alias is what keeps the two apart: ts-jest
+resolves `typescript`, which stays 5.9, and the script calls TypeScript 7's
+`tsc` by its path.
 
-`npm run typecheck:tsc` runs the same check through the JavaScript compiler. It
-is the tie-breaker when the two disagree, which they can: tsgo does not pick up
-`@types` packages hoisted to the workspace root the way tsc does, which is why
-`packages/engine/tsconfig.json` names `types: ["node"]` explicitly.
+`npm run typecheck:tsc` runs the same check through TypeScript 5.9. It is the
+tie-breaker when the two disagree. Neither 7's `tsc` nor the preview before it
+picks up `@types` packages hoisted to the workspace root the way 5.9 does, which
+is why `packages/engine/tsconfig.json` names `types: ["node"]` explicitly.
+
+`npm run typecheck:tests` type-checks the spec files and `tools/` with the
+same TypeScript 7 compiler, over `packages/engine/tsconfig.tests.json`. ts-jest
+transpiles each spec without checking it, so a type error in a test was never
+reported, and 248 had built up. The check compares the errors per file with
+`packages/engine/__tests__/typecheck-baseline.json`: a file with more errors
+than its baseline fails, and fewer rewrites the baseline lower, which you commit.
+Import Jest's globals from `@jest/globals`, as every spec does; `fail` is not a
+Jest 30 global, so assert on a captured error instead.
 
 The playground is already fully on TypeScript 7, since Vite transpiles and its
 `tsc -b` step only type checks.
@@ -124,6 +136,12 @@ the convention in `packages/engine/__tests__/bugs`.
 syntax reference. Examples in the documentation are executed by the test suite,
 so a stale example fails the build rather than misleading a reader.
 
+**The Obsidian plugin.** CI builds and tests
+[obsidian-solve](https://github.com/LiamRiddell/obsidian-solve) against the
+engine a pull request builds, in the optional `obsidian-canary` job. A red
+canary does not block a merge; it says the change will need a plugin change. It
+builds nothing while the plugin pins a different major of the engine.
+
 **Scope.** One concern per pull request. A refactor bundled with a behaviour
 change is difficult to review and difficult to revert.
 
@@ -137,7 +155,12 @@ lets a host tell a user typo apart from an internal fault.
 that is what appears on hover. Reasoning about the implementation belongs in
 short comments beside the line it explains. Write for someone reading the code
 cold: skip the history, and do not restate what the next line already says.
-Avoid em-dashes, which is checked automatically on changed files.
+Avoid em-dashes, which is checked automatically (`npm run lint:comments`).
+
+**Messages.** An error message or a warning is prose a reader sees, so it follows
+the house voice too: no em-dash, British spelling, no JavaScript operator, and
+no host method named in a line's result (say what is missing instead: "needs a
+document"). `npm run lint:messages` checks the messages written as literals.
 
 **Types.** No escape hatches from the type system. A type that is hard to
 express usually means the design needs adjusting rather than the checker needing
@@ -174,6 +197,11 @@ It asks for a bump type and a description. That description becomes the
 changelog entry a stranger reads to decide whether to upgrade, so write it for
 them rather than for the diff.
 
+**Check first.** `npm run release:check` is a read-only preflight: npm's
+versions against the changelog and the GitHub releases, publish runs still in
+flight or cancelled, the pending changesets, a throwaway `changeset version`, and
+a release-note skeleton. It needs the network and `gh`.
+
 **Cut the release.** Merging to `main` opens a `chore: version packages` pull
 request that bumps the version, writes `CHANGELOG.md`, and regenerates every
 figure the documentation site quotes: the test counts, the unit reference and
@@ -192,7 +220,8 @@ Target:  main
 The tag has to match `packages/engine/package.json` exactly, sit on `main`,
 and leave no changeset waiting, or the workflow refuses; so release the version
 commit rather than whatever is on `main` at the time. The workflow then runs
-`npm run verify:ci` against that commit before it publishes. A version
+`npm run verify:ci` against that commit, packs the release once, installs and
+uses that tarball, and publishes that same file. A version
 publishes to the `latest` dist-tag, and npm refuses to move `latest` to a
 version lower than the one it names, so re-running an old release cannot take
 `latest` backwards. A prerelease (a version with a `-` part) publishes to

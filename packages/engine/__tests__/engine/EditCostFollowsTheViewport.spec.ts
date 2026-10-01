@@ -69,15 +69,18 @@ describe("what a pass over a long document does", () => {
 		);
 	});
 
-	test("a dirty line before the viewport is still compiled", () => {
-		// The short-circuit is for CLEAN lines only. A dirty one below the fold
-		// goes to Tier 3, which is what keeps a definition's value available to
-		// the lines that can be seen.
+	test("a dirty line before the viewport is still run", () => {
+		// The short-circuit is for CLEAN lines only. A dirty one above the
+		// viewport runs, which is what keeps a definition's value available to
+		// the lines that can be seen, and its answer to a line that reads it by
+		// position.
 		const { doc, evaluator } = build(200);
 		doc.editLine(5, ":v4 = 12345");
 		const result = evaluator.evaluate({ startLine: 180, endLine: 200 });
 
-		expect(result.tierCounts.tier3).toBe(1);
+		expect(result.tierCounts.tier1).toBe(1);
+		expect(result.tierCounts.tier3).toBe(0);
+		expect(doc.getLineAt(5)!.result!.toNumber()).toBe(12345);
 	});
 
 	test("a definition above the viewport still reaches a line inside it", () => {

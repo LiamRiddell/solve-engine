@@ -6,6 +6,9 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { getLocale } from "@solve-js/constants/locales";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { localeLiteralRefusal, unreadableInLocale } from "@solve-js/parser/LocaleNumberLiteral";
+import { isPastSafeWholeLiteral, pastSafeBaseLiteralDigits } from "@solve-js/parser/WholeLiteral";
+import { decimalFromExponentLiteral } from "@solve-js/decimal/Decimal";
+import { isMoneyAmount } from "@solve-js/parser/MoneyAmountLiteral";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -43,7 +46,9 @@ export class NumberParselet implements PrefixParselet {
 		let v: number;
 		// Mirrors PrecedenceParser's Tier-1 NUMBER case: a fractional literal is
 		// pushed as PUSH_DECIMAL so its exact value survives to any money it
-		// meets, everything integer-shaped stays PUSH_NUMBER.
+		// meets, and so is a whole number past 2^53, which keeps its exact
+		// integer, as does a hex, binary or octal literal past 2^53; every other
+		// integer shape stays PUSH_NUMBER.
 		let decimalText: string | null = null;
 		const raw = token.value;
 		if (raw.startsWith("0x") || raw.startsWith("0X")) {
@@ -56,16 +61,19 @@ export class NumberParselet implements PrefixParselet {
 				// failure, which specifically checks for EngineError.
 				throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid hex literal: "${raw}"`, { raw });
 			}
+			decimalText = pastSafeBaseLiteralDigits(raw, v);
 		} else if (raw.startsWith("0b") || raw.startsWith("0B")) {
 			v = parseInt(raw.slice(2), 2);
 			if (Number.isNaN(v)) {
 				throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid binary literal: "${raw}"`, { raw });
 			}
+			decimalText = pastSafeBaseLiteralDigits(raw, v);
 		} else if (raw.startsWith("0o") || raw.startsWith("0O")) {
 			v = parseInt(raw.slice(2), 8);
 			if (Number.isNaN(v)) {
 				throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid octal literal: "${raw}"`, { raw });
 			}
+			decimalText = pastSafeBaseLiteralDigits(raw, v);
 		} else if (CHAINED_DOT_THOUSANDS_GROUPS.test(raw)) {
 			// Mirrors PrecedenceParser: a first group past three digits is refused (#806).
 			const chainedLocale = getLocale(parser.getLocaleCode());
@@ -82,7 +90,9 @@ export class NumberParselet implements PrefixParselet {
 			// (over 99% of the digits dropped, with no error). Handled as
 			// its own case, ahead of the locale-aware path, since it's
 			// unambiguous regardless of locale.
-			v = parseFloat(raw.split(".").join(""));
+			const digits = raw.split(".").join("");
+			v = parseFloat(digits);
+			if (isPastSafeWholeLiteral(digits)) decimalText = digits;
 		} else {
 			// Normalize number based on locale separators
 			const locale = getLocale(parser.getLocaleCode());
@@ -104,7 +114,9 @@ export class NumberParselet implements PrefixParselet {
 				normalized = normalized.replace(decimalSep, ".");
 			}
 			v = parseFloat(normalized);
-			if (PLAIN_DECIMAL.test(normalized)) decimalText = normalized;
+			if (PLAIN_DECIMAL.test(normalized) || isPastSafeWholeLiteral(normalized)) decimalText = normalized;
+			// Mirrors PrecedenceParser: scientific notation as the amount of money keeps its exact value.
+			else if (isMoneyAmount(parser.peekAt(-2), parser.peekAt(-3), parser.peek()) && decimalFromExponentLiteral(normalized) !== null) decimalText = normalized;
 		}
 		if (decimalText !== null) {
 			builder.emitOpcode(OpCode.PUSH_DECIMAL);

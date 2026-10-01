@@ -74,15 +74,15 @@ describe("ThreeTierEvaluator — Tier 1 (Full Pipeline)", () => {
 		expect(result.resultMap.get(3)![0].toNumber()).toBe(23);
 	});
 
-	test("returns null result for lines outside viewport (before viewport, are Tier 3 if dirty)", () => {
-		// Viewport starts at line 2 — line 1 is invisible (Tier 3)
+	test("returns null result for lines outside viewport (before viewport, run but not reported)", () => {
+		// Viewport starts at line 2; line 1 sits above it
 		const viewport: ViewportRange = { startLine: 2, endLine: 2 };
 		const result = evaluator.evaluate(viewport);
 
-		// Line 1 is dirty + invisible → Tier 3 (not in resultMap)
-		expect(result.tierCounts.tier3).toBe(1);
-		// Line 2 is visible + dirty → Tier 1
-		expect(result.tierCounts.tier1).toBe(1);
+		// Line 1 is dirty and above the viewport, so it runs (Tier 1) for the
+		// lines in view to read, and is not in resultMap; line 2 is in view.
+		expect(result.tierCounts.tier3).toBe(0);
+		expect(result.tierCounts.tier1).toBe(2);
 		// Only line 2 is in resultMap
 		expect(result.resultMap.size).toBe(1);
 		expect(result.resultMap.has(2)).toBe(true);
@@ -275,13 +275,11 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 	});
 
 	test("compiles invisible dirty non-variable-def lines without executing them", () => {
-		// Viewport covers line 4 — lines 1-3 are invisible + dirty → Tier 3
-		const result = evaluator.evaluate({ startLine: 4, endLine: 4 });
-
-		// Line 4 is visible + dirty → Tier 1
-		expect(result.tierCounts.tier1).toBe(1);
-		// Lines 1-3 are invisible + dirty → Tier 3
-		expect(result.tierCounts.tier3).toBe(3);
+		// Tier 3 is for the lines below the viewport, which a background
+		// compile reaches: viewport line 1, lines 2-4 below it.
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+		const below = evaluator.backgroundCompile({ startLine: 1, endLine: 1 });
+		expect(below.map((l) => l.tier)).toEqual([EvalTier.Tier3, EvalTier.Tier3, EvalTier.Tier3]);
 
 		// Line 3 ("x * 2") is a non-variable-def expression — should be compiled but NOT executed
 		const line3 = doc.getLineAt(3)!;
@@ -297,11 +295,23 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 		expect(line2.results.length).toBe(1);
 	});
 
+	test("the dirty lines above the viewport run in full, so the lines in view can read them", () => {
+		// Lines 1-3 sit above a viewport of line 4. They run, as a pass from
+		// line 1 runs them, since a line in view may read one by position
+		// (prev, line 2) as well as by name.
+		const result = evaluator.evaluate({ startLine: 4, endLine: 4 });
+		expect(result.tierCounts).toEqual({ tier1: 4, tier2: 0, tier3: 0, skipped: 0 });
+		expect(doc.getLineAt(3)!.dirty).toBe(false);
+		expect(doc.getLineAt(3)!.result!.toNumber()).toBe(20);
+		// Only the viewport is reported.
+		expect([...result.resultMap.keys()]).toEqual([4]);
+	});
+
 	test("executes invisible variable-def lines to maintain VM state", () => {
-		// Viewport only line 3 — lines 1-2 are invisible
+		// Viewport only line 3; lines 1-2 sit above it
 		const result = evaluator.evaluate({ startLine: 3, endLine: 3 });
 
-		// Line 2 (:x = 10) is a variable def + invisible → Tier 3 with execution
+		// Line 2 (:x = 10) is a variable def above the viewport, and runs
 		const line2 = doc.getLineAt(2)!;
 		expect(line2.isVariableDef).toBe(true);
 		expect(line2.bytecodes.length).toBe(1);
@@ -314,8 +324,9 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 	});
 
 	test("an equation stored out of view goes when its line is edited out of view (#569)", () => {
-		// Tier 3 compiles the line without a position before this, so the
-		// equation belonged to no line and nothing could drop it.
+		// Tier 3 compiled the line without a position before this, so the
+		// equation belonged to no line and nothing could drop it. A line above
+		// the viewport now runs in full, which drops it the same way.
 		const eqDoc = createDoc([":a = 2", "a * x = 10", "1", "2", "x =>"]);
 		const eqEvaluator = new ThreeTierEvaluator(eqDoc, createEngine());
 		try {
@@ -325,7 +336,7 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 			eqDoc.editLine(2, "3 + 3");
 			const after = eqEvaluator.evaluate({ startLine: 4, endLine: 5 });
 
-			expect(eqDoc.getLineAt(2)!.dirty).toBe(true); // still out of view
+			expect(eqDoc.getLineAt(2)!.result!.toNumber()).toBe(6); // out of view, and run
 			expect(formatValue(after.resultMap.get(5)![0])).toBe("x");
 		} finally {
 			eqEvaluator.terminateWorker();
@@ -554,11 +565,10 @@ describe("ThreeTierEvaluator — Edge Cases", () => {
 
 		const result = evaluator.evaluate({ startLine: 5, endLine: 2 });
 
-		// evalEnd = min(2, 1) = 1, startLine=5, no lines processed
-		// Actually: for loop goes 1 to 1, inViewport = (1 >= 5 && 1 <= 2) = false
-		// So line 1 is dirty + invisible → Tier 3
+		// evalEnd = min(2, 1) = 1: the loop visits line 1, which sits above
+		// startLine 5, so it runs like any dirty line above a viewport
 		expect(result.lines.length).toBe(1);
-		expect(result.tierCounts.tier3).toBe(1);
+		expect(result.tierCounts.tier1).toBe(1);
 		expect(result.resultMap.size).toBe(0); // not in "viewport"
 	});
 
@@ -569,9 +579,9 @@ describe("ThreeTierEvaluator — Edge Cases", () => {
 
 		const result = evaluator.evaluate({ startLine: 10, endLine: 20 });
 
-		// evalEnd = min(20, 1) = 1, process line 1 as invisible → Tier 3
+		// evalEnd = min(20, 1) = 1: line 1 sits above the viewport, and runs
 		expect(result.lines.length).toBe(1);
-		expect(result.tierCounts.tier3).toBe(1);
+		expect(result.tierCounts.tier1).toBe(1);
 	});
 
 	test("lines with inline solve syntax (pure s`...`) extract expression correctly", () => {
@@ -982,10 +992,10 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 		const result = evaluator.setViewport({ startLine: 3, endLine: 4 });
 
 		// Should have fallen back to evaluate(), which processes from line 1.
-		// Line 1: dirty + invisible → Tier 3 (variable def, executed)
-		// Line 2: dirty + invisible → Tier 3 (non-var-def, compiled only)
-		// Lines 3-4: dirty + visible → Tier 1
-		expect(result.tierCounts.tier3).toBeGreaterThanOrEqual(1); // line 1 or 2
+		// Line 1, dirty and above the viewport, runs (Tier 1); so does any line
+		// the edit made dirty, above the viewport or in it.
+		expect(result.lines[0].tier).toBe(EvalTier.Tier1);
+		expect(result.tierCounts.tier3).toBe(0);
 		expect(result.resultMap.get(3)![0].toNumber()).toBe(40); // xx*2 = 20*2
 		expect(result.resultMap.get(4)![0].toNumber()).toBe(30); // xx+10 = 20+10
 	});
@@ -1509,36 +1519,40 @@ describe("ThreeTierEvaluator — Multi Inline Solves", () => {
 		const engine = createEngine();
 		const evaluator = new ThreeTierEvaluator(doc, engine);
 
-		// Viewport covers line 4 — lines 1-3 are invisible → Tier 3
-		// evalEnd = 4 so ALL lines are processed in order
-		const result = evaluator.evaluate({ startLine: 4, endLine: 4 });
+		// Tier 3 is for the lines below the viewport: a viewport of line 1, and
+		// a background compile of lines 2-4 below it.
+		evaluator.evaluate({ startLine: 1, endLine: 1 });
+		const below = evaluator.backgroundCompile({ startLine: 1, endLine: 1 });
+		expect(below.map((l) => l.tier)).toEqual([EvalTier.Tier3, EvalTier.Tier3, EvalTier.Tier3]);
 
-		// Line 1: invisible + dirty + non-var-def → Tier 3 (compile-only, stays dirty)
+		// Line 1: in view → Tier 1
 		const line1 = doc.getLineAt(1)!;
 		expect(line1.inlineSolveCount).toBe(0);
 		expect(line1.bytecodes.length).toBe(1);
-		expect(line1.dirty).toBe(true);
+		expect(line1.dirty).toBe(false);
 
-		// Line 2: invisible + dirty + variable def → Tier 3 (compiled + executed)
+		// Line 2: below + dirty + variable def → Tier 3 (compiled + executed)
 		const line2 = doc.getLineAt(2)!;
 		expect(line2.dirty).toBe(false);
 
-		// Line 3: invisible + dirty → Tier 3 (compile-only, non-var-def)
+		// Line 3: below + dirty → Tier 3 (compile-only, non-var-def)
 		const line3 = doc.getLineAt(3)!;
 		expect(line3.inlineSolveCount).toBe(2);
 		expect(line3.expressions).toEqual(["x + 3", "x * 2"]);
 		expect(line3.bytecodes.length).toBe(2);
 		expect(line3.dirty).toBe(true); // stays dirty (compile-only, not executed)
 
-		// Line 4: visible + dirty → Tier 1 (fully executed)
+		// Line 4: in view once scrolled to → Tier 1 (fully executed)
+		const result = evaluator.evaluate({ startLine: 4, endLine: 4 });
 		const line4 = doc.getLineAt(4)!;
 		expect(line4.inlineSolveCount).toBe(2);
 		expect(line4.expressions).toEqual(["10 * 2", "20 + 5"]);
 		expect(line4.results.length).toBe(2);
 		expect(line4.results[0][0].toNumber()).toBe(20);
 		expect(line4.results[1][0].toNumber()).toBe(25);
-		expect(result.tierCounts.tier3).toBe(3); // lines 1-3
-		expect(result.tierCounts.tier1).toBe(1); // line 4
+		// Line 3, dirty above the viewport, runs too, and line 4 in view.
+		expect(result.tierCounts.tier3).toBe(0);
+		expect(result.tierCounts.tier1).toBe(2);
 	});
 
 	// ── Mixed document: inline solves + full-line expressions ───────

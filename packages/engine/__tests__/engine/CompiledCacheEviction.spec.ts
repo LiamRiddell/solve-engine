@@ -14,9 +14,9 @@
  * What is pinned: a hit refreshes the entry's place in the program cache; the
  * front half goes with its program, so an evicted line lexes again and a
  * refreshed one does not; the failed-parse memory follows the same rule; and
- * the cap itself is unchanged at 2,000 entries, which a whole document that
- * fits in it enjoys and one that does not still cycles through. Sizing the cap
- * to the document is a separate decision, deliberately not taken here.
+ * the cap itself is 2,000 entries with no document open. With a document
+ * open it grows by the document's line count, so a whole document always fits
+ * (#765, pinned in `bugs/Issue765_documentSizedCompileCache.spec.ts`).
  */
 
 import { describe, expect, jest, test } from "@jest/globals";
@@ -106,7 +106,7 @@ describe("the failed-parse memory", () => {
 });
 
 describe("the cap", () => {
-	test("is 2,000 entries by default, and the program cache never exceeds it", () => {
+	test("is 2,000 entries by default with no document open, and the program cache never exceeds it", () => {
 		const engine = newTrackedEngine();
 		const cap = engine.getConfig().performance.defaultCacheSize;
 		expect(cap).toBe(2000);

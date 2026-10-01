@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { WHAT_IF_FN_NAME } from "../WhatIfPluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The most inputs one what-if may override. Each is two arguments to the
@@ -43,60 +44,76 @@ export class WhatIfParselet implements PrefixParselet {
 		const targetLine = token.value === "deleted" ? -1 : parseInt(token.value, 10);
 		builder.emitOpcode(OpCode.PUSH_NUMBER);
 		builder.emitNumber(targetLine);
+		const count = readOverrides(parser, builder, `line ${targetLine} with deposit = 150000`, "A what-if");
+		emitBuiltinPluginCall(builder, WHAT_IF_FN_NAME, 1 + count * 2);
+	}
+}
 
-		const names = new Set<string>();
-		for (;;) {
-			// A name may be written with the colon a definition takes (`:price`), which
+/**
+ * Reads `<name> = <value> [and <name> = <value> ...]`, the overrides a
+ * what-if and a scenario declaration share, emitting each as its name (a
+ * String) and its value.
+ *
+ * @param parser - The parser, at the first name.
+ * @param builder - Where the pairs are emitted.
+ * @param example - A whole line of the form, for the missing-name message.
+ * @param form - The form, capitalised, for the messages ("A what-if").
+ * @returns How many overrides were read.
+ * @throws `WHAT_IF_REQUIRES_VARIABLE_NAME`, `WHAT_IF_DUPLICATE_INPUT` or
+ * `WHAT_IF_TOO_MANY_INPUTS`.
+ */
+export function readOverrides(parser: Parser, builder: BytecodeBuilder, example: string, form: string): number {
+	const names = new Set<string>();
+	for (;;) {
+		// A name may be written with the colon a definition takes (`:price`), which
 		// reaches here as a COLON before it; it names the same variable (the
 		// what-if form added the colon's assignment to the line instead).
-			if (parser.peek()?.type === "COLON") parser.consume();
-			const nameToken = parser.peek();
-			if (!nameToken || (nameToken.type !== "IDENT" && nameToken.type !== "UNIT")) {
-				throw ErrorFactory.parsing(
-					"WHAT_IF_REQUIRES_VARIABLE_NAME",
-					`A what-if names the input to change, as in "line ${targetLine} with deposit = 150000".`,
-					{ found: nameToken?.type ?? "end of input" },
-				);
-			}
-			parser.consume();
-			const name = nameToken.value;
-			if (names.has(name)) {
-				throw ErrorFactory.parsing(
-					"WHAT_IF_DUPLICATE_INPUT",
-					`This what-if sets ${name} twice. Give each input once.`,
-					{ name },
-				);
-			}
-			names.add(name);
-			if (names.size > WHAT_IF_MAX_OVERRIDES) {
-				throw ErrorFactory.parsing(
-					"WHAT_IF_TOO_MANY_INPUTS",
-					`A what-if can change at most ${WHAT_IF_MAX_OVERRIDES} inputs at once.`,
-					{ limit: WHAT_IF_MAX_OVERRIDES },
-				);
-			}
-			parser.consume("EQUALS");
-
-			builder.emitOpcode(OpCode.PUSH_STRING);
-			builder.emitString(name);
-			parser.parseExpression(BindingPower.Conjunction, builder);
-
-			// Another override follows only when the joining word is followed by
-			// a name and an `=`; anything else is left for the ordinary grammar,
-			// which reports trailing input the way it does for any expression.
-			const joiner = parser.peek();
-			const colon = parser.peekAt(1)?.type === "COLON" ? 1 : 0;
-			const nextName = parser.peekAt(1 + colon);
-			const isJoined =
-				!!joiner &&
-				(joiner.type === "AND_CONJ" || joiner.type === "COMMA") &&
-				!!nextName &&
-				(nextName.type === "IDENT" || nextName.type === "UNIT") &&
-				parser.peekAt(2 + colon)?.type === "EQUALS";
-			if (!isJoined) break;
-			parser.consume();
+		if (parser.peek()?.type === "COLON") parser.consume();
+		const nameToken = parser.peek();
+		if (!nameToken || (nameToken.type !== "IDENT" && nameToken.type !== "UNIT")) {
+			throw ErrorFactory.parsing(
+				"WHAT_IF_REQUIRES_VARIABLE_NAME",
+				`${form} names the input to change, as in "${example}".`,
+				{ found: nameToken?.type ?? "end of input" },
+			);
 		}
+		parser.consume();
+		const name = nameToken.value;
+		if (names.has(name)) {
+			throw ErrorFactory.parsing(
+				"WHAT_IF_DUPLICATE_INPUT",
+				`This ${form.replace(/^An? /, "")} sets ${name} twice. Give each input once.`,
+				{ name },
+			);
+		}
+		names.add(name);
+		if (names.size > WHAT_IF_MAX_OVERRIDES) {
+			throw ErrorFactory.parsing(
+				"WHAT_IF_TOO_MANY_INPUTS",
+				`${form} can change at most ${WHAT_IF_MAX_OVERRIDES} inputs at once.`,
+				{ limit: WHAT_IF_MAX_OVERRIDES },
+			);
+		}
+		parser.consume("EQUALS");
 
-		builder.emitPluginCall(WHAT_IF_FN_NAME, 1 + names.size * 2);
+		builder.emitOpcode(OpCode.PUSH_STRING);
+		builder.emitString(name);
+		parser.parseExpression(BindingPower.Conjunction, builder);
+
+		// Another override follows only when the joining word is followed by
+		// a name and an `=`; anything else is left for the ordinary grammar,
+		// which reports trailing input the way it does for any expression.
+		const joiner = parser.peek();
+		const colon = parser.peekAt(1)?.type === "COLON" ? 1 : 0;
+		const nextName = parser.peekAt(1 + colon);
+		const isJoined =
+			!!joiner &&
+			(joiner.type === "AND_CONJ" || joiner.type === "COMMA") &&
+			!!nextName &&
+			(nextName.type === "IDENT" || nextName.type === "UNIT") &&
+			parser.peekAt(2 + colon)?.type === "EQUALS";
+		if (!isJoined) break;
+		parser.consume();
 	}
+	return names.size;
 }

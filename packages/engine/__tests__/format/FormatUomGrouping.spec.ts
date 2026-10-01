@@ -58,7 +58,7 @@ describe("digit grouping on quantities and money", () => {
 		expect(formatValue(uomValue(1234567.891, "USD"), settingsWith({ enableSeperator: false }))).toBe("= $1234567.89");
 	});
 
-	test("the locale's own marks: €1.234.567,50 in German", () => {
-		expect(formatValue(uomValue(1234567.5, "EUR"), settingsWith({ decimalSeparatorLocale: "de-DE" }))).toBe("= €1.234.567,50");
+	test("the locale's own marks and place: 1.234.567,50 € in German", () => {
+		expect(formatValue(uomValue(1234567.5, "EUR"), settingsWith({ decimalSeparatorLocale: "de-DE" }))).toBe("= 1.234.567,50 €");
 	});
 });

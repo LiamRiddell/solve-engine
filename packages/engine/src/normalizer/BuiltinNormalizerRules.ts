@@ -136,62 +136,131 @@ export function implicitMultiplyRule(
 //#endregion
 //#region ─── isInsideRangeContext, Bracket/Call-Paren Context Guard ───────────
 
+/** The most tokens {@link isSingleArgumentCall} reads looking for a call's close, so a hostile line costs a bounded scan. */
+const SINGLE_ARGUMENT_SCAN_LIMIT = 10_000;
+
 /**
- * Whether token `pos` sits inside a context where a bare `NUMBER:NUMBER`
- * sequence means a Range, not a clock-time/laptime/video-timecode literal:
- * a matrix literal/index/slice (`[1,2,3]`, `a[0:3]`), OR a `map`/`reduce`/
- * `sum`/`prod` call's own argument-list parens (`map(f, 0:3)`, these
- * accept a bare Range argument directly, per the Calca spec's own
- * example). Scans backward from `pos` over the CURRENT pass's token array,
- * tracking `[`/`(` nesting depth, the same "positional guard via
- * backward scan" idiom already used elsewhere in this normalizer layer
- * (e.g. `LineRefNormalizerRule`'s previous-token check), generalized to
- * depth-tracking. An `LBRACKET` is unconditionally a range-safe opener; an
- * `LPAREN` is range-safe ONLY when immediately preceded by MAP/REDUCE/
- * SUM_FN/PROD_FN, an ordinary grouping/function-call paren is NOT, so
- * `(9:00) + 5` still means a clock time, not a range.
+ * Whether the bracket at `open` opens a call with one argument: no comma at
+ * its own depth before its matching close. A comma inside a nested bracket or
+ * list belongs to that. A bracket never closed, or one whose close is past
+ * the scan limit, is not one.
  *
- * Needed because the clock-time/laptime/video-timecode rules each match a
- * bare `NUMBER COLON NUMBER...` shape with ZERO context-awareness, a real
- * collision discovered when adding Range support, since e.g. "0:3" is
- * valid input to BOTH features. These contexts have no legitimate use for
- * a clock-time/laptime/timecode literal, so the carve-out costs the time
- * features nothing.
+ * `total(...)` is `sum(...)` only in this one-argument form (`total(1:3)`,
+ * `total([1, 2, 3])`), since `total(1, 2, 3)` is the aggregate over a list
+ * of values and `sum(x^2, 1:3)`'s element form is `sum`'s alone.
  *
- * IMPORTANT cross-pass-timing gotcha (a real bug found and fixed here,
- * not a hypothetical): the `LPAREN`-opener check deliberately tests the
- * RAW word text (`prev.value.toLowerCase()`), not `prev.type ===
- * "MAP"/"REDUCE"/...`. The normalizer's multi-pass loop hands every rule
- * the SAME frozen `tokens` snapshot for an entire pass, a rule scanning
- * a LATER position in that pass cannot see a fusion `mapReduceCallNormalizerRule`
- * performs at an EARLIER position in that SAME pass (fusion results only
- * become visible to other rules starting the NEXT pass). Checking the
- * fused token type here would miss exactly the case that matters most
- * `map(f, 0:3)` on its very first normalization pass, silently letting
- * `0:3` fuse into a clock time before `map(`'s own fusion ever lands.
- * Testing the raw word is immune to this: it's true from the very first
- * pass, regardless of whether `mapReduceCallNormalizerRule` has run yet.
- * (`LBRACKET` above has no equivalent issue, it's a genuine lexer token
- * from the start, never itself the product of a fusion.)
+ * @param tokens - The pass's tokens.
+ * @param open - The index of an `LPAREN`.
+ */
+export function isSingleArgumentCall(tokens: readonly Token[], open: number): boolean {
+  if (tokens[open]?.type !== "LPAREN") return false;
+  let depth = 0;
+  const end = Math.min(tokens.length, open + 1 + SINGLE_ARGUMENT_SCAN_LIMIT);
+  for (let i = open + 1; i < end; i++) {
+    const type = tokens[i].type;
+    if (type === "LPAREN" || type === "LBRACKET") depth++;
+    else if (type === "RBRACKET") depth--;
+    else if (type === "RPAREN") {
+      if (depth === 0) return i > open + 1;
+      depth--;
+    } else if (depth === 0 && type === "COMMA") return false;
+  }
+  return false;
+}
+
+/**
+ * The tokens after which a `[` opens a list rather than an index: an opening
+ * bracket, a separator or an operator. After anything else (a name, a
+ * closing bracket) it indexes or slices the value before it, `m[0:1, 0:1]`.
+ * A token not named here keeps the index reading, the one a colon inside a
+ * bracket has always had.
+ */
+const LIST_OPENS_AFTER: ReadonlySet<string> = new Set([
+  "LPAREN", "LBRACKET", "COMMA", "SEMICOLON", "EQUALS",
+  "PLUS", "MINUS", "STAR", "SLASH", "CARET", "PLUS_MINUS",
+  "PLUS_EQUALS", "MINUS_EQUALS", "STAR_EQUALS", "SLASH_EQUALS",
+  "EQUALITY", "NEQ", "GTE", "LTE", "LT", "GT", "LOGICAL_AND", "LOGICAL_OR", "THEREFORE",
+]);
+
+/**
+ * Whether the `[` at `open` indexes or slices the value before it
+ * (`m[0:1, 0:1]`) rather than opening a list (`[9:30, 10:15]`). A bracket at
+ * the start of the line, or after an opening bracket, a separator or an
+ * operator, opens a list.
+ *
+ * @param tokens - The pass's tokens.
+ * @param open - The index of an `LBRACKET`.
+ */
+export function opensIndex(tokens: readonly Token[], open: number): boolean {
+  const prev = tokens[open - 1];
+  return prev !== undefined && !LIST_OPENS_AFTER.has(prev.type);
+}
+
+/** Whether the `(` at `open` is the bracket of a `map`, `reduce`, `sum` or `prod` call, or of a one-argument `total`. */
+function opensMapReduceCall(tokens: readonly Token[], open: number): boolean {
+  const prev = tokens[open - 1];
+  if (prev === undefined) return false;
+  if (prev.type === "MAP" || prev.type === "REDUCE" || prev.type === "SUM_FN" || prev.type === "PROD_FN") return true;
+  if (prev.type !== "IDENT") return false;
+  const word = prev.value.toLowerCase();
+  if (word === "map" || word === "reduce" || word === "sum" || word === "prod") return true;
+  // `total(1:3)` is `sum(1:3)`, in the one-argument form only (see isSingleArgumentCall).
+  return word === "total" && isSingleArgumentCall(tokens, open);
+}
+
+/**
+ * Whether token `pos` sits where a bare `NUMBER:NUMBER` means a range rather
+ * than a clock time, a lap time or a video timecode: the index or slice of a
+ * matrix (`a[0:1, 0:1]`), or the collection a `map`, `reduce`, `sum` or `prod`
+ * call works through (`map(f, 0:3)`, `sum(1:3)`, `sum(x^2, 1:3)`).
+ *
+ * Only the collection is a range. The first of two or more arguments is the
+ * element (or the transform), worked out once for each item, so it is never a
+ * range, and a colon there is a clock time: `prod(9:30, 10:15)` multiplies a
+ * time of day and is refused by name, where it used to stop at the colon with
+ * the parser's wording. A list written in brackets is not a range context
+ * either: its items are values, so `sum(x, [9:30, 10:15])` holds two clock
+ * times. No list ever read a colon as a range (`[1:3]` stopped at the colon),
+ * so nothing that answered changes.
+ *
+ * An ordinary grouping or call bracket is not a range context, so
+ * `(9:00) + 5` is a clock time.
+ *
+ * The time, lap-time and timecode rules each match a bare `NUMBER COLON
+ * NUMBER` with no other view of their context, which is why they ask this.
+ *
+ * The call word is read as written (`prev.value`), not only as the token the
+ * map-reduce rule fuses it into: every rule in a normaliser pass sees the
+ * same snapshot of tokens, so a rule at a later position cannot see a fusion
+ * made at an earlier one in that pass, and on the first pass `map(` is still
+ * the word.
+ *
+ * @param tokens - The pass's tokens.
+ * @param pos - The position asked about.
  */
 export function isInsideRangeContext(tokens: Token[], pos: number): boolean {
-  const safeStack: boolean[] = [];
-  for (let i = 0; i < pos; i++) {
+  // One frame for each bracket still open at `pos`: whether it can hold a
+  // range at all, and for a call's bracket whether its first comma has been
+  // passed, since only the arguments after it are the collection.
+  const frames: { safe: boolean; call: boolean; open: number; pastFirst: boolean }[] = [];
+  for (let i = 0; i < pos && i < tokens.length; i++) {
     const t = tokens[i];
     if (t.type === "LBRACKET") {
-      safeStack.push(true);
+      frames.push({ safe: opensIndex(tokens, i), call: false, open: i, pastFirst: false });
     } else if (t.type === "LPAREN") {
-      const prev = tokens[i - 1];
-      const opensMapReduceCall = !!prev && (
-        prev.type === "MAP" || prev.type === "REDUCE" || prev.type === "SUM_FN" || prev.type === "PROD_FN" ||
-        (prev.type === "IDENT" && (prev.value.toLowerCase() === "map" || prev.value.toLowerCase() === "reduce" || prev.value.toLowerCase() === "sum" || prev.value.toLowerCase() === "prod"))
-      );
-      safeStack.push(opensMapReduceCall);
+      const call = opensMapReduceCall(tokens, i);
+      frames.push({ safe: call, call, open: i, pastFirst: false });
     } else if (t.type === "RBRACKET" || t.type === "RPAREN") {
-      safeStack.pop();
+      frames.pop();
+    } else if (t.type === "COMMA" && frames.length > 0) {
+      frames[frames.length - 1].pastFirst = true;
     }
   }
-  return safeStack.length > 0 && safeStack[safeStack.length - 1];
+  const top = frames[frames.length - 1];
+  if (top === undefined || !top.safe) return false;
+  if (!top.call || top.pastFirst) return true;
+  // The first argument is the collection only when it is the call's one argument.
+  return isSingleArgumentCall(tokens, top.open);
 }
 
 //#endregion

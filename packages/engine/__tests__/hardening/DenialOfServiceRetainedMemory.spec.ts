@@ -10,9 +10,9 @@
  * rather than a refusal", correct for an opcode nobody has thought about yet
  * and not sufficient for one whose result size is known before the first cell
  * exists. `OpCode.MUL` therefore charges up front through
- * `matrixProductCells()`. `dot()` is the same multiplication reached through
- * `CALL_BUILTIN` instead of through the operator, calls the same
- * `matrixMultiply()`, and charges nothing before it runs.
+ * `matrixProductCells()`. `dot()` used to be the same multiplication reached
+ * through `CALL_BUILTIN`, charging nothing before it ran; it is now the dot
+ * product of two vectors, which builds no cells at all (#828).
  *
  * The second is `vm/Value.ts`'s ValueArena, which is not covered by the budget
  * at all because it outlives the evaluation the budget is scoped to. It grows
@@ -23,9 +23,9 @@
  * scaled to where it is merely observable and the fatal input is named in the
  * comment. Measured on the release/1.0.0 worktree, Node 24, 512MB heap:
  *
- *   dot(transpose(map(x*1, 1:20000)), map(x*1, 1:20000))
- *       fatal OOM in 1.3 seconds. The `*` spelling of the same product is
- *       refused in 18 milliseconds.
+ *   transpose(map(x*1, 1:20000)) * map(x*1, 1:20000)
+ *       refused in 18 milliseconds; its `dot()` spelling was a fatal OOM in
+ *       1.3 seconds while `dot()` was the matrix product.
  *   map(x*1, 1:100000)
  *       legal under maxCollectionSize, and permanently grows the arena to
  *       300,004 Values, roughly 24MB that no later evaluation reclaims.
@@ -37,6 +37,7 @@ import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { disableValueArena, enableValueArena } from "@solve-js/vm/Value";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { formatValue } from "@solve-js/format/FormatEngine";
 
 /** The error code a source reports, or `"no error"` when it evaluated. */
 function codeFrom(engine: ExpressionEngine, source: string): string {
@@ -83,35 +84,25 @@ describe("a matrix product is refused before it is built", () => {
 		expect(codeFrom(engine, "transpose(map(x*1, 1:100000)) * map(x*1, 1:100000)")).toBe("ALLOCATION_LIMIT_EXCEEDED");
 	});
 
-	test("and so does the function spelling of the same product", () => {
-		// BUG. `dot()` is `VMBuiltins.ts` index 66 and goes straight to
-		// `matrixMultiply()`, which opens with a bare
-		// `new Array(resultRows * resultCols)`. Nothing has consulted the budget
-		// by then, so what answers is whichever of V8's own limits the array runs
-		// into first.
-		//
-		// This size is chosen so that limit is the harmless one: 100,001^2 is
-		// past the maximum length a JavaScript array may have, so `new Array`
-		// throws `RangeError: Invalid array length` before reserving anything,
-		// and the raw message surfaces through the engine as UNEXPECTED_ERROR.
-		// The distinct error code is the proof: an expression that never reached
-		// the budget cannot have been refused by it.
-		//
-		// One order of magnitude down is where it stops being harmless. At
-		// `1:20000` the array length is perfectly valid, so V8 obliges, and 400
-		// million cells aborts the process in 1.3 seconds. `abs()`, `det()`,
-		// `inv()` and `pow()` all reach `matrixMultiply()` the same way.
+	test("the function spelling is a dot product, which allocates nothing", () => {
+		// `dot()` was this same matrix product reached through `CALL_BUILTIN`,
+		// and it arrived at a bare `new Array(rows * cols)` before the budget
+		// was consulted. It is now the dot product of two vectors (#828): the
+		// sum of the products of matching components, one number, so the same
+		// two long vectors are summed in place and no cells are built at all.
 		const engine = newTrackedEngine();
-		expect(codeFrom(engine, "dot(transpose(map(x*1, 1:100000)), map(x*1, 1:100000))")).toBe("ALLOCATION_LIMIT_EXCEEDED");
+		const value = engine.evaluateExpression("dot(transpose(map(x*1, 1:100000)), map(x*1, 1:100000))");
+		// The sum of the first 100,000 squares, n(n+1)(2n+1)/6.
+		expect(value.toNumber()).toBe(333338333350000);
 	});
 
-	test("a product at the size people write is unaffected either way", () => {
-		// Pinned so the guard above is a ceiling rather than a removal, and so
-		// the two spellings keep agreeing on the answer as well as on the refusal.
+	test("a product at the size people write is unaffected, and dot refuses a matrix by name", () => {
+		// Pinned so the guard above is a ceiling rather than a removal.
 		const engine = newTrackedEngine();
 		const viaOperator = engine.evaluateExpression("[1,2;3,4] * [5,6;7,8]");
+		expect(formatValue(viaOperator)).toBe("= [19, 22; 43, 50]");
 		const viaFunction = engine.evaluateExpression("dot([1,2;3,4], [5,6;7,8])");
-		expect(viaFunction.value).toEqual(viaOperator.value);
+		expect(viaFunction.errorCode).toBe("DIMENSION_MISMATCH");
 	});
 });
 

@@ -14,7 +14,8 @@ and writing an answer for them are separate questions.
   with: its keywords (`mal` is times in German) and what a typed number means.
 - The formatter's `numberResult.decimalSeparatorLocale` setting chooses how a
   result is **written**: the decimal mark, the digit grouping, the digits
-  themselves, and the names of weekdays and months.
+  themselves, the names of weekdays, months and units, and where a currency
+  symbol goes.
 
 ```ts
 import { createEngine } from "solve-engine";
@@ -26,8 +27,15 @@ const value = engine.evaluateExpression("€1.250");
 formatValue(value, {
   ...DEFAULT_FORMATTING_SETTINGS,
   numberResult: { decimalSeparatorLocale: "de-DE" },
-}); // "= €1.250,00"
+}); // "= 1.250,00 €"
+
+engine.formatValue(value); // "= 1.250,00 €", from the engine's own locale
 ```
+
+`engine.formatValue` takes the output tag from the engine's `locale` option, so
+the two halves agree unless the host says otherwise; the default `en`, and a
+tag `Intl` has no number data for, write `en-US`. A worker runtime writes its
+results the same way.
 
 A host usually passes the reader's own tag to both, `navigator.language` in a
 browser, so that the engine reads the way the reader types and answers the way
@@ -55,7 +63,12 @@ not the reading, chose the comma.
 | `1.234,567` | refused | `1,234.57` | refused |
 | `12345.678` | `12,345.68` | refused | `12,345.68` |
 | `2.5 fps` | `2.50 frames/s` | refused | `2.50 frames/s` |
-| `2,5` | refused | refused | refused |
+| `2,5` | refused | `2.50` | `2.50` |
+| `1,5000` | refused | `1.50` | `1.50` |
+| `1.500,5` | refused | `1,500.50` | refused |
+| `1 500` | refused | refused | `1,500` |
+| `max(1,5; 2)` | refused | `2` | `2` |
+| `max(1,5, 2)` | `5` | `2` | `2` |
 | `5/2` | `2.50` | `2.50` | `2.50` |
 
 An English engine reads `.` as the decimal point and `,` as a thousands group.
@@ -81,18 +94,153 @@ the same rule, so a German `2.500 fps` is two thousand five hundred frames a
 second, as the bare number is.
 
 A French engine reads a dot as a decimal point, as English does. Its thousands
-group is a space, which a typed number cannot carry (`1 000` is refused) and
-which [pasted text](/syntax/pasted-text/) is read with.
+group is a space: `1 500` is fifteen hundred, and so is `1 500` written with the
+narrow no-break space the engine itself writes between French groups, or with an
+ordinary no-break space. A group after the space is exactly three digits and the
+first group is one to three, so `1 50` and `12345 678` are two numbers side by
+side and refused, as `5 3` is. A German or English engine does not group with a
+space.
 
-German and French both mark the decimal with a comma. Where a comma is followed
-by exactly three digits the engine reads it as that decimal comma, which is why
-`1,500` is one and a half there. A comma followed by one or two digits (`2,5`)
-is not read yet in any pack, so a German or French engine writes a fraction as a
-division (`5/2`) for now. A literal with a second decimal mark after its comma
-(`1,234,567`), or in French a dot decimal beside a comma one (`1.234,567`), has
-no reading in a comma-decimal locale, and is refused rather than cut short at
-the second mark. In German `1.234,567` is a thousands group and a decimal
-comma, and reads as one thousand two hundred and thirty-four and a bit.
+## The decimal comma
+
+German and French both mark the decimal with a comma: two and a half is `2,5`.
+In either engine, and in their regional tags (`de-DE`, `fr-CA`), a comma
+between two digits is that decimal comma, whatever follows it: `2,5`, `1,50`,
+`1,500` and `1,5000` are all read as a decimal, so `1,500` is one and a half,
+never fifteen hundred. It is read in money (`€9,99`), in a quantity (`1,5 km`),
+in a percentage (`12,5%`) and in a list, as a number is anywhere else.
+
+A literal with a second mark after its decimal comma (`1,500,000`), or in French
+a dot decimal beside a comma one (`1.234,567`), has no reading, and is refused
+rather than cut short at the second mark. In German `1.234,567` is a thousands
+group and a decimal comma, and reads as one thousand two hundred and thirty-four
+and a bit.
+
+### Separating a function's arguments
+
+A comma separates a function's arguments in English: `max(1, 2)` is the larger
+of one and two. Where a comma is also the decimal mark, `max(1,5, 2)` could mean
+either the larger of one and a half and two, or the largest of three numbers.
+The engine never guesses between them. In a German or French engine:
+
+- A comma **between two digits** is always the decimal comma, inside a call or
+  a bracket as much as outside one.
+- A `;` separates arguments, as a spreadsheet in those languages does:
+  `max(1,5; 2)` is 2.
+- A comma **with a space after it** still separates arguments, since a decimal
+  comma never has one: `max(1, 2)` and `max(1,5, 2)` are both 2.
+
+| Typed under `de` | Reads as | Answer |
+| --- | --- | --- |
+| `max(1,5; 2)` | the larger of 1.5 and 2 | `2` |
+| `max(1,5, 2)` | the larger of 1.5 and 2 | `2` |
+| `max(1; 2)` | the larger of 1 and 2 | `2` |
+| `max(1,2)` | the largest of one number, 1.2 | `1.20` |
+| `max(1,5,2)` | one literal with two decimal commas | refused |
+| `rgb(255,0,0)` | one literal with two decimal commas | refused |
+| `rgb(255; 0; 0)` | three arguments | `rgb(255, 0, 0)` |
+
+A matrix keeps `;` for its rows, so inside `[...]` the elements of a row are
+separated by a comma and a space, and the rows by `;`: `[1,5; 2,5]` is a column
+of 1.5 and 2.5, and `[1,5, 2,5]` a row of them. A `;` in a call inside a matrix
+separates that call's arguments, and one in a matrix inside a call separates the
+matrix's rows: each belongs to the bracket it is written in.
+
+The boundary: the reading follows the engine's locale only, never a guess made
+line by line. An English engine is unchanged, so there `1,500` is fifteen
+hundred, `max(1,5, 2)` is 5, and `;` is not an argument separator. A tag with no
+pack of its own (`es`, `it`, `nl`) reads as English too, even though the engine
+writes that tag's answers with a decimal comma (see
+[writing results](#writing-results)); an answer written for such a tag cannot yet
+be typed back into it. Outside a call a `;` separates nothing, so
+`1,5 + 2,5; 3` is refused.
+
+## The words each pack reads
+
+A language pack is a keyword table as well as a number format: the list of
+words the engine reads as operators, connectives and function names. A German
+or French pack **adds** its own words to the English ones rather than replacing
+them, so every English line reads the same under every pack. A German engine
+reads `mal` for times and `von` for of, and still reads `times` and `of`; a
+French engine reads `fois` and `si ... alors ... sinon` beside `if ... then ...
+else`. The words that come from the engine's packages rather than from the
+keyword table, the unit names (`km`, `lb`), the currency codes, and phrases such
+as `half of` and `20% off`, are read the same in every pack. Symbols are never
+translated: `+`, `^`, `%` and `!` mean the same everywhere.
+
+| Typed | `en` | `de` | `fr` |
+| --- | --- | --- | --- |
+| `3 times 4` | `12` | `12` | `12` |
+| `3 mal 4` | refused | `12` | refused |
+| `3 fois 4` | refused | refused | `12` |
+| `3 plus 4` | `7` | `7` | `7` |
+| `10 teilen 2` | refused | `5` | refused |
+| `10 diviser 2` | refused | refused | `5` |
+| `2 potenz 3` | refused | `8` | refused |
+| `2 puissance 3` | refused | refused | `8` |
+| `10 mod 3` | `1` | `1` | `1` |
+| `10% of 200` | `20` | `20` | `20` |
+| `10% von 200` | refused | `20` | refused |
+| `half of 10` | `5` | `5` | `5` |
+| `20% off $50` | `$40.00` | `$40.00` | `$40.00` |
+| `5 km to miles` | `3.11 miles` | `3.11 miles` | `3.11 miles` |
+| `5 km in miles` | `3.11 miles` | `3.11 miles` | `3.11 miles` |
+| `konvertieren 5 km in miles` | refused | `3.11 miles` | refused |
+| `5 km en miles` | refused | refused | `3.11 miles` |
+| `convertir 5 km en miles` | refused | refused | `3.11 miles` |
+| `3pm Tokyo in Dubai` | `10:00 AM` | `10:00 AM` | `10:00 AM` |
+| `5 kg + 2 lb` | `5.91 kg` | `5.91 kg` | `5.91 kg` |
+| `true and false` | `false` | `false` | `false` |
+| `vrai et faux` | refused | refused | `false` |
+| `if 1 > 0 then 1 else 2` | `1` | `1` | `1` |
+| `si 1 > 0 alors 1 sinon 2` | refused | refused | `1` |
+| `sin(0)` | `0` | `0` | `0` |
+| `sqrt(16)` | `4` | `4` | `4` |
+| `round(7/2)` | `4` | `4` | `4` |
+| `floor(7/2)` | `3` | `3` | `3` |
+| `ceil(7/2)` | `4` | `4` | `4` |
+| `max(1, 2)` | `2` | `2` | `2` |
+| `wurzel(16)` | refused | `4` | refused |
+| `kubikwurzel(27)` | refused | `3` | refused |
+| `runden(7/2)` | refused | `4` | refused |
+| `aufrunden(7/2)` | refused | `4` | refused |
+| `abrunden(7/2)` | refused | `3` | refused |
+| `racine(16)` | refused | refused | `4` |
+| `arrondi(7/2)` | refused | refused | `4` |
+| `plancher(7/2)` | refused | refused | `3` |
+| `plafond(7/2)` | refused | refused | `4` |
+| `15.03.2024` | `Friday, March 15, 2024` | `Friday, March 15, 2024` | `Friday, March 15, 2024` |
+
+The dates and times words follow the same rule: `today`, `now` and
+`next monday` in every pack, `heute`, `jetzt` and `naechste montag` in German
+too, and `aujourdhui` (without its apostrophe, which a word cannot hold),
+`maintenant` and `prochain lundi` in French. They answer from the clock, so they
+are not in the table.
+
+The pack's own function names are the German `wurzel` (square root),
+`kubikwurzel` (cube root), `runden`, `aufrunden` and `abrunden` (round to the
+nearest, up and down), `zufall` (a random number), `zeichen` (the sign) and
+`ganzzahl` (the whole-number part), and the French `racine`, `arrondi`,
+`plancher` and `plafond`. Each runs the same function as its English name, so
+`wurzel(16)` and `sqrt(16)` are one call.
+
+Two things are worth knowing before choosing a pack:
+
+- **A pack's words are keywords.** A word a pack reads, in its own language or
+  in English, cannot also be a variable name under that pack, as `times` cannot
+  be one in English. Under `fr` that includes `en`, the conversion word, and
+  `racine`, `arrondi`, `plancher` and `plafond`.
+- **One word where the languages meet.** French `multiplier` is the verb, so
+  `3 multiplier 4` is 12 under `fr`, and the English `as multiplier` converter
+  is not read there. It is the one word a pack spells the same as an English
+  keyword with another meaning; the pack's meaning is kept, since it is the
+  word that pack's reader writes.
+
+The boundary: the packs are a keyword table, not a translation of every phrase.
+A package's multi-word phrases (`half of`, `compound interest on`) and its unit
+names are English in every pack, and a pack adds no word for a phrase a package
+reads. A document can still name its own words for units, see
+[custom units](/syntax/custom-units/).
 
 ## Region tags
 
@@ -103,12 +251,11 @@ per language, so a tag with no pack of its own reads as its language's pack:
 language is matched in any case, and `de_DE`, the spelling some operating
 systems use, reads as `de` too.
 
-| `locale` | `€1.250` | `1.5 + 1` |
-| --- | --- | --- |
-| `de` | `€1,250.00` | refused |
-| `de-DE` | `€1,250.00` | refused |
-| `fr-FR` | `€1.25` | `2.50` |
-| `en-GB` | `€1.25` | `2.50` |
+| Typed | `de` | `de-DE` | `fr-FR` | `en-GB` |
+| --- | --- | --- | --- | --- |
+| `€1.250` | `€1,250.00` | `€1,250.00` | `€1.25` | `€1.25` |
+| `1.5 + 1` | refused | refused | `2.50` | `2.50` |
+| `3 mal 4` | `12` | `12` | refused | refused |
 
 Any other code reads as English, including one with no pack at all (`xx`) and
 one that happens to name a built-in JavaScript property (`toString`,
@@ -139,23 +286,26 @@ places.
 A bare `12,34,567` stays refused in an English engine: outside the Indian
 convention a group of two digits is not a group, and a refusal is safer than a
 guess. A German or French engine does not read Indian grouping even beside `₹`,
-since it reads the comma as its decimal mark. In every engine a comma inside a
-call or a bracket separates arguments and elements, so `[1,00,000]` is a list of
+since it reads the comma as its decimal mark, so `₹1,00,000` there is a literal
+with two decimal commas and refused. In an English engine a comma inside a call
+or a bracket separates arguments and elements, so `[1,00,000]` is a list of
 three numbers.
 
 ## Writing results
 
 `numberResult.decimalSeparatorLocale` takes any tag the runtime's `Intl` knows,
-and the answer is written the way that tag writes numbers and dates.
+and the answer is written the way that tag writes numbers, dates and the words
+beside them: a unit's long name in the tag's language (`Tage`, `jours`), and a
+currency symbol in the place the tag gives it (after the amount under `de-DE`).
 
 | Tag | `3.5 days` | `£1234.5` | `₹1234567.89` | `2025-11-17` |
 | --- | --- | --- | --- | --- |
 | `en-US` (the default) | `3.50 days` | `£1,234.50` | `₹1,234,567.89` | `Monday, November 17, 2025` |
-| `de-DE` | `3,50 days` | `£1.234,50` | `₹1.234.567,89` | `Montag, 17. November 2025` |
-| `fr-FR` | `3,50 days` | `£1 234,50` | `₹1 234 567,89` | `lundi 17 novembre 2025` |
+| `de-DE` | `3,50 Tage` | `1.234,50 £` | `1.234.567,89 ₹` | `Montag, 17. November 2025` |
+| `fr-FR` | `3,50 jours` | `1 234,50 £` | `1 234 567,89 ₹` | `lundi 17 novembre 2025` |
 | `en-IN` | `3.50 days` | `£1,234.50` | `₹12,34,567.89` | `Monday, 17 November 2025` |
-| `ar-EG` | `٣٫٥٠ days` | `£١٬٢٣٤٫٥٠` | `₹١٬٢٣٤٬٥٦٧٫٨٩` | `الاثنين، ١٧ نوفمبر ٢٠٢٥` |
-| `ar-EG-u-nu-latn` | `3.50 days` | `£1,234.50` | `₹1,234,567.89` | `الاثنين، 17 نوفمبر 2025` |
+| `ar-EG` | `٣٫٥٠ يوم` | `١٬٢٣٤٫٥٠ £` | `١٬٢٣٤٬٥٦٧٫٨٩ ₹` | `الاثنين، ١٧ نوفمبر ٢٠٢٥` |
+| `ar-EG-u-nu-latn` | `3.50 يوم` | `1,234.50 £` | `1,234,567.89 ₹` | `الاثنين، 17 نوفمبر 2025` |
 
 A tag whose script has digits of its own (Arabic-Indic for `ar-EG`, Bengali for
 `bn`, Devanagari for `mr`) writes every digit in them, the fraction included. A
@@ -163,10 +313,21 @@ host that wants Latin digits passes a tag that asks for them, as
 `ar-EG-u-nu-latn` does: the `-u-nu-latn` ending names the Latin numbering
 system.
 
-Weekday and month names follow the tag wherever `Intl` has data for it. Where
+A unit written as a symbol (`km`, `kg`) is written as it is in every language,
+and the currency symbol itself stays the engine's (`$` for every dollar), only
+its place moving. A host that writes answers back into a note keeps the
+engine's English words with `wordsResult: { spelling: "engine" }`, since
+`3,50 Tage` does not read back in; see
+[formatting results](/guide/formatting/#the-locale-tag).
+
+Weekday and month names follow the tag wherever `Intl` has data for it, in a
+spelled-out date and in the answer to `as weekday` and `as month`. Where
 it has none (`xx`), the names come from the language pack instead, English for
 any code without one, so the answer does not depend on the machine the engine
-happens to run on. A tag `Intl` cannot read at all (`de_DE`, which `Intl` spells
+happens to run on. A time in another zone follows the tag's clock the same way
+(`19:00` under `de` for `10:00 London in Tokyo on 2026-03-10`), and a time
+difference is written as `Tokyo: London + 8 Stunden`; see
+[time-zone answers](/guide/formatting/#time-zone-answers). A tag `Intl` cannot read at all (`de_DE`, which `Intl` spells
 `de-DE`) makes formatting a number throw `Intl`'s own `RangeError`, so a typo in
 the host's configuration is seen rather than hidden behind different output.
 
@@ -174,9 +335,12 @@ the host's configuration is seen rather than hidden behind different output.
 
 - **Typed native digits are not read.** An `ar-EG` engine writes `٣٫٥٠`, but
   typing `٣٫٥` is not read as three and a half.
-- **The decimal comma is only partly read.** `2,5` is refused in every pack,
-  and a German or French engine reads a comma as a decimal only before exactly
-  three digits.
+- **Only the German and French packs read a decimal comma.** Every other tag
+  reads as English, including those whose answers the engine writes with one.
+- **The formatter is the other half.** A pack decides what a typed line means,
+  never how the answer is written: that is `numberResult.decimalSeparatorLocale`
+  in the [formatting settings](/guide/formatting/), which `engine.formatValue`
+  takes from the engine's tag.
 - **Pasted text is read by its own rules.** `numbers in` and `amounts in` read
   a German engine's text in German, and do not refuse what a typed line would:
   `numbers in "preis 9.99"` is 9 and 99 in a German engine. See

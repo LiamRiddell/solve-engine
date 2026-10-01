@@ -1,10 +1,12 @@
 import { Value, ValueType, numberValue, stringValue, boolValue, uomValue, datetimeValue, errorValue, type DatetimeGrain } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { valueKindName } from "@solve-js/vm/VMConversion";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
 import { dayNumber, isoWeekNumber } from "@solve-js/calendar/Gregorian";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { parseIso8601, unixTimestampToEpochMs, formatIso8601Local } from "../Iso8601";
+import { writeDurationInUnit } from "@solve-js/packages/time/IsoDuration";
 
 /**
  * `CALL_PLUGIN` handlers backing the datetime package's workdays/weekday/
@@ -88,18 +90,30 @@ function asEpochMs(value: Value, fieldName: string): number | Value {
   if (value.type === ValueType.Datetime) return value.toNumber();
   return errorValue(
     "DATE_FIELD_EXPECTED_DATE",
-    `"${fieldName}" expects a date, got ${ValueType[value.type] ?? "an unsupported value"}`
+    `"${fieldName}" expects a date, but got ${valueKindName(value)}.`
   );
 }
 
 /**
  * `day of the week on <date>` / `what day is it in <duration>` /
  * `<date> as weekday` -> the weekday name (e.g. "Tuesday") as a String.
+ *
+ * The text is English, and the value records which weekday it names
+ * (`Value.calendarName`, #757), so the formatter writes it in the reader's
+ * language (`Dienstag` under `de`) while a comparison with `"Tuesday"` still
+ * holds.
  */
 function weekdayOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
   const epochMs = asEpochMs(args[0], "weekday");
   if (typeof epochMs !== "number") return epochMs;
-  return stringValue(WEEKDAY_NAMES[calendarOf(context).fields(epochMs).weekday]);
+  return namedFromDate("weekday", calendarOf(context).fields(epochMs).weekday, WEEKDAY_NAMES);
+}
+
+/** A weekday or month name as a String that records which one it is. See `Value.calendarName`. */
+function namedFromDate(kind: "weekday" | "month", index: number, names: readonly string[]): Value {
+  const value = stringValue(names[index]);
+  value.calendarName = { kind, index };
+  return value;
 }
 
 const MONTH_NAMES = [
@@ -111,16 +125,14 @@ const MONTH_NAMES = [
  * `what month is it on <date>` / `<date> as month` -> the month name
  * (e.g. "December") as a String value.
  *
- * English-only, exactly like {@link WEEKDAY_NAMES} directly above, the
- * locale-aware path is `format/FormatEngine.ts`, which is what renders a
- * whole Datetime; this returns a bare String field extracted from one, and
- * matching the established weekday behaviour beats having the two
- * neighbouring fields disagree about localization.
+ * English text that records which month it names, exactly like the weekday
+ * directly above, so the formatter writes it in the reader's language (`März`
+ * under `de`, #757) and the two neighbouring fields agree about localisation.
  */
 function monthOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
   const epochMs = asEpochMs(args[0], "month");
   if (typeof epochMs !== "number") return epochMs;
-  return stringValue(MONTH_NAMES[calendarOf(context).fields(epochMs).month0]);
+  return namedFromDate("month", calendarOf(context).fields(epochMs).month0, MONTH_NAMES);
 }
 
 /**
@@ -316,14 +328,25 @@ const LATEST_INSTANT_MS = 8.64e15;
  * `1710000000 as iso8601` answered a day in January 1970. It now reads its
  * argument as `to date` does ({@link toDateFromAnyHandler}): a date as it is, a
  * number through the same seconds-or-milliseconds threshold, text through the
- * ISO 8601 parser. Anything else (a quantity, money, true or false, a list)
- * is refused by name rather than read through its number.
+ * ISO 8601 parser. A length of time is written as an ISO 8601 duration
+ * (`PT1H30M`, #760). Anything else (another quantity, money, true or false, a
+ * list) is refused by name rather than read through its number.
  *
  * @param value - The value to write.
  * @param context - The line's context, for the calendar backend.
  * @returns The ISO 8601 text, or an error Value.
  */
 export function asIso8601(value: Value, context?: LineExecutionContext): Value {
+  // A length of time is written as an ISO 8601 duration, `90 minutes as
+  // iso8601` as PT1H30M (#760). It was refused here, and before that read as
+  // epoch milliseconds. See packages/time/IsoDuration.ts.
+  if (value.type === ValueType.Uom && value.unit !== undefined) {
+    const duration = writeDurationInUnit(value.toNumber(), value.unit);
+    if (duration === null) {
+      return errorValue("AS_ISO8601_DURATION_TOO_LONG", "This length of time is too large to write as an ISO 8601 duration with exact digits.");
+    }
+    if (duration !== undefined) return stringValue(duration);
+  }
   const readable = value.type === ValueType.Datetime || value.type === ValueType.Number || value.type === ValueType.String;
   if (!readable) {
     return errorValue(

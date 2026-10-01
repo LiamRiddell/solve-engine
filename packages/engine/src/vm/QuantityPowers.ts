@@ -26,7 +26,7 @@
 import { Value, ValueType, uomValue, uomValueExact, numberValue, errorValue } from "@solve-js/vm/Value";
 import { binaryOp } from "@solve-js/vm/VMConversion";
 import { poweredUnit, rootUnit, measureForPower } from "@solve-js/uom/UnitPowers";
-import { getMeasure, convertUnit } from "@solve-js/uom/UomConverter";
+import { getMeasure, convertUnit, unitForMessage } from "@solve-js/uom/UomConverter";
 
 /** The base unit of each measure a power or root lands in. */
 const BASE_UNIT_FOR_POWER: Readonly<Record<number, string>> = { 1: "m", 2: "m²", 3: "m³" };
@@ -44,7 +44,7 @@ const ROOT_EXPONENT_TOLERANCE = 1e-12;
 export function unitPowerUnsupported(unit: string, exponent: string): Value {
 	return errorValue(
 		"UNIT_POWER_UNSUPPORTED",
-		`A quantity in ${unit} cannot be raised to the power ${exponent}: only a length squared or cubed has a unit, an area or a volume.`,
+		`A quantity in ${unitForMessage(unit)} cannot be raised to the power ${exponent}: only a length squared or cubed has a unit, an area or a volume.`,
 	);
 }
 
@@ -100,7 +100,7 @@ export function rootQuantity(value: Value, power: 2 | 3, name: string): Value {
 	if (getMeasure(unit) !== wanted) {
 		return errorValue(
 			"UNIT_ROOT_UNSUPPORTED",
-			`${name}: a quantity in ${unit} has no ${power === 2 ? "square" : "cube"} root with a unit; only ${power === 2 ? "an area" : "a volume"} has a length as its root.`,
+			`${name}: a quantity in ${unitForMessage(unit)} has no ${power === 2 ? "square" : "cube"} root with a unit; only ${power === 2 ? "an area" : "a volume"} has a length as its root.`,
 		);
 	}
 	const magnitude = value.toNumber();
@@ -194,7 +194,7 @@ export function multiplyLengths(l: Value, r: Value): Value | undefined {
 
 	return errorValue(
 		"UNIT_PRODUCT_UNSUPPORTED",
-		`A quantity in ${l.unit} times one in ${r.unit} has no unit: lengths multiply into an area or a volume, and a product of more than three lengths is not a unit.`,
+		`A quantity in ${unitForMessage(l.unit!)} times one in ${unitForMessage(r.unit!)} has no unit: lengths multiply into an area or a volume, and a product of more than three lengths is not a unit.`,
 	);
 }
 

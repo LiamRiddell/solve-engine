@@ -75,8 +75,10 @@ try {
   engine.evaluateExpression("10 +");
 } catch (error) {
   if (error instanceof EngineError) {
-    error.code; // "UNEXPECTED_END_OF_INPUT"
-    error.span; // { start: 4, end: 4, line: 1, col: 5 }: just after the "+", where an editor underlines
+    error.code;       // "UNEXPECTED_END_OF_INPUT"
+    error.message;    // 'The line ends after "+", where a value was expected'
+    error.suggestion; // 'Write a value after "+"'
+    error.span;       // { start: 4, end: 4, line: 1, col: 5 }: just after the "+", where an editor underlines
   }
 }
 
@@ -89,6 +91,33 @@ value.errorMessage; // "a mass cannot be converted to a length"
 `isPending()` marks a value still waiting on live data, and `isFault()` covers
 either case. Check it before `toNumber()`: a faulted value reads as `0` through
 it, indistinguishable from a real zero.
+
+The **code** (`UNEXPECTED_END_OF_INPUT`, `INCOMPATIBLE_UNITS`) is the part to
+branch on: it is a fixed name for the kind of failure, and it keeps its name
+from one release to the next, where the message is a sentence for the reader and
+may be reworded. [Error codes](/guide/error-codes/) lists every one.
+
+A document reports both kinds on its lines, so nothing throws out of
+`parseDocument` or `evaluateDocument`. A line the engine could not read or run
+has its message in `error`, with the same `errorCode` and `errorSpan` the line
+throws on its own, and no `result`. A line that ran and could not answer has its
+error value in `result`, as a single expression does. `errors` lists both, one
+`Line N: message` entry each.
+
+```ts
+const doc = engine.parseDocument("3 + * 4\n5 kg to m");
+
+doc.lines[0].error;             // 'Expected a value after "+", but found "*"'
+doc.lines[0].errorCode;         // "NO_PREFIX_PARSELET"
+doc.lines[0].errorSpan;         // { start: 4, end: 5, line: 1, col: 5 }: offsets into the line's own text
+doc.lines[1].result?.errorCode; // "INCOMPATIBLE_UNITS"
+doc.errors.length;              // 2
+```
+
+`parseDocument` and `evaluateDocument` are two of the engine's four entry
+points, and they differ in what they resolve: [which entry
+point](/guide/entry-points/) compares them with a single expression and a live
+editor.
 
 Read [core concepts](/getting-started/concepts/) next for the mental model, or go
 to the [syntax reference](/syntax/cheatsheet/) for what you can write.

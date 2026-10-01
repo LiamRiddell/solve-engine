@@ -3,6 +3,7 @@ import type { Parser } from "@solve-js/parser/Parser";
 import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `ratio(a, b, ...)`: the parenthesised, comma-separated parts, reduced to
@@ -23,6 +24,6 @@ export const ratioCallParselet: PrefixParselet = {
 			}
 		}
 		parser.consume("RPAREN");
-		builder.emitPluginCall("ratioReduce", argCount);
+		emitBuiltinPluginCall(builder, "ratioReduce", argCount);
 	},
 };

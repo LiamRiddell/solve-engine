@@ -5,6 +5,11 @@ description: Comparisons, booleans, and the conditional expression.
 
 > **Package:** `CONDITIONALS_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
 
+A comparison asks whether one value is bigger than, smaller than or equal to
+another, and answers `true` or `false`. `>` is greater than, `<` less than, `>=`
+and `<=` add "or equal to", `==` asks whether the two are equal and `!=` whether
+they differ.
+
 ```solve
 5 > 3 // true
 10 == 10 // true
@@ -14,68 +19,180 @@ description: Comparisons, booleans, and the conditional expression.
 
 ## Booleans
 
+A boolean is a value that is either `true` or `false`, the kind of answer a
+comparison gives. `and` is true only when both sides are true; `or` is true when
+at least one is. They are how two conditions are combined into one.
+
 ```solve
 true and false // false
 true or false // true
 ```
 
+### Negation: `not` and `!`
+
+Negating a condition turns it around: `not` makes true false and false true. It
+is how a note says "unless", or asks that something does not hold. The word
+`not` and a `!` in front of a value mean the same thing.
+
+```solve
+not true // false
+not (1 > 2) // true
+!(1 > 2) // true
+!false // true
+```
+
+The two spellings bind differently, each the way it does in the languages it
+comes from. `not` takes the whole comparison after it, as it does in Python and
+SQL, so `not 1 > 2` asks whether 1 is not more than 2; it stops at `and` and
+`or`, so `not true and false` is `(not true) and false`. A `!` takes only the one
+value right after it, as it does in C and JavaScript, so a comparison after it
+needs its brackets: `!(1 > 2)`.
+
+```solve
+not 1 > 2 // true
+not true and false // false
+if not 5 > 3 then 1 else 2 // 2
+```
+
+Negation is defined for `true` and `false` only. A number is not read as "zero
+means false", and a `!` in front of one is not a bit flip (that is `~`, see
+[bitwise operators](/syntax/bitwise-operators/)), so negating anything that is
+not a boolean is refused by name, with the comparison to write instead:
+
+```solve
+not 5 // "not" works on true or false, and 5 is a number: compare it first, as in not (x > 3).
+!1 > 2 // "!" works on true or false, and 1 is a number: compare it first, as in not (x > 3).
+```
+
+A list of answers, a row of `true` and `false` in square brackets, is negated
+one answer at a time, whether it is written out, worked out from comparisons, or
+held in a name. A list of numbers is not a list of answers, so `not` before one
+is refused in the same words as `not 5`:
+
+```solve
+not [true, false] // [false, true]
+not [1 > 0, 2 > 3] // [false, true]
+not [1, 2] // "not" works on true or false, and [1, 2] is a list: compare it first, as in not (x > 3).
+![1, 2] // "!" works on true or false, and [1, 2] is a list: compare it first, as in not (x > 3).
+```
+
+`not [1, 2]` used to be read as an item of a list called `not`, and answered
+"Undefined variable: not", while `![1, 2]` and `not ([1, 2] > 1)` were read as
+negation.
+
+The boundary: a `!` straight after a value is still the factorial (`5!` is
+120), and `!=` is still "is not equal to". `not` is ordinary English, so it is
+read as negation only where a value is expected (at the start of a line, or
+after `if`, `then`, `else`, a bracket, `and`, `or` or a comparison) and a
+condition follows it. A sentence that starts with it (`not now`) stays prose,
+and a variable called `not` keeps working, except before a square bracket,
+which opens a list to negate, so an item of a list called `not` is not read
+as `not[0]`:
+
+```solve-doc
+not = 3 // 3
+not + 1 // 4
+```
+
+## Comparing text
+
+Text is anything in quotes, such as `"255"` or `"paid"`. Two pieces of text are
+equal when they are the same characters. Text and a number are two kinds of
+thing, even when they read alike, so `==` between them is false and `!=` is
+true. To compare the number a piece of text holds, turn it into a number first
+with `as number`:
+
+```solve
+"paid" == "paid" // true
+255 == "255" // false
+255 != "255" // true
+"255" as number == 255 // true
+```
+
+Text has no order that a note would mean (is `"apple"` less than `"pear"`?), so
+`<`, `<=`, `>` and `>=` with text on either side are refused by name, and the
+message points at `as number` when the text holds a number:
+
+```solve
+"5" > 3 // "5" on the left is text and the other side is a number, so they cannot be put in order. To read the text as a number, write "5" as number.
+"a" < "b" // Text has no order: two pieces of text can only be compared with == or !=, not <.
+```
+
+The boundary: `==` gives an answer rather than a refusal, as it does for a
+length beside a mass (`1 m == 1 kg` is false), so a condition such as `if x ==
+"yes"` still works whatever `x` holds. A [check](/syntax/checks/) is stricter,
+and refuses a check between text and a number, since a check that cannot hold
+is a mistake in the note. Earlier versions read the text as a number, or as 0
+when it was not one, so `"abc" == 0` was true.
+
+## Comparing a list
+
+A list (a row of numbers in square brackets) is compared one element at a
+time, so the answer is a list of `true` and `false`, one per element, and `and`,
+`or` and `not` combine such lists element by element. [Comparing a
+list](/syntax/vectors-and-matrices/#comparing-a-list) has the details.
+
+```solve
+[100, 200] > 150 // [false, true]
+[100, 200] > 150 and true // [false, true]
+```
+
+The boundary: an `if` needs one answer, so a list as its condition is refused
+by name rather than read as false.
+
+```solve
+if [100, 200] > 150 then 1 else 0 // "if" needs one true or false, and this is a list of 2 cells. Compare one cell, as in v[0] > 5, or choose for each cell with map, as in map(if x > 5 then 1 else 0, v).
+```
+
 ## Conditional expression
+
+A conditional expression picks one of two values depending on a condition: `if`
+the condition, `then` the value to use when it holds, `else` the value when it
+does not. It is how a note gives a different answer in different cases, such as
+a charge that applies only above some amount.
 
 ```solve
 if 5 > 3 then 100 else 200 // 100
 ```
 
-## Checks
-
-A **check** is a line that states something the note should always keep true:
-a budget that must cover the spending, two totals that must agree, a formula that
-must stay close to a known value. Write `check` and a comparison. While it holds,
-the line shows a quiet tick; the moment an edit breaks it, the line becomes an
-error that names both sides, so a mistake is caught where it happens rather than
-three lines further down.
+Programming languages often write the same choice with a question mark and a
+colon, `condition ? value : other` (the "ternary" operator). The engine has no
+such operator, and a colon on a line usually ends a [label](/syntax/labels/),
+so rather than read the text before the colon as a name and answer with the
+last value, the line is refused with its own parts spelled the way the engine
+reads them:
 
 ```solve-doc
-:budget = $1950
-:spent = $2010
-check :spent <= :budget // ERROR: check failed: $2,010.00 is more than $1,950.00
-check 1 km == 1000 m // ✓
+true ? 25 : 30 // ERROR: There is no choice written with "?" and ":": write if true then 25 else 30
+if true then 25 else 30 // 25
 ```
 
-A check compares the way the comparison does anywhere else in the note. A
-decimal, a fraction, an amount of money and a whole number past 2^53 each hold
-their value exactly, and are checked on it; only a pair of approximate numbers,
-such as the result of a unit conversion, is allowed the conversion's own
-rounding. A failed check shows both sides to as many decimal places as it takes
-to tell them apart, since at the usual two places `1.845` and `1.85` would both
-read `1.85`:
+## Conversions beside a comparison
+
+A conversion changes how a value is shown or which unit it is in: `as hex`,
+`in binary`, `in m`. Written on either side of a comparison, it belongs to that
+side, so the comparison is made between the two converted values and the line
+reads the way it is said:
 
 ```solve
-check 2^53 + 1 > 2^53 // ✓
-check 1.845 == 1.85 // check failed: 1.845 is not equal to 1.850
+255 in hex == 0xff in hex // true
+5 km in m == 5000 m // true
+0xff in hex != 255 in binary // false
 ```
 
-Two numbers worked out in different ways rarely match to the last digit, so a
-check can allow a margin: `≈` (or `~=`) means approximately equal, and `within`
-says how close is close enough, as a percentage of the right-hand side or as an
-amount in the same unit. A passing approximate check says how far apart the two
-sides were.
+The boundary: a conversion written after the right-hand side is that side's,
+not the comparison's. To convert the true or false a comparison answers, put
+the comparison in brackets:
 
 ```solve
-check 22/7 ≈ pi within 0.1% // ✓ (differs by 0.04%)
-check 5 m ≈ 5.01 m within 1 cm // ✓ (differs by 0.01 m)
+5 > 3 as number // true
+(5 > 3) as number // 1
 ```
 
-A check line is a statement about the numbers around it, not one of them, so a
-`total above` beneath it steps over it, passed or failed. A program embedding the
-engine gets a count of passed and failed checks on the parse result (`checks`), so
-it can flag a note whose checks have started failing. Only a line written with
-`check` is counted: a piece of text that happens to begin with a tick is text.
+## Checks
 
-The boundary: `check` only means this at the start of a line that compares two
-things, so a variable called `check` (a restaurant bill, say) keeps working.
-Things that cannot be compared, such as a length and a mass, are refused as
-incomparable rather than reported as a failed check, and text can only be
-checked for being equal or not.
+A `check` line states a comparison the note must keep true, and becomes an error
+naming both sides when it stops holding; it has its own page, [checks](/syntax/checks/).
 
 ## `and` between comparisons
 

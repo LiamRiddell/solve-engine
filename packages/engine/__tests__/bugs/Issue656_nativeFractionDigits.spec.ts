@@ -115,29 +115,29 @@ describe("localiseFixedDecimal", () => {
 
 describe("through formatValue, the issue's table", () => {
 	test.each([
-		["ar-EG", "3.5 days", "= ٣٫٥٠ days"],
-		["ar-EG", "£1234.5", "= £١٬٢٣٤٫٥٠"],
+		["ar-EG", "3.5 days", "= ٣٫٥٠ يوم"],
+		["ar-EG", "£1234.5", "= ١٬٢٣٤٫٥٠ £"],
 		["ar-EG", "3.14159 to 2 dp", "= ٣٫١٤"],
 		["ar-EG", "1234.5", "= ١٬٢٣٤٫٥٠"],
-		["bn", "3.5 days", "= ৩.৫০ days"],
-		["bn", "£1234.5", "= £১,২৩৪.৫০"],
-		["mr", "3.5 days", "= ३.५० days"],
+		["bn", "3.5 days", "= ৩.৫০ দিন"],
+		["bn", "£1234.5", "= ১,২৩৪.৫০£"],
+		["mr", "3.5 days", "= ३.५० दिवस"],
 		["mr", "£1234.5", "= £१,२३४.५०"],
-		["fa", "3.5 days", "= ۳٫۵۰ days"],
-		["ar-EG-u-nu-latn", "3.5 days", "= 3.50 days"],
+		["fa", "3.5 days", "= ۳٫۵۰ روز"],
+		["ar-EG-u-nu-latn", "3.5 days", "= 3.50 يوم"],
 	])("%s %s", (tag, line, expected) => {
 		expect(show(line, tagged(tag))).toBe(expected);
 	});
 
 	test("a quantity and money with grouping off are native throughout", () => {
-		expect(show("3.5 days", tagged("ar-EG", false))).toBe("= ٣٫٥٠ days");
-		expect(show("£1234.5", tagged("ar-EG", false))).toBe("= £١٢٣٤٫٥٠");
+		expect(show("3.5 days", tagged("ar-EG", false))).toBe("= ٣٫٥٠ يوم");
+		expect(show("£1234.5", tagged("ar-EG", false))).toBe("= ١٢٣٤٫٥٠ £");
 	});
 
 	test("realistic breakage: a negative amount, a conversion and a whole number of days", () => {
-		expect(show("-£5.25", tagged("ar-EG"))).toBe("= -£٥٫٢٥");
+		expect(show("-£5.25", tagged("ar-EG"))).toBe("= -٥٫٢٥ £");
 		expect(show("1.5 km to m", tagged("ar-EG"))).not.toMatch(ASCII_DIGIT);
-		expect(show("3 days", tagged("ar-EG"))).toBe("= ٣ days");
+		expect(show("3 days", tagged("ar-EG"))).toBe("= ٣ أيام");
 	});
 
 	test("the default settings are unchanged", () => {

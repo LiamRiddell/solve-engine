@@ -29,9 +29,9 @@ rather than an error:
 const engine = new ExpressionEngine(); // no packages
 formatValue(engine.evaluateExpression("2 + 2"));      // "= 4"
 formatValue(engine.evaluateExpression("2024-03-15")); // "= 2,006", a subtraction
-engine.evaluateExpression("5 km in miles"); // throws: Unexpected token after expression: "km"
-engine.evaluateExpression("sqrt(16)");      // throws: No prefix parselet found for token: FUNC ("sqrt")
-engine.evaluateExpression("$5 + $3");       // throws: No prefix parselet found for token: DOLLAR ("$")
+engine.evaluateExpression("5 km in miles"); // throws: Expected an operator or the end of the line, but found "km"
+engine.evaluateExpression("sqrt(16)");      // throws: Expected a value, but found "sqrt"
+engine.evaluateExpression("$5 + $3");       // throws: Expected a value, but found "$"
 ```
 
 A slim engine does the same for whatever it leaves out: one given only
@@ -222,7 +222,11 @@ import { pluginFunctionIndexFor } from "solve-engine/vm";
 const idx = pluginFunctionIndexFor(`${packageName}:myFn`);
 ```
 
-The `examples/osrs` Grand Exchange resolver is the worked example.
+The [package starter](https://github.com/LiamRiddell/solve-engine/tree/main/examples/package-starter),
+a package that depends on `solve-engine` by name and imports only its public
+entry points, is the worked example of a package written against 2.x: a
+function, a phrase, an `as` converter and a live lookup, each tested with
+`solve-engine/testing`.
 
 ## Snapshots carry their packages
 

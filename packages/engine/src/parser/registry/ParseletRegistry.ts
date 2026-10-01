@@ -1,5 +1,5 @@
 import { PrefixParselet, InfixParselet } from "@solve-js/parser/Parselet";
-import { tokenTypeId } from "@solve-js/lexer/Token";
+import { knownTokenTypeId, tokenTypeId, tokenTypeName } from "@solve-js/lexer/Token";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 
 /**
@@ -28,23 +28,27 @@ function bindingPowersOf(parselet: PrefixParselet | InfixParselet): ParseletBind
 }
 
 /**
- * Dual-keyed ParseletRegistry, accepts both string token types and
- * integer token type IDs for fast dispatch in the Parser hot path.
+ * ParseletRegistry, which accepts both string token types and integer token
+ * type IDs, the integer form being the fast dispatch in the Parser hot path.
  *
  * Providers call registerPrefix("NUMBER", ...) with string token types.
- * Internally, we populate both string-keyed and integer-keyed maps so
- * Parser.parseExpression() can use token.typeId (integer) for lookup
+ * Parser.parseExpression() looks a parselet up by token.typeId (integer),
  * while diagnostics and error messages use token.type (string).
+ *
+ * One map per kind, keyed by the integer ID. A name and its ID are one to one
+ * (the process-wide table in `lexer/Token.ts` hands each name one ID for
+ * good), so a lookup by name translates the name and reads the same map, and
+ * {@link getAllPrefix} translates back. This used to keep a second,
+ * string-keyed copy of each map as well. The built-in packages register more
+ * than 256 prefix parselets, past the size at which a `Map` doubles its
+ * table, so the copy cost every engine about 14KB for prefix parselets alone
+ * and answered nothing the integer map does not.
  *
  * Performance: Integer Map.get() avoids string hashing, saving ~2-5ns
  * per dispatch. With ~10-15 dispatches per expression, that's ~20-75ns.
  */
 export class ParseletRegistry {
-	// String-keyed maps (kept for diagnostics + backwards compat)
-	private prefixParselets: Map<string, PrefixParselet> = new Map();
-	private infixParselets: Map<string, InfixParselet> = new Map();
-
-	// Integer-keyed maps for parser hot path
+	// Integer-keyed maps, the parser hot path and the only store.
 	private prefixById: Map<number, PrefixParselet> = new Map();
 	private infixById: Map<number, InfixParselet> = new Map();
 
@@ -71,32 +75,32 @@ export class ParseletRegistry {
 	 * misfire on that intentional, already-documented pattern.
 	 */
 	registerPrefix(tokenType: string, parselet: PrefixParselet): void {
-		const existing = this.prefixParselets.get(tokenType);
+		const id = tokenTypeId(tokenType);
+		const existing = this.prefixById.get(id);
 		if (existing && existing !== parselet) {
 			console.warn(
 				`[ParseletRegistry] Prefix parselet for token "${tokenType}" is already registered ` +
 				`(category: "${existing.category ?? "unknown"}"). Overwriting with a new ` +
-				`parselet (category: "${parselet.category ?? "unknown"}") — the previous ` +
+				`parselet (category: "${parselet.category ?? "unknown"}"), so the previous ` +
 				`parselet is now unreachable. Two packages may be claiming the same token type.`,
 			);
 		}
-		this.prefixParselets.set(tokenType, parselet);
-		this.prefixById.set(tokenTypeId(tokenType), parselet);
+		this.prefixById.set(id, parselet);
 	}
 
 	/** Register an infix parselet for `tokenType`. See {@link registerPrefix} for the collision-warning behavior this mirrors. */
 	registerInfix(tokenType: string, parselet: InfixParselet): void {
-		const existing = this.infixParselets.get(tokenType);
+		const id = tokenTypeId(tokenType);
+		const existing = this.infixById.get(id);
 		if (existing && existing !== parselet) {
 			console.warn(
 				`[ParseletRegistry] Infix parselet for token "${tokenType}" is already registered ` +
 				`(category: "${existing.category ?? "unknown"}"). Overwriting with a new ` +
-				`parselet (category: "${parselet.category ?? "unknown"}") — the previous ` +
+				`parselet (category: "${parselet.category ?? "unknown"}"), so the previous ` +
 				`parselet is now unreachable. Two packages may be claiming the same token type.`,
 			);
 		}
-		this.infixParselets.set(tokenType, parselet);
-		this.infixById.set(tokenTypeId(tokenType), parselet);
+		this.infixById.set(id, parselet);
 	}
 
 	/**
@@ -113,9 +117,9 @@ export class ParseletRegistry {
 	 */
 	getAllPrefix(): Array<{ tokenType: string; bindingPower: number; category?: string }> {
 		const result: Array<{ tokenType: string; bindingPower: number; category?: string }> = [];
-		for (const [tokenType, parselet] of this.prefixParselets) {
+		for (const [id, parselet] of this.prefixById) {
 			result.push({
-				tokenType,
+				tokenType: tokenTypeName(id),
 				bindingPower: bindingPowersOf(parselet).bindingPower ?? BindingPower.Prefix,
 				category: parselet.category,
 			});
@@ -144,11 +148,11 @@ export class ParseletRegistry {
 	 */
 	getAllInfix(): Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; associativity: "left" | "right"; category?: string }> {
 		const result: Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; associativity: "left" | "right"; category?: string }> = [];
-		for (const [tokenType, parselet] of this.infixParselets) {
+		for (const [id, parselet] of this.infixById) {
 			const left = bindingPowersOf(parselet).bindingPower ?? 0;
 			const right = parselet.rightAssociative === true;
 			result.push({
-				tokenType,
+				tokenType: tokenTypeName(id),
 				leftBindingPower: left,
 				rightBindingPower: right ? left - 1 : left + 1,
 				associativity: right ? "right" : "left",
@@ -159,19 +163,21 @@ export class ParseletRegistry {
 	}
 
 	/** Number of registered prefix parselets. */
-	get prefixCount(): number { return this.prefixParselets.size; }
+	get prefixCount(): number { return this.prefixById.size; }
 
 	/** Number of registered infix parselets. */
-	get infixCount(): number { return this.infixParselets.size; }
+	get infixCount(): number { return this.infixById.size; }
 
 	/**
 	 * Get prefix parselet by string token type OR integer typeId.
 	 * Fast path for integer IDs (Parser hot path), fallback for strings
-	 * (diagnostics, error messages, backwards compatibility).
+	 * (diagnostics, error messages, backwards compatibility). A name no token
+	 * type was ever registered under has no parselet, and asking does not
+	 * register it.
 	 */
 	getPrefix(tokenType: string | number): PrefixParselet | undefined {
-		if (typeof tokenType === 'number') return this.prefixById.get(tokenType);
-		return this.prefixParselets.get(tokenType);
+		const id = typeof tokenType === 'number' ? tokenType : knownTokenTypeId(tokenType);
+		return id === undefined ? undefined : this.prefixById.get(id);
 	}
 
 	/**
@@ -179,21 +185,22 @@ export class ParseletRegistry {
 	 * Fast path for integer IDs (Parser hot path), fallback for strings.
 	 */
 	getInfix(tokenType: string | number): InfixParselet | undefined {
-		if (typeof tokenType === 'number') return this.infixById.get(tokenType);
-		return this.infixParselets.get(tokenType);
+		const id = typeof tokenType === 'number' ? tokenType : knownTokenTypeId(tokenType);
+		return id === undefined ? undefined : this.infixById.get(id);
 	}
 
+	/** Whether a prefix parselet is registered for the token type `tokenType`. */
 	hasPrefix(tokenType: string): boolean {
-		return this.prefixParselets.has(tokenType);
+		return this.getPrefix(tokenType) !== undefined;
 	}
 
+	/** Whether an infix parselet is registered for the token type `tokenType`. */
 	hasInfix(tokenType: string): boolean {
-		return this.infixParselets.has(tokenType);
+		return this.getInfix(tokenType) !== undefined;
 	}
 
+	/** Remove every registered parselet. */
 	clear(): void {
-		this.prefixParselets.clear();
-		this.infixParselets.clear();
 		this.prefixById.clear();
 		this.infixById.clear();
 	}

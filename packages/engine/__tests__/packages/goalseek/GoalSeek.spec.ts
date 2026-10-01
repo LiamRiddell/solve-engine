@@ -81,7 +81,8 @@ describe("numeric goal seek over a formula with no closed form", () => {
 			"solve line 2 for rate = 1200",
 		]);
 		const solved = lineResult(doc, 3);
-		expect(solved.type).toBe(ValueType.Number);
+		// The rate is held as a percentage, so it is solved as one (FoundBug_goalSeekLoanRefusals).
+		expect(solved.type).toBe(ValueType.Percentage);
 		const rate = solved.toNumber();
 		expect(rate).toBeGreaterThan(0);
 		expect(repaymentAt(rate)).toBeCloseTo(1200, 3);

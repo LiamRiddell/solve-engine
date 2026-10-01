@@ -5,7 +5,9 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { parseCollectionExpr, emitInvoke } from "../MapReduceShared";
+import { parseCollectionExpr, emitInvoke, callHasOwnComma, parseElementFold } from "../MapReduceShared";
+import { ReduceForm } from "@solve-js/vm/MatrixOps";
+import { heldExpressionReadsLines } from "@solve-js/parser/HeldExpression";
 
 /**
  * `prod(elementExpr, collection)`, parse-time sugar for
@@ -19,6 +21,13 @@ export class ProdParselet implements PrefixParselet {
   parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
     parser.consume("LPAREN");
 
+    // `prod(1:4)`, one argument: the collection's own elements multiplied, as
+    // `sum(1:3)` adds them (see SumParselet).
+    if (!callHasOwnComma(parser)) {
+      parseElementFold(parser, builder, OpCode.MUL, 1, ReduceForm.prod);
+      return;
+    }
+
     const bodyBuilder = new BytecodeBuilder(builder.pluginIndexMap);
     bodyBuilder.emitOpcode(OpCode.LOAD_VAR);
     bodyBuilder.emitString("acc");
@@ -26,6 +35,8 @@ export class ProdParselet implements PrefixParselet {
     parser.setBuilder(builder);
     bodyBuilder.emitOpcode(OpCode.MUL);
     const bodyProgram = bodyBuilder.build();
+    const readsLines = heldExpressionReadsLines(bodyProgram, bodyBuilder, "prod");
+    if (readsLines !== null) throw readsLines;
     if (bodyProgram.hasAsync) {
       throw ErrorFactory.parsing(
         "MAP_REDUCE_TRANSFORM_MUST_BE_SYNCHRONOUS",
@@ -44,6 +55,6 @@ export class ProdParselet implements PrefixParselet {
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(1);
 
-    emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program: bodyProgram }, ["acc", "x"], 1);
+    emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program: bodyProgram }, ["acc", "x"], ReduceForm.prod);
   }
 }

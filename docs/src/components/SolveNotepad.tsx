@@ -123,6 +123,16 @@ function toLines(text: string): string[] {
 /** How much of an answer the row's `title` carries. See its use below. */
 const TOOLTIP_LIMIT = 240;
 
+/**
+ * Answers at least this long may be cut off with an ellipsis in the column, so
+ * they are focusable and show their full text on focus, the keyboard route to
+ * what a pointer reads from the `title`. Shorter ones always fit.
+ */
+const MAY_TRUNCATE = 24;
+
+/** What a pending answer says in words, for a screen reader and on hover. */
+const PENDING_WORDS = "waiting for live data";
+
 function truncateForTooltip(text: string): string | undefined {
   if (!text) return undefined;
   return text.length > TOOLTIP_LIMIT ? `${text.slice(0, TOOLTIP_LIMIT)}…` : text;
@@ -138,8 +148,14 @@ function truncateForTooltip(text: string): string | undefined {
  * concerned, so they are classified by type rather than painted in the brand
  * colour beside the real ones.
  */
+/**
+ * The notepad writes at most this many elements of a list or matrix and counts
+ * the rest, so a 100,000-element list costs what a thousand do to show.
+ */
+const DISPLAY = { matrixResult: { maxElements: 1000 } };
+
 function toValueAnswer(result: unknown): Answer {
-  const text = stripMarker(formatValue(result as never));
+  const text = stripMarker(formatValue(result as never, DISPLAY));
   const v = result as { type?: number; value?: { r: number; g: number; b: number; a: number } };
   // A pending value is a network lookup (weather, currency) that has not
   // returned yet. Show a quiet marker rather than its internal query key, and
@@ -156,7 +172,7 @@ function toValueAnswer(result: unknown): Answer {
   // answer column shows the aligned form (`text` keeps the compact single line
   // for the tooltip and for anything that wants one value per row).
   if (v.type === ValueType.Matrix && v.value) {
-    return { text, kind: "value", matrix: formatMatrixAligned(v.value as never) };
+    return { text, kind: "value", matrix: formatMatrixAligned(v.value as never, DISPLAY) };
   }
   // A chart (a sparkline or a plot) carries its specification on the live Value.
   // The engine emits only the data; this notepad is one host that draws it. A
@@ -522,18 +538,23 @@ export default function SolveNotepad({
       <div className="notepad__answers" aria-live="polite" aria-atomic="false">
         {Array.from({ length: rows }, (_, i) => {
           const answer = answers[i] ?? EMPTY;
+          const pendingAnswer = answer.kind === "pending";
+          const long = !answer.matrix && !pendingAnswer && answer.text.length >= MAY_TRUNCATE;
           return (
             <div
               key={i}
               className="notepad__answer"
               data-kind={answer.kind}
               data-matrix={answer.matrix ? "true" : undefined}
+              /* A long answer can be cut off by the column, so it takes focus
+                 and shows its full text while it has it (see .notepad__full). */
+              tabIndex={long ? 0 : undefined}
               /* A fully spelled out datetime is longer than any sane column
                  width, so the ellipsised ones stay readable on hover. Truncated
                  because some answers are much longer than that: a vector of
                  1,501 elements prints to 8,000 characters, and a tooltip is a
                  hint, not a document. */
-              title={truncateForTooltip(answer.text)}
+              title={pendingAnswer ? PENDING_WORDS : truncateForTooltip(answer.text)}
             >
               {answer.matrix ? (
                 /* A matrix is a block, so it is the one answer that breaks the
@@ -544,8 +565,24 @@ export default function SolveNotepad({
                   {answer.swatch && (
                     <span className="notepad__swatch" style={{ background: answer.swatch }} aria-hidden="true" />
                   )}
-                  {answer.text}
+                  {pendingAnswer ? (
+                    /* The ellipsis is decoration; the words are what the live
+                       region announces. */
+                    <>
+                      <span aria-hidden="true">{answer.text}</span>
+                      <span className="notepad__visually-hidden">{PENDING_WORDS}</span>
+                    </>
+                  ) : (
+                    answer.text
+                  )}
                   {answer.chart && <Chart chart={answer.chart} />}
+                  {long && (
+                    /* The full answer, shown on focus. Hidden from assistive
+                       technology, which already reads the whole text above. */
+                    <span className="notepad__full" aria-hidden="true">
+                      {answer.text}
+                    </span>
+                  )}
                 </>
               )}
             </div>

@@ -26,10 +26,13 @@ skips the fuzz and long-document suites; the full run is still the gate.
 | --- | --- |
 | `packages/engine` | The published package, `solve-engine` |
 | `packages/playground-bridge` | Shared glue between the engine and the playground |
+| `packages/cli` | The `solve` command (`solve-engine-cli`), not yet published: the engine from a shell and in CI. Its spec is `packages/engine/__tests__/bugs/Issue774_solveCli.spec.ts`, and `npm run smoke:cli` runs the built command |
+| `packages/mcp` | The MCP server (`solve-engine-mcp`, `solve-mcp`), not yet published: the engine as tools for an AI client, network off and a fresh engine per call. It bundles the shared code from `packages/cli/src/evaluate.ts`. Its spec is `packages/engine/__tests__/bugs/Issue774_mcpServer.spec.ts`, and `npm run smoke:mcp` runs the built server over stdio |
 | `playground` | Interactive playground, own lockfile, not a workspace member |
 | `docs` | Documentation site, own lockfile, not a workspace member |
 | `docs-internal` | Maintainer notes, not published |
-| `examples/osrs` | A worked third-party package |
+| `examples/package-starter` | A third-party package starter: public imports only, built and tested against the packed tarball by `npm run test:consumer` |
+| `packages/engine/examples/osrs` | An internal fixture package, imported through the `@solve-js/*` aliases by the playground bridge and the engine's tests; not a template to copy |
 
 Inside `packages/engine/src`, evaluation flows `lexer` to `normalizer` to
 `parser` to `vm`, with `engine` orchestrating and `packages` supplying all the
@@ -87,16 +90,34 @@ of the engine already broke its own contract? Then internal or config.
 
 ### Adding a code
 
-For core layers, add it to `CoreErrorCodes` in `errors/ErrorCode.ts` with a
-one-line comment saying what triggers it, then run
-`__tests__/errors/ErrorCodeCatalog.spec.ts`. That test enforces uniqueness and
-scans for codes used but never cataloged, which catches typos immediately.
+Every code the engine or a built-in package raises is in a catalogue (#769).
+For core layers, add it to `CoreErrorCodes` in `errors/ErrorCode.ts`, in the
+section it belongs to, with a doc comment saying what triggers it in the
+reader's terms and how it arrives. A code raised under `src/packages/<name>/`
+goes in that package's own `XxxErrorCodes` const (`WeatherErrorCodes`,
+`TablesErrorCodes`), not in the core one: `IEnginePackage` is public SDK surface
+and a closed enum would stop a third-party author defining their own codes. A
+code built at run time from a template (`${namespace}_QUERY_FAILED`) is listed
+as a pattern in `resolvers/QueryResolverErrorCodes.ts`. A new catalogue object
+is registered in `packages/ErrorCodeCatalogue.ts` (`ERROR_CODE_CATALOGUES`).
 
-Domain packages under `src/packages/*` are deliberately outside the core
-catalog, because `IEnginePackage` is public SDK surface and a closed enum would
-stop a third-party author defining their own codes. Export a co-located
-`XxxErrorCodes` const instead, following `WeatherErrorCodes` or
-`CurrencyErrorCodes`. Those are not orphan-checked, so check the string by hand.
+Then:
+
+- `npm run lint:error-codes` (in `verify:ci` and the CI docs job) fails on a
+  code raised that no catalogue lists, on an entry with no doc comment, and on a
+  stale reference page. `npm run docs:error-codes` regenerates
+  `docs/src/content/docs/guide/error-codes.md` from the doc comments; never edit
+  that page by hand.
+- `__tests__/errors/ErrorCodeCatalogueSnapshot.spec.ts` fails on a code renamed
+  or removed. A code a host can receive keeps its name, so adding one means
+  adding it to `ErrorCodeCatalogue.snapshot.json`, and removing one is a
+  breaking change.
+- `__tests__/errors/ErrorCodeReachability.spec.ts` needs an example line that
+  produces the code, or an entry in one of its reason maps (host API, package
+  authoring, live data, behind a parse-time refusal, guarded before it,
+  engine invariant) saying why no line can.
+- `__tests__/errors/ErrorCodeCatalog.spec.ts` still enforces uniqueness within
+  `CoreErrorCodes`.
 
 ### Never `throw new Error`
 
@@ -184,13 +205,22 @@ Write for someone arriving cold. No history, no dates, no mention of which
 session produced something, and no restating what the next line already says.
 No em-dashes; use a comma, a colon, parentheses, or a second sentence.
 
-Every exported symbol outside `src/packages` carries a doc block, since that is
-what shows on hover. Two of these rules are checked rather than left to review:
+Every exported symbol under `packages/engine/src`, the language packages
+included, carries a doc block, since that is what shows on hover. Two of these
+rules are checked rather than left to review:
 
 ```bash
 npm run lint:comments
 npm run lint:docs
 ```
+
+Messages a reader sees (`errorValue`, `lineMessage`, `ErrorFactory`,
+`console.warn`/`console.error`) follow the same voice, and `npm run
+lint:messages` checks the ones written as literals: no em-dash, British
+spelling, no JavaScript operator, no host method named in a line's result.
+
+Specs and `tools/` are type-checked too, by `npm run typecheck:tests`, against
+a baseline that only falls. Import Jest's globals from `@jest/globals`.
 
 `docs-internal/COMMENT_STANDARD.md` has the full standard and the reasoning.
 `docs-internal/CODING_STANDARDS.md` covers general code style.
@@ -207,6 +237,12 @@ Examples in the documentation and in the root README are executed by
 `__tests__/docs/DocExamples.spec.ts`. If you change what an expression
 evaluates to, the docs fail until they are updated, which is the point. Do not
 write a documentation example you have not run.
+
+A TypeScript fence in the guides that states a result, with a trailing
+`// "= 4"` or `// throws: <message>`, is run by
+`__tests__/docs/GuideExamples.spec.ts` after the fences above it on its page. A
+fence that states a result and cannot run here is listed in that spec's
+`UNRUNNABLE` map with the reason.
 
 The suite runs against `src` through jest path aliases and never imports
 `dist`. That gap once hid a defect where the published bundle threw on import

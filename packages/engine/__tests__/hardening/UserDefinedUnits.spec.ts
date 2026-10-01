@@ -134,7 +134,7 @@ describe("what must keep working", () => {
 	});
 
 	test("a scalar equation with a coefficient is still an equation, not a definition", () => {
-		expect(runDocument("2 x = 10")).toEqual(['x stored as an equation — solve with "x =>"']);
+		expect(runDocument("2 x = 10")).toEqual(['x stored as an equation: solve with "x =>"']);
 	});
 
 	test("a plain assignment is still an assignment", () => {

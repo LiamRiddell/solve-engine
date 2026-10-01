@@ -229,6 +229,12 @@ export function extractLineTimings(
 }
 
 /**
+ * What the playground displays: at most 1,000 elements of a list or matrix,
+ * with the rest counted, so a very long list costs what a thousand do to show.
+ */
+const DISPLAY_FORMATTING = { matrixResult: { maxElements: 1000 } };
+
+/**
  * Format a line result's display string with the SAME contract the real
  * Obsidian widget uses (MarkdownEditorViewPlugin.buildDecorations):
  * `isPending ? "" : formatValue(value)`. solve-js's formatValue() has no
@@ -240,7 +246,7 @@ export function extractLineTimings(
  */
 export function formatLineResultValue(value: Value): string {
 	if (value.type === ValueType.Pending) return '';
-	return formatValue(value);
+	return formatValue(value, DISPLAY_FORMATTING);
 }
 
 /**

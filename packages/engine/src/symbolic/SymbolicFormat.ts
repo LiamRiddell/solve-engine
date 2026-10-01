@@ -3,8 +3,10 @@
  *
  * The conventions here match how the expressions are written rather than how
  * the tree is shaped: a coefficient juxtaposes its variable with no operator
- * (`2b`, not `2*b`), sums join with the correct sign (`2b+6` and `x-3`, never
- * `2b+-6`), and parentheses appear only where precedence genuinely needs them.
+ * (`2x`, not `2*x`), sums join with the correct sign (`2x+6` and `x-3`, never
+ * `2x+-6`), and parentheses appear only where precedence genuinely needs them.
+ * A name the number would read as a unit or a magnitude takes a `*` instead
+ * (`2*b`, since `2b` is two bits).
  *
  * This module does not simplify. Call `simplifySymbolic()` first for a
  * canonical, minimal rendering.
@@ -13,6 +15,8 @@
 import type { SymbolicNode } from "@solve-js/symbolic/SymbolicNode";
 import { type Rational, formatRational } from "@solve-js/symbolic/Rational";
 import { formatComplex } from "@solve-js/symbolic/Complex";
+import { isKnownUnit } from "@solve-js/lexer/units";
+import { isMagnitudeSuffix } from "@solve-js/packages/arithmetic/normalizer/LargeNumberSuffixNormalizerRule";
 
 /** Extracts `{coeff, name}` from a `const*var` or `var*const` shape, or `null` when `node` is not one. */
 function tryExtractCoeffVar(node: SymbolicNode & { kind: "mul" }): { coeff: Rational; name: string } | null {
@@ -31,16 +35,149 @@ function tryExtractCoeffPow(node: SymbolicNode & { kind: "mul" }): { coeff: Rati
 /** Whether a node renders as a single indivisible token, so an exponent can follow it without parentheses. */
 function isAtomic(node: SymbolicNode): boolean {
 	if (node.kind === "var" || node.kind === "call") return true;
-	// A negative constant needs brackets under an exponent: `-2^2` parses as
-	// `-(2^2)`, which is a different value from `(-2)^2`.
-	return node.kind === "const" && node.value.n >= 0n;
+	// A negative constant needs brackets under an exponent, since `-2^2` and
+	// `(-2)^2` are written differently; so does a fraction, since `2/3^2` reads
+	// as two ninths and `x^1/2` as half of x.
+	return node.kind === "const" && node.value.n >= 0n && !formatRational(node.value).includes("/");
 }
 
-/** Renders `coeff` immediately followed by `text`, collapsing the 1 and -1 cases the way a person writes them. */
+/**
+ * Whether the text opens with one operand raised to a power: `x^2`, `2^x`,
+ * `sqrt(x)^2`, `(x+1)^2`, but not `2x^2`, whose power belongs to the `x`.
+ *
+ * The engine reads a leading minus as part of the operand after it, so `-x^2`
+ * is `(-x)^2`, which is nine at x = 3. A minus written in front of such text
+ * has to be bracketed, `-(x^2)`, for the display to read back as the formula.
+ *
+ * @param text - Rendered display text.
+ * @returns True when a `^` follows the first operand.
+ */
+export function leadsWithPower(text: string): boolean {
+	let i = 0;
+	const first = text[0];
+	if (first === undefined) return false;
+	if (first === "(") {
+		i = closingBracket(text, 0);
+		if (i < 0) return false;
+	} else if (/[\d.]/.test(first)) {
+		while (i < text.length && /[\d.]/.test(text[i])) i++;
+	} else if (!/[-+*/^(),\s]/.test(first)) {
+		while (i < text.length && !/[-+*/^(),\s]/.test(text[i])) i++;
+		// A function call is one operand with its arguments.
+		if (text[i] === "(") {
+			i = closingBracket(text, i);
+			if (i < 0) return false;
+		}
+	} else {
+		return false;
+	}
+	return text[i] === "^";
+}
+
+/** The index just past the bracket that closes the one at `open`, or -1 when it is never closed. */
+function closingBracket(text: string, open: number): number {
+	let depth = 0;
+	for (let i = open; i < text.length; i++) {
+		if (text[i] === "(") depth++;
+		else if (text[i] === ")" && --depth === 0) return i + 1;
+	}
+	return -1;
+}
+
+/** Whether the text ends in one number over another (`x^2/3`), which a further `/27` would turn into a date. */
+function endsWithNumberOverNumber(text: string): boolean {
+	return /\d\/[\d.]+$/.test(text);
+}
+
+/** `text` with a minus in front, bracketed where the minus would otherwise take only the base of a power (see {@link leadsWithPower}). */
+function negated(text: string): string {
+	return leadsWithPower(text) ? `-(${text})` : `-${text}`;
+}
+
+/**
+ * Renders `coeff` immediately followed by `text`, collapsing the 1 and -1 cases
+ * the way a person writes them.
+ *
+ * A fraction that has no short decimal is written as a division after the
+ * term, `salary/1200` and `2x/3`, rather than in front of it: `1/1200salary`
+ * reads as one over 1200 salaries. Text that cannot stand beside a number
+ * takes a `*` (see {@link juxtaposes}).
+ */
 function formatCoefficient(coeff: Rational, text: string): string {
-	if (coeff.n === 1n && coeff.d === 1n) return text;
-	if (coeff.n === -1n && coeff.d === 1n) return `-${text}`;
-	return `${formatRational(coeff)}${text}`;
+	const written = formatRational(coeff);
+	if (coeff.d !== 1n && written.includes("/")) {
+		const numerator = formatCoefficient({ n: coeff.n, d: 1n }, text);
+		// As in a quotient: `y^2/5` over 3 must not read as the date 2/5/3.
+		return `${endsWithNumberOverNumber(numerator) ? `(${numerator})` : numerator}/${coeff.d}`;
+	}
+	// A coefficient a hair from one (`1 + 1e-302`) is written as one, as it is
+	// everywhere else, rather than as a `1` stuck to the term.
+	if (written === "1") return text;
+	if (written === "-1") return negated(text);
+	return juxtaposes(written, text) ? `${written}${text}` : `${written}*${text}`;
+}
+
+/**
+ * Whether a number written straight before `text` reads as their product, as
+ * `2x` and `2(x+1)` do. It does not when the text starts with a digit (`3`
+ * beside `2^x` reads as thirty-two to the x), a minus (`0.5` beside `-2*y`
+ * reads as a subtraction) or a function call (`5sin(x)` does not parse), when
+ * a zero would open a hexadecimal, binary or octal literal (`0x`), or when the
+ * name opens with a letter a number can continue (`1200net` is the whole
+ * number 1200n followed by `et`), or when the name is also a unit or a
+ * magnitude (see {@link readsAsAmountWord}): `2b` reads back as two bits and
+ * `2k` as two thousand, so a name `b` or `k` is written `2*b` and `2*k`.
+ *
+ * @param coefficient - The number as written.
+ * @param text - The term it multiplies.
+ */
+export function juxtaposes(coefficient: string, text: string): boolean {
+	const first = text[0];
+	if (first === undefined) return false;
+	if (first === "(") return true;
+	if (/[\d.\-+*/^),\s]/.test(first)) return false;
+	if (coefficient === "0") return false;
+	// A name that opens with n or e would continue the number: `1200net`
+	// reads as the whole number 1200n followed by `et`, and `2e1x` as 20x.
+	if (/[neE]/.test(first)) return false;
+	let i = 0;
+	while (i < text.length && !/[-+*/^(),\s]/.test(text[i])) i++;
+	if (text[i] === "(") return false;
+	return !readsAsAmountWord(text.slice(0, i));
+}
+
+/**
+ * Whether a name written straight after a number is read as part of the
+ * amount rather than as the name: a unit (`b`, the bit; `m`, the metre;
+ * `km`), or a magnitude (`k`, `M`, `million`). `2b` is two bits, not two of
+ * `b`, so the printer writes such a name after a `*`, which reads back as
+ * written: a unit word with no amount of its own before it is a name.
+ *
+ * The boundary: a unit a document defines for itself, and a package unit
+ * outside the built-in table, are not known here.
+ *
+ * @param name - A name as the printer writes it.
+ * @returns True when a number written before it would read it as a unit or a magnitude.
+ */
+export function readsAsAmountWord(name: string): boolean {
+	if (name.length === 0) return false;
+	return isKnownUnit(name) || isMagnitudeSuffix(name);
+}
+
+/**
+ * Whether the text opens with a name that is also a unit (`m`, `m^2`, `km`),
+ * which after a `/` reads as "per" that unit rather than as a division by
+ * the unknown. A function call (`sqrt(m)`) opens with its own name, not the
+ * unit's.
+ *
+ * @param text - Rendered display text.
+ * @returns True when the leading name is a built-in unit.
+ */
+export function leadsWithUnitName(text: string): boolean {
+	let i = 0;
+	while (i < text.length && !/[-+*/^(),\s]/.test(text[i])) i++;
+	if (i === 0 || text[i] === "(") return false;
+	return isKnownUnit(text.slice(0, i));
 }
 
 /**
@@ -81,8 +218,12 @@ const ELIDED = "...";
 function formatFactor(node: SymbolicNode, depth: number): string {
 	if (depth >= MAX_FORMAT_DEPTH) return ELIDED;
 	switch (node.kind) {
-		case "const":
-			return formatRational(node.value);
+		case "const": {
+			// A fraction inside a product or quotient is bracketed: `x*1/3/27`
+			// would read its `1/3/27` as a date.
+			const text = formatRational(node.value);
+			return text.includes("/") ? `(${text})` : text;
+		}
 		case "complex":
 			// Only a value with BOTH parts is a sum, and only a sum needs brackets
 			// inside a product: `(2+3i)*x` but `sqrt(2)*i`. Bracketing every
@@ -101,7 +242,7 @@ function formatFactor(node: SymbolicNode, depth: number): string {
 			// those do count.
 			return `(${formatSum(node, depth)})`;
 		case "neg":
-			return `-${formatFactor(node.operand, depth + 1)}`;
+			return negated(formatFactor(node.operand, depth + 1));
 		case "call":
 			// Written as an arrow rather than passing `formatSum` to `map`
 			// directly: `map` calls its callback with the index as a second
@@ -130,10 +271,18 @@ function formatFactor(node: SymbolicNode, depth: number): string {
 			// have been folded to `6x` by the simplifier, so this is a safety net
 			// rather than the normal path, but a formatter must never be able to
 			// print one value as another.
-			if (node.left.kind === "const" && node.right.kind === "mul") {
-				const inner = formatFactor(node.right, depth + 1);
-				if (!/^[\d.]/.test(inner)) return formatCoefficient(node.left.value, inner);
+			//
+			// Any other constant factor is a coefficient too, written in front
+			// (or after, as a division, for a fraction): `sqrt(x)/3` rather than
+			// `1/3*sqrt(x)`. formatCoefficient() decides whether it can stand
+			// beside the text or needs a `*`.
+			if (node.left.kind === "const") return formatCoefficient(node.left.value, formatFactor(node.right, depth + 1));
+			// A coefficient one product in moves to the front of the whole one, so
+			// `(rate/1200)*salary` reads `rate*salary/1200`.
+			if (node.left.kind === "mul" && node.left.left.kind === "const") {
+				return formatCoefficient(node.left.left.value, `${formatFactor(node.left.right, depth + 2)}*${formatFactor(node.right, depth + 1)}`);
 			}
+			if (node.right.kind === "const") return formatCoefficient(node.right.value, formatFactor(node.left, depth + 1));
 			return `${formatFactor(node.left, depth + 1)}*${formatFactor(node.right, depth + 1)}`;
 		}
 		case "div": {
@@ -144,9 +293,23 @@ function formatFactor(node: SymbolicNode, depth: number): string {
 			// printing `a/b/c`, which regroups left-to-right into `(a/b)/c`.
 			// A sum or difference is already bracketed by formatFactor itself, and
 			// a power binds tighter than division so `1/x^2` needs nothing.
+			//
+			// A minus, a fraction and an imaginary multiple are bracketed too:
+			// `x/-y*z` reads as (x/-y)*z, `x/1/3` as x/1 over 3 and `x/2i` as
+			// (x/2)*i. So is a name that is also a unit: `/m` after an amount is
+			// "per metre", so `0.5/m` reads as 0.5 per metre and `x/m` as x
+			// given a unit, where `0.5/(m)` is a half over the unknown.
 			const denominator = formatFactor(node.right, depth + 1);
-			const needsBrackets = node.right.kind === "mul" || node.right.kind === "div";
-			return `${formatFactor(node.left, depth + 1)}/${needsBrackets ? `(${denominator})` : denominator}`;
+			const needsBrackets = node.right.kind === "mul" || node.right.kind === "div" || node.right.kind === "neg"
+				|| (node.right.kind === "const" && !isAtomic(node.right) && !denominator.startsWith("("))
+				|| (node.right.kind === "complex" && denominator !== "i" && !denominator.startsWith("("))
+				|| leadsWithUnitName(denominator);
+			// Three numbers joined by two slashes read as a date (`x^2/3/27` is
+			// 2 March 2027), so a numerator ending in one number over another is
+			// bracketed before a denominator that starts with a digit.
+			const numerator = formatFactor(node.left, depth + 1);
+			const shown = /^[\d.]/.test(denominator) && endsWithNumberOverNumber(numerator) ? `(${numerator})` : numerator;
+			return `${shown}/${needsBrackets ? `(${denominator})` : denominator}`;
 		}
 	}
 }
@@ -254,7 +417,8 @@ function formatSum(node: SymbolicNode, depth: number): string {
 
 	let out = "";
 	terms.forEach((term, index) => {
-		if (index === 0) out += term.negated ? `-${term.text}` : term.text;
+		// A leading minus is the operand's own, so `-x^2` would square -x.
+		if (index === 0) out += term.negated ? negated(term.text) : term.text;
 		else out += term.negated ? `-${term.text}` : `+${term.text}`;
 	});
 	return out;

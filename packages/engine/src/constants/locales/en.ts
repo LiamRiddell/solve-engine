@@ -2,7 +2,21 @@
 export interface ILocale {
   code: string;
   label: string;
+  /**
+   * Every word this locale reads as a keyword, lower-cased, to its token type.
+   * A pack other than English holds the English words too, with its own beside
+   * them (see {@link withEnglishKeywords}), so an English
+   * line reads the same under every pack.
+   */
   keywordMap: Record<string, string>;
+  /**
+   * The pack's own names for built-in functions, each to the English name it
+   * stands for (`wurzel` to `sqrt`). A name listed here is also a `FUNC` word
+   * in {@link keywordMap}, which is what makes the lexer read it as a call;
+   * this table is what the call then runs. Absent for English, whose names are
+   * the built-ins' own.
+   */
+  functionNames?: Readonly<Record<string, string>>;
   display: {
     resultPrefix: string;
     dateFormat: string;
@@ -22,10 +36,13 @@ export const enLocale: ILocale = {
     plus: "PLUS", add: "PLUS", and: "AND_CONJ", with: "PLUS",
     minus: "MINUS", subtract: "MINUS", remove: "MINUS", take: "MINUS",
     without: "MINUS",
-    times: "STAR", multiply: "STAR", mul: "STAR",
+    // `mul`, `exponent` and `prime` were once aliases for `*` and `^` here. A
+    // keyword cannot be a name, not even with a colon, and `prime` claimed the
+    // word a reader uses to ask whether a number is prime, so they were
+    // retired rather than kept as operators nobody guessed (#829).
+    times: "STAR", multiply: "STAR",
     divide: "SLASH",
     modulo: "MOD", mod: "MOD",
-    exponent: "CARET", prime: "CARET",
     xor: "BIT_XOR",
     of: "OF",
     now: "NOW", today: "TODAY", tomorrow: "TOMORROW", yesterday: "YESTERDAY",
@@ -131,3 +148,21 @@ export const enLocale: ILocale = {
     percentageSuffix: "%",
   },
 };
+
+/**
+ * A language pack's keyword table: every English keyword, with the pack's own
+ * words beside them.
+ *
+ * A pack used to replace the English table, so a German engine read `mal` and
+ * no longer read `times`, `of`, `sqrt`, `true` or `if`, and a French engine had
+ * no word for a conversion at all (#833). A pack now adds to English. Where the
+ * pack spells one of its own words the same as an English keyword, the pack's
+ * meaning is kept, since that is the word its reader writes; the packs'
+ * specs list each such word.
+ *
+ * @param own - The pack's own words, to their token types.
+ * @returns A new table; neither argument is changed.
+ */
+export function withEnglishKeywords(own: Readonly<Record<string, string>>): Record<string, string> {
+  return { ...enLocale.keywordMap, ...own };
+}

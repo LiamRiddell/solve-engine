@@ -37,6 +37,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { UNNAMED_BASES, unitNamer } from "./lib/unit-names.mjs";
+import { readExtendedEntries } from "./lib/extended-units.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TABLE = path.join(ROOT, "packages/engine/src/uom/generated/UnitTable.generated.ts");
@@ -140,18 +142,6 @@ function formatRatio(ratio) {
 	return String(precise);
 }
 
-/**
- * The row's headline name: whichever surviving spelling comes first in the
- * table.
- *
- * Upstream lists a unit's canonical name before its aliases, so table order is
- * already the answer. Picking the longest word instead labelled area's base
- * unit "centiares", which is correct and not what anybody calls a square metre.
- */
-function headline(spellings) {
-	return spellings[0];
-}
-
 /** Groups a measure's spellings into one row per distinct unit, largest first. */
 function rowsFor(entries) {
 	// Keyed on the offset as well as the ratio. Kelvin and Celsius share a
@@ -184,35 +174,6 @@ function cell(spelling) {
 }
 
 /**
- * Reads a `toBase` value, which is written as a number or a small expression.
- *
- * `ExtendedUnits.ts` states ratios the way they are defined rather than as a
- * decimal someone worked out: a knot is `1852 / 3600` because a nautical mile
- * is 1852 metres and an hour is 3600 seconds, and that is worth keeping
- * readable in the source.
- *
- * Parsed explicitly rather than evaluated. Handing repository text to `eval`
- * to save a dozen lines is how a documentation generator becomes a way to run
- * code, and an unrecognised shape throws here rather than quietly producing a
- * ratio that is wrong in a table nobody double-checks.
- */
-function ratioValue(raw) {
-	// Numeric separators are readability only, and `Number` does not accept
-	// them: `1_000_000` parses as NaN rather than as a million.
-	const text = raw.replace(/(\d)_(\d)/g, "$1$2").replace(/(\d)_(\d)/g, "$1$2");
-	const plain = /^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$/;
-	if (plain.test(text)) return Number(text);
-
-	const binary = text.match(/^(-?\d+(?:\.\d+)?)\s*([*/])\s*(-?\d+(?:\.\d+)?)$/);
-	if (binary !== null) {
-		const [, left, operator, right] = binary;
-		return operator === "/" ? Number(left) / Number(right) : Number(left) * Number(right);
-	}
-
-	throw new Error(`Cannot read the ratio ${JSON.stringify(text)}. Extend ratioValue rather than guessing at it.`);
-}
-
-/**
  * The units defined outside the generated table.
  *
  * `ExtendedUnits.ts` carries everything the `convert` package has no concept
@@ -235,8 +196,7 @@ function readExtended(kinds) {
 	const byName = new Map(Object.entries(kinds).map(([id, name]) => [name, Number(id)]));
 	let nextId = Math.max(...Object.keys(kinds).map(Number)) + 1;
 
-	for (const match of source.matchAll(/^\s+([A-Za-z_][A-Za-z0-9_]*):\s*\{\s*measure:\s*"([^"]+)",\s*toBase:\s*([^}]+)\}/gm)) {
-		const [, spelling, measure, ratio] = match;
+	for (const { spelling, measure, ratio } of readExtendedEntries(source)) {
 		if (!byName.has(measure)) {
 			byName.set(measure, nextId);
 			extraKinds[nextId] = measure;
@@ -245,7 +205,7 @@ function readExtended(kinds) {
 		entries.push({
 			spelling,
 			kind: byName.get(measure),
-			ratio: ratioValue(ratio.trim().replace(/,$/, "")),
+			ratio,
 			difference: 0,
 		});
 	}
@@ -266,18 +226,23 @@ for (const entry of typable) {
 	byKind.get(entry.kind).push(entry);
 }
 
+const { headline, unusedDisplayNames } = unitNamer();
 const sections = [];
 for (const kind of [...byKind.keys()].sort((a, b) => a - b)) {
 	const rows = rowsFor(byKind.get(kind));
 	const base = rows.find(r => r.ratio === 1);
 	const baseName = base ? headline(base.spellings) : null;
+	const unnamedBase = UNNAMED_BASES.get(kinds[kind]);
+	if (baseName === null && unnamedBase === undefined) {
+		throw new Error(`The ${kinds[kind]} measure has no unit of relative size 1. Name its base in UNNAMED_BASES.`);
+	}
 
 	const lines = [];
 	lines.push(`## ${kinds[kind][0].toUpperCase()}${kinds[kind].slice(1).replace(/([A-Z])/g, " $1").toLowerCase()}`);
 	lines.push("");
 	lines.push(baseName
 		? `Measured against **${baseName}**.`
-		: "");
+		: `Measured against one **${unnamedBase}**, which no spelling here names on its own.`);
 	lines.push("");
 	lines.push("| Unit | Spellings | Relative size |");
 	lines.push("| --- | --- | --- |");
@@ -300,6 +265,11 @@ for (const kind of [...byKind.keys()].sort((a, b) => a - b)) {
 	sections.push(lines.join("\n"));
 }
 
+const staleNames = unusedDisplayNames();
+if (staleNames.length > 0) {
+	throw new Error(`DISPLAY_NAMES names spellings that head no row: ${staleNames.join(", ")}. Remove them, or fix the spelling.`);
+}
+
 const skipped = entries.length - typable.length;
 const page = `---
 title: Unit reference
@@ -312,6 +282,18 @@ Every spelling below is checked against a real engine when this page is built,
 so anything listed here parses and carries the unit it names. Units are
 case-sensitive throughout: \`m\` is metres and \`M\` is the millions suffix, \`MB\`
 is megabytes and \`Mb\` is megabits.
+
+Where a unit has an American and a British spelling, both are read, an answer
+shows back the one that was typed, and the row is headed by the British one
+(\`kilometre\`, with \`kilometer\` among its spellings). A unit that is typed
+only as a code, such as \`mps\` or \`kmpl\`, is headed by its name in words; the
+Spellings column is always what to type.
+
+\`\`\`solve
+5 metre // 5.00 metre
+5 meter // 5.00 meter
+1 mps // 1.00 mps
+\`\`\`
 
 \`\`\`solve
 100 cm + 2 m // 300.00 cm

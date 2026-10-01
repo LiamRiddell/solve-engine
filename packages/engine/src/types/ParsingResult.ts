@@ -8,6 +8,7 @@
 
 import { Value } from "@solve-js/vm/Value";
 import { DiagnosticReportJSON } from "@solve-js/diagnostics";
+import type { SourceSpan } from "@solve-js/errors/EngineError";
 
 /**
  * One inline solve, and where it sits in its line.
@@ -17,9 +18,9 @@ import { DiagnosticReportJSON } from "@solve-js/diagnostics";
  * the right span rather than at the end of the line.
  */
 export interface InlineSolvePosition {
-    /** Character offset where the expression starts, within its line. */
+    /** Character offset where the inline solve starts (its opening s and backtick), within its line. */
     start: number;
-    /** Character offset just past the end of the expression. */
+    /** Character offset just past the end of the inline solve (its closing backtick). */
     end: number;
     /** The expression text, without the surrounding backticks. */
     expression: string;
@@ -31,6 +32,20 @@ export interface InlineSolvePosition {
     result?: Value | null;
     /** Message when this span failed, leaving others on the line intact. */
     error?: string | null;
+    /**
+     * The code of the failure in {@link error} (`NO_PREFIX_PARSELET`,
+     * `UNDEFINED_VARIABLE`), the same code the expression throws on its own:
+     * what a host branches on. Null or absent when `error` is. A failure the
+     * expression returned as a value keeps its code on the value in `result`.
+     */
+    errorCode?: string | null;
+    /**
+     * Where in the line the failure in {@link error} is: character offsets into
+     * the line's text (not the expression's), the one-based line number, and the
+     * one-based column. Null when the engine has no position for it (an
+     * undefined variable is raised with none), and null or absent when `error` is.
+     */
+    errorSpan?: SourceSpan | null;
 }
 
 /**
@@ -60,6 +75,21 @@ export interface ParsedLine {
     result: Value | null;
     /** Message when the whole-line expression failed. */
     error: string | null;
+    /**
+     * The code of the failure in {@link error} (`NO_PREFIX_PARSELET`,
+     * `UNDEFINED_VARIABLE`), the same code the expression throws on its own:
+     * what a host branches on. Null when `error` is. A failure the line returned
+     * as a value keeps its code on the value in `result`. Absent from a line
+     * built by something other than the engine's document passes.
+     */
+    errorCode?: string | null;
+    /**
+     * Where in the line the failure in {@link error} is: character offsets into
+     * the line's {@link text}, the one-based line number, and the one-based
+     * column, for an editor to underline. Null when the engine has no position
+     * for it (an undefined variable is raised with none), and when `error` is.
+     */
+    errorSpan?: SourceSpan | null;
 }
 
 /**
@@ -74,7 +104,12 @@ export interface ParsingResult {
     lines: ParsedLine[];
     /** Line count, so a caller need not measure `lines`. */
     totalLines: number;
-    /** Messages from lines that failed. Those lines are still present above. */
+    /**
+     * One `Line N: message` entry for each failure in the document, in line
+     * order: a line or inline solve that threw (its `error`), and one whose
+     * result is an error value. Both document passes list the same failures.
+     * The lines themselves are still present above.
+     */
     errors: string[];
     /** Stage-by-stage trace, present only when diagnostics were requested. */
     diagnostics?: DiagnosticReportJSON;

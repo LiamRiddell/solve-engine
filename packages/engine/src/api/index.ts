@@ -43,18 +43,19 @@ export type { EngineConfigOverride } from "@solve-js/constants/Configuration";
 // subpaths keep exporting them; this is the same binding under the name a
 // first-time reader reaches for.
 export { Value, ValueType } from "@solve-js/vm/Value";
-export type { DatetimeGrain } from "@solve-js/vm/Value";
+export type { DatetimeGrain, TimePrecision, ZoneDifference } from "@solve-js/vm/Value";
 // Where a live figure came from, and the mark a frozen answer carries, read off
 // the same Value, so a host showing "reference rate, 23 Sep 16:02" needs no
 // other import.
 export type { ValueSource, SourceKind, FrozenMark, FrozenRecord } from "@solve-js/engine";
 export { formatValue } from "@solve-js/format/FormatEngine";
-export type { FormattingSettings } from "@solve-js/format/FormattingSettings";
+export type { FormattingSettings, FormattingOverrides } from "@solve-js/format/FormattingSettings";
 
 // Pin the zone the engine reads dates in. The zone belongs to the calendar
 // backend, which already owns what "local" means, so this factory is the one
 // knob for it and there is deliberately no `date.zone` config field beside it.
 export { dateCalendarInZone } from "@solve-js/engine";
+export type { DateCalendarOptions } from "@solve-js/engine";
 
 export { ExpressionEngine, SNAPSHOT_FORMAT, SNAPSHOT_VERSION, SnapshotErrorCodes } from "@solve-js/engine";
 export type { Explanation, ExplanationStep, ExplainCall, ExplainContext, ExplainHook, LineTrace } from "@solve-js/engine";

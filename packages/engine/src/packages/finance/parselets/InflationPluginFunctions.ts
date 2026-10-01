@@ -1,13 +1,13 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
-import { adjustForInflation, CPI_MIN_YEAR, CPI_MAX_YEAR } from "../data/CpiTable";
-import { inflationAmountRefused } from "../data/InflationAmount";
+import { adjustByCurrency, countedAmountRefusal, inflationIndexFor, inflationYear, isPriceIndex, isYear } from "../data/InflationAmount";
+import { rateAtOrBelowMinusHundred } from "@solve-js/vm/FinanceFormulas";
 
 /**
  * Inflation plugin functions -- registered via IEnginePackage.pluginFunctions
  * (collision-safe allocator), not VMBuiltins.ts's shared builtinFunctions
- * registry, since none of these three need function-call (`name(args)`)
+ * registry, since none of these need function-call (`name(args)`)
  * reachability through FunctionCallParselet -- only the general 3-arg
  * `inflationAdjust(amount, fromYear, toYear)` needs that (see VMBuiltins.ts
  * CALL_BUILTIN index 60). Matches TimezonePluginFunctions.ts's pattern.
@@ -16,6 +16,9 @@ import { inflationAmountRefused } from "../data/InflationAmount";
  * backend inside the handler), not baked in at parse time -- same reasoning
  * as this engine's DATE_NOW opcode: a parse-time constant would go stale if
  * the compiled bytecode for a line is ever re-executed on a later date.
+ *
+ * The index is chosen by the amount's currency (#756): see
+ * `data/InflationAmount.ts` and `data/PriceIndices.ts`.
  */
 
 /** The current calendar year, read through the engine's calendar backend. */
@@ -24,42 +27,97 @@ function presentYear(context: LineExecutionContext | undefined): number {
   return calendar.fields(calendar.now()).year;
 }
 
-function yearRangeError(code: string, badYear: number): Value {
+/** Adjust `amount` between two years by its currency's index, keeping its unit. */
+function adjusted(amount: Value, fromYear: number, toYear: number): Value {
+  const result = adjustByCurrency(amount, fromYear, toYear);
+  if ("refused" in result) return result.refused;
+  return amount.type === ValueType.Uom ? uomValue(result.value, amount.unit!) : numberValue(result.value);
+}
+
+/**
+ * "what is $X from YEAR" -> X (given as YEAR's money) expressed in present-day
+ * money, by the index the amount's currency picks. A year that is not a plain
+ * whole number is refused (see `inflationYear`).
+ */
+export function inflationFromYearToPresentHandler(args: Value[], context?: LineExecutionContext): Value {
+  const chosen = inflationIndexFor(args[0]);
+  if (!isPriceIndex(chosen)) return chosen;
+  const year = inflationYear(args[1]);
+  if (!isYear(year)) return year;
+  return adjusted(args[0], year, presentYear(context));
+}
+
+/**
+ * "what was $X worth in YEAR" -> X (given as present-day money) expressed in
+ * YEAR's money, by the index the amount's currency picks. A year that is not
+ * a plain whole number is refused (see `inflationYear`).
+ */
+export function inflationToYearFromPresentHandler(args: Value[], context?: LineExecutionContext): Value {
+  const chosen = inflationIndexFor(args[0]);
+  if (!isPriceIndex(chosen)) return chosen;
+  const year = inflationYear(args[1]);
+  if (!isYear(year)) return year;
+  return adjusted(args[0], presentYear(context), year);
+}
+
+/**
+ * The amount of `what is 100 apples from 1990`: the refusal, since the word
+ * stands where a currency would and no index measures it. The argument is the
+ * word as typed (see `countedWord` in InflationQueryParselet.ts).
+ */
+export function inflationCountedAmountHandler(args: Value[]): Value {
+  return errorValue("INFLATION_NO_INDEX", countedAmountRefusal(String(args[0]?.value ?? "")));
+}
+
+/** How `in <year> ...` names each currency it reads, and the currency in full. */
+const IN_YEAR_CURRENCY_NAMES: ReadonlyMap<string, { readonly word: string; readonly name: string }> = new Map([
+  ["USD", { word: "dollars", name: "US dollars" }],
+  ["GBP", { word: "pounds", name: "pounds sterling" }],
+  ["EUR", { word: "euros", name: "euros" }],
+]);
+
+/**
+ * The refusal for `<amount> in <year> <currency>` when the amount is in another
+ * currency an index is bundled for, or null when the two agree.
+ *
+ * The phrase names the currency it answers in, so `£100 in 1990 dollars` asks
+ * for dollars of a pound amount, which is a conversion and an adjustment at
+ * once, and neither is what the line says. The refusal points at the form that
+ * reads the amount's own index. A dollar phrase keeps its code,
+ * `INFLATION_EXPECTED_USD`; the pound and euro phrases answer
+ * `INFLATION_EXPECTED_CURRENCY`.
+ *
+ * @param asked - The ISO code the phrase names (`USD`, `GBP` or `EUR`).
+ * @param amountCurrency - The ISO code of the amount's own index.
+ * @param indexName - That index in the reader's words.
+ * @param year - The year the phrase names.
+ * @returns The error Value, or null.
+ */
+export function inYearCurrencyRefused(asked: string, amountCurrency: string, indexName: string, year: number): Value | null {
+  if (asked === amountCurrency) return null;
+  const named = IN_YEAR_CURRENCY_NAMES.get(asked) ?? { word: asked, name: asked };
   return errorValue(
-    code,
-    `Year ${badYear} is outside the bundled CPI table's range (${CPI_MIN_YEAR}-${CPI_MAX_YEAR})`,
+    asked === "USD" ? "INFLATION_EXPECTED_USD" : "INFLATION_EXPECTED_CURRENCY",
+    `in ${year} ${named.word} asks for ${named.name}, and this amount is in ${amountCurrency}: ask what it was worth in ${year} instead, which reads ${indexName}`,
   );
 }
 
 /**
- * "what is $X from YEAR" -> X (given as YEAR's dollars) expressed in present-day
- * dollars. Only dollars: see {@link inflationAmountRefused}.
+ * "$X in YEAR dollars", "£X in YEAR pounds", "€X in YEAR euros" -> the same
+ * question as `what was $X worth in YEAR`, asked in the currency the phrase
+ * names (the third argument, its ISO code). An amount in another currency is
+ * refused with the form that reads its own index (see
+ * {@link inYearCurrencyRefused}).
  */
-export function inflationFromYearToPresentHandler(args: Value[], context?: LineExecutionContext): Value {
-  const amountValue = args[0];
-  const refused = inflationAmountRefused(amountValue);
+export function inflationToYearInCurrencyHandler(args: Value[], context?: LineExecutionContext): Value {
+  const amount = args[0];
+  const chosen = inflationIndexFor(amount);
+  if (!isPriceIndex(chosen)) return chosen;
+  const year = inflationYear(args[1]);
+  if (!isYear(year)) return year;
+  const refused = inYearCurrencyRefused(String(args[2]?.value ?? "USD"), chosen.currency, chosen.name, year);
   if (refused) return refused;
-  const fromYear = args[1].toNumber();
-  const toYear = presentYear(context);
-  const result = adjustForInflation(amountValue.toNumber(), fromYear, toYear);
-  if (result === undefined) return yearRangeError("INFLATION_YEAR_OUT_OF_RANGE", fromYear);
-  return amountValue.type === ValueType.Uom ? uomValue(result, amountValue.unit!) : numberValue(result);
-}
-
-/**
- * "what was $X worth in YEAR" / "$X in YEAR dollars" -> X (given as
- * present-day dollars) expressed in YEAR's dollars. Only dollars: see
- * {@link inflationAmountRefused}.
- */
-export function inflationToYearFromPresentHandler(args: Value[], context?: LineExecutionContext): Value {
-  const amountValue = args[0];
-  const refused = inflationAmountRefused(amountValue);
-  if (refused) return refused;
-  const fromYear = presentYear(context);
-  const toYear = args[1].toNumber();
-  const result = adjustForInflation(amountValue.toNumber(), fromYear, toYear);
-  if (result === undefined) return yearRangeError("INFLATION_YEAR_OUT_OF_RANGE", toYear);
-  return amountValue.type === ValueType.Uom ? uomValue(result, amountValue.unit!) : numberValue(result);
+  return adjusted(amount, presentYear(context), year);
 }
 
 /**
@@ -78,14 +136,20 @@ export function inflationToYearFromPresentHandler(args: Value[], context?: LineE
  *
  * Growing a sum at a rate is still available and is a different question:
  * `$500 after 4 years at 5%` (see InvestmentParselets.ts).
+ *
+ * The year is read as every inflation form reads it (see `inflationYear`): a
+ * plain whole number, so `in 2030.5`, `in $2030` and `in 2030-01-01` are
+ * refused with `INFLATION_EXPECTED_YEAR` rather than read for their number.
+ * A whole year in the past is still a year, and discounts backwards.
  */
 export function inflationFutureValueHandler(args: Value[], context?: LineExecutionContext): Value {
   const amountValue = args[0];
-  const futureYear = args[1].toNumber();
+  const futureYear = inflationYear(args[1]);
+  if (!isYear(futureYear)) return futureYear;
   const rate = args[2].toNumber();
   const years = futureYear - presentYear(context);
   if (1 + rate <= 0) {
-    return errorValue("INVALID_RATE", `inflationFutureValue: rate ${rate} makes (1 + rate) non-positive`);
+    return rateAtOrBelowMinusHundred(rate, "An inflation rate");
   }
   const amount = amountValue.toNumber();
   const worth = amount / Math.pow(1 + rate, years);

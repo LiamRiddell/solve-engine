@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `value of $X in <futureYear> assuming N% inflation` -> a simple flat-rate
@@ -54,6 +55,6 @@ export class InflationFutureValueParselet implements PrefixParselet {
     }
     parser.consume();
 
-    builder.emitPluginCall("inflationFutureValue", 3);
+    emitBuiltinPluginCall(builder, "inflationFutureValue", 3);
   }
 }

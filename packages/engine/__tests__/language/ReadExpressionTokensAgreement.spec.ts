@@ -50,6 +50,11 @@ const EXTRA_LINES = [
 	"1 story point = 4 hours",
 	"f(x) = 2x",
 	"f(x) =",
+	// A definition the parser refuses is no code to either reading
+	// (FoundBug_refusedDefinitionReadsAsCode.spec.ts).
+	"f(x) = x + prev",
+	"f(x) = x + weather in London",
+	"sin(x) = 0.5",
 	":x =",
 	"global :r =",
 	"solve line 2 for x =",

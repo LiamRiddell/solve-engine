@@ -20,12 +20,15 @@
  * and named derived units (newtons, joules, watts) in `uom/Dimensions.ts`.
  */
 
-import { Value, ValueType, uomValue, numberValue, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, uomValue, uomValueExact, numberValue, errorValue } from "@solve-js/vm/Value";
+import { unitQuotient } from "@solve-js/uom/Dimensions";
+import { moneyForCount } from "@solve-js/vm/MoneyExact";
 import { rateForm, isNamedRate, type RateForm } from "@solve-js/uom/RateForms";
-import { getMeasure, convertUnit } from "@solve-js/uom/UomConverter";
+import { getMeasure, convertUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { UNIT_TABLE, MEASURE_SYMBOLS } from "@solve-js/uom/generated/UnitTable.generated";
 import { describeMeasure } from "@solve-js/vm/VMConversion";
+import { timecodeUnitPhrase } from "@solve-js/vm/TimecodeConversion";
 
 /**
  * The factor that turns one `from` into `to`, or `null` when the two do not
@@ -79,7 +82,9 @@ function quantityIn(magnitude: number, unit: string): Value {
  * @param right - The divisor's unit.
  * @returns A `UNIT_QUOTIENT_UNSUPPORTED` error value.
  */
-export function unitQuotientUnsupported(left: string, right: string): Value {
+export function unitQuotientUnsupported(writtenLeft: string, writtenRight: string): Value {
+	const left = unitForMessage(writtenLeft);
+	const right = unitForMessage(writtenRight);
 	return errorValue(
 		"UNIT_QUOTIENT_UNSUPPORTED",
 		`A quantity in ${left} divided by one in ${right} has no unit: nothing cancels, and ${left} per ${right} is a rate of a rate, which is not a unit.`,
@@ -133,6 +138,38 @@ export function multiplyRates(l: Value, r: Value): Value | undefined {
 	const factor = axisFactor(quantity.unit as string, form.denominator);
 	if (factor === null) return undefined;
 	return quantityIn(inPair(rate, form) * quantity.toNumber() * factor, form.numerator);
+}
+
+/**
+ * A rate times a quantity of another measure, as the rate per what is left:
+ * `$0.30/kWh * 2 kW` is $0.60 an hour, since a kilowatt-hour is a kilowatt for
+ * an hour, and `$0.30/kWh * 3 h` is $0.90 per kilowatt. The next factor then
+ * cancels as it would against any rate, so an electricity cost in reading
+ * order, `$0.30/kWh * 2 kW * 3 h`, is $1.80 either way round (#758).
+ *
+ * Only when the rate's denominator over the quantity is a single unit the
+ * engine names (see {@link unitQuotient}): a time, or a named derived unit such
+ * as the kilowatt. A price per kilowatt-hour times a mass, or a speed times a
+ * mass, names nothing and gives `undefined`, and the caller refuses it. A price
+ * keeps its exact decimal when the count it is scaled by has one, so the answer
+ * is exact to the cent as `12.3 kWh * $0.15/kWh` is.
+ *
+ * @param rate - A Uom whose unit is a compound rate (`USD/kWh`).
+ * @param quantity - A Uom in some other measure (`kW`).
+ * @returns The rate per the unit left over, or `undefined` when there is none.
+ */
+export function rateThroughQuantity(rate: Value, quantity: Value): Value | undefined {
+	if (rate.type !== ValueType.Uom || quantity.type !== ValueType.Uom || rate.unit === undefined || quantity.unit === undefined) return undefined;
+	if (isNamedRate(rate.unit)) return undefined;
+	const form = rateForm(rate.unit);
+	if (form === null || form.denominator === "" || form.denominator.includes("/")) return undefined;
+	const left = unitQuotient(form.denominator, quantity.unit);
+	if (left === null) return undefined;
+	const count = quantity.toNumber() / left.size;
+	const unit = `${form.numerator}/${left.unit}`;
+	const money = form.numerator === "" ? null : moneyForCount(rate, form.numerator, count);
+	if (money !== null && money.exact !== undefined) return uomValueExact(money.toNumber(), unit, money.exact);
+	return uomValue(inPair(rate, form) * count, unit);
 }
 
 /**
@@ -235,6 +272,13 @@ export function reciprocalOf(l: Value, r: Value): Value | undefined {
 	}
 	const measure = getMeasure(unit);
 	if (measure === "frequency") return uomValue(l.toNumber() / convertUnit(r.toNumber(), unit, "Hz"), "s");
+	// A time squared per length has no unit to show it in.
+	if (accelerationSize(unit) !== undefined) {
+		return errorValue(
+			"UNIT_RECIPROCAL_UNSUPPORTED",
+			`A number divided by an acceleration in ${unitForMessage(unit)} has no unit: a time squared per length is not a unit the engine can show.`,
+		);
+	}
 	if ((measure !== undefined && measure !== "temperature") || sharedCurrencyExchange.isCurrency(unit)) {
 		return uomValue(l.toNumber() / r.toNumber(), `/${unit}`);
 	}
@@ -263,9 +307,13 @@ export function refuseLikeProduct(l: Value, r: Value): Value | undefined {
 	const left = describeMeasure(l.unit);
 	const alike = l.unit === r.unit || (left !== undefined && left === describeMeasure(r.unit));
 	if (!alike) return undefined;
-	const noun = left ?? l.unit;
+	const noun = left ?? unitForMessage(l.unit);
+	// A timecode is named as one: its unit, `timecode@30`, is internal (#759).
+	// So is the acceleration's `mps2`, which the reader wrote `m/s²`.
+	const leftName = timecodeUnitPhrase(l.unit)?.replace(/^a/, "A") ?? `A quantity in ${unitForMessage(l.unit)}`;
+	const rightName = timecodeUnitPhrase(r.unit) ?? `one in ${unitForMessage(r.unit)}`;
 	return errorValue(
 		"UNIT_PRODUCT_UNSUPPORTED",
-		`A quantity in ${l.unit} times one in ${r.unit} has no unit: ${noun} times ${noun} is not a unit. Lengths multiply into an area or a volume, and no other quantity squares into one.`,
+		`${leftName} times ${rightName} has no unit: ${noun} times ${noun} is not a unit. Lengths multiply into an area or a volume, and no other quantity squares into one.`,
 	);
 }

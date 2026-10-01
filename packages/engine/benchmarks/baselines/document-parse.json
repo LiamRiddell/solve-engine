@@ -2,45 +2,55 @@
   "suite": "document-parse",
   "harness": "mitata-1",
   "results": {
-    "doc_50_lines_cold": {
-      "meanMs": 1.7788411764705883,
-      "medianMs": 1.6234,
-      "minMs": 1.2252
+    "doc_50_distinct_lines_cold": {
+      "meanMs": 5.146798,
+      "medianMs": 4.235769,
+      "minMs": 3.55565
     },
-    "doc_50_lines_warm": {
-      "meanMs": 0.6037904458598726,
-      "medianMs": 0.5166,
-      "minMs": 0.4292
+    "doc_50_distinct_lines_warm": {
+      "meanMs": 0.4429928803827751,
+      "medianMs": 0.415208,
+      "minMs": 0.245652
     },
-    "doc_250_lines_cold": {
-      "meanMs": 4.28401999999998,
-      "medianMs": 3.9648,
-      "minMs": 2.9537
+    "doc_250_distinct_lines_cold": {
+      "meanMs": 6.7387382098765425,
+      "medianMs": 5.636799,
+      "minMs": 3.893672
     },
-    "doc_250_lines_warm": {
-      "meanMs": 2.7307841860465114,
-      "medianMs": 2.5429,
-      "minMs": 2.0699
+    "doc_250_distinct_lines_warm": {
+      "meanMs": 0.9753209077429983,
+      "medianMs": 0.83199,
+      "minMs": 0.751397
     },
-    "doc_1000_lines_cold": {
-      "meanMs": 14.902663888888888,
-      "medianMs": 14.7572,
-      "minMs": 12.7512
+    "doc_1000_distinct_lines_cold": {
+      "meanMs": 19.2940708,
+      "medianMs": 17.826589,
+      "minMs": 12.468619
     },
-    "doc_1000_lines_warm": {
-      "meanMs": 13.311156097560998,
-      "medianMs": 13.024500000000478,
-      "minMs": 11.5738
+    "doc_1000_distinct_lines_warm": {
+      "meanMs": 4.03017185915493,
+      "medianMs": 3.594611,
+      "minMs": 3.134524
+    },
+    "doc_10000_distinct_lines_cold": {
+      "meanMs": 160.26379241666666,
+      "medianMs": 143.68657,
+      "minMs": 130.035252
+    },
+    "doc_10000_distinct_lines_warm": {
+      "meanMs": 60.431904083333336,
+      "medianMs": 56.309958,
+      "minMs": 54.463824
     },
     "doc_200_complex_warm": {
-      "meanMs": 2.930857,
-      "medianMs": 2.852,
-      "minMs": 2.1312
+      "meanMs": 1.1806229098196392,
+      "medianMs": 1.038101,
+      "minMs": 0.99801
     },
     "doc_200_prose_warm": {
-      "meanMs": 2.0573881118881117,
-      "medianMs": 1.8977,
-      "minMs": 1.5955
+      "meanMs": 0.4153839260293092,
+      "medianMs": 0.376279,
+      "minMs": 0.364802
     }
   }
 }

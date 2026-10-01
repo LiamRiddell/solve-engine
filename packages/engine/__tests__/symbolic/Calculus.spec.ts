@@ -117,7 +117,7 @@ describe("functionDerivative — the table", () => {
 
 describe("integrate — what it can do", () => {
 	test("the power rule, term by term", () => {
-		expect(formatSymbolic(expectOk(integrate(pow(2), "x")))).toBe("1/3x^3");
+		expect(formatSymbolic(expectOk(integrate(pow(2), "x")))).toBe("x^3/3");
 	});
 
 	test("a polynomial", () => {
@@ -195,12 +195,12 @@ describe("integrate — differentiating the result returns the input", () => {
 describe("taylorSeries", () => {
 	test("exp about zero, to degree four", () => {
 		expect(formatSymbolic(taylorSeries(callNode("exp", [x]), "x", RATIONAL_ZERO, 4)))
-			.toBe("1/24x^4+1/6x^3+0.5x^2+x+1");
+			.toBe("x^4/24+x^3/6+0.5x^2+x+1");
 	});
 
 	test("sin about zero has only odd powers", () => {
 		expect(formatSymbolic(taylorSeries(callNode("sin", [x]), "x", RATIONAL_ZERO, 5)))
-			.toBe("1/120x^5-1/6x^3+x");
+			.toBe("x^5/120-x^3/6+x");
 	});
 
 	test("a polynomial's series at its own degree is the polynomial", () => {

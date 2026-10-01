@@ -27,7 +27,11 @@ import { ValueType } from "@solve-js/vm/Value";
 function resultOf(lines: string[], packages: typeof BUILTIN_PACKAGES, lineNumber: number): string {
 	const engine = new ExpressionEngine({ packages });
 	const doc = evaluateDocument(engine, lines.join("\n"));
-	const value = doc.lines[lineNumber - 1]?.result;
+	const line = doc.lines[lineNumber - 1];
+	// A line that threw keeps its failure in `error`, and one that returned an
+	// error keeps it as an error value in `result`; either is refused.
+	if (line?.error) return "Error";
+	const value = line?.result;
 	if (!value) return "none";
 	return value.type === ValueType.Error ? "Error" : String(value.value);
 }

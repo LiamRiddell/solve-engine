@@ -106,7 +106,7 @@ describe("the root of an area or volume is a length", () => {
 });
 
 describe("a power or root with no unit to give is refused by name", () => {
-	test.each(["5 kg^2", "5 m^4", "5 m^0.5", "9.81 ft/s^2", "2s^2", "10 GBP ^ 2", "5 furlong^2", "5 m^-1"])(
+	test.each(["5 kg^2", "5 m^4", "5 m^0.5", "5 kg/s^2", "9.81 m/s^3", "2s^2", "10 GBP ^ 2", "5 furlong^2", "5 m^-1"])(
 		"%s is refused while parsing",
 		(source) => {
 			expect(thrownCode(source)).toBe("UNIT_POWER_UNSUPPORTED");

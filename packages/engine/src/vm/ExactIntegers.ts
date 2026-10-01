@@ -18,20 +18,22 @@
  * Which results qualify is deliberately narrow, and the boundary is provenance:
  *
  * - The operands must be whole numbers within the safe range, or already carry
- *   an exact integer. A number TYPED past the safe range (`1e16`,
- *   `12345678901234567890`) was rounded to a double before the engine saw it,
- *   so exact arithmetic on it would print invented digits as if they were
- *   exact. It keeps its double, which is why `1e16 + 1 - 1e16` is still 0 while
- *   `10^16 + 1 - 10^16` is 1. The `n` suffix is the way to type a large exact
- *   integer.
+ *   an exact integer. A whole number typed in plain digits past the safe range
+ *   (`9007199254740993`) carries its exact integer from the literal (see
+ *   {@link exactWholeLiteral}), since the digits are all there to read. One
+ *   typed in scientific notation (`1e16`) names a double, and a double past
+ *   the safe range may already be a rounding, so exact arithmetic on it would
+ *   print invented digits as if they were exact. It keeps its double, which is
+ *   why `1e16 + 1 - 1e16` is still 0 while `10^16 + 1 - 10^16` is 1.
  * - The result must be finite as a double. Past about 1.8e308 a double has no
  *   finite value, and the answer is Infinity exactly as it was; `2 ^ 100000`
  *   is unchanged. That also bounds the work: a finite result is at most 1,024
  *   bits, so an exact power here never needs more than a dozen squarings.
  */
 
-import { Value, ValueType, numberValue, numberValueRational } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueRational, errorValue, hexValue, bigIntValue, type IpCidrData, type DisplayBase } from "@solve-js/vm/Value";
 import { rational, rationalNeg } from "@solve-js/symbolic";
+import { infiniteResult } from "@solve-js/vm/IndeterminateQuotient";
 
 /**
  * `base ** exponent` for bigints, by repeated squaring.
@@ -112,7 +114,8 @@ export function exactIntegerValue(n: bigint): Value {
  * finite.
  */
 export function exactIntegerArithmetic(l: Value, r: Value, approx: number, op: "add" | "sub" | "mul" | "pow"): Value {
-    if (!Number.isFinite(approx)) return numberValue(approx);
+    // An infinity keeps the mark of one a division by zero gave; see infiniteResult().
+    if (!Number.isFinite(approx)) return approx === approx ? infiniteResult(l, r, approx) : numberValue(approx);
     const a = exactIntegerOf(l, true);
     if (a === null) return numberValue(approx);
     const b = exactIntegerOf(r, true);
@@ -178,10 +181,178 @@ export function exactGcdOrLcm(a: Value, b: Value, which: "gcd" | "lcm"): Value |
  * gave 0x20000000000000.
  */
 export function baseConversionOperand(v: Value): number | bigint {
-    if (v.type === ValueType.BigInt) return v.value as bigint;
+    // A value already written in a base keeps the bigint it holds past the
+    // safe range: through toNumber(), `(2^100 + 1) in binary as hex` rounded
+    // to the nearest double and lost its final 1.
+    if (typeof v.value === "bigint" && (v.type === ValueType.BigInt || v.type === ValueType.Hex)) return v.value;
+    // An IPv6 address converts from its 128 bits, which no double holds.
+    if (v.type === ValueType.IpCidr) {
+        const addr6 = (v.value as IpCidrData).addr6;
+        if (addr6 !== undefined) return addr6;
+    }
     const r = v.rational;
-    if (r !== undefined && r.d === 1n && !Number.isSafeInteger(v.value as number)) return r.n;
+    if (r !== undefined) {
+        if (r.d !== 1n) return wholeOfBig(r.n / r.d);
+        if (!Number.isSafeInteger(v.value as number)) return r.n;
+    }
+    // A decimal typed past 2^53 has no fraction left in its double, which can
+    // also sit on the far side of the whole number: `12345678901234567890.5`
+    // is the double ...0800, so its digits are taken from the decimal, cut
+    // toward zero as a base cuts them (see wholeForBase).
+    if (v.exact !== undefined) {
+        const whole = truncatedDecimal(v.exact.coef, v.exact.scale);
+        if (whole !== null) return wholeOfBig(whole);
+    }
     return v.toNumber();
+}
+
+/**
+ * The most places a decimal's point is moved to cut it to a whole number. A
+ * scale past it is a number below 1e-340 or above 1e340, whose whole part is
+ * zero or whose double is already infinite, so its double's path decides it.
+ */
+const MOST_TRUNCATED_PLACES = 340;
+
+/**
+ * The whole number `coef * 10^-scale` cuts to toward zero, or null when the
+ * scale is past {@link MOST_TRUNCATED_PLACES} either way.
+ *
+ * @param coef - The decimal's coefficient.
+ * @param scale - The places after its point; negative for trailing zeros.
+ */
+export function truncatedDecimal(coef: bigint, scale: number): bigint | null {
+    if (!Number.isInteger(scale) || scale > MOST_TRUNCATED_PLACES || scale < -MOST_TRUNCATED_PLACES) return null;
+    if (scale <= 0) return coef * bigIntPow(10n, BigInt(-scale));
+    // BigInt division truncates toward zero, which is the cut a base makes.
+    return coef / bigIntPow(10n, BigInt(scale));
+}
+
+/** A whole number as a base reads it: a double within the safe range, where it is exact, and the bigint past it. */
+function wholeOfBig(n: bigint): number | bigint {
+    return n <= MAX_SAFE_BIG && n >= -MAX_SAFE_BIG ? Number(n) : n;
+}
+
+/** How a base is named after `in`, for a message: "in hex", "in binary", "in octal". */
+const BASE_WORDS: Readonly<Record<DisplayBase, string>> = { hex: "in hex", bin: "in binary", oct: "in octal" };
+
+/**
+ * The refusal for a number with no digits to write in a base, or null when it
+ * has them.
+ *
+ * An infinity or a NaN has no digits in any base, and `(1/0) in hex` and
+ * `2^4000 in binary as hex` displayed "Infinity" as though it were a numeral.
+ * An ordinary number past about 1.8e308 (the largest a double holds) is
+ * already infinite before any conversion, since no exact integer is made for
+ * it (see this module's doc comment), so the message points at the `n` form,
+ * which keeps every digit up to its own stated power limit.
+ *
+ * @param n - What {@link baseConversionOperand} read.
+ * @param base - The base asked for.
+ * @returns The `BASE_NOT_FINITE` error Value, or null for a finite number or a bigint.
+ */
+export function nonFiniteInBase(n: number | bigint, base: DisplayBase): Value | null {
+    if (typeof n === "bigint" || Number.isFinite(n)) return null;
+    const where = BASE_WORDS[base];
+    return errorValue(
+        "BASE_NOT_FINITE",
+        Number.isNaN(n)
+            ? `A result with no value has no digits to write ${where}.`
+            : `An infinite value has no digits to write ${where}. An ordinary number past about 1.8e308 is infinite; a whole number written with n, as in 2n^4000, keeps every digit.`,
+    );
+}
+
+/**
+ * A value written in base 16, 2 or 8 from its own digits (see
+ * {@link baseConversionOperand}), or the refusal for one with none (see
+ * {@link nonFiniteInBase}). What `in hex`, `as binary`, `hex()` and `bin()`
+ * give for everything but a colour.
+ *
+ * @param v - The value, already checked for a fault.
+ * @param base - The base to write it in.
+ */
+export function valueInBase(v: Value, base: DisplayBase): Value {
+    const n = baseConversionOperand(v);
+    return nonFiniteInBase(n, base) ?? hexValue(wholeForBase(n), base);
+}
+
+/**
+ * The whole number a value written in a base holds: its fraction cut off,
+ * toward zero, as the digits it is shown with are.
+ *
+ * A base has no useful way to write a fractional digit, so `255.7 in hex` has
+ * always shown `0xFF`, but the value under it kept the .7: `255.7 in hex ==
+ * 255` was false, `(255.7 in hex) + 1` was 256.70, and `check (0.5 in hex) ==
+ * 0` failed with "0x0 is not equal to 0", two sides that read alike. The value
+ * is now the number shown, so what the line reads and what it holds agree. A
+ * fraction of a negative number goes toward zero as well, and one that leaves
+ * nothing (`-0.5`) is 0 rather than a negative zero.
+ *
+ * @param n - What {@link baseConversionOperand} read, already known to be finite or a bigint.
+ * @returns The whole number, unchanged for a bigint or a number that is already whole.
+ */
+export function wholeForBase(n: number | bigint): number | bigint {
+    if (typeof n === "bigint" || !Number.isFinite(n) || Number.isInteger(n)) return n;
+    const whole = Math.trunc(n);
+    return whole === 0 ? 0 : whole;
+}
+
+/** `Number.MAX_SAFE_INTEGER` as a bigint, the line past which a double stops holding every whole number. */
+const MAX_SAFE_BIG = BigInt(Number.MAX_SAFE_INTEGER);
+
+/**
+ * The whole number a value written in a base holds past the safe range, or
+ * null for any other value.
+ *
+ * `in hex` keeps a bigint inside the value it writes once the number passes
+ * 2^53 (see {@link baseConversionOperand}), and arithmetic straight on it read
+ * it through `toNumber()`, the nearest double: `(2^100 + 1) in hex + 1` lost
+ * its last digits while `(2^100 + 1) in hex as number + 1` kept them. Within
+ * the safe range the double is already exact, so null leaves that value on
+ * its ordinary path.
+ *
+ * @param v - Any value.
+ */
+export function bigBaseInteger(v: Value): bigint | null {
+    if (v.type !== ValueType.Hex || typeof v.value !== "bigint") return null;
+    const n = v.value;
+    return n > MAX_SAFE_BIG || n < -MAX_SAFE_BIG ? n : null;
+}
+
+/**
+ * A whole number read out of a value written in a base, as an answer: an
+ * ordinary number carrying its exact integer (see {@link exactIntegerValue}),
+ * or, past about 1.8e308 where a double has no finite value, the `n` whole
+ * number, so `(2n^2000) in hex + 1` and `-((2n^2000) in hex)` keep every digit
+ * rather than answering an infinity.
+ *
+ * @param n - The whole number.
+ */
+export function wholeFromBase(n: bigint): Value {
+    return Number.isFinite(Number(n)) ? exactIntegerValue(n) : bigIntValue(n);
+}
+
+/**
+ * A figure in a column, read as the number it is: a value written in a base
+ * (`255 in hex`, `0b101 as binary`) becomes its plain number, exact past the
+ * safe range (see {@link wholeFromBase}), carrying the sources it had; any
+ * other value is returned as it is.
+ *
+ * The span aggregates (`total above`, a line range, a section, a tag) took a
+ * number and a quantity and refused everything else, so a number shown in a
+ * base was refused as "not a plain number or unit value", though `in hex`
+ * changes only how a number is written. Reading it here, before their type
+ * test, lets each add it as the number it is.
+ *
+ * @param v - A line's value.
+ * @returns The plain number for a value in a base, and `v` otherwise.
+ */
+export function numberOfBase(v: Value): Value {
+    if (v.type !== ValueType.Hex) return v;
+    const n = v.value;
+    if (typeof n !== "bigint" && typeof n !== "number") return v;
+    const plain = typeof n === "bigint" ? wholeFromBase(n) : numberValue(n === 0 ? 0 : n);
+    if (v.sources !== undefined) plain.sources = v.sources;
+    return plain;
 }
 
 /**
@@ -197,4 +368,21 @@ export function wholeNumberUnchanged(v: Value, absolute: boolean): Value | null 
     if (v.type !== ValueType.Number || r === undefined || r.d !== 1n) return null;
     if (absolute && r.n < 0n) return numberValueRational(-(v.value as number), rationalNeg(r));
     return v;
+}
+
+/**
+ * The Value a whole-number literal past the safe range compiles to: a Number
+ * carrying its exact integer, as {@link exactIntegerValue} builds for a result.
+ *
+ * `9007199254740993` is 9,007,199,254,740,993, where the double reads it as
+ * 9,007,199,254,740,992. The parser only sends plain digits here (see
+ * `parser/WholeLiteral.ts`); anything else, which no compiled program holds,
+ * is null rather than a throw from `BigInt`.
+ *
+ * @param digits - The literal's digits, grouping removed.
+ * @returns The exact Number, or null for text that is not plain digits.
+ */
+export function exactWholeLiteral(digits: string): Value | null {
+    if (!/^\d+$/.test(digits)) return null;
+    return exactIntegerValue(BigInt(digits));
 }

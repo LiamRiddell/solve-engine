@@ -138,7 +138,7 @@ describe(`agrees with the Date backend in the process's zone (${hostZone}, ${tem
 		}
 	});
 
-	test("localMidnight, with Date's overflow, its two-digit-year window and its NaN past the range", () => {
+	test("localMidnight, with Date's overflow, the year as written (#823) and NaN past the range", () => {
 		const years = [-1, 0, 50, 99, 100, 1847, 1899, 1900, 1969, 1970, 1999, 2000, 2023, 2024, 2025, 2038, 2100, 275760, 300000];
 		const months = [-1, 0, 1, 2, 5, 11, 12, 13];
 		const days = [0, 1, 15, 28, 29, 30, 31, 32];

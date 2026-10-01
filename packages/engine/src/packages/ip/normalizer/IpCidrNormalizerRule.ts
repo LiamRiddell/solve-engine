@@ -14,6 +14,24 @@ const IP_CIDR = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?:\/\d{1,2})?/;
 const MAX_TOKENS = 8;
 
 /**
+ * Whether a number's text opens as an address does: one to three digits and
+ * then a dot, what `/^\d{1,3}\./` asks. Read character by character, since the
+ * rule is tried at every number of every line and nearly none of them has a
+ * dot in its first four characters.
+ *
+ * @param text - The number token's text.
+ */
+export function opensDottedQuad(text: string): boolean {
+	const n = text.length < 4 ? text.length : 4;
+	for (let i = 0; i < n; i++) {
+		const c = text.charCodeAt(i);
+		if (c === 46) return i > 0;
+		if (c < 48 || c > 57) return false;
+	}
+	return false;
+}
+
+/**
  * Fuses a dotted-quad IPv4 literal, `192.168.1.0` or `192.168.1.0/24`, into a
  * single `IP_CIDR` token (issue #189).
  *
@@ -50,7 +68,7 @@ export function ipCidrNormalizerRule(priority = 72): NormalizerRule {
 			if (!first || first.type !== "NUMBER") return null;
 			if (first.sourceEnd !== undefined) return null; // already fused
 			// Cheap reject: an address's first token starts with digits and a dot.
-			if (!/^\d{1,3}\./.test(first.text ?? "")) return null;
+			if (!opensDottedQuad(first.text ?? "")) return null;
 
 			// Reconstruct the contiguous run of number/slash tokens.
 			let text = first.text ?? "";

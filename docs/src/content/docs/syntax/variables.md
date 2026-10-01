@@ -28,6 +28,34 @@ deposit = 100
 payment = deposit * 40 // 4,000
 ```
 
+A name can be defined from one the note has not given a value yet. The
+definition then holds a formula, an expression still waiting for its unknown,
+and shows it as one. A line further down reads the formula with the value the
+unknown has by then, so the answer is the one the lines would give in the other
+order:
+
+```solve-doc
+y = x + 1   // x+1
+x = 5       // 5
+y + x       // 11
+```
+
+The formula is read with a plain number, or with another formula, which is
+read the same way. An unknown that has since been given money, a quantity in a
+unit, a date or text is refused by name, since the formula was written without
+that unit and adding one to it would be a guess; define the unknown above the
+line that uses it instead:
+
+```solve-doc
+y = x + 1   // x+1
+x = $5      // $5.00
+y + x       // ERROR: y was written as a formula in x before x had a value, and x now holds money, which the formula cannot take. Define x above the line that defines y.
+```
+
+A line above the definition of `x` still sees only the formula, and a `=>` line
+keeps its unknowns as they are. A pair of formulas that each name the other has
+no value to give, so each stays a formula.
+
 A name can be a letter that is also a unit symbol, `m` for mass or `s` for
 distance, as a physics formula would write it. A unit is always written after a
 value (`9.81 m/s^2`), so where a name stands on its own, at the start of a line or
@@ -59,7 +87,7 @@ the rate whatever the name holds, because a unit after a value is a unit:
 ```solve-doc
 h = 4
 100 / h // 25
-$15 / h // 15.00 USD/h
+$15 / h // $15.00/h
 60 km / h // 60.00 km/h
 ```
 
@@ -71,6 +99,163 @@ budget = 100
 budgte * 2 // ERROR: Undefined variable: budgte. Did you mean budget?
 sqr(16) // ERROR: Undefined function: sqr. Did you mean sqrt?
 ```
+
+## Invisible characters in a name
+
+A few characters are never drawn. Most are spacing, such as the zero-width
+space, which the engine reads as a space. A dozen others exist to say which way
+the text around them runs: Arabic and Hebrew are written right to left, and a
+sentence that mixes them with English needs these **direction controls** (in
+Unicode's terms, bidirectional formatting characters) to show in the right
+order. Each one is invisible and changes how the characters beside it are
+drawn, so one inside a name makes the name look like something it is not. A
+line can appear to define `rent` while it defines another name that only shows
+as `rent`, which is the shape of the attack known as "Trojan Source".
+
+A name, a number or a unit that holds a direction control is refused, and the
+error names the character by its code point, the number Unicode gives it,
+written `U+202E`. The second line below looks like `rent = 5`, but a
+right-to-left override sits in front of the name; the refusal shows it where it
+stands, and the `rent` defined above is untouched:
+
+```solve-doc
+rent = 1200 // 1,200
+‮rent = 5 // ERROR: "<U+202E>rent" holds U+202E (right-to-left override), an invisible character that changes the direction text is shown in, so it would not read as what it is. A name, a number or a unit cannot hold one: delete it and type the word again.
+rent * 12 // 14,400
+```
+
+To fix the line, retype the name (an invisible character is hard to find with
+the cursor), and it then reads as the name it shows. These are the characters
+refused:
+
+| Code point | Name |
+| --- | --- |
+| `U+200E`, `U+200F` | left-to-right mark, right-to-left mark |
+| `U+061C` | Arabic letter mark |
+| `U+202A`, `U+202B` | left-to-right embedding, right-to-left embedding |
+| `U+202C` | pop directional formatting |
+| `U+202D`, `U+202E` | left-to-right override, right-to-left override |
+| `U+2066`, `U+2067`, `U+2068` | left-to-right isolate, right-to-left isolate, first strong isolate |
+| `U+2069` | pop directional isolate |
+
+Refused rather than removed: dropping the character silently would leave the
+line showing one thing while the engine read another, which is the problem
+itself. The boundary is text. Text in quotes, a comment, a heading, the label
+before a colon (`Rent: $1,200`) and a line of prose keep these characters,
+since a right-to-left script needs them to show correctly there, and nothing
+is looked up by them. A prose line that is already refused before it reaches
+the character keeps its own message, so the rule adds no error to a sentence.
+A name written in Arabic or Hebrew letters, with no control inside it, is an
+ordinary name.
+
+## A value that is still arriving
+
+Some values come from outside the note: a share price, an exchange rate, the
+weather. The first time a line asks for one, the engine starts fetching it and
+the line shows that it is waiting. A variable given such a value waits with it,
+and so does every line that reads the variable: `:price = stock(AAPL)` and then
+`price * 10` or `check price > 100` all show as waiting, rather than calling
+`price` undefined, and all answer once the price arrives. A bare definition
+(`price = stock(AAPL)`) waits and answers the same way.
+
+The boundary: the waiting is only for a value that is on its way. A name the note
+never defines is still undefined, and a fetch that fails answers with its
+error on the line that asked for it.
+
+## Names of several words
+
+A name can be the words you would say, not only one word: `hourly rate`,
+`monthly rent`, `take home pay`. The words become one name on the line that
+defines it, the line that gives it a value with `=`, and from there on the same
+words on any line below read as that name.
+
+```solve-doc
+hourly rate = $50 // $50.00
+hours = 8 // 8
+hourly rate * hours // $400.00
+```
+
+Where two names share words, the longest one the note defines is read first, so
+a one-word name and a longer one that ends with it can sit side by side:
+
+```solve-doc
+rate = 5 // 5
+hourly rate = $50 // $50.00
+hourly rate * rate // $250.00
+```
+
+Only the line with the `=` makes the words a name, which is what keeps prose
+from turning into one: words that no line defines stay the error they always
+were, and a line above the definition does not read the name yet.
+
+```solve-doc
+hourly rate * 2 // ERROR: Expected an operator or the end of the line, but found "rate"
+hourly rate = $50 // $50.00
+```
+
+A name is two to four plain words. A word the engine already reads cannot be
+one of them, so a name never hides a unit, an operator or a phrase. A line that
+would make one of those part of a name is refused by name, rather than read as
+something else: `take` is a spelling of minus, and `take home = 5` used to be
+stored quietly as the equation `-home = 5`.
+
+```solve-doc
+take home = 5 // ERROR: "take home" cannot be a name: "take" is a spelling of minus. Choose other words, or join them as take_home. For the equation, write -home = 5.
+tax on = 5 // ERROR: "tax on" cannot be a name: "tax on" is a phrase the engine reads. Choose other words, or join them as tax_on.
+```
+
+The same holds for an operator word at the end of the words. `monthly take`
+cannot be a name, because the line below it would then read `take` two ways:
+as part of the name in `monthly take * 12`, and as minus in `monthly take 500`,
+which subtracts 500 from `monthly`. An operator with nothing after it is not
+arithmetic either, so the line is refused by name, with the word and what it
+means, rather than reported as a sum that stops too early. Joining the words
+with an underscore, or choosing another word, makes a name that works.
+
+```solve-doc
+monthly take = 4000 // ERROR: "monthly take" cannot be a name: "take" is a spelling of minus. Choose other words, or join them as monthly_take.
+monthly_take = 4000 // 4,000
+monthly pay = 4000 // 4,000
+```
+
+### Possessives
+
+A possessive, the `'s` that says whose something is, can be part of a name:
+`Alice's food`, `the Smiths' rent`. An apostrophe straight after a letter
+belongs to its word, whether it sits inside the word or ends it. Either
+apostrophe will do. The straight `'` a keyboard types and the curly `’` a phone
+or a word processor puts in its place are the same apostrophe in a name, so a
+name typed with one is read when it is typed with the other.
+
+```solve-doc
+Alice's food = £30 // £30.00
+Bob’s food = £20 // £20.00
+Alice’s food + Bob's food // £50.00
+the Smiths' rent = £900 // £900.00
+the Smiths' rent / 3 // £300.00
+```
+
+A mark that only looks like an apostrophe is refused by name rather than made
+part of a name, since it would make a second name that reads the same as the
+first: an opening quotation mark `‘`, or the prime `′` that marks feet and
+minutes of arc. So is an apostrophe before a word's first letter, since a word
+in a name starts with a letter.
+
+```solve-doc
+Alice‘s food = 3 // ERROR: "Alice‘s food" cannot be a name: "‘" in "Alice‘s" is a quotation mark, not an apostrophe. Write the apostrophe as ' or ’.
+’tis rate = 5 // ERROR: "’tis rate" cannot be a name: "’tis" starts with an apostrophe, and a word in a name starts with a letter.
+```
+
+The boundary: a straight apostrophe after a digit or an underscore, or before a
+word, is not read as part of anything and is skipped, as any stray mark is, so
+`'rent'` reads as the word `rent`. A name of one word may hold an apostrophe
+too, as `O'Brien = 4` does.
+
+The boundary: the words are matched as written, so `Hourly rate` is another
+name from `hourly rate`, as `Rate` is from `rate`. The colon forms `:name` and
+`global :name` keep their one-word name. A line with more than four words
+before its `=` is left as it was, since that is more often a sentence than a
+name.
 
 ## Running totals
 
@@ -117,6 +302,11 @@ subtracts three and `balance *= 1 + 0.05` multiplies by 1.05.
 
 ## Functions
 
+A function is a formula with a name and a blank to fill in, written once and
+used as often as needed. Write the name, the blank (the parameter) in brackets,
+`=`, and the formula; then give the name a value in brackets and it works the
+formula out with that value in the blank.
+
 ```solve
 f(x) = 2*x + 1
 f(5) // 11
@@ -130,3 +320,56 @@ variable named `x` defined elsewhere in the document.
 double(x) = x * 2
 double(5) // 10
 ```
+
+A function's formula can use any built-in that works its answer out from what
+it is given: the text functions, the hashes, colours, image sizes, statistics
+and the rest. So a function can shout a word, fingerprint a string or lighten a
+colour, and it is called like any other:
+
+```solve-doc
+shout(s) = upper(s)
+shout("hello") // HELLO
+fingerprint(t) = sha256(t)
+fingerprint("hello") // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+paler(c) = lighten(c, 10%)
+paler(#336699) // #407fbf
+printed(p) = p at 300 dpi in mm
+printed(4000px) // 338.67 mm
+```
+
+A formula can use the same phrases a line can: a percentage of a value, a
+conversion, a date question. Each is read in the function's formula as it is on
+a line of its own.
+
+```solve-doc
+discount(x) = 15% of x
+discount(200) // 30
+day(d) = weekday of d
+day(2026-12-25) // Friday
+far(d) = d in km
+far(5000 m) // 5.00 km
+```
+
+The boundary is a value the formula would have to fetch, or find elsewhere in
+the note. A function is worked out away from the line that wrote it, each time
+it is called, so neither can be part of one, and each is refused when the
+function is defined, with its own reason. A lookup that waits for the network
+(the weather, a share price, an exchange rate on a past date) is refused as a
+call that waits for data. A reference to another line (`prev`, `line 1`, a
+total above, a section, a tag or a table column) waits for nothing, but a
+function has no lines of its own to read, so it is refused for that, and the
+refusal says to pass the value in: `f(x) = x + prev` is refused with "a
+function body has no lines to read: pass the value in as an argument instead".
+Work the value out on a line of its own, or give the function a parameter for
+it and pass `prev` or `line 1` when you call it:
+
+```solve-doc
+bump(x, v) = x + v
+10
+bump(2, prev) // 12
+```
+
+The expression of a `map`, `reduce`, `sum` or `prod`, a plot and the algebra
+verbs is held the same way, and refuses a reference to another line for the
+same reason (see
+[map, reduce and aggregates](/syntax/map-reduce-and-aggregates/#using-another-lines-value)).

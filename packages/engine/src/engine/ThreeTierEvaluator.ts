@@ -1,14 +1,18 @@
-import { ExpressionEngine, type PassSpend } from "@solve-js/engine/ExpressionEngine";
+import type { PassSpend } from "@solve-js/engine/ExpressionEngine";
+import type { EvaluatorHost } from "@solve-js/engine/EvaluatorHost";
 import {
 	DocumentModel,
 	LineChange,
 	LineState,
 	ViewportRange,
+	splitInsertedLines,
 } from "@solve-js/engine/DocumentModel";
 import { Value, ValueType, enableValueArena, disableValueArena, errorValue, persistentValue, isArenaActive } from "@solve-js/vm/Value";
 import { DependencyGraph, isPrefixedEdgeKey } from "@solve-js/vm/DependencyGraph";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
-import { isEmptyLine } from "@solve-js/engine/ExpressionEngineSafety";
+import { isEmptyLine, findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
+import { expressionOffsetInLine, inlineExpressionOffset, lineFailureOf, type LineFailure } from "@solve-js/engine/LineDiagnostics";
+import type { SourceSpan } from "@solve-js/errors/EngineError";
 import { isPipeRow, tableBlockAt } from "@solve-js/lexer/TableBlocks";
 // Deliberately the shared lexer, not an engine's own.
 //
@@ -25,6 +29,7 @@ import { isPipeRow, tableBlockAt } from "@solve-js/lexer/TableBlocks";
 import { sharedLexer } from "@solve-js/lexer/Lexer";
 import { CompilationWorkerManager, type CompileRequestItem } from "@solve-js/engine/CompilationWorkerManager";
 import { PageManager } from "@solve-js/engine/PageManager";
+import { PrefixSums } from "@solve-js/engine/PrefixSums";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { withTagEdges } from "@solve-js/packages/tags/TagScanner";
@@ -44,7 +49,7 @@ export enum EvalTier {
 	Tier1 = 1,
 	/** Execute-only from cached bytecode (visible + cached). */
 	Tier2 = 2,
-	/** Compile-only for dependency tracking (invisible). Executes only variable assignments. */
+	/** Compile-only for dependency tracking, for a dirty line below the viewport (`backgroundCompile`). Executes only variable assignments. */
 	Tier3 = 3,
 	/** Skipped, already clean or non-evaluable. */
 	Skipped = 0,
@@ -66,6 +71,18 @@ export interface EvalLineResult {
 	results?: Value[][];
 	/** Error message, or null. */
 	error: string | null;
+	/**
+	 * The code of the failure in {@link error}, the same code the expression
+	 * throws on its own (`NO_PREFIX_PARSELET`, `UNDEFINED_VARIABLE`). Null or
+	 * absent when `error` is.
+	 */
+	errorCode?: string | null;
+	/**
+	 * Where in the line the failure in {@link error} is, as offsets into the
+	 * line's text with the one-based line and column. Null when the engine has
+	 * no position for it, and null or absent when `error` is.
+	 */
+	errorSpan?: SourceSpan | null;
 }
 
 // ── EvalResult ──────────────────────────────────────────────────────────
@@ -81,6 +98,11 @@ export interface EvalResult {
 }
 
 // ── ThreeTierEvaluator ──────────────────────────────────────────────────
+
+/** Where inline solve `index`'s expression starts, or where the text is found when the solve is not. */
+function inlineOffset(solveStart: number | undefined, text: string, expression: string): number {
+	return solveStart === undefined ? expressionOffsetInLine(text, expression) : inlineExpressionOffset(solveStart);
+}
 
 /**
  * The names these programs define as functions, from the bodies compiled
@@ -136,9 +158,9 @@ function hasExpressionWithoutProgram(state: LineState): boolean {
  * ── Tier assignment ─────────────────────────────────────────────────
  * | Tier  | Condition                          | Action                        |
  * |───────|────────────────────────────────────|───────────────────────────────|
- * | **1** | Visible + Dirty (new/changed)      | Full pipeline: lex→parse→compile→execute |
+ * | **1** | Dirty, in or above the viewport   | Full pipeline: lex→parse→compile→execute |
  * | **2** | Visible + Cached (scroll into view)| Execute from cached bytecode  |
- * | **3** | Invisible + Dirty                  | Compile-only; execute only variable defs |
+ * | **3** | Dirty, below the viewport          | Compile-only; execute only variable defs |
  * | Skip  | Clean, empty, or non-evaluable     | No action                     |
  *
  * ── Evaluation order ─────────────────────────────────────────────────
@@ -157,7 +179,8 @@ function hasExpressionWithoutProgram(state: LineState): boolean {
  */
 export class ThreeTierEvaluator {
 	private doc: DocumentModel;
-	private engine: ExpressionEngine;
+	/** The engine, held as the seams the evaluator needs and no more; see {@link EvaluatorHost}. */
+	private engine: EvaluatorHost;
 	private dag: DependencyGraph;
 	private checkpointer: VMCheckpointer | null;
 	private compilationWorker: CompilationWorkerManager | null = null;
@@ -199,6 +222,14 @@ export class ThreeTierEvaluator {
 	private readonly spendByLine = new Map<number, PassSpend>();
 
 	/**
+	 * {@link spendByLine} by position, for {@link recordedSpendBefore}, with the
+	 * line order it was built for (`DocumentModel.layoutRevision`); null
+	 * before it is first asked for. A line that runs again changes its own
+	 * figure in place; a structural edit builds it again.
+	 */
+	private spendIndex: { layout: number; work: PrefixSums; kept: PrefixSums } | null = null;
+
+	/**
 	 * The lines that sit on a cycle, by line id. See {@link settleCycles}.
 	 */
 	private cycleMemberIds: Set<number> = new Set();
@@ -216,11 +247,31 @@ export class ThreeTierEvaluator {
 	private movedFloor = Number.MAX_SAFE_INTEGER;
 
 	/**
+	 * The line now running, which {@link nameVisible} reads names for, or
+	 * `MAX_SAFE_INTEGER` between lines, where every name is readable.
+	 */
+	private readingLine = Number.MAX_SAFE_INTEGER;
+
+	/**
 	 * Unsubscribe from sharedGlobalVariableStore, set in the constructor
 	 * called from terminateWorker(). See the subscription itself below for
 	 * why this only marks lines dirty and never re-evaluates synchronously.
 	 */
 	private globalUnsubscribe: (() => void) | null = null;
+
+	/**
+	 * The engine's {@link EvaluatorHost.documentEpoch} as this evaluator's last
+	 * pass left it, or -1 before the first. See {@link claimEngine}.
+	 */
+	private engineEpoch = -1;
+
+	/** Set by {@link dispose}: a retired evaluator does not take the engine back. */
+	private disposed = false;
+
+	/** {@link applyTransaction}, as the document model's structural editor; see `DocumentModel.setStructuralEditor`. */
+	private readonly structuralEditor = (changes: LineChange[]): void => {
+		this.applyTransaction(changes);
+	};
 
 	/**
 	 * @param doc The persistent document model.
@@ -231,7 +282,7 @@ export class ThreeTierEvaluator {
 	 */
 	constructor(
 		doc: DocumentModel,
-		engine: ExpressionEngine,
+		engine: EvaluatorHost,
 		checkpointer?: VMCheckpointer
 	) {
 		this.doc = doc;
@@ -267,6 +318,10 @@ export class ThreeTierEvaluator {
 		// document lifecycle itself. See ExpressionEngine.makeLineContext().
 		this.engine.setDocumentModel(this.doc);
 
+		// An editLine whose text holds a line break is a structural edit, and
+		// comes here to be applied, as a transaction does.
+		this.doc.setStructuralEditor(this.structuralEditor);
+
 		// ── Cross-document global-variable propagation ──────────────────
 		// GlobalVariableAsyncResolver (via preflight) handles a line's FIRST
 		// resolution when a global it reads wasn't known yet. This handles
@@ -296,13 +351,18 @@ export class ThreeTierEvaluator {
 	 * Evaluate all lines needed to render the given viewport.
 	 *
 	 * Processes lines from 1 to `viewport.endLine` in document order.
-	 * Dirty lines in the viewport get Tier-1 full pipeline; clean cached
-	 * lines get Tier-2 bytecode execution. Lines after the viewport
-	 * get Tier-3 compile-only (with variable-def execution).
+	 * Dirty lines in the viewport, and above it, get the Tier-1 full
+	 * pipeline; clean cached lines in it get Tier-2 bytecode execution; clean
+	 * lines above it are skipped. Each line that runs reads the VM as a pass
+	 * from line 1 leaves it at that line (see runAt). Lines after the viewport
+	 * are not visited; `backgroundCompile` gives them Tier-3 compile-only.
 	 *
 	 * @returns Results for all processed lines, including tier metadata.
 	 */
 	evaluate(viewport: ViewportRange, signal?: AbortSignal): EvalResult {
+		// ── The engine serves this document ──
+		this.claimEngine();
+
 		// ── One AbortController Per Keystroke ────────────────────────
 		// Link the UI layer's keystroke signal to the engine so that
 		// all per-evaluation AbortControllers created during this call
@@ -355,6 +415,7 @@ export class ThreeTierEvaluator {
 			// `DocumentModel.getLineStatesInRange`.
 			const states = this.doc.getLineStatesInRange(1, evalEnd);
 
+			this.openNameVisibility();
 			for (let pos = 1; pos <= evalEnd; pos++) {
 				const state = states[pos - 1];
 				if (!state) {
@@ -364,7 +425,7 @@ export class ThreeTierEvaluator {
 
 				const inViewport = pos >= viewport.startLine && pos <= viewport.endLine;
 
-				const lineResult = this.evaluateSingleLine(state, pos, inViewport);
+				const lineResult = this.evaluateSingleLine(state, pos, inViewport, pos < viewport.startLine);
 				lines.push(lineResult);
 
 				if (lineResult.tier === EvalTier.Tier1) tierCounts.tier1++;
@@ -376,6 +437,7 @@ export class ThreeTierEvaluator {
 					resultMap.set(pos, lineResult.results.flat());
 				}
 			}
+			this.closeNameVisibility();
 
 			// A line that read a position it had not read before may have
 			// closed a cycle, and the end of the pass is when every edge the
@@ -400,9 +462,12 @@ export class ThreeTierEvaluator {
 			if (unitsBefore.some((name) => !unitsAfter.has(name))) {
 				this.engine.invalidateForRemovedUserUnits();
 			}
+			// A name of several words the same way (#743).
+			this.engine.settleMultiWordNames();
 
 			return { lines, resultMap, tierCounts };
 		} finally {
+			this.closeNameVisibility();
 			this.engine.endPass();
 			// Clear keystroke signal to prevent stale signal references
 			// from being used by subsequent evaluations from other code paths.
@@ -438,21 +503,28 @@ export class ThreeTierEvaluator {
 		const docEnd = this.doc.lineCount;
 		const startPos = viewport.endLine + 1;
 
-		for (let pos = startPos; pos <= docEnd; pos++) {
-			const state = this.doc.getLineAt(pos);
-			if (!state) continue;
+		// A line compiled here reads the names of several words defined above
+		// it and no others, as a line of a pass does.
+		this.openNameVisibility();
+		try {
+			for (let pos = startPos; pos <= docEnd; pos++) {
+				const state = this.doc.getLineAt(pos);
+				if (!state) continue;
 
-			// Skip clean lines, already compiled + executed
-			if (!state.dirty) continue;
+				// Skip clean lines, already compiled + executed
+				if (!state.dirty) continue;
 
-			// Skip already-compiled Tier 3 lines, they have bytecode
-			// but were compiled without execution (non-variable-def).
-			// Recompiling is wasteful since the text hasn't changed
-			// (text change clears bytecodes via editLine).
-			if (state.bytecodes.length > 0 && !state.isVariableDef) continue;
+				// Skip already-compiled Tier 3 lines, they have bytecode
+				// but were compiled without execution (non-variable-def).
+				// Recompiling is wasteful since the text hasn't changed
+				// (text change clears bytecodes via editLine).
+				if (state.bytecodes.length > 0 && !state.isVariableDef) continue;
 
-			const lineResult = this.evaluateSingleLine(state, pos, false);
-			results.push(lineResult);
+				const lineResult = this.evaluateSingleLine(state, pos, false);
+				results.push(lineResult);
+			}
+		} finally {
+			this.closeNameVisibility();
 		}
 
 		return results;
@@ -499,6 +571,41 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
+	 * Take the engine back for this document, when another has used it since
+	 * this evaluator's last pass.
+	 *
+	 * An engine holds one document's state: the VM's names, the dependency
+	 * graph and the line cache (both keyed by line number), the tables of units
+	 * and names, and which document model a line reference reads. Two
+	 * evaluators on one engine, or a `parseDocument` or `evaluateDocument`
+	 * between two passes of a live one, each left that state as their own
+	 * document's, so the next pass here read it: `prev + 1` on line 2 read
+	 * line 1 of the other note, and a name the other note defined was defined
+	 * here too. The engine counts every change of document
+	 * ({@link EvaluatorHost.documentEpoch}); when the count has moved, this
+	 * evaluator wires its own model and checkpoint chain back in, has the
+	 * engine drop what the other document defined, clears the graph and the
+	 * line cache, and marks every line to run again, so the pass that follows
+	 * answers what a first pass over this document answers.
+	 *
+	 * The boundary: that is a full pass, so two documents taking turns on one
+	 * engine pay for one each time they swap. A host showing two notes at once
+	 * gives each its own engine, which costs nothing of the kind. A retired
+	 * evaluator (see {@link dispose}) does not take the engine back.
+	 */
+	private claimEngine(): void {
+		if (this.disposed || this.engine.documentEpoch() === this.engineEpoch) return;
+		this.engine.setDocumentModel(this.doc);
+		this.engine.getBatcher().checkpointer = this.checkpointer;
+		this.engine.beginDocument();
+		this.dag.clear();
+		this.engine.getLineCache().clear();
+		this.checkpointer?.desync();
+		this.doc.invalidateAll();
+		this.engineEpoch = this.engine.documentEpoch();
+	}
+
+	/**
 	 * Terminate the compilation worker if active, and unsubscribe from
 	 * sharedGlobalVariableStore. Call this when the evaluator is no longer
 	 * needed to clean up resources, every call site that retires a
@@ -515,6 +622,38 @@ export class ThreeTierEvaluator {
 			this.globalUnsubscribe();
 			this.globalUnsubscribe = null;
 		}
+	}
+
+	/**
+	 * Retire this evaluator: the call a host makes when the document it serves
+	 * is closed or replaced by another.
+	 *
+	 * It stops the background compilation worker, if one was started, and
+	 * drops the evaluator's subscription to the shared `global :name` store.
+	 * Until then the store holds a reference to the evaluator, so one that is
+	 * never retired stays reachable (and keeps marking its lines dirty) after
+	 * the host has let go of it.
+	 *
+	 * It also detaches the evaluator from the engine, where the engine still
+	 * points at it: the engine's document model and its async batcher's
+	 * checkpoint chain are cleared if they are this evaluator's own. Left in
+	 * place, the engine went on answering from the retired document, so a
+	 * later `evaluateLine("line 1 * 2")` read a line of a note the host had
+	 * closed rather than refusing for want of a document. An engine an evaluator
+	 * built since has taken over is left alone.
+	 *
+	 * {@link terminateWorker} is the first half of this and keeps working as
+	 * it did. `dispose` is safe to make more than once. The document model and
+	 * the engine themselves are left intact: the host owns both, and may build
+	 * a new evaluator over them.
+	 */
+	dispose(): void {
+		this.disposed = true;
+		this.terminateWorker();
+		if (this.doc.getStructuralEditor() === this.structuralEditor) this.doc.setStructuralEditor(null);
+		if (this.engine.getDocumentModel() === this.doc) this.engine.setDocumentModel(null);
+		const batcher = this.engine.getBatcher();
+		if (batcher.checkpointer === this.checkpointer) batcher.checkpointer = null;
 	}
 
 	/**
@@ -582,6 +721,11 @@ export class ThreeTierEvaluator {
 	 * not included in `lines[]` or `resultMap`.
 	 */
 	setViewport(viewport: ViewportRange, signal?: AbortSignal): EvalResult {
+		// ── The engine serves this document ──
+		// Before the guard below: taking the engine back marks every line dirty,
+		// which sends the pass through evaluate().
+		this.claimEngine();
+
 		// ── One AbortController Per Keystroke ────────────────────────
 		// Link the UI layer's keystroke signal to the engine.
 		this.engine.setKeystrokeSignal(signal ?? null);
@@ -617,9 +761,13 @@ export class ThreeTierEvaluator {
 		// ── Phase 5.2g: Detect scroll direction & preload ───────────
 		this.preloadNextPages(viewport);
 
-		// ── Restore VM state from nearest checkpoint before the viewport ──
-		// This sets all variables that were defined at or before startLine-1.
-		this.restoreTo(viewport.startLine - 1);
+		// ── The VM at the line before the viewport ──
+		// Moved there from wherever the last pass left it, rather than rebuilt
+		// from line 1, so a scroll costs the distance it moves and not the
+		// length of the document above it. The first line in view that runs
+		// moves it as well (see runAt); moving here leaves the VM at the
+		// viewport's prefix even when no line in view runs.
+		this.checkpointer?.syncTo(viewport.startLine - 1);
 
 		// What the lines above the viewport recorded, so a line in view is
 		// charged against what a pass from line 1 would have left it (#711, #694).
@@ -636,6 +784,7 @@ export class ThreeTierEvaluator {
 			const result = this.collectEvalResults(viewport.startLine, viewport.endLine);
 			return result;
 		} finally {
+			this.closeNameVisibility();
 			this.engine.endPass();
 			// Clear keystroke signal to prevent stale signal references.
 			this.engine.setKeystrokeSignal(null);
@@ -668,13 +817,48 @@ export class ThreeTierEvaluator {
 	 * **Caller should follow up with `evaluate(viewport)`** to re-evaluate
 	 * dirty lines from line 1 and rebuild the DAG + checkpoints.
 	 *
+	 * A transaction in which every change replaces as many lines as it
+	 * deletes (a keystroke inside a line, sent as delete-one-insert-one) moves
+	 * no line, and is applied in place through `DocumentModel.editLine`
+	 * instead: the lines keep their ids, nothing is renumbered or cleared, and
+	 * the ids of the lines whose text changed come back in `edited`, with
+	 * `inserted` and `removed` empty. A transaction with any change that alters
+	 * the line count takes the structural path for all of it (#713).
+	 *
 	 * @param changes Line-level changes to apply. Must be non-overlapping.
 	 * @returns Metadata about the applied changes.
 	 */
 	applyTransaction(changes: LineChange[]): {
 		inserted: number[];
 		removed: number[];
+		edited: number[];
 	} {
+		// The graph read below is this document's only while the engine serves it.
+		this.claimEngine();
+		// A line break inside an inserted text is a line break: `7\r8` is two
+		// lines, as a document loaded with it has, so the count the change
+		// inserts is counted after splitting. See splitInsertedLines.
+		changes = splitInsertedLines(changes);
+		// Refused before any bookkeeping below starts, so a paste too large for
+		// the model leaves the graph and the chain as they were.
+		this.doc.assertChangesFit(changes);
+		// ── A change that moves no line is an edit in place (#713) ──
+		// A host that reports each keystroke as "delete this line, insert its
+		// new text" sends a change whose counts match, and nothing below it has
+		// moved. Taken as structural, it cost a new line id (the compiled
+		// programs and recorded edges went with the old one), a renumbered
+		// chain, a cleared graph and the answers below the viewport. Applied
+		// line by line through `editLine`, the line keeps its id and is only
+		// marked dirty, exactly as a host calling `editLine` itself gets.
+		const inPlace = inPlaceEdits(changes, this.doc.lineCount);
+		if (inPlace !== null) {
+			const edited: number[] = [];
+			for (const [lineNumber, text] of inPlace) {
+				if (this.doc.editLine(lineNumber, text)) edited.push(this.doc.getLineAt(lineNumber)!.lineId);
+			}
+			return { inserted: [], removed: [], edited };
+		}
+
 		// ── Phase 1: Collect DAG writes + downstream lineIds ───────────
 		// Must happen BEFORE applyChanges() because line numbers are still
 		// valid at this point. We collect writes from deleted lines and
@@ -698,6 +882,9 @@ export class ThreeTierEvaluator {
 				// because this runs before the next pass begins and that
 				// comparison would see the unit already gone.
 				const deletedLineId = this.doc.getLineAt(lineNum)?.lineId ?? -1;
+				// Its names of several words go with it (#743).
+				this.engine.undefineMultiWordNamesFrom(deletedLineId);
+				this.engine.settleMultiWordNames();
 				if (this.engine.undefineUserUnitsFrom(deletedLineId)) {
 					this.engine.invalidateForRemovedUserUnits();
 				}
@@ -809,6 +996,7 @@ export class ThreeTierEvaluator {
 
 		// A deleted line's id is never seen again, so its entries are dead weight.
 		for (const lineId of result.removed) {
+			this.spendByLine.delete(lineId);
 			this.textHashOfRecordedEdges.delete(lineId);
 			this.selfReadingWrites.delete(lineId);
 			this.cycleMemberIds.delete(lineId);
@@ -817,6 +1005,7 @@ export class ThreeTierEvaluator {
 		return {
 			inserted: result.inserted,
 			removed: result.removed,
+			edited: [],
 		};
 	}
 
@@ -860,7 +1049,7 @@ export class ThreeTierEvaluator {
 	 * nothing and walks nothing.
 	 *
 	 * What membership does is decided where a line runs: see
-	 * {@link evaluateSingleLine} and `ExpressionEngine.setLineOnCycle`. Earlier
+	 * {@link evaluateSingleLine}. Earlier
 	 * versions reset a member's answer here instead, at the end of the pass,
 	 * and that was one line too late: the number the member computed had
 	 * already been read by the lines below it during the pass. Deciding how the
@@ -905,7 +1094,12 @@ export class ThreeTierEvaluator {
 		const low = new Map<number, number>();
 		const onStack = new Set<number>();
 		const stack: number[] = [];
-		const frames: { line: number; targets: number[]; next: number }[] = [];
+		// Each frame reads its line's dependants one at a time rather than
+		// holding them all. The walk goes as deep as the longest chain, and on
+		// the first pass of a ledger (a running total after every entry) every
+		// line on that chain is read by every line below it, so a list per
+		// frame held n^2 / 2 numbers at once: 8 million for 4,000 lines.
+		const frames: { line: number; targets: Iterator<number> }[] = [];
 		let visited = 0;
 		const enter = (line: number): void => {
 			index.set(line, visited);
@@ -913,7 +1107,7 @@ export class ThreeTierEvaluator {
 			visited++;
 			stack.push(line);
 			onStack.add(line);
-			frames.push({ line, targets: this.dependantsOf(line), next: 0 });
+			frames.push({ line, targets: this.dependantsOf(line) });
 		};
 		const setMembership = (line: number, onCycle: boolean): void => {
 			const state = this.doc.getLineAt(line);
@@ -930,8 +1124,9 @@ export class ThreeTierEvaluator {
 			enter(root);
 			while (frames.length > 0) {
 				const frame = frames[frames.length - 1];
-				if (frame.next < frame.targets.length) {
-					const target = frame.targets[frame.next++];
+				const next = frame.targets.next();
+				if (next.done !== true) {
+					const target = next.value;
 					if (!index.has(target)) enter(target);
 					else if (onStack.has(target)) low.set(frame.line, Math.min(low.get(frame.line)!, index.get(target)!));
 					continue;
@@ -975,11 +1170,14 @@ export class ThreeTierEvaluator {
 	 * Only variable names among the keys: a tag, a global or a data source is
 	 * not a line's answer, and a cycle cannot run through one.
 	 */
-	private dependantsOf(line: number): number[] {
-		const out = [...this.dag.getAffectedLinesByPosition(line)];
+	private *dependantsOf(line: number): Generator<number, void, undefined> {
+		// A reader can come twice (through a position and a name); the walk
+		// takes a line it has already entered as an edge to it, which is what
+		// it is, so nothing is lost by not collecting them first.
+		yield* this.dag.positionReadersOf(line);
 		for (const key of this.dag.getWrites(line)) {
 			if (isPrefixedEdgeKey(key)) continue;
-			for (const reader of this.dag.directConsumersOf(key)) out.push(reader);
+			yield* this.dag.directConsumersOf(key);
 			// A running total's other steppers depend on this one through the
 			// total, and the graph keeps a writer out of its own name's consumers,
 			// so that dependency is recovered here for an accumulator name alone.
@@ -989,10 +1187,9 @@ export class ThreeTierEvaluator {
 			// never on those below. Without the order a plain column of steps was
 			// a cycle.
 			if (this.engine.isAccumulatorName(key)) {
-				for (const stepper of this.dag.getProducers(key)) if (stepper > line) out.push(stepper);
+				for (const stepper of this.dag.getProducers(key)) if (stepper > line) yield stepper;
 			}
 		}
-		return out;
 	}
 
 	// ── Private helpers ─────────────────────────────────────────────────
@@ -1015,6 +1212,10 @@ export class ThreeTierEvaluator {
 	private reseedAccumulators(): void {
 		const names = this.engine.resetAccumulators();
 		if (names.size === 0) return;
+		// The VM is kept at a line (see runAt), and clearing the totals moved
+		// them off it; they go back to what they hold there, and a line that
+		// steps one moves them from that.
+		this.checkpointer?.resync(names);
 		// Read from the lines themselves, not from the dependency graph.
 		//
 		// A structural edit clears the graph (see {@link applyTransaction}) and
@@ -1084,6 +1285,7 @@ export class ThreeTierEvaluator {
 		const evalEnd = Math.min(endLine, docEnd);
 		this.forgetMovedBelowViewport(evalEnd);
 
+		this.openNameVisibility();
 		for (let pos = startLine; pos <= evalEnd; pos++) {
 			const state = this.doc.getLineAt(pos);
 			if (!state) continue;
@@ -1107,6 +1309,7 @@ export class ThreeTierEvaluator {
 				resultMap.set(pos, lineResult.results.flat());
 			}
 		}
+		this.closeNameVisibility();
 
 		// The same end-of-pass check `evaluate` makes; a viewport pass runs
 		// lines and records what they read just as a full one does.
@@ -1144,7 +1347,40 @@ export class ThreeTierEvaluator {
 	 * since it fired on every viewport change, not just edits.
 	 */
 	private hasDirtyLinesBefore(position: number): boolean {
-		return this.doc.hasAnyDirtyVariableDefLineBefore(position);
+		// Or a line nothing has compiled yet, which may be either; see
+		// DocumentModel.hasAnyUncompiledDirtyLineBefore.
+		return this.doc.hasAnyDirtyVariableDefLineBefore(position) || this.doc.hasAnyUncompiledDirtyLineBefore(position);
+	}
+
+	/**
+	 * Whether the line now running may use a name of several words these lines
+	 * define: yes when one of them sits above it (#743).
+	 *
+	 * The table the normaliser reads names from holds every name the document
+	 * defines, and the evaluator keeps it between passes, so from the second
+	 * pass on `hourly rate * 2` above `hourly rate = 5` read the name and
+	 * answered from the VM, where a pass from the top reads two words there.
+	 * An owner that is no document line (-1) is always visible.
+	 */
+	private readonly nameVisible = (definedByLineIds: ReadonlySet<number>): boolean => {
+		for (const lineId of definedByLineIds) {
+			if (lineId < 0) return true;
+			const position = this.doc.getLinePosition(lineId);
+			if (position !== -1 && position < this.readingLine) return true;
+		}
+		return false;
+	};
+
+	/** Put {@link nameVisible} in force for the lines of a pass. */
+	private openNameVisibility(): void {
+		this.readingLine = Number.MAX_SAFE_INTEGER;
+		this.engine.setMultiWordNameVisibility(this.nameVisible);
+	}
+
+	/** Lift it again, so what follows the lines reads every name. */
+	private closeNameVisibility(): void {
+		this.readingLine = Number.MAX_SAFE_INTEGER;
+		this.engine.setMultiWordNameVisibility(null);
 	}
 
 	/**
@@ -1166,26 +1402,27 @@ export class ThreeTierEvaluator {
 	private evaluateSingleLine(
 		state: LineState,
 		lineNumber: number,
-		inViewport: boolean
+		inViewport: boolean,
+		aboveViewport = false,
 	): EvalLineResult {
 		// An edit always dirties, so a clean line's edges describe its text and
 		// the map is not consulted for it: the check costs the pass nothing on
 		// the lines that are most of it.
 		if (state.dirty) this.forgetPositionsOfEditedText(state, lineNumber);
+		this.readingLine = lineNumber;
 		// A line on a cycle runs the way a single fresh pass runs it: the names
 		// it reads hold what the lines above left, and a line below it is not
-		// yet evaluated. That is the answer `parseDocument` gives such a line,
-		// and it is stable, where a number found in the VM from the previous
-		// pass is the start of a chase. See `ExpressionEngine.setLineOnCycle`.
-		const onCycle = this.cycleMemberIds.has(state.lineId);
-		this.engine.setLineOnCycle(onCycle);
-		if (onCycle) {
+		// yet evaluated (every line refuses a forward read; see the context's
+		// `getLineResult`). That is the answer `parseDocument` gives such a
+		// line, and it is stable, where a number found in the VM from the
+		// previous pass is the start of a chase.
+		if (this.cycleMemberIds.has(state.lineId)) {
 			for (const read of state.reads) {
 				if (!isPrefixedEdgeKey(read)) this.engine.restoreToPrefix(read, lineNumber);
 			}
 		}
 		const before = this.engine.passSpent();
-		const lineResult = this.dispatchLine(state, lineNumber, inViewport);
+		const lineResult = this.dispatchLine(state, lineNumber, inViewport, aboveViewport);
 		const after = this.engine.passSpent();
 		this.recordSpend(state, lineResult.tier, { work: after.work - before.work, kept: after.kept - before.kept });
 		// A member's edges follow its run like any other line's. Its run is cut
@@ -1212,39 +1449,78 @@ export class ThreeTierEvaluator {
 	 */
 	private recordSpend(state: LineState, tier: EvalTier, spent: PassSpend): void {
 		if (tier !== EvalTier.Skipped) {
-			if (spent.work > 0 || spent.kept > 0) this.spendByLine.set(state.lineId, spent);
-			else this.spendByLine.delete(state.lineId);
+			if (spent.work > 0 || spent.kept > 0) this.setSpend(state.lineId, spent);
+			else this.dropSpend(state.lineId);
 			return;
 		}
 		if (state.dirty) {
-			this.spendByLine.delete(state.lineId);
+			this.dropSpend(state.lineId);
 			return;
 		}
 		const recorded = this.spendByLine.get(state.lineId);
 		if (recorded !== undefined) this.engine.addPassSpend(recorded);
 	}
 
-	/** What the lines above `line` recorded when they last ran. */
+	/** Record what a line spent, and move {@link spendIndex} by the difference. */
+	private setSpend(lineId: number, spent: PassSpend): void {
+		const recorded = this.spendByLine.get(lineId);
+		if (recorded !== undefined && recorded.work === spent.work && recorded.kept === spent.kept) return;
+		this.spendByLine.set(lineId, spent);
+		this.moveSpendIndex(lineId, spent.work - (recorded?.work ?? 0), spent.kept - (recorded?.kept ?? 0));
+	}
+
+	/** Forget what a line spent. */
+	private dropSpend(lineId: number): void {
+		const recorded = this.spendByLine.get(lineId);
+		if (recorded === undefined) return;
+		this.spendByLine.delete(lineId);
+		this.moveSpendIndex(lineId, -recorded.work, -recorded.kept);
+	}
+
+	/** Change one line's figures in {@link spendIndex}, while it describes the line order the document has. */
+	private moveSpendIndex(lineId: number, work: number, kept: number): void {
+		const index = this.spendIndex;
+		if (index === null || index.layout !== this.doc.layoutRevision) return;
+		const position = this.doc.getLinePosition(lineId);
+		index.work.add(position, work);
+		index.kept.add(position, kept);
+	}
+
+	/**
+	 * What the lines above `line` recorded when they last ran.
+	 *
+	 * A viewport-only pass asks this once, and it used to walk every recorded
+	 * line to answer, which is every line that has run: on a note of twenty
+	 * thousand lines that walk was most of the cost of a scroll, and a scroll
+	 * cost three times as much there as on one of five thousand. The figures
+	 * are kept by position in running totals instead ({@link spendIndex}),
+	 * which a line that runs again changes in place, so a scroll answers in
+	 * O(log n) whatever the length of the note. Only a change to the line
+	 * order builds the totals again, in one walk of the document.
+	 */
 	private recordedSpendBefore(line: number): PassSpend {
-		let work = 0;
-		let kept = 0;
-		for (const [lineId, spent] of this.spendByLine) {
-			const position = this.doc.getLinePosition(lineId);
-			if (position === -1) {
-				this.spendByLine.delete(lineId);
-			} else if (position < line) {
-				work += spent.work;
-				kept += spent.kept;
+		let index = this.spendIndex;
+		if (index === null || index.layout !== this.doc.layoutRevision) {
+			const states = this.doc.getLineStatesInRange(1, this.doc.lineCount);
+			const work = new Float64Array(states.length);
+			const kept = new Float64Array(states.length);
+			for (let i = 0; i < states.length; i++) {
+				const spent = states[i] === undefined ? undefined : this.spendByLine.get(states[i]!.lineId);
+				if (spent === undefined) continue;
+				work[i] = spent.work;
+				kept[i] = spent.kept;
 			}
+			index = this.spendIndex = { layout: this.doc.layoutRevision, work: new PrefixSums(work), kept: new PrefixSums(kept) };
 		}
-		return { work, kept };
+		return { work: index.work.sumBefore(line), kept: index.kept.sumBefore(line) };
 	}
 
 	/** The tier dispatch itself; see {@link evaluateSingleLine} for what wraps it. */
 	private dispatchLine(
 		state: LineState,
 		lineNumber: number,
-		inViewport: boolean
+		inViewport: boolean,
+		aboveViewport: boolean,
 	): EvalLineResult {
 		const baseResult: Omit<EvalLineResult, "tier" | "result" | "error"> = {
 			lineId: state.lineId,
@@ -1273,7 +1549,7 @@ export class ThreeTierEvaluator {
 		// Skip empty/markdown-only lines
 		// A table row is markup too, though only its block says so (#616).
 		if (state.isEmpty || isEmptyLine(state.text) || this.isTableRow(lineNumber)) {
-			this.deregisterIfDirty(state, lineNumber);
+			this.deregisterIfDirtyAt(state, lineNumber);
 			state.isEmpty = true;
 			this.doc.markClean(state.lineId);
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
@@ -1282,7 +1558,7 @@ export class ThreeTierEvaluator {
 		// Extract all evaluable expressions (may be multiple inline solves)
 		const { expressions, inlineSolveCount } = this.extractExpressions(state);
 		if (expressions.length === 0) {
-			this.deregisterIfDirty(state, lineNumber);
+			this.deregisterIfDirtyAt(state, lineNumber);
 			state.isEmpty = true;
 			this.doc.markClean(state.lineId);
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
@@ -1290,9 +1566,15 @@ export class ThreeTierEvaluator {
 
 		// Determine the expression to evaluate (only needed for dirty lines)
 		if (state.dirty) {
-			if (inViewport) {
+			if (inViewport || aboveViewport) {
 				// ── Tier 1: Visible + Dirty → Full Pipeline ──────────
-				return this.evaluateTier1(state, lineNumber, expressions, inlineSolveCount, baseResult);
+				// A dirty line above the viewport runs too. The lines in view
+				// read it by position as well as by name (`prev`, `line 2`,
+				// `total above`), and compiled without running it had no answer
+				// for them: `prev + 1` at the top of a viewport starting at line
+				// 3 reported line 2 as not evaluated, where a pass from line 1
+				// answers it. Tier 3 is for the lines below the viewport.
+				return this.runAt(lineNumber, () => this.evaluateTier1(state, lineNumber, expressions, inlineSolveCount, baseResult));
 			} else {
 				// ── Tier 3: Invisible + Dirty → Compile-only ─────────
 				// Skip recompilation if already compiled by a previous Tier 3 pass.
@@ -1303,7 +1585,7 @@ export class ThreeTierEvaluator {
 				if (state.bytecodes.length > 0 && state.bytecodes.length === expressions.length && !state.isVariableDef) {
 					return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
 				}
-				return this.evaluateTier3(state, lineNumber, expressions, inlineSolveCount, baseResult);
+				return this.runAt(lineNumber, () => this.evaluateTier3(state, lineNumber, expressions, inlineSolveCount, baseResult));
 			}
 		}
 
@@ -1311,15 +1593,43 @@ export class ThreeTierEvaluator {
 		if (inViewport && this.mustRerunWithoutProgram(state, lineNumber)) {
 			// ── Tier 1 again: a line with no program to re-run ──────
 			// Tier 2 would run nothing for it; see mustRerunWithoutProgram.
-			return this.evaluateTier1(state, lineNumber, expressions, inlineSolveCount, baseResult);
+			return this.runAt(lineNumber, () => this.evaluateTier1(state, lineNumber, expressions, inlineSolveCount, baseResult));
 		}
 		if (inViewport && state.bytecodes.length > 0) {
 			// ── Tier 2: Visible + Cached → Execute from bytecode ────
-			return this.evaluateTier2(state, lineNumber, baseResult);
+			return this.runAt(lineNumber, () => this.evaluateTier2(state, lineNumber, baseResult));
 		}
 
 		// Clean, not in viewport, or no bytecode → skip
 		return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
+	}
+
+	/**
+	 * Run one line of a pass on a VM holding the state the document has at the
+	 * end of the line above it, and record that it now holds the state at the
+	 * end of this one. See `VMCheckpointer.syncTo`, which does the moving: a
+	 * pass leaves the VM where its last line left it, and a line that runs next
+	 * may sit above that (the next pass starting again from the top) or below a
+	 * stretch of lines the pass skipped. Only a line that runs is moved to, so a
+	 * pass pays for the distance between the lines it runs and no more.
+	 *
+	 * @param lineNumber - The 1-based line about to run.
+	 * @param run - The tier that runs it.
+	 * @returns What the tier returned.
+	 */
+	private runAt(lineNumber: number, run: () => EvalLineResult): EvalLineResult {
+		this.checkpointer?.syncTo(lineNumber - 1);
+		const result = run();
+		this.checkpointer?.noteLineRan(lineNumber);
+		return result;
+	}
+
+	/** {@link deregisterIfDirty} on a VM put at the line above first, as {@link runAt} puts it for a line that runs. */
+	private deregisterIfDirtyAt(state: LineState, lineNumber: number): void {
+		if (!state.dirty) return;
+		this.checkpointer?.syncTo(lineNumber - 1);
+		this.deregisterIfDirty(state, lineNumber);
+		this.checkpointer?.noteLineRan(lineNumber);
 	}
 
 	/**
@@ -1352,7 +1662,7 @@ export class ThreeTierEvaluator {
 	private mustRerunWithoutProgram(state: LineState, lineNumber: number): boolean {
 		if (!hasExpressionWithoutProgram(state)) return false;
 		if (state.writes.length > 0 || state.reads.length > 0) return true;
-		if (this.dag.positionsReadBy(lineNumber).length > 0) return true;
+		if (this.dag.readsAnyPosition(lineNumber)) return true;
 		return withTagEdges(state.text, [], []).reads.length > 0;
 	}
 
@@ -1419,6 +1729,8 @@ export class ThreeTierEvaluator {
 		state.writes = [];
 		this.registerWithTags(lineNumber, [], []);
 		this.engine.undefineUserUnitsFrom(state.lineId);
+		this.engine.undefineMultiWordNamesFrom(state.lineId);
+		this.engine.settleMultiWordNames();
 		this.engine.undefineEquationsFrom(state.lineId);
 		// And its checkpoint, for the same reason Tier 1 drops one for a line
 		// that wrote nothing: a heading defines nothing.
@@ -1459,6 +1771,22 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
+	 * What a line keeps of a failure one of its expressions threw: the code,
+	 * the message, and the span moved into the line's own offsets (see
+	 * `LineDiagnostics`). The engine measures the span against the expression
+	 * alone, so it is shifted by where the expression starts in the line: an
+	 * inline solve's own offset, or a whole-line expression's place in the text.
+	 * Only a failure pays for finding that place.
+	 */
+	private failureOf(thrown: unknown, state: LineState, lineNumber: number, expression: string, index: number, inlineSolveCount: number): LineFailure {
+		const text = state.text.endsWith("\r") ? state.text.slice(0, -1) : state.text;
+		const shift = inlineSolveCount > 0
+			? inlineOffset(findInlineSolvesInLine(text, lineNumber)[index]?.start, text, expression)
+			: expressionOffsetInLine(text, expression);
+		return lineFailureOf(thrown, lineNumber, shift, text.length);
+	}
+
+	/**
 	 * Tier 1: Full pipeline, lex, parse, compile, execute.
 	 * Uses the engine's existing evaluateLine() which handles all pipeline
 	 * stages including DAG updates and LineCache population.
@@ -1489,6 +1817,8 @@ export class ThreeTierEvaluator {
 		// the pass compares the units in scope before and after itself, so
 		// dropping and re-adding the same one invalidates nothing.
 		this.engine.undefineUserUnitsFrom(state.lineId);
+		// A name of several words the same way (#743); the pass settles it.
+		this.engine.undefineMultiWordNamesFrom(state.lineId);
 		// A stored equation the same way: `a * x = 10` stores it again as it
 		// runs, and a line edited into anything else no longer has one (#569).
 		this.engine.undefineEquationsFrom(state.lineId);
@@ -1500,6 +1830,9 @@ export class ThreeTierEvaluator {
 		let hasVariableDef = false;
 		let lastValue: Value | null = null;
 		let firstError: string | null = null;
+		let firstFailure: LineFailure | null = null;
+		/** What each expression threw, parallel to allResults; see LineState.failures. */
+		const failures: (LineFailure | null)[] = [];
 		let anyFailed = false;
 		/** Set when any expression returned a value still waiting on a resolver. */
 		let anyPending = false;
@@ -1525,10 +1858,11 @@ export class ThreeTierEvaluator {
 		// And the names this line writes that its right-hand side reads, for
 		// Tier 2; see {@link selfReadingWrites}.
 		const selfReading: string[] = [];
-		for (const expression of expressions) {
+		for (const [expressionIndex, expression] of expressions.entries()) {
 			if (!expression.trim()) continue;
 
 			let value: Value[] | null = null;
+			let failure: LineFailure | null = null;
 			let entry: { bytecode: BytecodeProgram; readVariables: string[]; writeVariable: string | null } | undefined;
 
 			try {
@@ -1544,8 +1878,11 @@ export class ThreeTierEvaluator {
 				// and getEntryForLine always returns the FIRST entry (Map insertion order).
 				entry = this.engine.getLineCache().get(lineNumber, expression) as typeof entry;
 			} catch (e) {
-				const errorMessage = e instanceof Error ? e.message : String(e);
-				if (!firstError) firstError = errorMessage;
+				failure = this.failureOf(e, state, lineNumber, expression, expressionIndex, inlineSolveCount);
+				if (!firstError) {
+					firstError = failure.message;
+					firstFailure = failure;
+				}
 				anyFailed = true;
 				value = null;
 			}
@@ -1560,11 +1897,16 @@ export class ThreeTierEvaluator {
 
 			if (value) {
 				allResults.push(value);
+				failures.push(null);
 			} else {
 				// Expression failed, push an ErrorValue sentinel so results[] stays
 				// aligned with expressions[] and bytecodes[] indices. Downstream code
 				// checking result.type === Error will find it, vs a raw null that NPEs.
-				allResults.push([errorValue("eval_failed", firstError ?? "unknown error")]);
+				// It carries this expression's own code and message, the ones it
+				// threw, and `failures` records that it threw (#709).
+				const thrown = failure ?? { code: "UNKNOWN_ERROR", message: "An unknown error occurred", span: null };
+				allResults.push([errorValue(thrown.code, thrown.message)]);
+				failures.push(thrown);
 			}
 
 			// Failed means the store never happened, which is a throw (or, below, a
@@ -1640,6 +1982,10 @@ export class ThreeTierEvaluator {
 			}
 		}
 
+		// A name of several words this line let go of and did not define again
+		// is gone now, before any line below compiles against it (#743).
+		this.engine.settleMultiWordNames();
+
 		const reads = [...allReads];
 		const writes = [...allWrites];
 
@@ -1664,6 +2010,7 @@ export class ThreeTierEvaluator {
 			// Also set results for the successful expressions
 			state.results = allResults;
 			state.result = allResults[0]?.[0] ?? null;
+			state.failures = anyFailed ? failures : undefined;
 			state.inlineSolveCount = inlineSolveCount;
 			state.expressions = expressions;
 		} else {
@@ -1712,6 +2059,8 @@ export class ThreeTierEvaluator {
 			result: lastValue,
 			results: allResults,
 			error: firstError,
+			errorCode: firstFailure?.code ?? null,
+			errorSpan: firstFailure?.span ?? null,
 		};
 	}
 
@@ -1736,6 +2085,9 @@ export class ThreeTierEvaluator {
 		const results: Value[][] = [];
 		let lastValue: Value | null = null;
 		let firstError: string | null = null;
+		let firstFailure: LineFailure | null = null;
+		/** What each program threw, parallel to results; see LineState.failures. */
+		const failures: (LineFailure | null)[] = [];
 		let anyFailed = false;
 
 		// Execute each bytecode independently, a failure in one should not
@@ -1781,13 +2133,19 @@ export class ThreeTierEvaluator {
 				const value = this.engine.executeCached(bytecode, lineNumber);
 				lastValue = value;
 				results.push([value]);
+				failures.push(null);
 			} catch (e) {
-				const errorMessage = e instanceof Error ? e.message : String(e);
-				if (!firstError) firstError = errorMessage;
+				const failure = this.failureOf(e, state, lineNumber, state.expressions[i] ?? "", i, state.inlineSolveCount);
+				if (!firstError) {
+					firstError = failure.message;
+					firstFailure = failure;
+				}
 				anyFailed = true;
 				failed = true;
-				// Push error sentinel to maintain results[i] ↔ bytecodes[i] alignment
-				results.push([errorValue("exec_failed", errorMessage)]);
+				// Push error sentinel to maintain results[i] ↔ bytecodes[i] alignment,
+				// with the code the program threw rather than one of its own (#709).
+				results.push([errorValue(failure.code, failure.message)]);
+				failures.push(failure);
 			}
 			for (const written of writtenHere) {
 				if (failed && !definedEarlierOnThisLine.has(written)) this.engine.restoreToPrefix(written, lineNumber);
@@ -1816,6 +2174,7 @@ export class ThreeTierEvaluator {
 		if (results.length > 0) {
 			state.results = results;
 			state.result = results[0][0] ?? null;
+			state.failures = anyFailed ? failures : undefined;
 		} else if (state.result !== null && isArenaActive()) {
 			// Kept by value, not by reference.
 			//
@@ -1855,6 +2214,8 @@ export class ThreeTierEvaluator {
 			result: results.length > 0 ? lastValue : state.result,
 			results: results.length > 0 ? results : state.results,
 			error: firstError,
+			errorCode: firstFailure?.code ?? null,
+			errorSpan: firstFailure?.span ?? null,
 		};
 	}
 
@@ -1882,6 +2243,7 @@ export class ThreeTierEvaluator {
 		let hasVariableDef = false;
 		let lastResult: Value | null = null;
 		let firstError: string | null = null;
+		let firstFailure: LineFailure | null = null;
 		let anyFailed = false;
 		/** Set when a result is still waiting on a resolver. */
 		let anyPending = false;
@@ -1903,15 +2265,17 @@ export class ThreeTierEvaluator {
 		// Compile each expression independently, a parse error in one
 		// should not prevent other expressions from being compiled and
 		// having their reads/writes registered in the DAG.
-		for (const expression of expressions) {
+		for (const [expressionIndex, expression] of expressions.entries()) {
 			if (!expression.trim()) continue;
 
 			let compiled: { program: BytecodeProgram; reads: string[]; writes: string[] };
 			try {
 				compiled = this.engine.compileExpression(expression, lineNumber);
 			} catch (e) {
-				const errorMessage = e instanceof Error ? e.message : String(e);
-				if (!firstError) firstError = errorMessage;
+				if (!firstError) {
+					firstFailure = this.failureOf(e, state, lineNumber, expression, expressionIndex, inlineSolveCount);
+					firstError = firstFailure.message;
+				}
 				anyFailed = true;
 				// Push empty bytecode placeholder for alignment
 				allBytecodes.push({ opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false });
@@ -1949,8 +2313,10 @@ export class ThreeTierEvaluator {
 					}
 					for (const w of writes) definedEarlierOnThisLine.add(w);
 				} catch (e) {
-					const errorMessage = e instanceof Error ? e.message : String(e);
-					if (!firstError) firstError = errorMessage;
+					if (!firstError) {
+						firstFailure = this.failureOf(e, state, lineNumber, expression, expressionIndex, inlineSolveCount);
+						firstError = firstFailure.message;
+					}
 					anyFailed = true;
 					// A definition that threw stored nothing; see Tier 1.
 					for (const w of writes) {
@@ -2013,7 +2379,15 @@ export class ThreeTierEvaluator {
 			this.checkpointer.dropCheckpointAt(lineNumber);
 		}
 
-		return { ...baseResult, tier: EvalTier.Tier3, result: lastResult, results: hasVariableDef && lastResult && !anyFailed && !anyPending ? [[lastResult]] : undefined, error: firstError };
+		return {
+			...baseResult,
+			tier: EvalTier.Tier3,
+			result: lastResult,
+			results: hasVariableDef && lastResult && !anyFailed && !anyPending ? [[lastResult]] : undefined,
+			error: firstError,
+			errorCode: firstFailure?.code ?? null,
+			errorSpan: firstFailure?.span ?? null,
+		};
 	}
 
 	// ── Public checkpoint API (used by Phase 5.2e setViewport) ──────
@@ -2171,4 +2545,37 @@ export class ThreeTierEvaluator {
 		const content = state.text.slice(contentOffset).trim();
 		return { expressions: content.length > 0 ? [content] : [], inlineSolveCount: 0 };
 	}
+}
+
+/**
+ * The line-by-line edits a transaction amounts to when it moves no line, or
+ * null when it has to take the structural path.
+ *
+ * A change moves no line when it deletes exactly as many lines as it inserts,
+ * all of them inside the document, from a whole-number first line. One change
+ * that does not qualify sends the whole transaction down the structural path,
+ * which is correct for any shape. The edits come back in the order the
+ * structural path would apply them (highest first line first), so two changes
+ * that overlap, which the contract forbids, still end with the same text.
+ * A change of nothing (`deleteCount: 0` and no lines) contributes nothing.
+ *
+ * @param changes - The transaction, as a host sent it.
+ * @param lineCount - How many lines the document holds before it.
+ * @returns `[lineNumber, text]` pairs, or null.
+ */
+export function inPlaceEdits(changes: readonly LineChange[], lineCount: number): [number, string][] | null {
+	const edits: [number, string][] = [];
+	const sorted = [...changes].sort((a, b) => b.startLine - a.startLine);
+	for (const change of sorted) {
+		const { startLine, deleteCount, insertLines } = change;
+		if (!Array.isArray(insertLines) || deleteCount !== insertLines.length) return null;
+		if (deleteCount === 0) continue;
+		if (!Number.isSafeInteger(startLine) || startLine < 1 || startLine + deleteCount - 1 > lineCount) return null;
+		for (let i = 0; i < deleteCount; i++) {
+			const text = insertLines[i];
+			if (typeof text !== "string") return null;
+			edits.push([startLine + i, text]);
+		}
+	}
+	return edits;
 }

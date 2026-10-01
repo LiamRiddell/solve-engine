@@ -114,7 +114,7 @@ describe("what the scalar-equation match must NOT swallow", () => {
 		// behaviour, which is not this feature's business.
 		const engine = newTrackedEngine();
 		try {
-			expect(() => engine.evaluateLine(1, "2+2 = 4")).toThrow(/Unexpected token/);
+			expect(() => engine.evaluateLine(1, "2+2 = 4")).toThrow(/Expected an operator or the end of the line/);
 		} finally {
 			engine.clear();
 		}
@@ -126,12 +126,13 @@ describe("what the scalar-equation match must NOT swallow", () => {
 	});
 
 	test("two unknowns decline rather than guessing which to solve for", () => {
-		// Declining means falling through to the pre-existing parse error, not
-		// picking one of the two names arbitrarily. `solve(x+y=5, x)` remains
-		// the way to say which unknown is meant.
+		// Declining means refusing the line, not picking one of the two names
+		// arbitrarily. It used to fall through to the parse error at the `=`;
+		// it is now refused by name, pointing at `solve(x+y = 5, x)` as the
+		// way to say which unknown is meant (FoundBug_equationWithSeveralUnknowns).
 		const engine = newTrackedEngine();
 		try {
-			expect(() => engine.evaluateLine(1, "x+y = 5")).toThrow(/Unexpected token/);
+			expect(() => engine.evaluateLine(1, "x+y = 5")).toThrow(/^This equation has 2 unknowns, x and y, .* as in solve\(x\+y = 5, x\)\.$/);
 		} finally {
 			engine.clear();
 		}

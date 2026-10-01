@@ -1,5 +1,7 @@
-import { Value, ValueType, stringValue } from "@solve-js/vm/Value";
+import { Value, ValueType, stringValue, isTimecodeUnit, timecodeFps } from "@solve-js/vm/Value";
+import { timecodeSeconds } from "./timecode/TimecodeMath";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+import { nonFiniteText } from "@solve-js/utilities/Number";
 
 /**
  * `as timespan` and `as laptime`, the two ways of writing a duration out.
@@ -40,6 +42,11 @@ const TIMESPAN_PARTS: readonly (readonly [singular: string, plural: string, seco
 function durationSeconds(value: Value): number | null {
 	if (value.type === ValueType.Number) return value.toNumber();
 	if (value.type !== ValueType.Uom || value.unit === undefined) return null;
+	// A timecode is a length of time too, its frames over its rate (#759): it
+	// was refused here under its internal unit name, `got timecode@30`.
+	// Read into a boolean first: the guard narrows the unit to never on its false branch.
+	const timecode: boolean = isTimecodeUnit(value.unit);
+	if (timecode) return timecodeSeconds(value.toNumber(), timecodeFps(value.unit));
 	const entry = UNIT_TABLE[value.unit.toLowerCase()] as readonly [number, number] | undefined;
 	if (entry === undefined || entry[0] !== TIME_KIND) return null;
 	return value.toNumber() * entry[1];
@@ -58,6 +65,10 @@ export function toTimespanString(value: Value): Value {
 	if (total === null) {
 		return stringValue(`"as timespan" needs a duration, got ${value.unit ?? "a non-duration"}`);
 	}
+	// An infinite span has no weeks and days to count out: the loop below
+	// would write `Infinity weeks`.
+	const infinite = nonFiniteText(total);
+	if (infinite !== undefined) return stringValue(`${infinite} seconds`);
 
 	const negative = total < 0;
 	let remaining = Math.abs(total);

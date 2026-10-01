@@ -78,3 +78,38 @@ in for the number.
 490 rounded to nearest hundred // 500
 21 rounded up to nearest 5 // 25
 ```
+
+## Rounding a list
+
+A list, such as `[0.001, 0.006]` or what `map` gives back, holds several
+numbers, and rounding it rounds each one on its own. The list keeps its length,
+its order and its unit, and each number in it is rounded and shown as the same
+number would be on a line of its own, trailing zeros and all. Every form on this
+page works this way, and so do `ceil`, `floor` and `int`.
+
+```solve
+[0.001, 0.006] to 4 dp // [0.0010, 0.0060]
+map(x/1000, 1:3) to 4 dp // [0.0010, 0.0020, 0.0030]
+round([1.5, 2.4]) // [2, 2]
+[1.005, 2.675] to 2 dp // [1.01, 2.68]
+[1234, 0.5] to 2 sf // [1,200, 0.50]
+[12, 37] to nearest 10 // [10, 40]
+[1 km, 2.345 km] to 1 dp // [1.0 km, 2.3 km]
+```
+
+A list has no single number, and these used to read it as 0 and answer one
+zero: `[0.001, 0.006] to 4 dp` was `0.0000`. A number in a list is rounded from
+the decimal it is written as, so `1.005` in a list goes up to 1.01 as it does on
+its own.
+
+The boundary: a conversion that writes a value as one number, in scientific
+notation, as a fraction or a percentage, in hex, binary or octal, or `as number`,
+has no list form, since the text it writes is one number. Each refuses a list by
+name rather than answer for a 0 it read in its place; convert one value at a
+time. A list of `true` and `false` has nothing to round, and is refused too.
+
+```solve
+[1234, 5678] as sci // A list cannot be written in scientific notation: it holds several numbers, not one. Convert one value at a time.
+[0.5, 0.25] as % // A list cannot be written as a percentage: it holds several numbers, not one. Convert one value at a time.
+[true, false] to 2 dp // A list can be rounded only when every cell is a number: this one holds a true or false.
+```

@@ -16,8 +16,9 @@
 			"@solve-js/*": ["./src/*"]
 		},
 		// Declared explicitly rather than left to automatic @types discovery.
-		// tsc walks up from this directory and finds @types/node hoisted at the
-		// workspace root; tsgo does not, and reported every use of `process` and
+		// TypeScript 5.9's tsc walks up from this directory and finds @types/node
+		// hoisted at the workspace root; TypeScript 7's tsc (`npm run typecheck`)
+		// does not, and reports every use of `process` and
 		// `Error.captureStackTrace` as an error. Naming the one @types package
 		// this source actually needs makes both compilers agree, and makes the
 		// dependency visible instead of implied by hoisting.

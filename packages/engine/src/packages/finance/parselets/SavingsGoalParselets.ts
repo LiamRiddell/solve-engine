@@ -83,7 +83,7 @@ export class SavingsDurationParselet implements PrefixParselet {
 }
 
 /**
- * `how much per month to save|reach <target> in <duration> [at <rate>]`,
+ * `how much per month to save|reach <target> in|over <duration> [at <rate>]`,
  * answering the level monthly contribution. The target parses at Conditional and
  * `in` is consumed here, so the currency-conversion `in` infix never fires, the
  * same guard PresentValueParselet uses.
@@ -98,7 +98,15 @@ export class SavingsContributionParselet implements PrefixParselet {
     // otherwise be swallowed by the currency package's conversion parselet, the
     // same guard InflationFutureValueParselet draws.
     parser.parseExpression(BindingPower.Product, builder); // target
-    parser.consume("IN");
+    // `in 2 years` or `over 2 years`: both name the time the saving runs for.
+    if (!parser.match("IN") && !parser.match("OVER")) {
+      const found = parser.peek();
+      throw ErrorFactory.parsing(
+        "SAVINGS_GOAL_SYNTAX",
+        `Expected "in" or "over" and a duration after the target, as in "how much per month to reach $10,000 in 2 years", but found ${found ? `"${found.value}"` : "the end of the line"}.`,
+        { found: found?.type ?? "end of input" },
+      );
+    }
     parser.parseExpression(BindingPower.Conditional, builder); // duration (months/years)
     // An optional trailing "at <rate>", else a zero rate.
     if (parser.match("RATE_AT") || parser.match("AT")) {

@@ -39,6 +39,7 @@ import { applyTextEdits, type LineShift } from "@solve-js/language/DocumentRefer
 import { ValueType } from "@solve-js/vm/Value";
 import type { ParsingResult } from "@solve-js/types/ParsingResult";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { createLinkedTransports, createWorkerEngine, serializeParsingResult, startWorkerRuntime, type WorkerEngine } from "@solve-js/worker";
 
 /** The formatted result of each line, or `ERROR: <message>` where a line failed, from a document result. */
 function readLines(result: ParsingResult): string[] {
@@ -140,6 +141,57 @@ function expectNeedsDocument(expr: string): void {
   expect(type).toBe(ValueType.Error);
   expect(message.toLowerCase()).toContain("document");
 }
+
+describe("ans and prev inside a stored equation across entry points", () => {
+  // The equation's sides are run as the line that stored it, so ans and prev
+  // read the answer above the equation, not the line above the arrow
+  // (FoundBug_lineReadInAnEquation).
+  const doc = ["5", "x + ans = 7", "100", "x =>"];
+  const stored = 'x stored as an equation: solve with "x =>"';
+
+  test("both document passes solve with the line above the equation, and agree", () => {
+    expect(batch(doc)).toEqual(["5", stored, "100", "2"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+    const withPrev = ["5", "x + prev = 7", "x =>"];
+    expect(batch(withPrev)).toEqual(["5", stored, "2"]);
+    expect(incremental(withPrev)).toEqual(batch(withPrev));
+  });
+
+  test("an edit to the line above the equation re-solves it, and a fresh batch pass agrees", () => {
+    const { shown, edited } = editThenEvaluate(["5", "x + ans = 7", "x =>"], [[1, "6"]]);
+    expect(shown).toEqual(["6", stored, "1"]);
+    expect(batch(edited)).toEqual(shown);
+  });
+
+  test("the single-line path refuses the equation as needing a document", () => {
+    expectNeedsDocument("x + ans = 7");
+    expectNeedsDocument("x + prev = 7");
+  });
+});
+
+describe("a line read inside a held expression across entry points", () => {
+  // A map, sum, plot or algebra verb works its expression out away from the
+  // line, so a line read inside one is refused for that, the same in every
+  // path, and naming the value first is the way to write it
+  // (FoundBug_heldExpressionReadsLines).
+  const refusal = "map's expression reads other lines of the document, and it is worked out away from the line, where there are no lines to read: give the line's value a name first, as in p = prev, and use p in the expression";
+  const doc = ["5", "map(x + prev, 1:3)", "p = 5", "map(x + p, 1:3)"];
+
+  test("both document passes refuse it by name and answer the named form, and agree", () => {
+    expect(batch(doc)).toEqual(["5", `ERROR: ${refusal}`, "5", "[6, 7, 8]"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an edit that names the value answers it, and a fresh batch pass agrees", () => {
+    const { shown, edited } = editThenEvaluate(["5", "map(x + prev, 1:3)"], [[2, "map(x + 5, 1:3)"]]);
+    expect(shown).toEqual(["5", "[6, 7, 8]"]);
+    expect(batch(edited)).toEqual(shown);
+  });
+
+  test("the single-line path refuses it in the same words, as it refuses any line it cannot read", () => {
+    expect(single("map(x + prev, 1:3)")).toEqual({ threw: true, type: null, message: refusal });
+  });
+});
 
 describe("category tags across entry points", () => {
   const totalDoc = ["40 #grocery", "20 #grocery", "total of #grocery"];
@@ -395,6 +447,21 @@ describe("line references across entry points", () => {
     expect(incremental(doc).slice(2)).toEqual(["0.30", "true", "true", "true"]);
   });
 
+  test("a number written in a base is a figure in a column, through every span form, both passes (FoundBug_baseValueInAColumn)", () => {
+    const doc = ["255 in hex", "0b1010 as binary", "5", "total above", "average(line 1 : line 3)", "sum(line 1 : line 3) in hex", "max above"];
+    const expected = ["0xFF", "0b1010", "5", "270", "90", "0x10E", "255"];
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(batch(doc));
+    const big = ["(2^100 + 1) in hex", "1", "total above"];
+    // A column total reads a whole number past 2^53 as the plain number's own column does.
+    expect(batch(big)[2]).toBe(batch(["2^100 + 1", "1", "total above"])[2]);
+    expect(incremental(big)).toEqual(batch(big));
+    const tagged = ["255 in hex #dev", "10 #dev", "total of #dev"];
+    expect(batch(tagged)[2]).toBe("265");
+    expect(incremental(tagged)).toEqual(batch(tagged));
+    expectNeedsDocument("255 in hex + total above");
+  });
+
   test("the single-expression path refuses with a document error", () => {
     expectNeedsDocument("prev");
     expectNeedsDocument("ans * 2");
@@ -634,6 +701,23 @@ describe("goal seek across entry points", () => {
     expect(incremental(doc)[3]).toBe("170,507.23");
   });
 
+  // The answer carries the unit the unknown has in the note (#835): a price in
+  // pounds is solved as pounds, through either mechanism, and a target in
+  // another unit of the line's measure is read in the line's unit first.
+  test("an unknown in money or a unit is answered in it, through the incremental pass only (#835)", () => {
+    const money = [":price = £200", ":qty = 3", "price * qty", "solve line 3 for price = £1,500"];
+    expect(incremental(money)[3]).toBe("£500.00");
+    const searched = [":deposit = £100000", ":rate = 4%", "monthly repayment on deposit over 25 years at rate", "solve line 3 for deposit = £900"];
+    expect(incremental(searched)[3]).toBe("£170,507.23");
+    const length = [":d = 5 km", "d * 2", "solve line 2 for d = 3000 m"];
+    expect(incremental(length)[2]).toBe("1.50 km");
+    // The lines both passes evaluate agree; the seek itself is refused by the
+    // batch pass, and by the single line, as every goal seek is.
+    expect(batch(money).slice(0, 3)).toEqual(incremental(money).slice(0, 3));
+    expect(batch(money)[3].toLowerCase()).toContain("document");
+    expectNeedsDocument("solve line 3 for price = £1,500");
+  });
+
   test("the batch pass refuses goal seek, since it cannot re-run a line", () => {
     // The one form the two document passes disagree on, and deliberately: the
     // batch pass has no document to solve against, so it errors rather than
@@ -663,6 +747,64 @@ describe("goal seek across entry points", () => {
     expect(refused[3]).toBe(out[3]);
     expect(refused[4].toLowerCase()).toContain("document");
     expectNeedsDocument("solve line 1 for k = 5");
+  });
+
+  // Both signs, a sample that is not finite as a gap, every crossing, and a
+  // stated range (#739). The incremental pass solves each; the batch pass and
+  // the single line refuse, as every goal seek is refused there.
+  test("both signs and a stated range, through the incremental pass only (#739)", () => {
+    const negative = ["x = 1", "x + sin(x)", "solve line 2 for x = -2"];
+    expect(incremental(negative)[2]).toBe("-1.11");
+    const power = ["x = 1", "2^x", "solve line 2 for x = 4", "solve line 2 for x = 0.25"];
+    expect(incremental(power).slice(2)).toEqual(["2", "-2"]);
+    const both = ["x = 1", "x^2", "solve line 2 for x = 4", "solve line 2 for x = 4 between 0 and 10"];
+    expect(incremental(both).slice(2)).toEqual(["[-2, 2]", "2"]);
+    for (const doc of [negative, power, both]) {
+      expect(batch(doc).slice(0, 2)).toEqual(incremental(doc).slice(0, 2));
+      for (const line of batch(doc).slice(2)) expect(line.toLowerCase()).toContain("document");
+    }
+    expectNeedsDocument("solve line 2 for x = 4 between 0 and 10");
+  });
+
+  // A rate held as a percentage is solved as one, and a goal seek on a line a
+  // what-if re-runs names the what-if as the reason it cannot answer there,
+  // through both document passes alike (FoundBug_goalSeekLoanRefusals,
+  // FoundBug_goalSeekRefusalNamesWhereItIs).
+  test("a percentage unknown, and a goal seek inside a what-if, across entry points", () => {
+    const rate = [":deposit = 100000", ":rate = 4%", "monthly repayment on deposit over 25 years at rate", "solve line 3 for rate = 600"];
+    expect(incremental(rate)[3]).toBe("5.26%");
+    expect(batch(rate).slice(0, 3)).toEqual(incremental(rate).slice(0, 3));
+    expect(batch(rate)[3].toLowerCase()).toContain("batch pass");
+    expectNeedsDocument("solve line 3 for rate = 600");
+    const whatIf = ["x = 5", "x * 2", "y = solve line 2 for x = 3", "line 3 with x = 4"];
+    const refusal = "ERROR: Goal seek cannot run inside a what-if: the what-if works each line of its scenario out once, and a goal seek re-runs another line many times. Solve the line outside the what-if.";
+    expect(incremental(whatIf)[3]).toBe(refusal);
+    expect(batch(whatIf)[3]).toBe(refusal);
+    expectNeedsDocument("line 3 with x = 4");
+  });
+});
+
+describe("a formula stored before its unknown had a value, across entry points (#732)", () => {
+  // `y = x + 1` above `x = 5` stores the formula; a line below both reads it
+  // with the value x now has. Both document passes agree value for value. A
+  // single line has no later definition to read, so it keeps the formula.
+  test("both document passes read the formula with the later value", () => {
+    const doc = ["y = x + 1", "x = 5", "y + x", "z = y * 2", "z"];
+    expect(batch(doc)).toEqual(["x+1", "5", "11", "12", "12"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("a value the formula cannot take is refused by name in both passes", () => {
+    const doc = ["y = x + 1", "x = $5", "y + x"];
+    expect(batch(doc)[2]).toBe("ERROR: y was written as a formula in x before x had a value, and x now holds money, which the formula cannot take. Define x above the line that defines y.");
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("the single-expression path keeps the formula, with no later line to read", () => {
+    const { threw, type, message } = single("y = x + 1");
+    expect(threw).toBe(false);
+    expect(type).toBe(ValueType.Symbolic);
+    expect(message).toBe("x+1");
   });
 });
 
@@ -822,7 +964,7 @@ describe("=> lines and equation solves across entry points (#565)", () => {
 
   test("both document passes agree on a document of => lines and solves", () => {
     const doc = [":a = 2", "a + 1 =>", "a * x = 10", "x =>", "line 1 * 2 =>", "expand((x + a)^2)"];
-    expect(batch(doc)).toEqual(["2", "3", 'x stored as an equation — solve with "x =>"', "5", "4", "x^2+4x+4"]);
+    expect(batch(doc)).toEqual(["2", "3", 'x stored as an equation: solve with "x =>"', "5", "4", "x^2+4x+4"]);
     expect(incremental(doc)).toEqual(batch(doc));
   });
 
@@ -912,6 +1054,48 @@ describe("what-if and sweeps across entry points", () => {
   test("the single-expression path refuses with a document error", () => {
     expectNeedsDocument("line 4 with deposit = 150000");
     expectNeedsDocument("line 4 for rate from 3% to 6% step 1%");
+  });
+});
+
+describe("named scenarios and date sweeps across entry points (#744)", () => {
+  const shop = ["price = $100", "qty = 3", "price * qty", "scenario bull with price = $120, qty = 5", "line 3 under bull"];
+  const dates = ["start = 2026-01-01", "finish = 2026-12-31", "working days between start and finish", "line 3 for start from 2026-01-01 to 2026-04-01 step 1 month"];
+
+  test("both document passes read the scenario and step the dates, and agree value for value", () => {
+    const fromBatch = batch(shop);
+    expect(fromBatch.slice(3)).toEqual(["bull: price = $120.00, qty = 5", "$600.00"]);
+    expect(incremental(shop)).toEqual(fromBatch);
+    expect(batch(dates)[3]).toBe("[261, 239, 219, 197]");
+    expect(incremental(dates)).toEqual(batch(dates));
+  });
+
+  test("an edit to the declaration reaches the reader in a live editor", () => {
+    const { shown, edited } = editThenEvaluate(shop, [[4, "scenario bull with price = $150, qty = 5"]]);
+    expect(shown[4]).toBe("$750.00");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("an inserted line moves the scenario's target with the line it meant", () => {
+    const service = new LanguageService(newTrackedEngine());
+    const changed = ["", ...shop];
+    const result = service.shiftLineReferences(changed.join("\n"), { kind: "insert", line: 1, count: 1 });
+    if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+    const after = applyTextEdits(changed.join("\n"), result.edits).split("\n");
+    expect(after[5]).toBe("line 4 under bull");
+    expect(batch(after)[5]).toBe("$600.00");
+  });
+
+  test("a refusal is the same named error through both passes", () => {
+    const refused = [...shop.slice(0, 3), "line 3 under nope", "line 3 for price from 2026-01-01 to 2026-02-01 step 1 day"];
+    const fromBatch = batch(refused);
+    expect(fromBatch[3]).toMatch(/^ERROR: No line above this one declares a scenario named nope/);
+    expect(fromBatch[4]).toMatch(/^ERROR: /);
+    expect(incremental(refused)).toEqual(fromBatch);
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument("line 3 under bull");
+    expectNeedsDocument("line 3 for start from 2026-01-01 to 2026-04-01 step 1 month");
   });
 });
 
@@ -1016,7 +1200,7 @@ describe("a variable named like a unit, after a slash (#642)", () => {
 
   test("a unit written before the slash keeps the rate, both passes", () => {
     const doc = ["h = 4", "$15 / h", "60 km / h", "100 per h"];
-    expect(batch(doc)).toEqual(["4", "15.00 USD/h", "60.00 km/h", "100.00 /h"]);
+    expect(batch(doc)).toEqual(["4", "$15.00/h", "60.00 km/h", "100.00 /h"]);
     expect(incremental(doc)).toEqual(batch(doc));
   });
 
@@ -1153,5 +1337,687 @@ describe("the other questions of the block above, across entry points (#703)", (
 
   test("the single-expression path has no block, and says so", () => {
     for (const form of forms) expectNeedsDocument(form);
+  });
+});
+
+describe("a failed line's shape across entry points (#709)", () => {
+  // `readLines` above folds a thrown failure and a returned one into the same
+  // `ERROR:` text, which is why the two passes could disagree about where a
+  // failure goes without this file noticing. This reader keeps them apart, and
+  // reads the code, the span, the inline solves and the flat `errors` list.
+  type Shape = {
+    error: string | null;
+    code: string | null;
+    span: unknown;
+    result: string | null;
+    solves: { error: string | null; code: string | null; span: unknown; result: string | null }[];
+  };
+  const valueOf = (value: { type: ValueType; value: unknown } | null | undefined): string | null =>
+    value ? (value.type === ValueType.Error ? `error value ${String(value.value)}` : "value") : null;
+  function shapes(result: ParsingResult): { lines: Shape[]; errors: string[] } {
+    return {
+      lines: result.lines.map((line) => ({
+        error: line.error,
+        code: line.errorCode ?? null,
+        span: line.errorSpan ?? null,
+        result: valueOf(line.result),
+        solves: line.inlineSolves.map((solve) => ({
+          error: solve.error ?? null,
+          code: solve.errorCode ?? null,
+          span: solve.errorSpan ?? null,
+          result: valueOf(solve.result),
+        })),
+      })),
+      errors: result.errors,
+    };
+  }
+  const both = (doc: string[]) => {
+    const text = doc.join("\n");
+    const batchShape = shapes(newTrackedEngine().parseDocument(text, { inputType: "markdown" }));
+    const incrementalShape = shapes(evaluateDocument(newTrackedEngine(), text, { inputType: "markdown" }));
+    return { batchShape, incrementalShape };
+  };
+
+  const DOC = ["3 + * 4", "5 kg + 3 m", "price * 2", "sqrt(-1 m)", "total is s`2 +` and s`5 kg + 3 m`"];
+
+  test("both passes give every line the same shape, value for value", () => {
+    const { batchShape, incrementalShape } = both(DOC);
+    expect(incrementalShape).toEqual(batchShape);
+  });
+
+  test("a thrown failure keeps its code and its span in the line, with no result", () => {
+    const { batchShape } = both(DOC);
+    expect(batchShape.lines[0]).toEqual({
+      error: 'Expected a value after "+", but found "*"',
+      code: "NO_PREFIX_PARSELET",
+      span: { start: 4, end: 5, line: 1, col: 5 },
+      result: null,
+      solves: [],
+    });
+    // Raised with no position even through evaluateExpression, so none is invented.
+    expect(batchShape.lines[2]).toMatchObject({ error: "Undefined variable: price", code: "UNDEFINED_VARIABLE", span: null, result: null });
+  });
+
+  test("a returned failure stays an error value in result, with no error", () => {
+    const { batchShape } = both(DOC);
+    expect(batchShape.lines[1]).toMatchObject({ error: null, code: null, result: "error value INCOMPATIBLE_UNITS" });
+    expect(batchShape.lines[3]).toMatchObject({ error: null, code: null, result: "error value UNIT_ROOT_UNSUPPORTED" });
+  });
+
+  test("an inline solve that throws, beside one that returns an error, each in its own place", () => {
+    const { batchShape } = both(DOC);
+    expect(batchShape.lines[4].solves).toEqual([
+      // The span is in the line's own terms: `2 +` starts at offset 11.
+      { error: 'The line ends after "+", where a value was expected', code: "UNEXPECTED_END_OF_INPUT", span: { start: 14, end: 14, line: 5, col: 15 }, result: null },
+      { error: null, code: null, span: null, result: "error value INCOMPATIBLE_UNITS" },
+    ]);
+  });
+
+  test("the flat errors list names every failure, thrown and returned, in both passes", () => {
+    const { batchShape } = both(DOC);
+    expect(batchShape.errors).toEqual([
+      'Line 1: Expected a value after "+", but found "*"',
+      "Line 2: mass and length cannot be added",
+      "Line 3: Undefined variable: price",
+      "Line 4: sqrt: a quantity in m has no square root with a unit; only an area has a length as its root.",
+      'Line 5: The line ends after "+", where a value was expected',
+      "Line 5: mass and length cannot be added",
+    ]);
+  });
+
+  test("a line the tokeniser refuses carries its code and span through both passes", () => {
+    const { batchShape, incrementalShape } = both(["1 + 1", 'x = "unterminated']);
+    expect(incrementalShape).toEqual(batchShape);
+    expect(batchShape.lines[1]).toMatchObject({ code: "UNTERMINATED_STRING", result: null });
+    expect(batchShape.lines[1].error).toMatch(/^Unterminated string literal/);
+  });
+
+  test("a live editor's line result carries the same code and span", () => {
+    const engine = newTrackedEngine();
+    const doc = new DocumentModel();
+    doc.setDocument(DOC.join("\n"));
+    const evaluator = new ThreeTierEvaluator(doc, engine);
+    try {
+      const lines = evaluator.evaluate({ startLine: 1, endLine: DOC.length }).lines;
+      const first = lines.find((line) => line.lineNumber === 1)!;
+      expect({ code: first.errorCode, span: first.errorSpan }).toEqual({ code: "NO_PREFIX_PARSELET", span: { start: 4, end: 5, line: 1, col: 5 } });
+      const third = lines.find((line) => line.lineNumber === 3)!;
+      expect({ code: third.errorCode, span: third.errorSpan }).toEqual({ code: "UNDEFINED_VARIABLE", span: null });
+    } finally {
+      evaluator.terminateWorker();
+    }
+  });
+
+  test("the single-expression path throws the same code and span the document line carries", () => {
+    try {
+      newTrackedEngine().evaluateExpression("3 + * 4");
+      throw new Error("expected a throw");
+    } catch (error) {
+      expect({ code: (error as { code?: string }).code, span: (error as { span?: unknown }).span }).toEqual({ code: "NO_PREFIX_PARSELET", span: { start: 4, end: 5, line: 1, col: 5 } });
+    }
+  });
+});
+
+/** A live evaluator's answers after `passes` passes over the text, as an editor settles it. */
+function afterPasses(lines: string[], passes: number): string[] {
+  const doc = new DocumentModel();
+  doc.setDocument(lines.join("\n"));
+  const evaluator = new ThreeTierEvaluator(doc, newTrackedEngine());
+  try {
+    let shown: string[] = [];
+    for (let pass = 0; pass < passes; pass++) shown = evaluator.evaluate({ startLine: 1, endLine: doc.lineCount }).lines.map(readEvalLine);
+    return shown;
+  } finally {
+    evaluator.terminateWorker();
+  }
+}
+
+describe("a reference to a line further down, across entry points and passes", () => {
+  // A note is read from the top, so a line below has not been evaluated from
+  // where the reader stands. The batch pass refused it, and so did the first
+  // incremental pass; from the second on, the incremental path read the answer
+  // the previous pass had left the line below, so a live editor showed 10 and
+  // 11 where parseDocument refused both lines. It is refused on every pass now.
+  const reported = ["a = line 3 * 2", "a + 1", "5"];
+  const refusal = "ERROR: Line 3 has not been evaluated yet (forward reference, or out of range)";
+
+  test("the reported document: the forward reference and the line reading it are refused", () => {
+    expect(batch(reported)).toEqual([refusal, refusal, "5"]);
+  });
+
+  test("the incremental pass agrees, on the first pass and on every later one", () => {
+    expect(incremental(reported)).toEqual(batch(reported));
+    for (const passes of [1, 2, 3, 5]) expect(afterPasses(reported, passes)).toEqual(batch(reported));
+  });
+
+  test.each([
+    [["line 2 + 1", "7"]],
+    [["sum(line 2 : line 3)", "1", "2"]],
+    [["total of #a", "1 #a", "2 #a"]],
+    [["total by tag", "1 #a", "2 #b"]],
+    [['total of section "Costs"', "# Costs", "1", "2"]],
+    [["x = 3", "solve line 3 for x = 10", "x * 2"]],
+    [["inputs of line 2", "5"]],
+  ])("every form that reads a line below refuses it through every path: %j", (lines) => {
+    const settled = afterPasses(lines, 3);
+    expect(afterPasses(lines, 1)).toEqual(settled);
+    expect(incremental(lines)).toEqual(settled);
+    // The batch pass refuses goal seek outright; every other form it answers the same.
+    if (!lines.some((line) => line.startsWith("solve"))) expect(batch(lines)).toEqual(settled);
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument("line 3 * 2");
+    expectNeedsDocument("a = line 3 * 2");
+  });
+});
+
+describe("a name defined below the line that reads it, across entry points and passes", () => {
+  // The name form of the forward reference above: a note read from the top has
+  // not defined `x` where `x * 2` stands above `x = 5`. The batch pass and the
+  // first incremental pass said so; from the second pass on a live editor read
+  // the value the last pass left in the VM and answered 10. Each line now reads
+  // the VM as a pass from the top leaves it at that line.
+  test.each([
+    [["x * 2", "x = 5"]],
+    [["x + 1", ":x = 5"]],
+    [["f(2)", "f(x) = x + 1"]],
+    [["y = x + 1", "x = 5", "y + x"]],
+    [[":x = 1", "x + 100", ":x = 99", "x + 100"]],
+  ])("%j: every pass of a live editor agrees with both document passes", (lines) => {
+    const settled = batch(lines);
+    expect(incremental(lines)).toEqual(settled);
+    for (const passes of [1, 2, 3]) expect(afterPasses(lines, passes)).toEqual(settled);
+  });
+
+  test("the single-expression path reads only the names it was given", () => {
+    const { threw, message } = single("x * 2");
+    expect(threw).toBe(true);
+    expect(message).toBe("Undefined variable: x");
+  });
+});
+
+describe("a viewport starting below line 1, across entry points", () => {
+  // The dirty lines above such a viewport were compiled without running, so a
+  // positional reader in view had nothing to read: `prev + 1` answered "Line 2
+  // has not been evaluated yet" where parseDocument answers 21. They run now.
+  const note = ["10", "20", "prev + 1", "line 1 * 3", "total above"];
+
+  test("the batch pass, the incremental pass and a first evaluate of lines 3 to 5 agree", () => {
+    const settled = batch(note);
+    expect(settled).toEqual(["10", "20", "21", "30", "81"]);
+    expect(incremental(note)).toEqual(settled);
+    const doc = new DocumentModel();
+    doc.setDocument(note.join("\n"));
+    const evaluator = new ThreeTierEvaluator(doc, newTrackedEngine());
+    try {
+      const view = evaluator.evaluate({ startLine: 3, endLine: 5 });
+      expect(view.lines.slice(2).map(readEvalLine)).toEqual(settled.slice(2));
+      const scroll = new ThreeTierEvaluator(doc, newTrackedEngine());
+      expect(scroll.setViewport({ startLine: 4, endLine: 5 }).lines.filter((l) => l.lineNumber >= 4).map(readEvalLine)).toEqual(settled.slice(3));
+      scroll.dispose();
+    } finally {
+      evaluator.dispose();
+    }
+  });
+
+  test("the single-expression path refuses the positional forms with a document error", () => {
+    expectNeedsDocument("prev + 1");
+    expectNeedsDocument("line 1 * 3");
+  });
+});
+
+describe("a lone carriage return across entry points", () => {
+  // The batch pass's scan ends a line at a lone "\r" as it does at "\n" and
+  // "\r\n"; the document model split on "\n" alone, so `5\r6` was two lines to
+  // parseDocument and one to evaluateDocument and a live editor. The model now
+  // splits where the scan does, the way #613 made the trailing newline agree.
+  test.each([
+    ["5\r"],
+    ["5\r6"],
+    ["1\r2\rtotal above"],
+    ["1\r\n2\rtotal above\r\n"],
+    ["\r\r\r"],
+    ["10 #a\r20 #a\rtotal of #a"],
+  ])("%j has the same lines through both passes", (text) => {
+    const batchLines = readLines(newTrackedEngine().parseDocument(text, { inputType: "markdown" }));
+    const incrementalLines = readLines(evaluateDocument(newTrackedEngine(), text, { inputType: "markdown" }));
+    expect(incrementalLines).toEqual(batchLines);
+    const doc = new DocumentModel();
+    doc.setDocument(text);
+    expect(doc.lineCount).toBe(batchLines.length);
+  });
+
+  test("the offsets each line reports are the batch pass's", () => {
+    const text = "1\r22\r\n333\n4444\r";
+    const shape = (result: ParsingResult) => result.lines.map((line) => [line.text, line.startPosition, line.endPosition]);
+    expect(shape(evaluateDocument(newTrackedEngine(), text))).toEqual(shape(newTrackedEngine().parseDocument(text)));
+  });
+
+  test("the single-expression path reads a trailing carriage return as the end of the line", () => {
+    const { threw, message } = single("5\r");
+    expect(threw).toBe(false);
+    expect(message).toBe("5");
+  });
+});
+
+describe("converting into a document's own unit across entry points (#762)", () => {
+  // A defined unit reads a definition from another line, so it is a
+  // document form: `84 days in sprints` needs `1 sprint = 2 weeks` above it.
+  const doc = ["1 sprint = 2 weeks", "84 days in sprints", "3 weeks in sprints to 1 dp", "1 click = 1 km", "3 clicks", "5 km in clicks", "6 sprints in kg"];
+  const expected = ["sprint defined", "6 sprints", "1.5 sprints", "click defined", "3.00 clicks", "5.00 clicks", "ERROR: a duration cannot be converted to a mass"];
+
+  test("the document result, and the two passes agree", () => {
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(expected);
+  });
+
+  test("an edit to the definition re-answers the target in a live editor, as a fresh pass does", () => {
+    const { shown, edited } = editThenEvaluate(doc, [[1, "1 sprint = 3 weeks"]]);
+    expect(shown[1]).toBe("4 sprints");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("deleting the definition refuses the target, as a fresh pass does", () => {
+    const { shown, edited } = deleteThenEvaluate(doc.slice(0, 2), 1);
+    expect(shown[0]).toMatch(/^ERROR: /);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("the single-expression path has no definition to read and refuses the word by name", () => {
+    const { threw, type, message } = single("84 days in sprints");
+    expect(threw).toBe(false);
+    expect(type).toBe(ValueType.Error);
+    expect(message).toContain('"sprints" is not a unit');
+  });
+});
+
+describe("a lone sum or total, and a label without its colon, across entry points (#742)", () => {
+  // `Rent $1200` is the label `Rent` and the amount, as `Rent: $1200` is, and a
+  // line that is only `sum` or `total` totals the block above it unless the
+  // note defines a variable of that name.
+  const doc = ["Rent $1200", "Food $300", "sum", "Extra $5", "total", "", "total = 7", "total"];
+
+  test("the block is totalled, a subtotal passed over, and a variable read, in both passes", () => {
+    const expected = ["$1,200.00", "$300.00", "$1,500.00", "$5.00", "$1,505.00", "", "7", "7"];
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(expected);
+  });
+
+  test("an edit inside the block, and one that defines the variable, reach it in a live editor", () => {
+    const inBlock = editThenEvaluate(["Rent $1200", "Food $300", "sum"], [[2, "Food $400"]]);
+    expect(inBlock.shown).toEqual(batch(inBlock.edited));
+    expect(inBlock.shown[2]).toBe("$1,600.00");
+    const defines = editThenEvaluate(["x = 3", "Rent $5", "total"], [[1, "total = 9"]]);
+    expect(defines.shown).toEqual(batch(defines.edited));
+    expect(defines.shown[2]).toBe("9");
+  });
+
+  test("the single-expression path has no block, and says so", () => {
+    expectNeedsDocument("sum");
+    expectNeedsDocument("total");
+  });
+
+  test("a label reads the same on every path", () => {
+    expect(single("Rent $1200")).toEqual({ threw: false, type: ValueType.Uom, message: "$1,200.00" });
+    expect(batch(["Rent $1200"])).toEqual(incremental(["Rent $1200"]));
+  });
+});
+
+describe("names of several words across entry points (#743)", () => {
+  // A run of words before a definition's `=` is one name, and a later line
+  // reads the same words as it. The table of names is the document's, filled
+  // top to bottom, so both passes read a name only below its definition.
+  const doc = ["hourly rate * 2", "hourly rate = $50", "hours = 8", "hourly rate * hours", "rate = 3", "hourly rate * rate"];
+
+  test("each line reads the name below its definition, and both passes agree", () => {
+    const answers = batch(doc);
+    expect(answers[0]).toMatch(/^ERROR: /);
+    expect(answers.slice(1)).toEqual(["$50.00", "8", "$400.00", "3", "$150.00"]);
+    expect(incremental(doc)).toEqual(answers);
+  });
+
+  // The line above the definition is in the live-editor comparisons too: a
+  // live editor used to read a name defined further down with the value the
+  // last pass left, from its second pass on, and now reads the note from the
+  // top on every pass (see the forward-reads block below).
+  const below = ["hourly rate = $50", "hours = 8", "hourly rate * hours", "rate = 3", "hourly rate * rate"];
+
+  test("the line above the definition is two words in a live editor, on every pass", () => {
+    expect(afterPasses(doc, 3)).toEqual(batch(doc));
+    const edited = editThenEvaluate(doc, [[2, "hourly rate = $60"]]);
+    expect(edited.shown).toEqual(batch(edited.edited));
+    expect(edited.shown[0]).toMatch(/^ERROR: /);
+  });
+
+  test("editing the definition re-keys every reader in a live editor, as a fresh pass reads it", () => {
+    const renamed = editThenEvaluate(below, [[1, "hourly wage = $50"]]);
+    expect(renamed.shown).toEqual(batch(renamed.edited));
+    expect(renamed.shown[2]).toMatch(/^ERROR: /);
+    const valued = editThenEvaluate(below, [[1, "hourly rate = $60"]]);
+    expect(valued.shown).toEqual(batch(valued.edited));
+    expect(valued.shown[2]).toBe("$480.00");
+  });
+
+  test("deleting the definition takes the name away in a live editor, as a fresh pass reads it", () => {
+    const { shown, edited } = deleteThenEvaluate(below, 1);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[1]).toMatch(/^ERROR: /);
+  });
+
+  test("the single-expression path: a definition needs no document, and a read of words nothing defined is the parse error it was", () => {
+    // The definition line is self-contained, so it answers on its own. A read
+    // has nothing that says its words are one name: it is the parse error it
+    // always was, and never a number.
+    expect(single("hourly rate = $50")).toEqual({ threw: false, type: ValueType.Uom, message: "$50.00" });
+    const read = single("hourly rate * 2");
+    expect(read.threw).toBe(true);
+    expect(read.message).toBe('Expected an operator or the end of the line, but found "rate"');
+  });
+});
+
+describe("the document's names in the language service, across entry points", () => {
+  // Completions and the lone-word highlight read the names the whole document
+  // defines, so they are a whole-document read. The language service's default
+  // source knew none after the batch pass, since it read the dependency graph,
+  // which only the incremental pass fills for a plain assignment.
+  const doc = ["rent = 1200", "rate = 5", "hourly rate = $50", "f(x) = x * 2", "rent * missing", "re"];
+
+  /** The completion labels and categories for `prefix`, and whether a lone `word` line is highlighted, over `engine`. */
+  function readNames(engine: ExpressionEngine, prefix: string, word: string): { offered: string[]; highlighted: boolean } {
+    const ls = new LanguageService(engine);
+    return {
+      offered: ls.getCompletions(prefix, prefix.length).map((c) => `${c.label}:${c.category}`),
+      highlighted: ls.getSemanticTokens(word, 1).length > 0,
+    };
+  }
+
+  /** The same reading with only the document's own variables kept. */
+  function variablesOf(read: { offered: string[]; highlighted: boolean }): { offered: string[]; highlighted: boolean } {
+    return { offered: read.offered.filter((item) => item.endsWith(":variable")), highlighted: read.highlighted };
+  }
+
+  test.each([["re", "rent"], ["r", "rate"], ["h", "hourly"], ["f", "f"], ["mis", "missing"]])("%j: both document passes give the same completions and the same lone-word answer", (prefix, word) => {
+    const batchEngine = newTrackedEngine();
+    batchEngine.parseDocument(doc.join("\n"));
+    const incrementalEngine = newTrackedEngine();
+    evaluateDocument(incrementalEngine, doc.join("\n"));
+    expect(readNames(incrementalEngine, prefix, word)).toEqual(readNames(batchEngine, prefix, word));
+  });
+
+  test("the batch pass offers each defined name, and neither a name only read nor the half-typed word", () => {
+    const engine = newTrackedEngine();
+    engine.parseDocument(doc.join("\n"));
+    expect([...engine.documentVariableNames()]).toEqual(["rent", "rate", "hourly rate", "f"]);
+    expect(variablesOf(readNames(engine, "re", "rent"))).toEqual({ offered: ["rent:variable"], highlighted: true });
+    expect(readNames(engine, "mis", "missing").highlighted).toBe(false);
+  });
+
+  test("a rename in a live editor offers the new name and drops the old, as a fresh pass of the edited text does", () => {
+    const live = new DocumentModel();
+    live.setDocument(doc.join("\n"));
+    const engine = newTrackedEngine();
+    const evaluator = new ThreeTierEvaluator(live, engine);
+    try {
+      evaluator.evaluate({ startLine: 1, endLine: live.lineCount });
+      live.editLine(1, "rental = 1200");
+      evaluator.evaluate({ startLine: 1, endLine: live.lineCount });
+      const fresh = newTrackedEngine();
+      fresh.parseDocument(["rental = 1200", ...doc.slice(1)].join("\n"));
+      expect(readNames(engine, "ren", "rent")).toEqual(readNames(fresh, "ren", "rent"));
+      expect(variablesOf(readNames(engine, "ren", "rent"))).toEqual({ offered: ["rental:variable"], highlighted: false });
+    } finally {
+      evaluator.terminateWorker();
+    }
+  });
+
+  test("the single-expression path: a name set outside a document is not offered, and nothing throws", () => {
+    // Not an Error value: completions are a list, so the honest answer for a
+    // path with no document is an empty one, and the name still evaluates.
+    const engine = newTrackedEngine();
+    engine.evaluateExpression("rent = 1200");
+    expect(variablesOf(readNames(engine, "re", "rent"))).toEqual({ offered: [], highlighted: false });
+    expect(engine.evaluateNumber("rent")).toBe(1200);
+  });
+
+  test("the worker's completions after its parseDocument offer the document's names, as after its evaluateDocument", async () => {
+    const { client, host } = createLinkedTransports();
+    const stopRuntime = startWorkerRuntime(host);
+    const worker = await createWorkerEngine({ transport: client });
+    try {
+      await worker.parseDocument(doc.join("\n"));
+      const afterBatch = (await worker.getCompletions("re", 2)).filter((c) => c.category === "variable").map((c) => c.label);
+      await worker.evaluateDocument(doc.join("\n"));
+      const afterIncremental = (await worker.getCompletions("re", 2)).filter((c) => c.category === "variable").map((c) => c.label);
+      expect(afterBatch).toEqual(["rent"]);
+      expect(afterIncremental).toEqual(afterBatch);
+    } finally {
+      worker.terminate();
+      stopRuntime();
+    }
+  });
+});
+
+describe("a possessive name of several words across entry points", () => {
+  // The straight apostrophe after a letter is part of its word, as the curly
+  // one always was, and a name's value reads either as the straight one. The
+  // name is the document's, as every name of several words is (#743).
+  const doc = ["Alice's food = £30", "Bob’s food = £20", "Alice’s food + Bob's food", "the Smiths' rent = £900", "the Smiths' rent / 3"];
+
+  test("each line reads the name, and both passes agree", () => {
+    expect(batch(doc)).toEqual(["£30.00", "£20.00", "£50.00", "£900.00", "£300.00"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an edit to the definition re-keys the reader in a live editor, as a fresh pass reads it", () => {
+    const { shown, edited } = editThenEvaluate(doc, [[1, "Alice’s food = £35"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[2]).toBe("£55.00");
+  });
+
+  test("the single-expression path: the definition answers, a read is the parse error it was, and a look-alike mark is refused by name", () => {
+    expect(single("Alice's food = £30")).toEqual({ threw: false, type: ValueType.Uom, message: "£30.00" });
+    const read = single("Alice's food * 2");
+    expect(read.threw).toBe(true);
+    expect(read.message).toBe('Expected an operator or the end of the line, but found "food"');
+    const look = single("Alice‘s food = 3");
+    expect(look.message).toMatch(/is a quotation mark, not an apostrophe/);
+    expect(batch(["Alice‘s food = 3"])[0]).toBe(`ERROR: ${look.message}`);
+  });
+});
+
+describe("an equation line with several unknowns across entry points", () => {
+  // Refused by name on every path, since an equation line is solved for its
+  // one unknown; with the others given values above it, it is stored and
+  // solved as a one-unknown equation is (see FoundBug_equationWithSeveralUnknowns).
+  const equation = "(salary / 12) * rate / 100 = net";
+
+  test("the single-expression path and both passes give the same refusal", () => {
+    const line = single(equation);
+    expect(line.message).toMatch(/^This equation has 3 unknowns, salary, rate and net,/);
+    expect(batch([equation])).toEqual([`ERROR: ${line.message}`]);
+    expect(incremental([equation])).toEqual(batch([equation]));
+  });
+
+  test("with values above it, both passes solve it and agree", () => {
+    const doc = ["salary = 60000", "net = 1000", equation, "rate =>"];
+    expect(batch(doc)).toEqual(["60,000", "1,000", 'rate stored as an equation: solve with "rate =>"', "20"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an edit that gives an unknown its value turns the refusal into a stored equation in a live editor", () => {
+    const { shown, edited } = editThenEvaluate(["salary = 60000", "x = 1", equation, "rate =>"], [[2, "net = 1000"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[3]).toBe("20");
+  });
+});
+
+describe("an unknown under the arrow across entry points", () => {
+  // A unit or a percentage on an unknown is refused with the error the line
+  // gives without the arrow, on every path (FoundBug_unknownUnderTheArrow).
+  test("the single-expression path and both passes refuse it alike, and answer once the name has a value", () => {
+    expect(single("foo percent =>").message).toBe("Undefined variable: foo");
+    expect(batch(["foo percent =>", "foo km =>"])).toEqual(["ERROR: Undefined variable: foo", "ERROR: Undefined variable: foo"]);
+    expect(incremental(["foo percent =>", "foo km =>"])).toEqual(batch(["foo percent =>", "foo km =>"]));
+    const { shown, edited } = editThenEvaluate(["x = 1", "foo percent =>"], [[1, "foo = 12"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[1]).toBe("12.00%");
+  });
+});
+
+describe("a product equation and the line above under the arrow, across entry points", () => {
+  // `a*x = b` with `a` unknown points at `solve`, which answers `b/a`
+  // (FoundBug_productEquationUndefinedFactor); `ans` under the arrow is the
+  // line above, as it is without the arrow (FoundBug_constantUnderTheArrow).
+  const solveHint = 'Cannot solve for "x": "a" is not yet defined. Give "a" a value on a line above, or solve for "x" in terms of it with solve(a*x = b, x).';
+
+  test("both passes give the refusal, and the solve it names answers", () => {
+    const doc = ["a*x = b", "x =>", "solve(a*x = b, x)"];
+    expect(batch(doc)).toEqual(['x stored as an equation: solve with "x =>"', `ERROR: ${solveHint}`, "b/a"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an edit that gives the factor a value solves it in a live editor, as a fresh pass does", () => {
+    const { shown, edited } = editThenEvaluate(["b = 1", "a*x = 10", "x =>"], [[1, "a = 4"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[2]).toBe("2.5");
+  });
+
+  test("the single-expression path: the equation has no document to keep it, and the solve answers", () => {
+    expect(single("solve(a*x = b, x)").message).toBe("b/a");
+    expect(single("x =>").message).toBe("x");
+  });
+
+  test("ans under the arrow reads the line above on both passes, and needs a document on its own", () => {
+    const doc = ["2 + 3", "ans km =>", "3", "ans * x =>"];
+    expect(batch(doc)).toEqual(["5", "5.00 km", "3", "3x"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+    expectNeedsDocument("ans km =>");
+  });
+});
+
+describe("a column of percentages across entry points", () => {
+  // A set of percentages totals to a percentage wherever it is gathered: by
+  // position (`total above`, a line range), by heading (a section) or by tag,
+  // as `sum(10%, 20%)` does on one line. A percentage beside a number is
+  // refused by name on every path, never added as its fraction.
+  const doc = [
+    "# Rates", "10% #r", "20% #r", "# Totals",
+    "total of section \"Rates\"", "total of #r", "average of #r",
+    "", "10%", "20%", "total above", "average above", "max above",
+    "sum(line 9 : line 10)", "average(line 9 : line 10)",
+    "", "100", "10%", "total above",
+  ];
+  const mixed = "ERROR: A percentage (10%) and a number cannot be added together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 10% as the number 0.1; to raise an amount by a percentage, write it as 100 + 10%.";
+
+  test("the column answers a percentage, a mixed one is refused, and both passes agree", () => {
+    const expected = [
+      "", "10.00%", "20.00%", "",
+      "30.00%", "30.00%", "15.00%",
+      "", "10.00%", "20.00%", "30.00%", "15.00%", "20.00%",
+      "30.00%", "15.00%",
+      "", "100", "10.00%", mixed,
+    ];
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(expected);
+  });
+
+  test("an edit that turns a percentage into a number reaches the total in a live editor", () => {
+    const { shown, edited } = editThenEvaluate(["10%", "20%", "total above"], [[2, "20"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[2]).toMatch(/^ERROR: A percentage \(10%\) and a number cannot be added together/);
+  });
+
+  test("the single-expression path has no column, and says so; the comma form needs none", () => {
+    for (const form of ["total above", "average above", "sum(line 1 : line 2)", "total of section \"Rates\""]) expectNeedsDocument(form);
+    expect(single("sum(10%, 20%)")).toEqual({ threw: false, type: ValueType.Percentage, message: "30.00%" });
+  });
+});
+
+describe("a sweep of a percentage line and exact percentage totals across entry points", () => {
+  // A list holds plain numbers, so a sweep of a line that answers a
+  // percentage is refused by name on every path rather than listed as
+  // fractions, and the line that gives the answer as percentage points
+  // sweeps. A total of percentages is formed in base ten, so a check that it
+  // equals the percentage it shows passes on every path
+  // (FoundBug_percentageArithmetic).
+  const doc = [
+    "rate = 10%", "rate * 20%", "line 2 for rate from 10% to 30% step 10%",
+    "line 2 * 100", "line 4 for rate from 10% to 30% step 10%",
+    "", "10% #r", "20% #r", "total above", "check line 9 == 30%", "total of #r == 30%",
+  ];
+  const refused = 'ERROR: With rate at 10%, line 2 answers 2%, a percentage, and a sweep lists its answers in a list, which holds plain numbers, not percentages. To sweep it, add a line that gives the answer as a number, such as "line 2 * 100" for its percentage points, and sweep that line.';
+
+  test("the sweep is refused, its points sweep, the totals are exact, and both passes agree", () => {
+    const expected = [
+      "10.00%", "2.00%", refused,
+      "2", "[2, 4, 6]",
+      "", "10.00%", "20.00%", "30.00%", "✓", "true",
+    ];
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(expected);
+  });
+
+  test("an edit that makes the line a percentage reaches the sweep in a live editor", () => {
+    const { shown, edited } = editThenEvaluate(["rate = 10%", "rate * 2", "line 2 for rate from 10% to 30% step 10%"], [[2, "rate * 20%"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[2]).toMatch(/^ERROR: With rate at 10%, line 2 answers 2%, a percentage/);
+  });
+
+  test("the single-expression path has no line to sweep, and says so; the arithmetic needs none", () => {
+    expectNeedsDocument("line 2 for rate from 10% to 30% step 10%");
+    expect(single("10% * 20%")).toEqual({ threw: false, type: ValueType.Percentage, message: "2.00%" });
+    expect(single("10% + 20% == 30%")).toEqual({ threw: false, type: ValueType.Boolean, message: "true" });
+  });
+});
+
+// The worker is a further entry point (#770): `evaluateDocument` through the
+// worker client must agree with the main thread's `evaluateDocument` value for
+// value on every whole-document form, and its `parseDocument` with the main
+// thread's batch pass, goal seek's refusal included.
+describe("the worker as a further path (#770)", () => {
+  const forms: Record<string, string[]> = {
+    "line references": ["10", "20", "line 1 + line 2", "prev * 2", "total above"],
+    "category tags": ["40 #grocery", "20 #grocery", "total of #grocery", "average of #grocery"],
+    "table columns": ["| item | cost |", "| ---- | ---- |", "| rent | 1200 |", "| food | 300 |", "", 'sum of column "cost" in table above'],
+    "goal seek": [":deposit = 100000", ":rate = 4%", "monthly repayment on deposit over 25 years at rate", "solve line 3 for deposit = 900"],
+  };
+
+  /** A worker client and runtime linked on one thread, torn down by the returned function. */
+  async function linkedWorker(): Promise<{ worker: WorkerEngine; stop: () => void }> {
+    const { client, host } = createLinkedTransports();
+    const stopRuntime = startWorkerRuntime(host);
+    const worker = await createWorkerEngine({ transport: client });
+    return { worker, stop: () => { worker.terminate(); stopRuntime(); } };
+  }
+
+  for (const [form, lines] of Object.entries(forms)) {
+    test(`${form}: the worker's evaluateDocument agrees with the main thread's`, async () => {
+      const { worker, stop } = await linkedWorker();
+      try {
+        const text = lines.join("\n");
+        const engine = newTrackedEngine();
+        const main = serializeParsingResult(evaluateDocument(engine, text), engine.getFormattingSettings());
+        expect(await worker.evaluateDocument(text)).toEqual(main);
+        // And its batch pass agrees with the main thread's batch pass.
+        const batchEngine = newTrackedEngine();
+        expect(await worker.parseDocument(text)).toEqual(serializeParsingResult(batchEngine.parseDocument(text), batchEngine.getFormattingSettings()));
+      } finally {
+        stop();
+      }
+    });
+  }
+
+  test("goal seek resolves through the worker's evaluateDocument and refuses through its parseDocument and a lone line", async () => {
+    const { worker, stop } = await linkedWorker();
+    try {
+      const text = forms["goal seek"].join("\n");
+      expect((await worker.evaluateDocument(text)).lines[3].result?.text).toBe("= 170,507.23");
+      expect((await worker.parseDocument(text)).lines[3].result?.errorCode).toBe("GOAL_SEEK_NO_DOCUMENT");
+      const lone = await worker.evaluateExpression("solve line 3 for deposit = 900");
+      expect(lone.errorCode).toBe("GOAL_SEEK_NO_DOCUMENT");
+    } finally {
+      stop();
+    }
   });
 });

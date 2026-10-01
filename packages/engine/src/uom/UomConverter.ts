@@ -13,7 +13,8 @@
 
 import { lookupUnit, convertRaw, convertResolved, convertToBestMetric, hasOffset } from "@solve-js/uom/UnitConversion";
 import { MEASURE_KIND_NAMES, MEASURE_SYMBOLS, UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
-import { EXTENDED_UNITS } from "@solve-js/uom/ExtendedUnits";
+import { EXTENDED_UNITS, IMPERIAL_MPG_SPELLINGS, MILES_PER_IMPERIAL_GALLON_IN_KM_PER_LITRE } from "@solve-js/uom/ExtendedUnits";
+import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 
 // ── "workday", a synthetic unit with no entry in the base table ───────────
 //
@@ -368,14 +369,76 @@ interface RateForm {
  * it stands for and the factor that turns one of it into that rate's base. `mpg`
  * is `km/l` scaled, `l/100km` is `l/km` scaled by a hundredth (issue #190).
  */
-const FUEL_RATE_UNITS: Record<string, { numerator: string; denominator: string; factor: number }> = {
+const FUEL_RATE_UNITS: Readonly<Record<string, { numerator: string; denominator: string; factor: number }>> = {
   mpg: { numerator: "km", denominator: "l", factor: 1.609344 / 3.785411784 },
   kmpl: { numerator: "km", denominator: "l", factor: 1 },
   l100km: { numerator: "l", denominator: "km", factor: 0.01 },
+  // Miles per imperial gallon, under each of its spellings (issue #736).
+  ...Object.fromEntries(
+    IMPERIAL_MPG_SPELLINGS.map((spelling) => [spelling, { numerator: "km", denominator: "l", factor: MILES_PER_IMPERIAL_GALLON_IN_KM_PER_LITRE }]),
+  ),
 };
 
+/** The fuel-economy entry for `unit`, read as an own property so an inherited name is not one. */
+function fuelRateUnit(unit: string): { numerator: string; denominator: string; factor: number } | undefined {
+  return Object.prototype.hasOwnProperty.call(FUEL_RATE_UNITS, unit) ? FUEL_RATE_UNITS[unit] : undefined;
+}
+
+/**
+ * The size of an acceleration unit in metres per second squared, or
+ * `undefined` when `unit` is not one.
+ *
+ * An acceleration is a change of speed per unit of time, so its unit is a
+ * length over a time squared. The engine stores metres per second squared as
+ * `mps2` (the spelling `m/s^2` is fused into), and any other length over a
+ * squared time as it is printed, with the superscript: `ft/s²`, `km/h²`. The
+ * square is always on a time, never on the length, and only the power 2 makes
+ * an acceleration (#737, #834).
+ *
+ * @param unit - A unit spelling.
+ * @returns Metres per second squared in one of `unit`, or `undefined`.
+ */
+export function accelerationSize(unit: string): number | undefined {
+  if (unit === "mps2") return 1;
+  const slash = unit.indexOf("/");
+  if (slash <= 0 || !unit.endsWith("²") || unit.indexOf("/", slash + 1) >= 0) return undefined;
+  const length = unit.slice(0, slash);
+  const time = unit.slice(slash + 1, -1);
+  if (getMeasure(length) !== "length" || getMeasure(time) !== "time") return undefined;
+  const seconds = convertUnit(1, time, "s");
+  return convertUnit(1, length, "m") / (seconds * seconds);
+}
+
+/**
+ * A unit as a message names it: the acceleration the engine stores as `mps2` is
+ * written `m/s²`, as its answers are, so the internal spelling never reaches the
+ * reader (#590, #737).
+ *
+ * @param unit - A unit as a value carries it.
+ * @returns The spelling to show.
+ */
+export function unitForMessage(unit: string): string {
+  // A timecode's unit carries its rate (`timecode@30`), an internal spelling (#759).
+  const timecode = /^timecode@(.+)$/.exec(unit);
+  if (timecode !== null) return `timecode at ${timecode[1]} fps`;
+  return unit.split("/").map((part) => (part === "mps2" ? "m/s²" : part)).join("/");
+}
+
+/**
+ * A frequency as the count per second it is: one hertz is once a second, so
+ * `10 Hz` is the rate `10 /s` and converts to any count per unit of time
+ * (`10 Hz in /min` is 600 a minute). `null` for a unit that is not a
+ * frequency.
+ */
+function frequencyAsRate(value: number, unit: string): RateForm | null {
+  if (unit.includes("/") || getMeasure(unit) !== "frequency") return null;
+  return { value: convertUnit(value, unit, "Hz"), numerator: "", denominator: "s" };
+}
+
 function expandUnitToRate(value: number, unit: string): RateForm | null {
-  const fuel = FUEL_RATE_UNITS[unit];
+  const frequency = frequencyAsRate(value, unit);
+  if (frequency !== null) return frequency;
+  const fuel = fuelRateUnit(unit);
   if (fuel !== undefined) {
     return { value: value * fuel.factor, numerator: fuel.numerator, denominator: fuel.denominator };
   }
@@ -445,6 +508,11 @@ export function quantityAtRateSeconds(
 function rateAxisFactor(from: string, to: string): number | null {
   if (from === to) return 1;
   if (from === "" || to === "") return null;
+  // Two currencies line up through the cached exchange rate, and have no
+  // factor until one is known: `$20/hour in €/day` (#738).
+  const fromMoney = sharedCurrencyExchange.isCurrency(from);
+  const toMoney = sharedCurrencyExchange.isCurrency(to);
+  if (fromMoney || toMoney) return fromMoney && toMoney ? sharedCurrencyExchange.convertSync(1, from, to) : null;
   const fromMeasure = getMeasure(from);
   const toMeasure = getMeasure(to);
   if (fromMeasure === undefined || toMeasure === undefined || fromMeasure !== toMeasure) {
@@ -474,6 +542,13 @@ function rateAxisFactor(from: string, to: string): number | null {
  */
 export function convertRate(value: number, from: string, to: string): number | null {
   if (from === to) return value;
+  // Two accelerations: `9.81 m/s^2 in ft/s^2`. Neither is a pair of halves the
+  // routine below can rescale, since the time is squared.
+  const fromAcceleration = accelerationSize(from);
+  if (fromAcceleration !== undefined) {
+    const toAcceleration = accelerationSize(to);
+    return toAcceleration === undefined ? null : (value * fromAcceleration) / toAcceleration;
+  }
   const source = expandUnitToRate(value, from);
   if (source === null) return null;
 
@@ -483,9 +558,15 @@ export function convertRate(value: number, from: string, to: string): number | n
   let targetNumerator: string;
   let targetDenominator: string;
   let targetScale: number;
-  const fuelTarget = FUEL_RATE_UNITS[to];
+  const fuelTarget = fuelRateUnit(to);
+  const frequencyTarget = frequencyAsRate(1, to);
   const slash = to.indexOf("/");
-  if (fuelTarget !== undefined) {
+  if (frequencyTarget !== null) {
+    // `600 /min in Hz`: a count per second, read out in the frequency unit.
+    targetNumerator = "";
+    targetDenominator = "s";
+    targetScale = frequencyTarget.value;
+  } else if (fuelTarget !== undefined) {
     // The base-pair magnitude divided by the fuel unit's own factor reads out in
     // that unit (so a l/km magnitude becomes a l/100km figure).
     targetNumerator = fuelTarget.numerator;

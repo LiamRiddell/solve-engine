@@ -82,6 +82,35 @@ cross-line forms do in one pass, and the elements its answers keep. Each
 produces a clear error rather than hanging; the
 [security page](/guide/security/) lists every limit and its setting.
 
+## Lines written as sentences
+
+People end a question with `?` and a sentence with `.`, and so do language
+models writing for a chat host or a tool. By default a line must be an
+expression and nothing more, so `what is 5 km in miles?` is refused at its last
+character. A host whose lines are sentences can opt in to reading that one
+character as the end of the sentence:
+
+```ts
+const engine = createEngine({
+  config: { validation: { allowTrailingPunctuation: true } },
+});
+
+engine.evaluateExpression("what is 5 km in miles?"); // 3.11 miles
+engine.evaluateExpression("5 + 5.");                 // 10
+```
+
+One `?` or `.` is dropped, and only at the very end of a line that is complete
+without it. A line that fails for another reason keeps its own error, so
+`5 kg + 2 m?` still says that mass and length cannot be added.
+
+The boundary: `?` already means something after `in`, `to` or `=`, and those
+lines are read as before. `5 cm in ?` still lists the units a length converts
+to, and the [knowledge](/syntax/knowledge/) package still reads a line ending
+`= ?` as its question. A `?` inside a line, and a doubled `..` or `??`, are not
+touched. The option is off by default because a `.` straight after digits is
+then a full stop rather than a decimal point, so a version-like `1.5.` answers
+1.5; strict parsing, which refuses it, stays the default.
+
 ## Reading a result
 
 ```ts
@@ -93,6 +122,12 @@ value.type;        // ValueType.Number
 value.toNumber();  // 4
 value.unit;        // undefined
 ```
+
+This page reads a note with `parseDocument`, the batch pass. It is one of four
+entry points, and the others resolve what it cannot (goal seek) or cost less
+per keystroke (a live evaluator): [which entry point](/guide/entry-points/)
+compares them. To store, log or post a result, see
+[results as JSON](/guide/results-as-json/).
 
 ## Clearing state
 
@@ -267,3 +302,35 @@ try {
   }
 }
 ```
+
+## The rest of the engine
+
+Most hosts need only the entry points above. The engine has a few more members
+a host may call, each for one job:
+
+| Member | What it is for |
+| --- | --- |
+| `warmUp()` | Runs a few throwaway expressions so the first real keystroke does not pay for the JavaScript engine's start-up work. `createEngine({ warmup: true })` calls it for you. |
+| `unregisterPackage(name)` | Takes a package back out: its words, functions, converters, unit aliases and highlight categories go, and anything it took over from another package is handed back. Returns whether it was registered. |
+| `getConfig()` | The settings in force, with every default filled in. A copy: changing it changes nothing in the engine. |
+| `getContext()` | This engine's registries (its plugin functions, `as` converters, highlight categories, query cache), for checking what a package registered. Each engine has its own, so one engine's packages never answer on another. |
+| `getTokenCategory(type)` | How an editor should colour a token of this type, reading this engine's packages and the built-in table. The language service's `getTokenCategory` is the same answer. |
+| `tokenizeForClassification(text)` | The tokens a line would be read as, without evaluating it: a cheap way to tell a line the engine recognises (`weather in Tokyo`) from prose. |
+| `getPackageCompletionItems()` | The completion candidates the registered packages declared, which the language service's completions already include. |
+| `getParseletRegistry()` | A list of the token types the parser reads and how tightly each binds, for a diagnostics view. A copy. |
+| `reEvaluateLine(n, text)` | Runs a line again from its compiled program, after a name it reads has changed, without reading its text again. |
+| `evaluateIncremental(name, value)` | Sets a name and re-runs exactly the lines that read it, in dependency order, returning each one's new answer. |
+| `isDiagnosticMode()` and `evaluateLineWithDebug(n, text)` | Whether the engine was built with `diagnostics: true`, and, when it was, a line's answer together with every stage of how it was read. |
+| `getCacheSnapshot()`, `getBatcherMetrics()`, `getCheckpoints()`, `getLastTelemetry()`, `getBackgroundRefreshCount()` | Plain-data reports for a diagnostics panel: what is cached, what the live-data batcher is doing, the saved states the evaluator keeps, the last measured pipeline timings, and how many live values refresh in the background. |
+
+The engine also has members its own incremental evaluator and language service
+call, which are not for a host: they are marked `@internal` in the type
+declarations, and the evaluator reaches them through one named list of seams.
+Four of them used to hand out the engine's live internals: `getBytecodeCache()`
+gave out the map the engine compiles through, so one `set` on it made `2 + 2`
+answer `9`. It returns a copy now. `getLineCache()`, `getDag()` and `getVM()`
+are the structures the evaluator runs on, so they cannot become copies without
+breaking it; they, `getLexer()`, `getNormalizer()`, `getParser()`,
+`getScopeManager()`, `getDiagnosticPipeline()` and `getDocumentModel()` are
+deprecated, each naming what to use instead, and every member marked
+`@internal` leaves the published types in 3.0.

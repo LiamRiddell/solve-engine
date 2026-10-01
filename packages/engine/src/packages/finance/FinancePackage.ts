@@ -7,13 +7,13 @@ import { SavingsDurationParselet, SavingsContributionParselet } from "./parselet
 import { SalesTaxParselet } from "./parselets/SalesTaxParselet";
 import { InflationQueryParselet } from "./parselets/InflationQueryParselet";
 import { InflationFutureValueParselet } from "./parselets/InflationFutureValueParselet";
-import { InYearDollarsParselet } from "./parselets/InYearDollarsParselet";
+import { InYearMoneyParselet } from "./parselets/InYearMoneyParselet";
 import {
-  inflationFromYearToPresentHandler, inflationToYearFromPresentHandler, inflationFutureValueHandler,
+  inflationFromYearToPresentHandler, inflationToYearFromPresentHandler, inflationToYearInCurrencyHandler, inflationFutureValueHandler, inflationCountedAmountHandler,
 } from "./parselets/InflationPluginFunctions";
 import { CashFlowParselet } from "./parselets/CashFlowParselets";
 import { CASH_FLOW_PLUGIN_FUNCTIONS } from "./parselets/CashFlowPluginFunctions";
-import { inYearDollarsNormalizerRule } from "./normalizer/InYearDollarsNormalizerRule";
+import { inYearMoneyNormalizerRule } from "./normalizer/InYearMoneyNormalizerRule";
 import { recurringScheduleNormalizerRule } from "./normalizer/RecurringScheduleNormalizerRule";
 import { billSplitNormalizerRule, billSplitPrefixNormalizerRule } from "./normalizer/BillSplitNormalizerRule";
 import { explainFinance } from "./FinanceExplain";
@@ -76,9 +76,10 @@ const SAVINGS_PAYMENT = 99, SAVINGS_PERIODS = 100;
  *
  * Inflation-adjusted value (extends this package, see
  * `parselets/InflationQueryParselet.ts`/`InflationFutureValueParselet.ts`/
- * `InYearDollarsParselet.ts` and `data/CpiTable.ts` for the bundled,
- * clearly-labeled-approximate CPI-U table and its doc comment on
- * vintage/accuracy) was the one topic explicitly deferred from this
+ * `InYearMoneyParselet.ts`, and `data/PriceIndices.ts` for the bundled
+ * indices, one per currency: the CPI-U table generated from the BLS series
+ * (#700), the ONS CDKO and euro-area HICP tables (#756), each with its doc
+ * comment on source and method) was the one topic explicitly deferred from this
  * package's original scope, now implemented.
  *
  * Cash-flow appraisal (`npv of`, `irr of`, `payback of`, see
@@ -103,6 +104,13 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     "monthly repayment on": "MONTHLY_REPAYMENT_ON",
     "annual repayment on": "ANNUAL_REPAYMENT_ON",
     "total repayment on": "TOTAL_REPAYMENT_ON",
+    // `payment on` is the everyday name for the same repayment (#746). The
+    // phrase ends in `on`, so a variable named `payment` (`payment * 12`) is
+    // untouched: only the three words together are claimed.
+    "daily payment on": "DAILY_REPAYMENT_ON",
+    "monthly payment on": "MONTHLY_REPAYMENT_ON",
+    "annual payment on": "ANNUAL_REPAYMENT_ON",
+    "total payment on": "TOTAL_REPAYMENT_ON",
     "daily interest on": "DAILY_LOAN_INTEREST_ON",
     "monthly interest on": "MONTHLY_LOAN_INTEREST_ON",
     "annual interest on": "ANNUAL_LOAN_INTEREST_ON",
@@ -175,14 +183,16 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     AFTER: new InvestmentGrowthParselet(COMPOUND_FV, COMPOUND_FV_EVERY),
     FOR_DURATION: new InvestmentGrowthParselet(COMPOUND_FV, COMPOUND_FV_EVERY),
     INVESTED: new ReturnOnInvestmentParselet(ROI),
-    IN_YEAR_DOLLARS: new InYearDollarsParselet(),
+    IN_YEAR_DOLLARS: new InYearMoneyParselet("USD"),
+    IN_YEAR_POUNDS: new InYearMoneyParselet("GBP"),
+    IN_YEAR_EUROS: new InYearMoneyParselet("EUR"),
     // The amount-first split spelling, `<amount> split N ways`. Infix so the
     // amount (which may be `$120 + 18%`) is the left operand. See
     // BillSplitParselets.ts.
     SPLIT_WAYS: new SplitWaysParselet(SPLIT_EACH),
   },
   normalizerRules: [
-    inYearDollarsNormalizerRule(),
+    inYearMoneyNormalizerRule(),
     // `450 monthly for 18 months` -> `450 * 18`. A recurring schedule totalled
     // as a plain multiplication, so a currency amount stays currency and an
     // exact one stays exact. See RecurringScheduleNormalizerRule.ts.
@@ -197,6 +207,10 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     inflationFromYearToPresent: inflationFromYearToPresentHandler,
     /** Plugin index for `<amount> in <year>`, today's money valued in a past year. */
     inflationToYearFromPresent: inflationToYearFromPresentHandler,
+    /** Plugin index for `<amount> in <year> dollars` (or pounds, or euros), the same question asked in the currency the phrase names (#756). */
+    inflationToYearInCurrency: inflationToYearInCurrencyHandler,
+    /** Plugin index for the amount of `what is 100 apples from 1990`: the refusal by the word that stands where a currency would. */
+    inflationCountedAmount: inflationCountedAmountHandler,
     /** Plugin index for projecting an amount forward at an assumed rate. */
     inflationFutureValue: inflationFutureValueHandler,
     // `npv of`, `irr of`, `payback of`. See parselets/CashFlowPluginFunctions.ts.

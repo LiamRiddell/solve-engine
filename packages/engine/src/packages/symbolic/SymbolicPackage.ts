@@ -104,7 +104,7 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		tokenType: "INTEGRAL_FN",
 		builtinIndex: SYMBOLIC_BUILTIN_INTEGRAL,
 		example: "integral(x^2, x)",
-		expected: "1/3x^3",
+		expected: "x^3/3",
 		docPage: "calculus.md",
 	},
 	{
@@ -112,7 +112,7 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		tokenType: "TAYLOR_FN",
 		builtinIndex: SYMBOLIC_BUILTIN_TAYLOR,
 		example: "taylor(exp(x), x=0, 3)",
-		expected: "1/6x^3+0.5x^2+x+1",
+		expected: "x^3/6+0.5x^2+x+1",
 		docPage: "calculus.md",
 	},
 	{

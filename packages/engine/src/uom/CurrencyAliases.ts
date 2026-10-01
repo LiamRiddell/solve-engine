@@ -164,25 +164,39 @@ export const CURRENCY_WORD_ALIASES: Record<string, string> = {
 };
 
 /**
+ * The four alias tables above as `Map`s, built once, for
+ * {@link resolveCurrencyAlias}.
+ *
+ * `text` is a raw lexed word, so a name that happens to be an inherited
+ * property (`constructor`, `__proto__`, `valueOf`) must read as no alias: read
+ * through the prototype it found a function, which a caller's `?? text`
+ * fallback emitted as a bytecode string constant that the VM then read back as
+ * a non-string. A `Map` holds only its own keys, and a lookup reads no global:
+ * `Object.prototype.hasOwnProperty.call` reads `Object` on each call, which
+ * inside a `vm` context (the Jest harness the benchmarks run in) cost the
+ * rate-target rule, tried at every `in` and `to`, most of its time.
+ */
+const SYMBOL_ALIAS_MAP: ReadonlyMap<string, string> = new Map(Object.entries(CURRENCY_SYMBOL_ALIASES));
+const LETTER_SYMBOL_MAP: ReadonlyMap<string, string> = new Map(Object.entries(CURRENCY_LETTER_SYMBOLS));
+const LOWERCASE_CODE_MAP: ReadonlyMap<string, string> = new Map(Object.entries(CURRENCY_LOWERCASE_CODES));
+const WORD_ALIAS_MAP: ReadonlyMap<string, string> = new Map(Object.entries(CURRENCY_WORD_ALIASES));
+
+/**
  * Resolve a raw lexed unit/symbol string to its canonical ISO 4217 code
  * e.g. `"euro"` -> `"EUR"`, `"$"` -> `"USD"`, `"USD"` -> `"USD"` (already
  * canonical, returned unchanged). Returns `undefined` if `text` isn't a
  * recognized currency alias at all (distinct from "already canonical"
  * callers should fall back to the original text in that case).
+ *
+ * Own keys only, through the `Map`s above, so an inherited property name is
+ * never an alias.
  */
 export function resolveCurrencyAlias(text: string): string | undefined {
-  // Guarded with hasOwnProperty: `text` is a raw lexed word, so a name that
-  // happens to be an inherited property (`constructor`, `__proto__`,
-  // `valueOf`) would otherwise read a function off `Object.prototype` and, via
-  // a caller's `?? text` fallback, emit it as a bytecode string constant, which
-  // the VM then reads back as a non-string.
-  const lower = text.toLowerCase();
-  if (Object.prototype.hasOwnProperty.call(CURRENCY_SYMBOL_ALIASES, text)) return CURRENCY_SYMBOL_ALIASES[text];
-  // Exact case: `Ft` is the forint, `ft` the foot; `usd` is a code, `Usd` is not.
-  if (Object.prototype.hasOwnProperty.call(CURRENCY_LETTER_SYMBOLS, text)) return CURRENCY_LETTER_SYMBOLS[text];
-  if (Object.prototype.hasOwnProperty.call(CURRENCY_LOWERCASE_CODES, text)) return CURRENCY_LOWERCASE_CODES[text];
-  if (Object.prototype.hasOwnProperty.call(CURRENCY_WORD_ALIASES, lower)) return CURRENCY_WORD_ALIASES[lower];
-  return undefined;
+  return SYMBOL_ALIAS_MAP.get(text)
+    // Exact case: `Ft` is the forint, `ft` the foot; `usd` is a code, `Usd` is not.
+    ?? LETTER_SYMBOL_MAP.get(text)
+    ?? LOWERCASE_CODE_MAP.get(text)
+    ?? WORD_ALIAS_MAP.get(text.toLowerCase());
 }
 
 /** How a currency's amount and symbol are conventionally arranged for display. */
@@ -220,10 +234,10 @@ export const CURRENCY_DISPLAY: Record<string, CurrencyDisplayInfo> = {
   SGD: { symbol: "$", position: "prefix", spaced: false },
   MXN: { symbol: "$", position: "prefix", spaced: false },
   GBP: { symbol: "£", position: "prefix", spaced: false },
-  // English-language convention (€100.00), many EU locales instead suffix
-  // with a space ("100,00 €"); this engine's default locale is "en", so
-  // the English convention was chosen. A locale-aware override would be a
-  // reasonable future extension, not attempted here.
+  // English-language convention (€100.00), the engine's own. Many EU locales
+  // instead suffix with a space ("100,00 €"), and the formatter places the
+  // symbol by the number locale where it is not English (#755): this entry is
+  // the placement for English and for a host that keeps the engine's spelling.
   EUR: { symbol: "€", position: "prefix", spaced: false },
   JPY: { symbol: "¥", position: "prefix", spaced: false },
   CNY: { symbol: "¥", position: "prefix", spaced: false },

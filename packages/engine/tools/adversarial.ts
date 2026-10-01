@@ -168,13 +168,15 @@ const LEAK_MARKERS: readonly string[] = [
 	"exec_failed",
 	"mps2",
 	"timecode@",
+	// JavaScript's word for an infinity; the engine writes `∞`.
+	"Infinity",
 ];
 
 /** What an adversarial check allows beyond the defaults. */
 export interface HonestyOptions {
 	/** The most milliseconds the line or each document pass may take. Generous by default, so a slow runner is not a failure. */
 	readonly budgetMs?: number;
-	/** Whether an answer of NaN is documented for this input (`0/0` is), rather than an unexplained one. */
+	/** Whether an answer of NaN is documented for this input (`∞ - ∞` is), rather than an unexplained one. */
 	readonly allowNaN?: boolean;
 	/** An engine to use instead of a fresh one, for a check that depends on configuration or earlier lines. */
 	readonly engine?: ExpressionEngine;

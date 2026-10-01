@@ -1,8 +1,10 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
 import { isCheckLine } from "@solve-js/packages/conditionals/CheckFunctions";
-import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
+import { isScenarioDeclarationText } from "@solve-js/packages/whatif/ScenarioText";
+import { nonNumericKind, unifyQuantities, percentageAnswer, isAggregateFigure } from "@solve-js/vm/VMConversion";
 import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
-import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
+import { exactDecimalTotal, percentTotal } from "@solve-js/vm/ExactDecimals";
+import { numberOfBase } from "@solve-js/vm/ExactIntegers";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { lineValueProblem as checkLineValue, noDocument as requireContext } from "@solve-js/vm/LineReads";
 import { headingOf, isSummaryLine, sectionKey } from "./SectionReader";
@@ -125,6 +127,9 @@ function combineQuantities(values: Value[], isAverage: boolean): Value {
   if (exact !== null) return withSources(exact, sourcesOfValues(values));
   const unified = unifyQuantities(values, isAverage ? "averaged" : "added");
   if (unified instanceof Value) return unified;
+  // A column of percentages totals to a percentage, as `sum(10%, 20%)` does,
+  // formed in base ten as that is (see percentTotal()).
+  if (unified.percent) return percentageAnswer(percentTotal(unified.magnitudes, isAverage), unified.sources);
   const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
   const result = isAverage ? sum / values.length : sum;
   if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
@@ -172,10 +177,12 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
     const v = context.getLineResult!(n);
     const err = checkLineValue(v, n);
     if (err) return err;
-    if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
-      return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value — cannot include it in a sum/total/average range`);
+    // A number written in a base is added as the number it is.
+    const figure = numberOfBase(v!);
+    if (!isAggregateFigure(figure)) {
+      return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value, so it cannot be included in a sum, total or average range`);
     }
-    values.push(v!);
+    values.push(figure);
   }
   if (values.length === 0) {
     return errorValue("LINE_RANGE_EMPTY", `Lines ${from} to ${to} hold no figures to ${isAverage ? "average" : "add up"}: every line in the range is blank or a heading.`);
@@ -258,6 +265,8 @@ function aggregateAbove(context: LineExecutionContext, mode: AboveMode): Value {
     // A check line is a statement about the column, not one of its values,
     // passed or failed alike (#506).
     if (isCheckLine(context.getLineText?.(n) ?? "", v)) continue;
+    // A scenario declaration keeps inputs rather than being a figure (#744).
+    if (isScenarioDeclarationText(context.getLineText?.(n) ?? "")) continue;
     // A subtotal above is a summary of figures already in the column, not
     // another figure: `10`, `total above`, `5`, `total above` is 15, not the
     // 25 that counted the first total as well (#551). The same test the
@@ -265,10 +274,12 @@ function aggregateAbove(context: LineExecutionContext, mode: AboveMode): Value {
     if (isSummaryLine(context.getLineText?.(n) ?? "")) continue;
     const err = checkLineValue(v, n);
     if (err) return err;
-    if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
-      return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value — cannot include it in "above" aggregation`);
+    // A number written in a base is added as the number it is.
+    const figure = numberOfBase(v!);
+    if (!isAggregateFigure(figure)) {
+      return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value, so it cannot be included in an "above" aggregation`);
     }
-    values.push(v!);
+    values.push(figure);
   }
   const refused = spendSpanReads(context, walked, `${mode} above`);
   if (refused) return refused;
@@ -298,12 +309,15 @@ function combineAbove(values: Value[], mode: AboveMode): Value {
   if (mode === "median") {
     const sorted = [...cells].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
-    result = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    // The midpoint of two percentages is their mean, formed in base ten.
+    if (sorted.length % 2 === 0) result = unified.percent ? percentTotal([sorted[mid - 1], sorted[mid]], true) : (sorted[mid - 1] + sorted[mid]) / 2;
+    else result = sorted[mid];
   } else {
     // Folded, not spread: a long column spread into Math.max overflows the stack.
     result = cells[0];
     for (const n of cells) result = mode === "min" ? Math.min(result, n) : Math.max(result, n);
   }
+  if (unified.percent) return percentageAnswer(result, unified.sources);
   if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
   const combined = withSources(uomValue(result, unified.unit), unified.sources);
   if (values.every((v) => v.datetimeSpan === true)) combined.datetimeSpan = true;
@@ -326,6 +340,27 @@ export function totalAboveHandler(_args: Value[], context?: LineExecutionContext
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
   return aggregateAbove(context!, "total");
+}
+
+/**
+ * A line that is only `sum` or `total` (#742): the note's own variable of that
+ * name when it defines one, and otherwise `total above`.
+ *
+ * The variable wins, as it did before the bare word meant anything: `total =
+ * 5` then `total` answers 5. Which applies is decided as the line runs, since
+ * a definition can be added or removed above it without the line changing.
+ *
+ * @param args - The word as typed, `sum` or `total`.
+ * @param context - Per-line execution context: the variable is read through
+ * `getVariable`, and the block through the same reads `total above` makes.
+ * @returns The variable's value, the block's total, or the error `total above`
+ * gives in the same place (outside a document, the refusal that names it).
+ */
+export function columnTotalHandler(args: Value[], context?: LineExecutionContext): Value {
+  const word = args[0]?.type === ValueType.String ? String(args[0].value) : "total";
+  const named = context?.getVariable?.(word);
+  if (named !== undefined) return named;
+  return totalAboveHandler([], context);
 }
 
 /** `average above`, the mean of every numeric result before this line. */
@@ -522,27 +557,36 @@ function aggregateSection(context: LineExecutionContext, name: string, mode: Sec
     if (isSummaryLine(getText(n) ?? "")) continue;
     members.push(n);
   }
+  // The block as one span of figures when the path takes one (#733): its
+  // members are the block less its summary lines, which in a ledger with a
+  // running total is every other line, and one edge per member made each
+  // total cost the length of its block.
+  const spanDeclared = context.noteFigureSpanRead !== undefined;
+  if (spanDeclared) context.noteFigureSpanRead!(open.line + 1, end - 1);
   if (context.noteLineRead) {
     context.noteLineRead(open.line);
-    for (const n of members) context.noteLineRead(n);
+    if (!spanDeclared) for (const n of members) context.noteLineRead(n);
     if (close !== undefined) context.noteLineRead(close.line);
   }
 
   const verb = mode === "average" ? "averaged" : "added";
   const values: Value[] = [];
   for (const n of members) {
-    const v = getResult(n);
+    const v = getResult(n, spanDeclared);
     // A check line is a statement about the section, not one of its figures,
     // passed or failed alike, as `total above` treats it (#506).
     if (isCheckLine(getText(n) ?? "", v)) continue;
+    if (isScenarioDeclarationText(getText(n) ?? "")) continue;
     const err = checkSectionMember(v, n, context.lineIndex);
     if (err) return err;
     // `count of section` is "how many figures sit under the heading", so a
     // line that is not a number still counts; only sum and average add.
-    if (mode !== "count" && v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
+    // A number written in a base is added as the number it is.
+    const figure = numberOfBase(v!);
+    if (mode !== "count" && !isAggregateFigure(figure)) {
       return sectionNonNumeric(v!, n, open.name, verb);
     }
-    values.push(v!);
+    values.push(figure);
   }
 
   if (mode === "count") return numberValue(values.length);

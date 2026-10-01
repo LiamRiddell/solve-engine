@@ -5,7 +5,7 @@ import { serializeValue } from "@solve-js/worker/serialize";
 import type { SerializedValue } from "@solve-js/worker/dto";
 
 /**
- * Issue #141: a non-finite reading (1/0 -> Infinity, 0/0 -> NaN, an overflow)
+ * Issue #141: a non-finite reading (1/0 -> Infinity, 1/0 - 1/0 -> NaN, an overflow)
  * broke the worker DTO's documented JSON round-trip. `structuredClone` preserves
  * Infinity/NaN but `JSON.stringify` turns them into `null`, so the two paths
  * diverged and the serialized value could not be cached and reloaded.
@@ -29,7 +29,7 @@ describe("Issue #141: a non-finite reading survives the DTO's JSON round-trip", 
   test.each([
     ["1/0", "Infinity"],
     ["-1/0", "-Infinity"],
-    ["0/0", "NaN"],
+    ["1/0 - 1/0", "NaN"],
     ["1e308 * 10", "Infinity"],
   ])("%s serialises portably as %s", (source, sentinel) => {
     const dto = dtoOf(source);
@@ -38,7 +38,7 @@ describe("Issue #141: a non-finite reading survives the DTO's JSON round-trip", 
     expect(dto.nonFinite).toBe(sentinel);
     expectPortable(dto);
     // A host reconstructs the true reading from the sentinel.
-    expect(Number(dto.nonFinite)).toBe(Number(source === "0/0" ? NaN : source.startsWith("-") ? -Infinity : Infinity));
+    expect(Number(dto.nonFinite)).toBe(Number(source === "1/0 - 1/0" ? NaN : source.startsWith("-") ? -Infinity : Infinity));
   });
 
   test("a finite result carries no nonFinite marker", () => {

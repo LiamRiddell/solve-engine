@@ -1,0 +1,61 @@
+{
+  "suite": "dependency-graph",
+  "harness": "mitata-1",
+  "results": {
+    "register_5k_lines": {
+      "meanMs": 6.611783900000001,
+      "medianMs": 6.485854,
+      "minMs": 5.665793
+    },
+    "affected_chain_4k": {
+      "meanMs": 0.5684436987951808,
+      "medianMs": 0.507007,
+      "minMs": 0.494408
+    },
+    "affected_tagged_column_2k": {
+      "meanMs": 0.3217599727891156,
+      "medianMs": 0.252662,
+      "minMs": 0.245682
+    },
+    "ordered_chain_2k": {
+      "meanMs": 0.8307527477477477,
+      "medianMs": 0.644555,
+      "minMs": 0.630163
+    },
+    "ordered_tagged_column_2k": {
+      "meanMs": 0.7496641825396825,
+      "medianMs": 0.656373,
+      "minMs": 0.64123
+    },
+    "ordered_fan_10k": {
+      "meanMs": 3.2456364615384614,
+      "medianMs": 2.769571,
+      "minMs": 2.694517
+    },
+    "ordered_mixed_5k": {
+      "meanMs": 0.13885263884892088,
+      "medianMs": 0.121624,
+      "minMs": 0.116967
+    },
+    "register_mixed_5k": {
+      "meanMs": 3.03277712,
+      "medianMs": 2.552411,
+      "minMs": 2.476147
+    },
+    "rereg_unchanged_5k": {
+      "meanMs": 0.5075562983425415,
+      "medianMs": 0.382999,
+      "minMs": 0.369459
+    },
+    "missing_lookups_100k": {
+      "meanMs": 0.139124342143906,
+      "medianMs": 0.117268,
+      "minMs": 0.116537
+    },
+    "remove_5k_lines": {
+      "meanMs": 11.706341166666666,
+      "medianMs": 10.377541,
+      "minMs": 7.925331
+    }
+  }
+}

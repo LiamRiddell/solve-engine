@@ -28,7 +28,11 @@ import {
 	makeDecimal,
 	type DecimalData,
 } from "@solve-js/decimal";
+import { DECIMAL_DIGIT_CEILING } from "@solve-js/decimal";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
+import { currencyMinorUnits } from "@solve-js/uom/CurrencyMinorUnits";
+import { roundRationalToPlaces } from "@solve-js/vm/ExactDecimals";
+import type { Rational } from "@solve-js/symbolic";
 
 /** Exact base-ten `1`, the constant term in a `1 + p%` scaling factor. */
 const ONE_DECIMAL: DecimalData = decimalFromInteger(1);
@@ -46,7 +50,45 @@ const ONE_DECIMAL: DecimalData = decimalFromInteger(1);
  */
 export function moneyExactMagnitude(operand: Value, unit: string): DecimalData | null {
 	if (!sharedCurrencyExchange.isCurrency(unit)) return null;
-	return operand.exact ?? decimalFromNumberIfExact(operand.toNumber());
+	if (operand.exact !== undefined) return operand.exact;
+	// A fraction that ends in base ten (`(1/2) KWD`, `3/8 of £1`) is a decimal
+	// written another way, so it is as exact as the literal `0.5` would be.
+	if (operand.rational !== undefined) {
+		const terminating = terminatingDecimal(operand.rational);
+		if (terminating !== null) return terminating;
+	}
+	return decimalFromNumberIfExact(operand.toNumber());
+}
+
+/**
+ * The exact decimal a fraction is, when it has one: a denominator whose only
+ * prime factors are 2 and 5 ends after as many places as the larger count of
+ * either. `1/8` is 0.125; `1/3` has no end, and is null, and so is a fraction
+ * that ends past the 34 places an exact decimal holds.
+ *
+ * @param q - The fraction, in lowest terms with a positive denominator.
+ * @returns Its decimal, or null when it recurs.
+ */
+export function terminatingDecimal(q: Rational): DecimalData | null {
+	if (q.d <= 0n) return null;
+	let rest = q.d;
+	let twos = 0;
+	let fives = 0;
+	while (rest % 2n === 0n) {
+		rest /= 2n;
+		twos++;
+	}
+	while (rest % 5n === 0n) {
+		rest /= 5n;
+		fives++;
+	}
+	if (rest !== 1n) return null;
+	const places = Math.max(twos, fives);
+	// Past the exact decimals' ceiling the fraction has no exact form to keep
+	// (1/2^40 ends after 40 places), so it reads its double, as `0.1` written
+	// to 40 places would.
+	if (places > DECIMAL_DIGIT_CEILING) return null;
+	return roundRationalToPlaces(q, places);
 }
 
 /**
@@ -126,16 +168,41 @@ function moneyRateExactMagnitude(operand: Value, unit: string): DecimalData | nu
  *
  * What a unit written after a number makes (`$0.15`, `$0.15/kWh`, `12.3 kWh`),
  * and what `0.15 USD per kWh` makes of an amount of money. Only money and a
- * price per unit keep the decimal; a length, a mass or a speed stays a double,
- * the boundary vm/ExactDecimals.ts draws for units other than money.
+ * price per unit keep the decimal at every size; a length, a mass or a speed
+ * stays a double until it is past 2^53, where the double holds no fraction and
+ * the exact value it was written as is kept instead ({@link exactPastTheDouble}).
  *
  * @param operand - The amount, a number or an amount of money.
  * @param unit - The unit it is given.
  * @returns The value in that unit.
  */
 export function valueInUnit(operand: Value, unit: string): Value {
-	const exact = moneyExactMagnitude(operand, unit) ?? moneyRateExactMagnitude(operand, unit);
+	const exact = moneyExactMagnitude(operand, unit) ?? moneyRateExactMagnitude(operand, unit) ?? exactPastTheDouble(operand);
 	return exact !== null ? uomValueExact(operand.toNumber(), unit, exact) : uomValue(operand.toNumber(), unit);
+}
+
+/** 2^53: from here on a double holds no fraction, and not every whole number either. */
+const DOUBLE_EXACT_LIMIT = 2 ** 53;
+
+/**
+ * The exact decimal a number keeps when it is given a unit that is not money,
+ * or null when its double already says what it is.
+ *
+ * A length, a mass or a speed is a double, but past 2^53 a double holds no
+ * fraction and skips whole numbers, so `(2^60 + 0.5) m` was 2^60 m before
+ * anything else ran, and `ceil` and `round` of it answered a metre short. A
+ * number that large keeps the exact value it carries (a decimal, or a fraction
+ * that ends in base ten), so the formatter and the rounding functions can read
+ * it. Below 2^53 nothing changes: the double is the quantity, as before.
+ *
+ * @param operand - The number being given a unit.
+ * @returns The exact decimal, or null.
+ */
+export function exactPastTheDouble(operand: Value): DecimalData | null {
+	if (operand.exact === undefined && operand.rational === undefined) return null;
+	if (!(Math.abs(operand.toNumber()) >= DOUBLE_EXACT_LIMIT)) return null;
+	if (operand.exact !== undefined) return operand.exact;
+	return terminatingDecimal(operand.rational!);
 }
 
 /**
@@ -261,11 +328,17 @@ export function taxInExact(money: Value, unit: string, rate: number): Value | nu
 }
 
 /**
- * Allocate a bill split into whole-cent shares that add back to the exact
- * total. `split $100 between 3` is $33.34 once and $33.33 twice: 2 × $33.33 +
- * 1 × $33.34 is $100.00 to the cent, not the bare $33.33 each that loses a
- * penny. Largest-remainder allocation on the amount's exact decimal cents, so
- * the reconciliation is exact wherever the amount is (a money literal, or a
+ * Allocate a bill split into shares of the currency's smallest unit that add
+ * back to the exact total. `split $100 between 3` is $33.34 once and $33.33
+ * twice: 2 × $33.33 + 1 × $33.34 is $100.00 to the cent, not the bare $33.33
+ * each that loses a penny. Largest-remainder allocation on the amount's exact
+ * decimal, counted in the currency's minor unit (see uom/CurrencyMinorUnits.ts),
+ * so a yen split has whole-yen shares (`¥100 split 3 ways` is ¥33 each with one
+ * share paying ¥34), a dinar split has shares to the fils, and a bitcoin split
+ * to the satoshi. Every currency used to be counted in hundredths, so a yen
+ * share was a hundredth of a yen nobody can pay (#731).
+ *
+ * The reconciliation is exact wherever the amount is (a money literal, or a
  * percentage-scaled one like `$120 + 18%`). A non-currency amount (a bare
  * number, or a unit such as km) divides evenly into a single share, carrying
  * its unit for display; money with no exact magnitude (a live-rate conversion)
@@ -273,42 +346,46 @@ export function taxInExact(money: Value, unit: string, rate: number): Value | nu
  *
  * `n` is assumed a positive integer, the split builtin validates it first.
  * Shares are ordered base-first: the "each" amount, then, on an uneven split,
- * the slightly larger amount the odd penny falls on.
+ * the slightly larger amount the odd smallest unit falls on.
  */
 export function splitEachExact(amount: Value, n: number): SplitData {
 	const unit = amount.unit;
-	const cents = unit !== undefined && sharedCurrencyExchange.isCurrency(unit)
-		? centsOfMoney(amount, unit)
-		: null;
-	if (cents === null) {
+	const places = unit !== undefined && sharedCurrencyExchange.isCurrency(unit) ? currencyMinorUnits(unit) : null;
+	const units = unit !== undefined && places !== null ? minorUnitsOfMoney(amount, unit, places) : null;
+	if (units === null || places === null) {
 		return { unit, shares: [{ value: amount.toNumber() / n, count: n }] };
 	}
 
 	const divisor = BigInt(n);
-	const baseCents = cents / divisor; // truncates toward zero
-	const remainder = cents - baseCents * divisor; // sign follows `cents`
+	const baseUnits = units / divisor; // truncates toward zero
+	const remainder = units - baseUnits * divisor; // sign follows `units`
 	const extraShares = Number(remainder < 0n ? -remainder : remainder);
-	// A refund (negative total) puts the extra cent on the more-negative share.
-	const step = cents < 0n ? -1n : 1n;
+	// A refund (negative total) puts the extra unit on the more-negative share.
+	const step = units < 0n ? -1n : 1n;
 
-	const base = centShare(baseCents, n - extraShares);
+	const base = minorUnitShare(baseUnits, places, n - extraShares);
 	if (extraShares === 0) return { unit, shares: [base] };
-	return { unit, shares: [base, centShare(baseCents + step, extraShares)] };
+	return { unit, shares: [base, minorUnitShare(baseUnits + step, places, extraShares)] };
 }
 
-/** A currency share built from its whole-cent coefficient. */
-function centShare(cents: bigint, count: number): SplitShare {
-	const exact = makeDecimal(cents, 2);
+/** A currency share built from its coefficient in the currency's smallest unit. */
+function minorUnitShare(units: bigint, places: number, count: number): SplitShare {
+	const exact = makeDecimal(units, places);
 	return { value: decimalToNumber(exact), exact, count };
 }
 
 /**
- * The exact whole-cent coefficient of a money amount, or null when it has no
+ * The exact coefficient of a money amount in its currency's smallest unit (the
+ * cents of `$1.25` are 125, the yen of `¥100` are 100), or null when it has no
  * exact magnitude (a live-rate conversion), so the caller falls back to a float
- * even split. Rounds to two places half-away-from-zero, the till rule the rest
+ * even split. Rounds to `places` half-away-from-zero, the till rule the rest
  * of the money arithmetic uses.
+ *
+ * @param amount - The money being split.
+ * @param unit - Its currency code.
+ * @param places - The currency's minor unit.
  */
-function centsOfMoney(amount: Value, unit: string): bigint | null {
+export function minorUnitsOfMoney(amount: Value, unit: string, places: number): bigint | null {
 	const base = moneyExactMagnitude(amount, unit);
-	return base === null ? null : decimalRound(base, 2).coef;
+	return base === null ? null : decimalRound(base, places).coef;
 }

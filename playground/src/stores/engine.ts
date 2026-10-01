@@ -4,6 +4,7 @@ import { useWorkersStore } from "./workers"
 import { useDiagnosticReportStore } from "./diagnosticReport"
 import { usePipelineStore } from "./pipeline"
 import { useTabsStore } from "./tabsStore"
+import { useUiStore } from "./ui"
 import EngineWorker from "@bridge/engine.worker.ts?worker"
 
 /**
@@ -219,7 +220,7 @@ export function evaluate(expression: string, tabId: string): void {
       // background tab's own edits still get evaluated (so IT stays current
       // for when the user switches to it) but don't need the streaming
       // event overhead.
-      engineWorker.postMessage({ id, tabId, expression, stream: isActiveTab })
+      engineWorker.postMessage({ id, tabId, expression, stream: isActiveTab, networkEnabled: useUiStore.getState().liveData })
     }, 150),
   )
 }

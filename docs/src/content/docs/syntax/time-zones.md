@@ -44,6 +44,57 @@ Francisco is still on the evening before.
 9am Tokyo on 23 September 2026 in San Francisco // 5:00 PM (-1 day)
 ```
 
+### A time kept in a variable
+
+A time you have already worked out, or will use more than once, can sit in a
+variable. Write the variable where the time would go, then the place that time
+is in and `in` the places to show it in. It reads the variable's time of day
+and its date as a clock in the first place, exactly as the written-out time is
+read, and one or several places after `in` work the same way.
+
+```solve-doc
+meeting = 2026-09-23T15:00 // Wednesday, September 23, 2026, 3:00:00 PM
+meeting London in Tokyo // 11:00 PM
+meeting London in rio de janeiro and New York // Rio de Janeiro 11:00 AM, New York 10:00 AM
+(meeting + 1 hour) London in Tokyo // 12:00 AM (+1 day)
+```
+
+The variable has to hold a time. One that holds a number, or anything else, is
+refused by name rather than guessed at, since a zone has nothing to convert in
+it. The place after the variable must be one the engine knows and must be
+followed by `in`, so a variable whose name is a unit (`t`, `m`) or a word
+before an ordinary `in` conversion is read as it always was.
+
+```solve-doc
+t = 5 // 5
+t London in Tokyo // ERROR: A zone after a name converts the time of day it holds, as in "t London in Tokyo" with t = 3pm, and this holds a number.
+```
+
+### Working with the answer
+
+The answer is a time, not a piece of text, so you can keep calculating with it.
+Add or take away a length of time and the clock in the other place moves on,
+with the day shift updated to match. Write `in` and another place to see the
+same moment on that clock instead.
+
+```solve
+(3pm London on 23 September 2026 in Tokyo) + 1 hour // 12:00 AM (+1 day)
+(3pm London on 23 September 2026 in Tokyo) - 30 minutes // 10:30 PM
+(3pm London on 23 September 2026 in Tokyo) in New York // 10:00 AM
+```
+
+The day shift is always counted from the day you named, so it stays right
+however the time is moved. Because the answer is a value rather than text, a
+reader whose notes are set to another language sees it on their own clock:
+under German settings, `11:00 PM` reads `23:00`. A note written when these
+answers were text still works: comparing the answer with the text it used to
+be, or joining text to it, gives what it always gave.
+
+```solve
+(3pm London on 23 September 2026 in Tokyo) == "11:00 PM" // true
+"call at " + (3pm London on 23 September 2026 in Tokyo) // call at 11:00 PM
+```
+
 ## Several zones at once
 
 A team spread across several places rarely asks about just one of them. List the
@@ -62,6 +113,31 @@ as a city, and keeps its own label.
 ```solve
 3pm JST on 23 September 2026 in EST and CET // EST 2:00 AM, CET 8:00 AM
 3pm GMT+9 on 23 September 2026 in London and UTC-5 // London 7:00 AM, UTC-5 1:00 AM
+```
+
+A place whose name is more than one word is written with its spaces, as it is
+said, whether it is a city (`Los Angeles`, `Las Vegas`, `Mexico City`, `Kuala
+Lumpur`, `New Delhi`, `Cape Town`, `Rio de Janeiro`, `Sao Paulo`) or a country
+(`South Africa`, `United Kingdom`).
+
+```solve
+3pm London on 23 September 2026 in Los Angeles, Mexico City and Kuala Lumpur // Los Angeles 7:00 AM, Mexico City 8:00 AM, Kuala Lumpur 10:00 PM
+3pm London on 23 September 2026 in Las Vegas // 7:00 AM
+3pm London on 23 September 2026 in New Delhi // 7:30 PM
+3pm London on 23 September 2026 in Cape Town // 4:00 PM
+3pm London on 23 September 2026 in Rio de Janeiro // 11:00 AM
+3pm London on 23 September 2026 in Sao Paulo // 11:00 AM
+3pm London on 23 September 2026 in South Africa // 4:00 PM
+3pm Los Angeles on 23 September 2026 in United Kingdom // 11:00 PM
+```
+
+A label is the name as you wrote it, with the first letter of each word raised
+the way the place writes its name. The small linking words inside a name, such
+as the `de` of Rio de Janeiro, keep the case you gave them, and nothing you
+capitalised is lowered.
+
+```solve
+3pm london on 23 September 2026 in rio de janeiro and new york // Rio de Janeiro 11:00 AM, New York 10:00 AM
 ```
 
 ## Why the date matters
@@ -194,6 +270,29 @@ date in Vancouver // March 11, 2026
 time difference between Seattle and Moscow // Moscow is 10 hours ahead of Seattle
 ```
 
+### The difference as a number of hours
+
+A time difference is how far one place's clock is set ahead of another's. It is
+written as a sentence, but it is a length of time underneath, measured from the
+first place you name to the second: positive when the second place is ahead,
+negative when it is behind. Add `in hours`, or `in minutes`, to get that length
+on its own, ready to use in a calculation such as moving a time from one clock
+to the other.
+
+```solve
+time difference between Seattle and Moscow in hours // 10 hours
+time difference between Moscow and Seattle in hours // -10 hours
+time difference between London and New Delhi in minutes // 330 minutes
+```
+
+Places that keep the same clock have a difference of nothing, and the answer
+says they share it rather than that one is zero hours ahead.
+
+```solve
+time difference between Paris and Berlin // Berlin and Paris currently share the same UTC offset
+time difference between Paris and Berlin in hours // 0 hours
+```
+
 ## A date or a time in a zone
 
 Writing `in <zone>` after a date, or after a time of day, reads it in that zone
@@ -226,12 +325,48 @@ unit, the same as `5 km in Tokyo`.
 5 in Tokyo // "Tokyo" is not a unit.
 ```
 
-A signed offset does not work after a date: `2026-04-03 in GMT+9` is read as
-`(2026-04-03 in GMT) + 9`, and since a bare 9 does not say whether it means
-days, hours or minutes, the line is refused rather than moved. Write `in Tokyo`
+An offset from UTC works after a date as well as a place does. An offset is
+the number of hours, and sometimes minutes, that a clock is set ahead of UTC or
+behind it: `UTC-5` is five hours behind, and `UTC+5:45` five and three quarters
+ahead. Unlike a place, an offset never changes for daylight saving, so it names
+a clock that stays put all year. The time is read on that clock and shown there,
+as a place's is.
+
+```solve
+2026-04-03T15:00 in UTC-5 // Friday, April 3, 2026, 3:00:00 PM
+2026-04-03T15:00 in GMT+9 // Friday, April 3, 2026, 3:00:00 PM
+2026-04-03T15:00 in UTC+5:45 // Friday, April 3, 2026, 3:00:00 PM
+2026-04-03 in UTC-05:00 // Friday, April 3, 2026
+```
+
+A time that already names its moment, one written with its own offset such as
+`Z` (UTC itself), or `now`, is moved onto the offset's clock instead, because the
+moment is fixed. Three in the afternoon in UTC is ten in the morning five hours
+behind it.
+
+```solve
+2026-04-03T15:00Z in UTC-5 // Friday, April 3, 2026, 10:00:00 AM
+```
+
+`UTC` and `GMT` are read in either case, with or without a space either side
+of the sign. A number with a unit after it is arithmetic rather than an offset,
+so `in UTC - 5 hours` is the time in UTC less five hours. Clocks are kept from
+twelve hours behind UTC to fourteen ahead, so an offset outside that range, or
+one with sixty minutes or more, is refused rather than read as a clock that
+exists nowhere.
+
+```solve
+2026-04-03T15:00 in UTC - 5 hours // Friday, April 3, 2026, 10:00:00 AM
+2026-04-03T15:00 in UTC+25 // "UTC+25" is not an offset a clock keeps: write whole hours and minutes from UTC-12 to UTC+14, as in "UTC-5" or "UTC+5:45"
+```
+
+An offset suits a clock that never changes. For a place that changes its
+clocks, an offset is right for only part of the year, so name the place and the
+answer follows its clocks through the year: write the city or its abbreviation,
+`in New York` or `in Tokyo`,
 or `in JST` instead. A host that wants the whole
 document computed in one zone can pin it: see
-[dates on Temporal](/guide/dates-on-temporal/#choosing-a-zone-without-temporal).
+[dates on Temporal](/guide/dates-on-temporal/#choosing-a-zone-on-either-backend).
 
 ## The names that work
 

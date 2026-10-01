@@ -38,7 +38,7 @@ describe("Issue #154: a non-finite matrix cell survives the DTO's JSON round-tri
   });
 
   test("a matrix with a NaN cell is portable", () => {
-    const dto = dtoOf("[0/0, 1; 2, 3]");
+    const dto = dtoOf("[1/0 - 1/0, 1; 2, 3]");
     expect(dto.matrix!.cells).toContain("NaN");
     expectPortable(dto);
     expect(Number(dto.matrix!.cells[dto.matrix!.cells.indexOf("NaN")])).toBeNaN();

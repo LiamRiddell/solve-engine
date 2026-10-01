@@ -171,6 +171,11 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   // `log <x> base <n>`: reached only through that phrase, so it is named for
   // the function it is (#667).
   114: { name: "log", min: 2, max: 2 },
+  // `float(x)`: the number x is, reached only through its own keyword (#828).
+  115: { name: "float", min: 1, max: 1 },
+  // The name a quantity is shown under, emitted after an aliased or
+  // document-defined unit and never callable by name (#762).
+  116: { name: "unitLabel", min: 3, max: 3 },
 };
 
 /** "1 argument" / "2 arguments", so the message reads as English either way. */
@@ -187,10 +192,25 @@ function expectation(arity: BuiltinArity): string {
 
 /**
  * The name of every builtin function in the arity table, for the "did you mean"
- * suggestion an undefined function carries (see errors/DidYouMean.ts).
+ * suggestion an undefined function carries (see errors/DidYouMean.ts). The
+ * unit label (116) is left out: it is emitted by the engine and no reader can
+ * call it, so suggesting it would name something that cannot be typed.
  */
 export function builtinFunctionNames(): string[] {
-  return Object.values(BUILTIN_ARITY).map((arity) => arity.name);
+  return Object.entries(BUILTIN_ARITY).filter(([index]) => index !== "116").map(([, arity]) => arity.name);
+}
+
+/**
+ * The arity entry the table itself holds for `index`, or undefined. Read as an
+ * own property, so an index the table does not hold never finds one inherited
+ * from `Object.prototype`: before, a planted `Object.prototype[250]` turned an
+ * unregistered builtin into "() takes undefined arguments".
+ *
+ * @param index - The builtin's index.
+ * @returns Its arity entry, or undefined.
+ */
+function arityAt(index: number): BuiltinArity | undefined {
+  return Object.prototype.hasOwnProperty.call(BUILTIN_ARITY, index) ? BUILTIN_ARITY[index] : undefined;
 }
 
 /**
@@ -204,7 +224,7 @@ export function builtinFunctionNames(): string[] {
  * @returns The name, or an empty string for an index this table does not list.
  */
 export function builtinFunctionName(index: number): string {
-  return BUILTIN_ARITY[index]?.name ?? "";
+  return arityAt(index)?.name ?? "";
 }
 
 /**
@@ -220,7 +240,7 @@ export function builtinFunctionName(index: number): string {
  * builtin index working rather than making this table a gate on extensibility.
  */
 export function builtinArityError(index: number, argCount: number): EngineError | undefined {
-  const arity = BUILTIN_ARITY[index];
+  const arity = arityAt(index);
   if (arity === undefined) return undefined;
   if (argCount >= arity.min && argCount <= arity.max) return undefined;
 
@@ -228,5 +248,26 @@ export function builtinArityError(index: number, argCount: number): EngineError 
     "BUILTIN_ARITY_MISMATCH",
     `${arity.name}() takes ${expectation(arity)}, but was given ${argCount === 0 ? "none" : plural(argCount)}`,
     { functionName: arity.name, expectedMin: arity.min, expectedMax: arity.max, actual: argCount },
+  );
+}
+
+/**
+ * The arity refusal for a built-in form that takes a fixed number of
+ * arguments and checks it at parse time rather than at `CALL_BUILTIN`:
+ * `vec2(1, 2, 3)` and `vec3(1, 2)`, whose count the keyword itself fixes.
+ *
+ * Worded and coded as {@link builtinArityError}'s refusal, so a host sees one
+ * kind of mistake whichever path found it.
+ *
+ * @param name - The form's name as the reader wrote it (`vec3`).
+ * @param expected - The one count it takes.
+ * @param actual - The count it was given.
+ * @returns The `BUILTIN_ARITY_MISMATCH` error to throw.
+ */
+export function fixedArityError(name: string, expected: number, actual: number): EngineError {
+  return ErrorFactory.execution(
+    "BUILTIN_ARITY_MISMATCH",
+    `${name}() takes ${plural(expected)}, but was given ${actual === 0 ? "none" : plural(actual)}`,
+    { functionName: name, expectedMin: expected, expectedMax: expected, actual },
   );
 }

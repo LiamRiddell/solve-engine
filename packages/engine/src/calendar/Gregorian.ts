@@ -12,9 +12,13 @@ import type { ZonedFields } from "./CalendarBackend";
  * backends agree on them by construction.
  *
  * The arithmetic is `Date`'s own UTC methods, which read and write the number
- * with no zone consulted. That includes `Date`'s reading of a year from 0 to
- * 99 as the 1900s in `Date.UTC`, kept because the engine's results are
- * measured against it.
+ * with no zone consulted. The year is always taken as written: `Date.UTC`
+ * reads a year from 0 to 99 as the 1900s, and every year handed to these
+ * helpers is one already read off a date (a zone's fields, a backend's
+ * fields, a literal's digits), so that window turned 26 AD into 1926 and put
+ * every date in the first century on the wrong day (#823). The window a
+ * backend's `localMidnight` keeps is the `Date` constructor's, applied by the
+ * backend itself, not here.
  *
  * @module Gregorian
  */
@@ -23,9 +27,32 @@ import type { ZonedFields } from "./CalendarBackend";
 const MS_PER_DAY = 86_400_000;
 
 /**
+ * Four hundred Gregorian years, in milliseconds: 146,097 days, a whole number
+ * of weeks, after which the calendar repeats exactly (leap days and weekdays
+ * included). A year from 0 to 99 is moved forward by it, past `Date.UTC`'s
+ * two-digit window, and the answer moved back.
+ */
+const MS_PER_400_YEARS = 146_097 * MS_PER_DAY;
+
+/**
+ * `Date.UTC` with the year read as written.
+ *
+ * @param year - The calendar year, astronomical: 0 is 1 BC, -1 is 2 BC.
+ * @returns Epoch milliseconds, or `NaN` when a field is not finite.
+ */
+function literalUtc(year: number, month0: number, day: number, hour = 0, minute = 0, second = 0): number {
+	// `Date.UTC` truncates the year before it windows it, so the window is
+	// exactly the years whose integer part is 0 to 99, and -0.5 is one of them.
+	// Those are the years above -1 and below 100, tested on the year itself so
+	// the common year reads no `Math` (a global, slow inside a `vm` context).
+	if (year > -1 && year < 100) return Date.UTC(Math.trunc(year) + 400, month0, day, hour, minute, second) - MS_PER_400_YEARS;
+	return Date.UTC(year, month0, day, hour, minute, second);
+}
+
+/**
  * The instant a set of calendar fields names in UTC, in epoch milliseconds.
  *
- * @param year - The calendar year (0 to 99 read as the 1900s, as `Date.UTC` does).
+ * @param year - The calendar year, as written: 26 is 26 AD, 0 is 1 BC.
  * @param month0 - Zero-based month; overflow rolls into the adjacent year.
  * @param day - Day of the month; overflow rolls into the adjacent month.
  * @param hour - Hour of the day, default 0.
@@ -34,7 +61,7 @@ const MS_PER_DAY = 86_400_000;
  * @returns Epoch milliseconds, or `NaN` when the fields are not finite.
  */
 export function utcMs(year: number, month0: number, day: number, hour = 0, minute = 0, second = 0): number {
-	return Date.UTC(year, month0, day, hour, minute, second);
+	return literalUtc(year, month0, day, hour, minute, second);
 }
 
 /**
@@ -46,12 +73,12 @@ export function utcMs(year: number, month0: number, day: number, hour = 0, minut
  * the answer never depends on a zone, and the month clamp in a month step and
  * the count in `days in <period>` must not move between backends.
  *
- * @param year - The calendar year (0 to 99 read as the 1900s, as `Date.UTC` does).
+ * @param year - The calendar year, as written: 0 (1 BC) is a leap year.
  * @param month0 - Zero-based month; overflow rolls into the adjacent year.
  * @returns 28 to 31.
  */
 export function daysInMonth(year: number, month0: number): number {
-	return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
+	return new Date(literalUtc(year, month0 + 1, 0)).getUTCDate();
 }
 
 /**
@@ -64,7 +91,7 @@ export function daysInMonth(year: number, month0: number): number {
  * @returns Whole days since 1 January 1970, negative before it.
  */
 export function dayNumber(year: number, month0: number, day: number): number {
-	return Math.floor(Date.UTC(year, month0, day) / MS_PER_DAY);
+	return Math.floor(literalUtc(year, month0, day) / MS_PER_DAY);
 }
 
 /**
@@ -103,12 +130,12 @@ export function utcFields(epochMs: number): ZonedFields {
  */
 export function isoWeekNumber(year: number, month0: number, day: number): number {
 	// A date-only copy in UTC, so no local hour can shift the day.
-	const target = new Date(Date.UTC(year, month0, day));
+	const target = new Date(literalUtc(year, month0, day));
 	// `getUTCDay()` counts Sunday as 0. Map to ISO's Monday 1 to Sunday 7,
 	// then step to the Thursday of the same week.
 	const isoDay = target.getUTCDay() === 0 ? 7 : target.getUTCDay();
 	target.setUTCDate(target.getUTCDate() + 4 - isoDay);
-	const yearStart = Date.UTC(target.getUTCFullYear(), 0, 1);
+	const yearStart = literalUtc(target.getUTCFullYear(), 0, 1);
 	const days = Math.floor((target.getTime() - yearStart) / MS_PER_DAY);
 	return Math.floor(days / 7) + 1;
 }

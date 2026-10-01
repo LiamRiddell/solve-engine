@@ -45,6 +45,7 @@ export type { DocumentUnit } from "@solve-js/packages/uom/UserUnitTable";
 // and the `Date` backend that option defaults to.
 export type { CalendarBackend, CalendarFields, ZonedFields } from "@solve-js/calendar/CalendarBackend";
 export { DateCalendar, DATE_CALENDAR, calendarOf, dateCalendarInZone } from "@solve-js/calendar/DateCalendar";
+export type { DateCalendarOptions } from "@solve-js/calendar/DateCalendar";
 
 // What `ExpressionEngine.getDateReading()` answers with: the order this engine
 // reads an ambiguous numeric date literal in, and where that order came from.

@@ -1,25 +1,37 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
-import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData, type DisplayBase } from "@solve-js/vm/Value";
+import { decimalFromLiteral, decimalFromExponentLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
+import { nonFiniteText, numberText } from "@solve-js/utilities/Number";
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
-import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
-import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
+import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-js/symbolic";
+import { symbolicPow, symbolicNeg, symbolicBuiltin, unknownNameIn, symbolicPercentChange, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
+import { resolveStoredFormulaIn } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
-import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
+import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues, ReduceForm, reduceFormCall } from "@solve-js/vm/MatrixOps";
+import { listFromCells, listCellValue, needsUnitCells, unitListArithmetic, listConverted } from "@solve-js/vm/MatrixUnits";
+import { percentageMeetsList, type PercentageCell } from "@solve-js/vm/ListPercentage";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
-import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
+import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
-import { CoreErrorCodes, DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
+import { CoreErrorCodes, DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions, asConverterRegistry, datetimeArgumentRefused } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, builtinArgumentRefused, listBuiltinCall, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
+import { valuesEqual, valuesOrdered } from "@solve-js/vm/Comparisons";
+import { listConditionRefused, answersCellByCell, isListOfAnswers, type CellComparison } from "@solve-js/vm/ListComparison";
+import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
+import type { QueryClient } from "@tanstack/query-core";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
+import { multiplierRefused, numberFromBaseText, textSignRefused } from "@solve-js/vm/PlainNumberForms";
+import { dateDifference } from "@solve-js/vm/DateDifference";
 import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, unitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, cellUnitsDiffer } from "@solve-js/vm/VMConversion";
+import { safeText } from "@solve-js/parser/ParseMessages";
+import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageRefusal, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused, bigBaseArithmetic } from "@solve-js/vm/VMConversion";
+import { listConversionRefused } from "@solve-js/vm/ListRounding";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -28,15 +40,24 @@ import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { ScopeId } from "@solve-js/vm/CellScope";
 import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } from "@solve-js/vm/QuantityPowers";
-import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf } from "@solve-js/vm/UnitAlgebra";
-import { bigIntPow, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
-import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
+import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf, rateThroughQuantity, unitQuotientUnsupported } from "@solve-js/vm/UnitAlgebra";
+import { rateForm } from "@solve-js/uom/RateForms";
+import { bigIntPow, exactWholeLiteral, valueInBase, bigBaseInteger, wholeFromBase } from "@solve-js/vm/ExactIntegers";
+import { indeterminateQuotient, infiniteResult, zeroDivisorQuotient } from "@solve-js/vm/IndeterminateQuotient";
+import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal, percentSum } from "@solve-js/vm/ExactDecimals";
+import { percentageTimesPercentage, percentageOverNumber, percentageToPower } from "@solve-js/vm/PercentArithmetic";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
+import { fieldsShownIn, noonOnDay, shownZone, zoneAnswerJoinedText } from "@solve-js/vm/ZoneAnswers";
+import { descendingRangeMessage } from "@solve-js/vm/RangeBounds";
+import { addZonedCalendarDays, addZonedCalendarMonths } from "@solve-js/calendar/ZonedSteps";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { LineTrace } from "@solve-js/explain/Explanation";
+import { offsetRefusal, resolveUtcOffsetName } from "@solve-js/calendar/UtcOffset";
+import { CALENDAR_MONTHS_PER_UNIT, addCalendarDays, shiftByCalendarUnit } from "@solve-js/vm/CalendarShift";
+import { timecodeConverted, timecodeOperandRefused, timecodeUnitPhrase } from "@solve-js/vm/TimecodeConversion";
 
 /**
  * Create a new VM instance with the given opcode registry and configurable limits.
@@ -218,8 +239,8 @@ export function createVM(
       deleteUserFunction(name: string) { userFunctions.delete(name); },
       getVariableEntries() { return Array.from(variables.entries()); },
       getUserFunctionDefs() { return Array.from(userFunctions.values()); },
-      defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram) {
-        equations.set(variable, { variable, factorNames, rhsProgram });
+      defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram, text?: string) {
+        equations.set(variable, text === undefined ? { variable, factorNames, rhsProgram } : { variable, factorNames, rhsProgram, text });
       },
       getEquation(variable: string) { return equations.get(variable); },
       hasEquation(variable: string) { return equations.has(variable); },
@@ -322,6 +343,14 @@ export interface LineExecutionContext {
      */
     getLineCount?: () => number;
     /**
+     * Set when this pass runs a what-if's scenario (`line 4 with deposit =
+     * 150000`), which works each line out once in a scratch engine. A form that
+     * re-runs another line (goal seek) names that as the reason it cannot
+     * answer here, rather than the batch pass or a single expression, which the
+     * reader did not write.
+     */
+    inWhatIf?: boolean;
+    /**
      * Whether this engine may fetch live data (`network.enabled`). A plugin
      * function that reads a resolver's cache uses it to say "live data is
      * switched off" when the cache is empty, rather than the "not preflighted"
@@ -336,6 +365,16 @@ export interface LineExecutionContext {
      * `calendar/DateCalendar.ts` resolves either case.
      */
     calendar?: CalendarBackend;
+    /**
+     * The query cache of the engine running this line, where its asynchronous
+     * resolvers keep what they fetched. A plugin function that reads a
+     * resolved value back (`createQueryResolver`'s, the historical currency
+     * conversion's) reads it from here, so it reads its own engine's cache
+     * however many engines share the process (#710). Absent on a context no
+     * engine built; such a handler falls back to the deprecated
+     * `getActiveQueryClient()`.
+     */
+    queryClient?: QueryClient;
     /**
      * The random source this line draws from, a number in [0, 1) per call, the
      * way `calendar` is the clock. `roll`, `random()`, `pick`, `shuffle`,
@@ -355,8 +394,20 @@ export interface LineExecutionContext {
      * `docs-internal/plans/CROSS_SCOPE_CELLS.md`.
      */
     scope?: ScopeId;
-    /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range), distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
-    getLineResult?: (lineNumber: number) => Value | undefined;
+    /**
+     * Look up another line's cached result by 1-based line number. `undefined`
+     * means not evaluated yet, out of range, or below this line: a note is
+     * read from the top, so a line further down is never read, on any pass.
+     * No Value is `undefined`-like, so the two cannot be confused.
+     *
+     * On the incremental path a read records that this line depends on that
+     * position. Pass `declared` as true for a read an edge the form already
+     * took covers (a member of a tag asked for through
+     * {@link getTaggedLines}, a line inside a span given to
+     * {@link noteFigureSpanRead}), so the graph records nothing more; a form
+     * that reads a thousand members then costs one edge, not a thousand.
+     */
+    getLineResult?: (lineNumber: number, declared?: boolean) => Value | undefined;
     /**
      * Say that this line is about to read `lineNumber`, before reading it.
      *
@@ -371,6 +422,20 @@ export interface LineExecutionContext {
      */
     noteLineRead?: (lineNumber: number) => void;
     /**
+     * Say that this line reads the figures on lines `first` to `last`, before
+     * reading any of them: every line in the span except a summary line (a
+     * `total above`, a section or tag total), which a span of figures passes
+     * over, as a section total does.
+     *
+     * One edge however long the span, where {@link noteLineRead} per member
+     * is one per line (#733). The graph asks the document which lines in the
+     * span are summaries when it follows the edge back, so two totals of one
+     * section are not taken to read each other. Absent where there is no
+     * document; a form falls back to {@link noteLineRead} then, or skips the
+     * declaration where that is absent too.
+     */
+    noteFigureSpanRead?: (first: number, last: number) => void;
+    /**
      * The 1-based positions of the lines carrying `#tag`, ascending, or
      * `undefined` when this path keeps no index and the caller should walk the
      * document itself.
@@ -378,8 +443,26 @@ export interface LineExecutionContext {
      * `total of #tag` used to look at every line of the document, so a notepad
      * of tagged amounts and totals cost aggregates x lines per pass. Both
      * document paths maintain an index instead, and answer from it here.
+     *
+     * Asking is also what tells the dependency graph that this line reads
+     * every line carrying the tag, as one edge on the tag rather than one per
+     * member (#733), so a form that asks here needs no `noteLineRead` for the
+     * members. A line joining or leaving the group later is covered by the
+     * same edge.
      */
     getTaggedLines?: (tag: string) => readonly number[] | undefined;
+    /**
+     * Every category tag the document's lines carry, lower-cased, each with the
+     * 1-based positions of its lines ascending, or `undefined` when this path
+     * keeps no index and the caller should walk the document itself.
+     *
+     * What `total by tag` reads its groups from (#734). The answer is the same
+     * object for as long as the document's text is unchanged, within a pass
+     * and across passes, so a form may key work of its own on it. Asking tells
+     * the dependency graph that this line reads every tagged line, as one
+     * edge, the way {@link getTaggedLines} does for one tag.
+     */
+    getTagGroups?: () => ReadonlyMap<string, readonly number[]> | undefined;
     /**
      * Whether line `lineNumber` has no figure to read: a blank line, a `#`
      * heading, or a line the classifier skips (a comment, a blockquote, table
@@ -403,6 +486,15 @@ export interface LineExecutionContext {
      * line never reads, rather than searching a relationship that cannot move.
      */
     getLineReads?: (lineNumber: number) => string[] | undefined;
+    /**
+     * The value the document gives a name as it stands, or `undefined` when no
+     * line has set it. Goal seek reads it to learn the unit its unknown is in,
+     * so `solve line 3 for price = £1,500` answers in pounds when `price` is an
+     * amount of pounds (#835), and a line that is only `sum` or `total` reads it
+     * before it totals the block above (#742). Present on every path the engine
+     * builds a context for, a single expression included.
+     */
+    getVariable?: (name: string) => Value | undefined;
     /**
      * Re-evaluate another line's already-compiled expression with `variable`
      * bound to `bound` for that one evaluation, without disturbing the
@@ -460,6 +552,18 @@ export interface LineExecutionContext {
      * must {@link LineRerun.close} the session, in a `finally`.
      */
     rerunLines?: (lineNumber: number) => LineRerun | Value;
+    /**
+     * What line `lineNumber` says with the inputs of the scenario named `name`
+     * in force (`line 5 under bull`, #744), or the error that stops it.
+     *
+     * The scenario is the `scenario <name> with ...` line above the asking
+     * line; none, or two with the same name, is refused by name. It is read as
+     * the what-if it stands for (`line 5 with ...`, with the declaration's
+     * inputs), evaluated where the asking line stands, so every what-if
+     * refusal is a scenario's too. Every line above the asking line is read,
+     * so an edit to any of them re-runs it. Absent where there is no document.
+     */
+    readScenario?: (name: string, lineNumber: number) => Value;
     /**
      * The RAW markdown text of line `lineNumber` (1-based), or `undefined`
      * when there is no real document or the line is out of range. Distinct
@@ -926,11 +1030,13 @@ function builtinAt(ref: number): ((args: Value[], context?: LineExecutionContext
 function rateOver(args: Value[], rateIndex: number, context: LineExecutionContext | undefined): Value {
     const fault = faultedIn(args);
     if (fault) return fault;
-    const refused = datetimeArgumentRefused(rateIndex, args);
+    // The unit is text by construction, so only the value is checked.
+    const refused = builtinArgumentRefused(rateIndex, args.slice(0, 1));
     if (refused) return refused;
     if (args[0].type === ValueType.Symbolic && !SYMBOLIC_NATIVE_BUILTINS.has(rateIndex)) return symbolicBuiltin(rateIndex, args);
     const fn = builtinAt(rateIndex);
-    return fn === undefined ? errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${rateIndex} is not registered`) : fn(args, context);
+    if (fn === undefined) return errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${rateIndex} is not registered`);
+    return listBuiltinCall(rateIndex, args, context) ?? fn(args, context);
 }
 
 /**
@@ -1289,13 +1395,22 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
         // Number/Percentage make sense here; anything else (a date, a matrix)
         // falls through to the ordinary error path.
         if (r.type !== ValueType.Percentage && r.type !== ValueType.Number) return null;
-        return percentageValue(l.toNumber() + sign * r.toNumber());
+        // Formed in base ten, so `10% + 20%` holds the double `30%` does and
+        // `10% + 20% == 30%` is true. See percentSum().
+        const fraction = percentSum(l.toNumber(), r.toNumber(), sign);
+        // `50% + 1e308` is a fraction a double holds, but not a hundred times
+        // it, so it is refused as `1e308 as %` is; see toPercentage().
+        if (!Number.isFinite(fraction * 100)) return percentageRefusal(l.divisionByZero === true ? l : r, fraction);
+        return percentageValue(fraction);
     }
     if (r.type !== ValueType.Percentage) return null;
 
     // A percentage on the right of something concrete scales it. Uom covers
     // money and every other unit, and the unit has to survive: "$300 + 15%"
     // is $345.00, not a bare 345.
+    // An unknown is scaled the same way: `foo + 10%` is `1.1foo`, where it
+    // added the bare fraction. See symbolicPercentChange().
+    if (l.type === ValueType.Symbolic) return symbolicPercentChange(l, r.toNumber(), sign);
     const factor = 1 + sign * r.toNumber();
     if (l.type === ValueType.Number) {
         // A scalar multiply scales a carried tolerance by the same factor, so a
@@ -1313,6 +1428,39 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
     // stays exact via the base-ten scaling factor.
     if (l.type === ValueType.Uom && l.unit !== undefined) return scaleMoneyByPercent(l, l.unit, r.toNumber(), sign);
     return null;
+}
+
+/** {@link combinePercentage} for `+`, as one cell of a list meets a percentage. */
+const addPercentageCell: PercentageCell = (a, b) => combinePercentage(a, b, 1);
+
+/** {@link combinePercentage} for `-`, as one cell of a list meets a percentage. */
+const subtractPercentageCell: PercentageCell = (a, b) => combinePercentage(a, b, -1);
+
+/**
+ * `+` or `-` with a list on at least one side, worked cell by cell, or null
+ * for the general path (two plain lists, a plain list and a plain number).
+ *
+ * A percentage is a share of each cell, by the rule one number follows, so
+ * `[100, 200] + 10%` is `[110, 220]`; the general path read the percentage as
+ * its bare fraction and answered `[100.10, 200.10]` (see vm/ListPercentage.ts).
+ * A list that carries a unit, or a plain list meeting a quantity, keeps the
+ * unit (#745, see vm/MatrixUnits.ts).
+ *
+ * @param l - The left operand.
+ * @param r - The right operand; at least one of the two is a list.
+ * @param sign - `1` for `+`, `-1` for `-`.
+ */
+function listAddOrSubtract(l: Value, r: Value, sign: 1 | -1): Value | null {
+    // `and` compiles to ADD, and between two answers it is the conjunction
+    // (`true and false` is false), so a list of answers beside an answer, or
+    // two of them, join cell by cell: `([1, 2] > 1) and true` is
+    // [false, true], where adding the cells as 1 and 0 gave [1, 2].
+    if (sign === 1 && (l.type === ValueType.Boolean || isListOfAnswers(l)) && (r.type === ValueType.Boolean || isListOfAnswers(r))) {
+        return answersCellByCell(l, r, BOTH_TRUE);
+    }
+    const shared = percentageMeetsList(l, r, sign, sign === 1 ? addPercentageCell : subtractPercentageCell);
+    if (shared !== null) return shared;
+    return needsUnitCells(l, r) ? unitListArithmetic(sign === 1 ? "add" : "sub", l, r) : null;
 }
 
 /**
@@ -1340,7 +1488,7 @@ function multiplyPercentWithUncertainty(l: Value, r: Value): Value | null {
  * {@link multiplyPercentWithUncertainty}). One call from the loop, as before.
  */
 function multiplyPrelude(l: Value, r: Value): Value | null {
-    return quantityOperandRefused(l, r, "mul") ?? multiplyPercentWithUncertainty(l, r);
+    return quantityOperandRefused(l, r, "mul") ?? timecodeOperandRefused(l, r, "mul") ?? multiplyPercentWithUncertainty(l, r);
 }
 
 /**
@@ -1373,7 +1521,8 @@ function multiplyMoneyByScalarExact(l: Value, r: Value): Value | null {
  * An exact product with a scalar, or null: money times a number or a
  * percentage (see {@link multiplyMoneyByScalarExact}), or a plain number times a
  * percentage, `10% of 0.1`, which is exact for the same reason (see
- * vm/ExactDecimals.ts). Every other multiply keeps its own path. One call from
+ * vm/ExactDecimals.ts), or a percentage times a percentage, which is a
+ * percentage (see vm/PercentArithmetic.ts). Every other multiply keeps its own path. One call from
  * MUL, so the dispatch loop does not grow (see the note on the size of
  * `executeBytecode` above the opcode bodies kept out of it).
  */
@@ -1382,16 +1531,19 @@ function multiplyScalarExact(l: Value, r: Value): Value | null {
     if (money !== null) return money;
     if (l.type === ValueType.Percentage && r.type === ValueType.Number) return multiplyByPercentExact(r, l.toNumber());
     if (r.type === ValueType.Percentage && l.type === ValueType.Number) return multiplyByPercentExact(l, r.toNumber());
-    return null;
+    // A share of a share is a share: `10% * 20%` is 2%. See vm/PercentArithmetic.ts.
+    return percentageTimesPercentage(l, r);
 }
 
 /**
  * What DIV asks before anything else on its general path, as
  * {@link multiplyPrelude} does for MUL: the quantity refusal, then a percentage
- * and an uncertain number (see {@link dividePercentWithUncertainty}).
+ * and an uncertain number (see {@link dividePercentWithUncertainty}), then a
+ * percentage over a plain number, which is a percentage (`10% / 2` is 5%, see
+ * vm/PercentArithmetic.ts).
  */
 function dividePrelude(l: Value, r: Value): Value | null {
-    return quantityOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r);
+    return quantityOperandRefused(l, r, "div") ?? timecodeOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r) ?? percentageOverNumber(l, r);
 }
 
 /**
@@ -1526,80 +1678,8 @@ function addBusinessDays(epochMs: number, n: number, vm: VM): number {
 }
 
 /** Milliseconds in a day that contains no daylight-saving transition. */
+/** Milliseconds in a day of 24 hours. */
 const MS_PER_DAY = 86_400_000;
-
-/**
- * How many calendar months one of these units spans.
- *
- * The unit table gives a month and a year fixed lengths (2,592,000 and
- * 31,536,000 seconds, i.e. exactly 30 and 365 days). Those ratios are correct
- * for pure duration arithmetic, which is why they are left alone: `2 years in
- * days` genuinely is 730 days, and other code depends on that. They are not
- * correct for landing on a calendar date, because a real month is 28 to 31
- * days and a real year is 365 or 366, so no single ratio can put "a year after
- * January 1 2024" on January 1 2025 (linearly it lands on December 31 2024,
- * a day early, and drifts further with every year added).
- *
- * Every unit named here is therefore shifted with `setMonth()` instead, by
- * this many months. Everything not named here keeps whatever the table says.
- */
-const CALENDAR_MONTHS_PER_UNIT: Record<string, number> = {
-    month: 1, months: 1, mo: 1,
-    year: 12, years: 12, yr: 12, y: 12, a: 12,
-    decade: 120, decades: 120, dec: 120,
-    century: 1200, centuries: 1200,
-    millennium: 12000, millennia: 12000,
-};
-
-/**
- * Move `epochMs` by `days` calendar days, holding the local wall-clock time.
- *
- * Stepping the day field is the whole point, the same reason
- * addBusinessDays() above does it. A day is only 86,400,000 ms when no
- * daylight-saving transition falls inside it: the day a zone springs forward
- * is 23 hours long and the day it falls back is 25. Adding a flat 86,400,000
- * across either one lands an hour off, and an hour off a local midnight is a
- * different calendar day, so `2024-11-03 + 1 day` answered November 3 again
- * in Los Angeles and `26/10/2024 + 2 days` answered October 27 in London.
- * The calendar backend moves the day field and recomputes the offset (see
- * `CalendarBackend.addDays`), so the answer is the day the user named in
- * every zone.
- */
-function addCalendarDays(epochMs: number, days: number, calendar: CalendarBackend): number {
-    const whole = Math.trunc(days);
-    const shifted = calendar.addDays(epochMs, whole);
-    // A shift far enough out to leave the range a Date can represent gives an
-    // Invalid Date. Falling back to the linear arithmetic hands back the same
-    // out-of-range number as before rather than turning it into a NaN here.
-    if (Number.isNaN(shifted)) return epochMs + days * MS_PER_DAY;
-    // A fractional part is elapsed time, not a calendar step ("1.5 days" is a
-    // day and then twelve hours), so it is added as milliseconds.
-    return shifted + (days - whole) * MS_PER_DAY;
-}
-
-/**
- * Move `epochMs` by `months` calendar months, clamping to the end of the month
- * it lands in: January 31 plus a month is February 28, or February 29 in a leap
- * year, and never March.
- *
- * The clamp lives in `CalendarBackend.addMonths`, which parks the day on the
- * 1st before the month field moves. A bare month step keeps the day number,
- * so the 31st of a month whose target has 30 days overflows into the month
- * after it, which is how `2024-01-31 + 1 month` answered March 1 and
- * `2024-03-31 - 1 month` answered March 1 as well. Clamping is what every
- * calendar application does with this case, and it is the only choice that
- * keeps the month the user asked for.
- */
-function addCalendarMonths(epochMs: number, months: number, calendar: CalendarBackend): number {
-    const whole = Math.trunc(months);
-    const shifted = calendar.addMonths(epochMs, whole);
-    // A leftover fraction of a month names no calendar date of its own, so it
-    // falls back to the table's fixed-length month. Same overflow reasoning as
-    // addCalendarDays() above for the NaN case.
-    const monthMs = convertUnit(1, "month", "ms");
-    if (Number.isNaN(shifted)) return epochMs + months * monthMs;
-    return shifted + (months - whole) * monthMs;
-}
 
 /**
  * Move a Datetime by a duration: the operation behind `<date> + <duration>`
@@ -1617,8 +1697,12 @@ function addCalendarMonths(epochMs: number, months: number, calendar: CalendarBa
  * in hours is elapsed time. "36 hours from now" means 36 hours of clock
  * ticking, across a daylight-saving transition included, which is exactly what
  * adding milliseconds does.
+ *
+ * A date read in a zone (`zone`, as `2024-11-02 12:00 in New York` carries
+ * one) steps its days and months on that zone's calendar, not the host's: see
+ * `calendar/ZonedSteps.ts`. Workdays still walk the backend's calendar.
  */
-function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): number {
+function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM, zone?: string): number {
     if (duration.type === ValueType.Uom && duration.unit !== undefined) {
         const unit = duration.unit;
         const amount = sign * duration.toNumber();
@@ -1628,24 +1712,25 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
         // one that needs a configured ceiling. See addBusinessDays().
         if (isWorkdayUnit(unit)) return addBusinessDays(epochMs, amount, vm);
 
-        const monthsPerUnit = CALENDAR_MONTHS_PER_UNIT[unit];
-        if (monthsPerUnit !== undefined) return addCalendarMonths(epochMs, amount * monthsPerUnit, vm.context.calendar);
-
-        // Measure first, for the reason extractDurationMs() gives below: a
-        // unit that is not a duration at all has to contribute nothing rather
-        // than be rescued by a lenient conversion.
-        if (getMeasure(unit) === "time") {
-            // Whether a unit is a whole number of days is read out of the unit
-            // table rather than listed here, so weeks and fortnights are
-            // covered by the same rule as days with nothing to keep in step by
-            // hand. Sub-day units fail the test and fall through to the linear
-            // path below, which is what they want.
-            let daysPerUnit = 0;
-            try { daysPerUnit = convertUnit(1, unit, "day"); } catch { /* Ignore */ }
-            if (Number.isInteger(daysPerUnit) && daysPerUnit >= 1) {
-                return addCalendarDays(epochMs, amount * daysPerUnit, vm.context.calendar);
+        // A date read in a zone steps its months and whole days on that zone's
+        // calendar (calendar/ZonedSteps.ts); a date with no zone steps the
+        // backend's, through the shared vm/CalendarShift.ts.
+        if (zone !== undefined) {
+            const monthsPerUnit = CALENDAR_MONTHS_PER_UNIT[unit];
+            if (monthsPerUnit !== undefined) return addZonedCalendarMonths(epochMs, amount * monthsPerUnit, zone, vm.context.calendar, convertUnit(1, "month", "ms"));
+            // Measure first, for the reason extractDurationMs() gives below: a
+            // unit that is not a duration at all contributes nothing.
+            if (getMeasure(unit) === "time") {
+                let daysPerUnit = 0;
+                try { daysPerUnit = convertUnit(1, unit, "day"); } catch { /* Ignore */ }
+                if (Number.isInteger(daysPerUnit) && daysPerUnit >= 1) return addZonedCalendarDays(epochMs, amount * daysPerUnit, zone, vm.context.calendar);
             }
         }
+
+        // Months, years and whole days step the calendar; see
+        // vm/CalendarShift.ts. Everything else falls through to the linear path.
+        const stepped = shiftByCalendarUnit(epochMs, amount, unit, vm.context.calendar);
+        if (stepped !== undefined) return stepped;
     }
     return epochMs + sign * extractDurationMs(duration);
 }
@@ -1691,7 +1776,11 @@ function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Valu
             `A date or time moves by a length of time, such as 5 days, 2 weeks or 3 hours, not by ${what}.`,
         );
     }
-    return datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm), date.grain, date.zone);
+    const moved = datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm, date.zone), date.grain, date.zone, date.timeAnchor);
+    // A time of day keeps how finely it is written, so a time in a zone moved
+    // by an hour still reads to the minute (#757).
+    if (date.timePrecision !== undefined) moved.timePrecision = date.timePrecision;
+    return moved;
 }
 
 /** The base types a percentage change reads a size from, and so checks for zero and sign. */
@@ -1827,8 +1916,17 @@ function combineTimecode(tc: Value, r: Value, sign: 1 | -1): Value {
         return uomValue(tc.toNumber() + sign * seconds * fps, tc.unit!);
     }
 
-    // Bare Number (or any other Uom), treated as a raw frame count.
-    return uomValue(tc.toNumber() + sign * r.toNumber(), tc.unit!);
+    // A bare number is a count of frames: `01:02:03:04 at 30 fps + 10` is ten
+    // frames on.
+    if (r.type === ValueType.Number) return uomValue(tc.toNumber() + sign * r.toNumber(), tc.unit!);
+
+    // Anything else used to be read as a frame count too, so `+ 5 kg` moved
+    // the timecode five frames: a confident answer to a question with none.
+    const what = r.type === ValueType.Uom && r.unit !== undefined ? describeQuantity(r.unit) : valueKindName(r);
+    return errorValue(
+        "INCOMPATIBLE_UNITS",
+        `${timecodeUnitPhrase(tc.unit)!.replace(/^a/, "A")} moves by frames or by a length of time, such as 10 frames or 2 seconds, not by ${what}.`,
+    );
 }
 
 /**
@@ -1842,6 +1940,13 @@ function isTruthy(value: Value): boolean {
     if (value.type === ValueType.Boolean) return value.value as boolean;
     return value.toNumber() !== 0;
 }
+
+/** `&&` for one pair of list cells, by the truthiness one pair of values has. */
+const BOTH_TRUTHY: CellComparison = (l, r) => boolValue(isTruthy(l) && isTruthy(r));
+/** `||` for one pair of list cells, by the truthiness one pair of values has. */
+const EITHER_TRUTHY: CellComparison = (l, r) => boolValue(isTruthy(l) || isTruthy(r));
+/** The word `and` between two answers, for one pair of list cells: both must be true, as `true and false` is false. */
+const BOTH_TRUE: CellComparison = (l, r) => boolValue(l.value === true && r.value === true);
 
 /**
  * The answer a conversion gives when the two units measure different things.
@@ -1874,7 +1979,11 @@ function isTruthy(value: Value): boolean {
  * an instant renders exactly as it did.
  */
 function datetimeInZone(left: Value, name: string, vm: VM): Value {
-    const zoneRef = resolveZoneName(name);
+    // A signed offset (`in UTC-5`, #730) resolves beside the zone names.
+    const zoneRef = resolveZoneName(name) ?? resolveUtcOffsetName(name);
+    // `in UTC+25`: an offset's shape, and no clock keeps it.
+    const badOffset = zoneRef === null ? offsetRefusal(name) : null;
+    if (badOffset !== null) return errorValue(DatetimeZoneErrorCodes.TIME_ZONE_OFFSET_OUT_OF_RANGE, badOffset);
     if (zoneRef === null) {
         // A real unit on the right is a different mistake from a misspelt zone,
         // and the two need different advice. `getMeasure` covers the unit table
@@ -1882,15 +1991,19 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
         const isUnit = getMeasure(name) !== undefined || sharedCurrencyExchange.isCurrency(name);
         return isUnit
             ? errorValue(
-                DatetimeErrorCodes.DATETIME_NOT_CONVERTIBLE,
+                DatetimeZoneErrorCodes.DATETIME_NOT_CONVERTIBLE,
                 `A date cannot be read in "${name}". "in <name>" after a date names a time zone, as in "2026-04-03 in Tokyo"`,
             )
             : errorValue(
-                DatetimeErrorCodes.DATETIME_ZONE_UNKNOWN,
+                DatetimeZoneErrorCodes.DATETIME_ZONE_UNKNOWN,
                 `"${name}" is not a time zone this engine knows. Name a city ("in Tokyo"), a standard abbreviation ("in JST") or "in UTC"`,
             );
     }
     const epochMs = left.toNumber();
+    // A time already shown in a zone (`3pm London in Tokyo`, #757) names its
+    // instant, so another zone shows that moment on its own clock, still as a
+    // time of day and still counted from the day the reader named.
+    if (left.grain === "time" && typeof left.zone === "string") return zoneTimeRezoned(left, zoneRef, vm.context.calendar);
     if (left.grain !== "date" && left.grain !== "datetime") {
         return datetimeValue(epochMs, "instant", zoneRef);
     }
@@ -1909,6 +2022,28 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
     return datetimeValue(reanchored + f.second * 1000 + f.millisecond, "instant", zoneRef);
 }
 
+/**
+ * A time in a zone shown in another one: the same instant, the same
+ * precision, and the anchor moved to noon on the same day as the new zone
+ * counts it, so the day shift stays against the day the reader named.
+ *
+ * @param time - A time of day that names a zone.
+ * @param zoneRef - The zone to show it in.
+ * @param calendar - The backend that resolves a named zone.
+ * @returns The time in the new zone.
+ */
+function zoneTimeRezoned(time: Value, zoneRef: string, calendar: CalendarBackend): Value {
+    const zone = time.zone as string;
+    let anchor: number | undefined;
+    if (time.timeAnchor !== undefined) {
+        const day = fieldsShownIn(time.timeAnchor, zone, calendar);
+        anchor = noonOnDay(day.year, day.month0, day.day, zoneRef, calendar);
+    }
+    const moved = datetimeValue(time.toNumber(), "time", shownZone(zoneRef), anchor);
+    if (time.timePrecision !== undefined) moved.timePrecision = time.timePrecision;
+    return moved;
+}
+
 /** `a % b` for two doubles, the MOD opcode's arithmetic. */
 const doubleRemainder = (a: number, b: number): number => a % b;
 
@@ -1919,17 +2054,56 @@ const bigIntRemainder = (a: bigint, b: bigint): bigint => {
 };
 
 /**
+ * The Value a PUSH_DECIMAL literal pushes. A decimal-point literal keeps its
+ * exact base-ten value in the `exact` sidecar, with the nearest double in
+ * `value`, so it reads as an ordinary Number everywhere except where it meets
+ * money. A literal with no point is a whole number past 2^53, which keeps its
+ * exact integer instead (see parser/WholeLiteral.ts). An exponent-form
+ * literal (`1e-3`) keeps its exact value as the point form does, so `$1e-3`
+ * rounds to the cent as `$0.001` does; see {@link exponentLiteralValue}. Kept
+ * out of the dispatch loop, which has to stay under V8's optimisation ceiling.
+ */
+function exactLiteralValue(text: string): Value {
+  if (text.indexOf("e") !== -1 || text.indexOf("E") !== -1) return exponentLiteralValue(text);
+  const whole = text.indexOf(".") === -1 ? exactWholeLiteral(text) : null;
+  if (whole !== null) return whole;
+  const dec = decimalFromLiteral(text);
+  return numberValueExact(decimalToNumber(dec), dec);
+}
+
+/**
+ * The Value an exponent-form literal pushes: its nearest double, with its
+ * exact decimal beside it when the double holds the same amount. A literal
+ * whose double overflowed to infinity or underflowed to zero (`1e309`,
+ * `1e-330`), or whose exponent is past the limit, is the plain double alone,
+ * as it always was: an exact value there would let arithmetic answer what the
+ * number itself cannot.
+ *
+ * @param text - The literal, normalized (`1.5e2`, `-2.5E-3`).
+ * @returns A Number Value.
+ */
+export function exponentLiteralValue(text: string): Value {
+  const n = Number(text);
+  const dec = decimalFromExponentLiteral(text);
+  if (dec === null || !Number.isFinite(n) || (n === 0 && dec.coef !== 0n)) return numberValue(n);
+  return numberValueExact(n, dec);
+}
+
+/**
  * The MOD opcode's answer for operands with no exact remainder, refusing one
  * that has no value.
  *
  * A remainder by zero, and a remainder of an infinite number, have no value, and
  * JavaScript's `%` answers NaN for both: `5 mod 0` and `(1/0) mod 3` were
  * NaN (#600). They are refused by name, as the functions outside their domain
- * are. A NaN operand still gives NaN: `0/0` is the documented NaN, and its
- * remainder has nothing to add. Kept out of the dispatch loop, which has to stay
+ * are. A NaN operand still gives NaN: its remainder has nothing to add. Kept out of the dispatch loop, which has to stay
  * under V8's optimisation ceiling.
  */
 function remainder(l: Value, r: Value): Value {
+    // A value written in a base past 2^53 takes its remainder from its whole
+    // number; see bigBaseArithmetic().
+    const inBase = bigBaseArithmetic(l, r, "mod");
+    if (inBase) return inBase;
     const result = binaryOp(l, r, doubleRemainder, bigIntRemainder);
     if (result.type !== ValueType.Number && result.type !== ValueType.Uom) return result;
     if (!Number.isNaN(result.toNumber())) return result;
@@ -1939,9 +2113,112 @@ function remainder(l: Value, r: Value): Value {
     return errorValue(
         "REMAINDER_UNDEFINED",
         b === 0
-            ? `${a} mod 0 has no value: nothing is left over from a division by zero, because it never ends.`
-            : `${a} mod ${b} has no value: an infinite number has no remainder.`,
+            ? `${numberText(a)} mod 0 has no value: nothing is left over from a division by zero, because it never ends.`
+            : `${numberText(a)} mod ${numberText(b)} has no value: an infinite number has no remainder.`,
     );
+}
+
+/**
+ * The EXP opcode's answer for a pair no earlier branch took: the double power,
+ * except for a percentage raised to a number, which is a percentage (`10% ^ 2`
+ * is 1%, see vm/PercentArithmetic.ts), and a value written in a base past
+ * 2^53, which is raised on its whole number (see bigBaseArithmetic()). Kept
+ * out of the dispatch loop.
+ *
+ * @param l - The base, already checked for a fault.
+ * @param r - The exponent.
+ */
+function plainPower(l: Value, r: Value): Value {
+    return percentageToPower(l, r) ?? bigBaseArithmetic(l, r, "pow") ?? numberValue(power(l.toNumber(), r.toNumber()));
+}
+
+/**
+ * The NEG opcode's answer for a value no earlier branch took: its negated
+ * double, except for a value written in a base past 2^53, whose whole number
+ * is negated exactly (see bigBaseInteger()), and an infinity a division by
+ * zero gave, which stays marked as one (see infiniteResult()). Kept out of
+ * the dispatch loop.
+ *
+ * @param v - The value, already checked for a fault.
+ */
+function negatedPlain(v: Value): Value {
+    if (v.divisionByZero === true) return infiniteResult(v, v, -v.toNumber());
+    const inBase = bigBaseInteger(v);
+    return inBase === null ? numberValue(-v.toNumber()) : wholeFromBase(-inBase);
+}
+
+/**
+ * A value as a plain number, for `as number`: an IPv6 address is its exact
+ * 128-bit whole number, a value written in a base past the safe range keeps
+ * every digit (`(2^100 + 1) in hex as number` rounded to the nearest double
+ * through toNumber()), and a colour, three channels with no one number, is
+ * refused by name (see colourRefused()), as is a list of several numbers (see
+ * listConversionRefused()). Text is read before this, by numberFromText().
+ *
+ * @param v - The value, already checked for a fault.
+ */
+function numberOf(v: Value): Value {
+    if (isIpv6Value(v)) return ipv6WholeNumber(v);
+    const list = listConversionRefused(v, "read as one number");
+    if (list !== null) return list;
+    if (v.type === ValueType.Colour) return colourRefused("read as one number");
+    if (v.type === ValueType.Hex && typeof v.value === "bigint") return wholeFromBase(v.value);
+    return numberValue(v.toNumber());
+}
+
+/**
+ * A value written in base 16, 2 or 8, for `as hex`, `in binary` and `in octal`.
+ *
+ * A colour already has a hex reading, so `#3366cc as rgb as hex` round-trips
+ * with its channels intact rather than collapsing through toNumber() (0 for a
+ * colour); in binary or octal it has none, and `#ff0000 in binary` answered
+ * `0b0`, so those are refused by name (see colourRefused()). A bigint keeps its
+ * bigint, exactly as ADD/SUB/MUL/DIV do: `12345678901234567890n as hex`
+ * rendered 0xAB54A98CEB1F0800 while the value ends 0AD2, because toNumber()
+ * rounded it first. An exact integer past the safe range, an IPv6 address and
+ * a value already written in another base convert from their own digits
+ * likewise, and an infinity, which has no digits, is refused by name (see
+ * valueInBase()).
+ *
+ * @param v - The value, already checked for a fault.
+ * @param base - The base to write it in.
+ */
+function inBase(v: Value, base: DisplayBase): Value {
+    if (v.type === ValueType.Colour) {
+        if (base !== "hex") return colourRefused(base === "bin" ? "written in binary" : "written in octal");
+        const c = v.value as ColourData;
+        return colourValue({ r: c.r, g: c.g, b: c.b, a: c.a, format: "hex" });
+    }
+    return valueInBase(v, base);
+}
+
+/**
+ * The unit a conversion to a count per something means for a rate that counts
+ * a unit: `$50/week in /month` keeps the dollars and changes the period, so the
+ * target is `USD/month`, as `$50/week in $/month` writes it (#738). Any other
+ * pair is the target as written (`10 Hz in /s` is a count per second).
+ */
+function rateTargetUnit(fromUnit: string, toUnit: string): string {
+    if (!toUnit.startsWith("/")) return toUnit;
+    const from = rateForm(fromUnit);
+    return from === null || from.numerator === "" ? toUnit : `${from.numerator}${toUnit}`;
+}
+
+/**
+ * Why a rate conversion found no answer: a price per unit into another
+ * currency per unit waits on the exchange rate (`$20/hour in €/day` before a
+ * rate is known), which is said as the missing rate it is (#738); anything else
+ * is the incompatible pair.
+ */
+function rateConversionError(vm: VM, fromUnit: string, toUnit: string): Value {
+    const from = rateForm(fromUnit);
+    const to = rateForm(toUnit);
+    if (from !== null && to !== null && from.numerator !== to.numerator
+        && sharedCurrencyExchange.isCurrency(from.numerator) && sharedCurrencyExchange.isCurrency(to.numerator)
+        && sharedCurrencyExchange.convertSync(1, from.numerator, to.numerator) === null) {
+        return rateUnavailable(vm, from.numerator, to.numerator);
+    }
+    return incompatibleConversionError(fromUnit, toUnit);
 }
 
 function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
@@ -1956,7 +2233,7 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
     const named = describeConversionMismatch(fromUnit, toUnit);
     return errorValue(
         "INCOMPATIBLE_UNITS",
-        named ?? `Cannot convert ${fromUnit} to ${toUnit}: they do not measure the same thing`,
+        named ?? `Cannot convert ${unitForMessage(fromUnit)} to ${unitForMessage(toUnit)}: they do not measure the same thing`,
     );
 }
 
@@ -1996,12 +2273,16 @@ const NUMBER_TEXT = /^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?
 /**
  * The number a piece of text spells, or the Error that says it spells none.
  * The whole text must be the number, spaces at either end aside, so `"12abc"`
- * is refused rather than read as 12.
+ * is refused rather than read as 12. A number written with a base prefix
+ * (`"0xFF"`) is read as a typed one is.
  *
  * @param text - The text to read.
  */
 function numberFromText(text: string): Value {
     const trimmed = text.trim();
+    // A base prefix reads as a typed number's does; see numberFromBaseText().
+    const based = numberFromBaseText(trimmed, text);
+    if (based !== null) return based;
     if (!NUMBER_TEXT.test(trimmed)) {
         return errorValue(
             "TEXT_NOT_A_NUMBER",
@@ -2013,7 +2294,7 @@ function numberFromText(text: string): Value {
 
 /**
  * The variables an undefined variable could have been meant as. The unit
- * spellings are searched alongside, through {@link unitNameIndex}, since a
+ * spellings are searched alongside, through {@link typeableUnitNameIndex}, since a
  * misspelt unit reaches the VM as an undefined variable too.
  */
 function* variableNameCandidates(vm: VM): Generator<string> {
@@ -2173,9 +2454,15 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
     const rateMeasure = getMeasure(denominator);
     const multiplierMeasure = getMeasure(multiplier.unit!);
     if (!rateMeasure || rateMeasure !== multiplierMeasure) {
+        // Not what the rate is per, but it may make it up with what follows:
+        // a speed times a force is a power, an acceleration times a time a
+        // speed (#737), and a price per kWh times a power a price per hour
+        // (#758). See uom/Dimensions.ts and vm/UnitAlgebra.ts.
+        const composed = tryDimensionalCompose(rate, multiplier, true) ?? rateThroughQuantity(rate, multiplier);
+        if (composed) return composed;
         return errorValue(
             "RATE_MUL_MEASURE_MISMATCH",
-            `Cannot multiply a "${denominator}"-denominated rate by "${multiplier.unit}" — different measures`
+            `Cannot multiply a rate per ${denominator} by a quantity in ${unitForMessage(multiplier.unit!)}: they measure different things, and together they make no unit.`
         );
     }
     const multiplierInDenominatorUnit = convertUnit(multiplier.toNumber(), multiplier.unit!, denominator);
@@ -2201,8 +2488,8 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
  * an unreadably large denominator.
  */
 function toFractionString(n: number): string {
-    if (Number.isNaN(n)) return "NaN";
-    if (!isFinite(n)) return n > 0 ? "Infinity" : "-Infinity";
+    const nonFinite = nonFiniteText(n);
+    if (nonFinite !== undefined) return nonFinite;
     const negative = n < 0;
     const abs = Math.abs(n);
     const whole = Math.floor(abs);
@@ -2275,15 +2562,20 @@ function fractionString(v: Value): string {
 function toMultiplierString(value: Value): string {
     const n = value.toNumber();
     const multiple = value.type === ValueType.Percentage ? 1 + n : n;
-    return `${Math.round(multiple * 1e6) / 1e6}x`;
+    // Rounding to six places multiplies by a million first, which overflows
+    // past about 1.8e302; such a multiple has no places to round anyway.
+    const rounded = Math.round(multiple * 1e6) / 1e6;
+    return `${numberText(Number.isFinite(rounded) ? rounded : multiple)}x`;
 }
 
 /** Scientific notation with trailing mantissa zeros trimmed ("1.50e+6" -> "1.5e+6"). */
 function toScientificString(n: number): string {
     // An infinity or a NaN has no mantissa and no exponent, so splitting on
     // "e" gave back one piece and the second was undefined: "0/0 as sci"
-    // rendered the string "NaNeundefined".
-    if (!Number.isFinite(n)) return String(n);
+    // rendered the string "NaNeundefined". It is written as the engine
+    // writes it, `∞` rather than JavaScript's `Infinity`.
+    const nonFinite = nonFiniteText(n);
+    if (nonFinite !== undefined) return nonFinite;
     if (n === 0) return "0e+0";
     const [mantissa, exponent] = n.toExponential().split("e");
     const trimmed = mantissa.includes(".") ? mantissa.replace(/0+$/, "").replace(/\.$/, "") : mantissa;
@@ -2319,7 +2611,7 @@ function workdayOffset(stack: Value[], workdayDirection: number, vm: VM): void {
     if (anchorValue.type !== ValueType.Datetime) {
       stack.push(errorValue(
         CoreErrorCodes.WORKDAY_OFFSET_EXPECTED_DATE,
-        `"working days after/before/from" expects a date to count from, got ${ValueType[anchorValue.type] ?? "an unsupported value"}`,
+        `"working days after/before/from" expects a date to count from, but got ${valueKindName(anchorValue)}.`,
       ));
       return;
     }
@@ -2337,7 +2629,7 @@ function workdaysBetween(stack: Value[], vm: VM): void {
     if (startValue.type !== ValueType.Datetime || endValue.type !== ValueType.Datetime) {
       stack.push(errorValue(
         CoreErrorCodes.WORKDAYS_BETWEEN_EXPECTED_DATES,
-        `"working days between" expects two dates, got ${ValueType[startValue.type] ?? "an unsupported value"} and ${ValueType[endValue.type] ?? "an unsupported value"}`,
+        `"working days between" expects two dates, but got ${valueKindName(startValue)} and ${valueKindName(endValue)}.`,
       ));
       return;
     }
@@ -2407,26 +2699,16 @@ function matrixLiteral(stack: Value[], rows: number, cols: number): void {
     // literal like `[1,2;3,4]` is textually written), pop in
     // reverse to restore that order, then transpose once into the
     // column-major storage MatrixData actually uses.
-    const rowMajor = checkedArray<MatrixEntry>(count, "matrix cells");
+    const rowMajor = checkedArray<Value>(count, "matrix cells");
     // A MatrixEntry is a number, a boolean or a symbolic node, so a
     // faulted cell has nowhere to live inside the matrix and became a
     // zero cell nothing could tell apart from a real one. The whole
     // literal fails instead, the way one bad cell fails a map() (see
     // MAP_INVOKE's own check).
     let cellFault: Value | null = null;
-    // The unit of the quantity cell nearest the end so far. The cells pop from
-    // the last one written, so a cell met later here was written earlier.
-    let laterUnit: string | undefined;
     for (let i = count - 1; i >= 0; i--) {
       const cellVal = safePop(stack);
       if (cellFault === null) cellFault = faultedOperand(cellVal);
-      // A quantity's unit is dropped as the cell is stored, so two units side
-      // by side cannot both be right: `[1 km, 500 m]` was `[1, 500]`. Refused by
-      // name; one unit, or a bare number beside it, is let through (#641).
-      if (cellVal.type === ValueType.Uom && cellVal.unit !== undefined) {
-        if (cellFault === null && laterUnit !== undefined) cellFault = cellUnitsDiffer(cellVal.unit, laterUnit);
-        laterUnit = cellVal.unit;
-      }
       // A cell with no numeric reading was the same silent zero: a pair
       // inside a list, `[(1, 2), 3]`, answered `[0, 3]`, and a date
       // became its epoch milliseconds. A cell holds one number, so the
@@ -2441,12 +2723,117 @@ function matrixLiteral(stack: Value[], rows: number, cols: number): void {
             : `${kind[0].toUpperCase()}${kind.slice(1)} cannot be a cell of a list: each cell holds one number.`,
         );
       }
-      rowMajor[i] = cellVal.type === ValueType.Boolean ? (cellVal.value as boolean)
-        : cellVal.type === ValueType.Symbolic ? (cellVal.value as SymbolicNodeType)
-        : cellVal.toNumber();
+      rowMajor[i] = cellVal;
     }
     if (cellFault) { stack.push(cellFault); return; }
-    stack.push(matrixValue(rows, cols, rowMajorToColumnMajor(rows, cols, rowMajor)));
+    // A list of quantities carries one unit, the first quantity cell's, and
+    // every later cell is read in it: `[1 km, 500 m]` is 1 and 0.5 in km
+    // (#745). Two measures that do not convert are refused by name. See
+    // vm/MatrixUnits.ts.
+    const columnMajor = new Array<Value>(count);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) columnMajor[r + c * rows] = rowMajor[r * cols + c];
+    }
+    stack.push(listFromCells(rows, cols, columnMajor));
+}
+
+/**
+ * The plugin-function slot the IP package (`solve-ip`) registers its
+ * `<address> in <block>` test under, the same stable index its registration
+ * takes (see pluginFunctionIndexFor()).
+ */
+const IP_MEMBERSHIP_INDEX = pluginFunctionIndexFor("solve-ip:ipInCidr");
+
+/**
+ * `<address> in <name>` where the name holds an IP value: the membership test,
+ * or null to leave the line a conversion.
+ *
+ * The parser sends `in` straight to the membership test only when a block
+ * literal follows it, so `192.168.1.7 in lab`, with `lab = 192.168.1.0/24`,
+ * was a conversion to a unit named "lab" and refused. What a name holds is
+ * only known when the line runs, so it is read here, as a divisor's name is
+ * read for `100 / t`. Only an IP value on the left and an IP value in the
+ * name qualify: any other value after `in` keeps its meaning as a conversion
+ * target, and so does a name no line defines. An address held where a block
+ * is wanted is refused by the membership test itself, by name. Null as well
+ * when the IP package is not registered, since then no line can make an IP
+ * value.
+ *
+ * @param left - The value before `in`.
+ * @param name - The word after it.
+ * @param vm - The machine, for the variable and the registered test.
+ */
+export function membershipThroughName(left: Value, name: string, vm: VM): Value | null {
+    if (left.type !== ValueType.IpCidr) return null;
+    const named = vm.getVar(name);
+    if (named === undefined || named.type !== ValueType.IpCidr) return null;
+    const test = pluginHandlerAt(vm.context.pluginFunctions, IP_MEMBERSHIP_INDEX);
+    if (test === undefined) return null;
+    const answer = test([left, named]);
+    return answer instanceof Value ? answer : null;
+}
+
+/**
+ * A value converted with `in` (UOM_CONVERT_IN), moved out of the dispatch loop
+ * so a list can convert each of its cells the same way (#745): a quantity
+ * through the measure, currency and rate tables, a date into a zone, a
+ * percentage onto the parts-per scale, and a number given the unit.
+ *
+ * @returns The converted value, and the table it went through for a trace.
+ */
+function convertValueIn(left: Value, writtenTo: string, vm: VM): { value: Value; table?: string } {
+    const membership = membershipThroughName(left, writtenTo, vm);
+    if (membership !== null) return { value: membership };
+    const toUnit = left.type === ValueType.Uom ? rateTargetUnit(left.unit!, writtenTo) : writtenTo;
+    if (left.type === ValueType.Uom) {
+      // A timecode into frames or a unit of time (#759). See vm/TimecodeConversion.ts.
+      const timecode = timecodeConverted(left, writtenTo);
+      if (timecode !== null) return { value: timecode, table: "measure" };
+      const fromUnit = left.unit!;
+      const val = left.toNumber();
+      const measure = getMeasure(fromUnit);
+      if (measure && getMeasure(toUnit) === measure) {
+        return { value: uomValue(convertUnit(val, fromUnit, toUnit), toUnit), table: "measure" };
+      } else if (sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit)) {
+        // Deferred past the measure check, as in UOM_CONVERT_TO above.
+        const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
+        if (converted !== null) {
+          return { value: withSources(uomValue(converted, toUnit), combineSources(left.sources, sharedCurrencyExchange.rateSourcesSync(fromUnit, toUnit))), table: "currency" };
+        } else {
+          // See the matching comment in UOM_CONVERT_TO, pushing the
+          // original value here would silently pass off a missing
+          // exchange rate as a successful (non-)conversion.
+          return { value: rateUnavailable(vm, fromUnit, toUnit) };
+        }
+      } else {
+        // Rate or speed conversion, "(120 km / 2 hours) in kph". See the
+        // matching branch in UOM_CONVERT_TO above.
+        const rate = convertRate(val, fromUnit, toUnit);
+        if (rate !== null) {
+          return { value: uomValue(rate, toUnit), table: "rate" };
+        } else {
+          return { value: rateConversionError(vm, fromUnit, toUnit) };
+        }
+      }
+    } else if (left.type === ValueType.Datetime) {
+      // `<datetime> in <zone>`. Ahead of the fall-through below, which
+      // read the epoch-millisecond payload as a magnitude and labelled it
+      // with the name: `2026-04-03 in Tokyo` answered
+      // `1,775,170,800,000.00 Tokyo`, a fourteen-digit quantity in a unit
+      // named after a city. There is no new parselet here on purpose, the
+      // currency package already owns the `IN` infix slot and a second
+      // registration would overwrite it.
+      return { value: datetimeInZone(left, toUnit, vm) };
+    } else if (left.type === ValueType.Percentage && percentageInPartsPer(left, toUnit) !== null) {
+      // `0.5% in ppm`: a percentage on the parts-per scale (#633).
+      return { value: percentageInPartsPer(left, toUnit)! };
+    } else {
+      // A number given the unit, or a refusal by name: a value with no
+      // single amount (#547), one carrying a tolerance (#639), a constant
+      // with no spelled unit (#648), a target that is not a unit (#646).
+      // See plainValueInUnit().
+      return { value: plainValueInUnit(left, toUnit) };
+    }
 }
 
 /** `m[i]` (MAT_INDEX1), moved out of the dispatch loop. */
@@ -2472,7 +2859,7 @@ function matrixIndex1(stack: Value[]): void {
       return;
     }
     const cell = matIndex(m, index);
-    stack.push(matrixEntryToValue(cell));
+    stack.push(listCellValue(m, cell));
 }
 
 /** `m[r, c]` (MAT_INDEX2), moved out of the dispatch loop. */
@@ -2495,11 +2882,18 @@ function matrixIndex2(stack: Value[]): void {
       return;
     }
     const cell = matAt(m, row, col);
-    stack.push(matrixEntryToValue(cell));
+    stack.push(listCellValue(m, cell));
 }
 
-/** A range literal, `0:3` (RANGE_NEW), moved out of the dispatch loop. */
-function rangeLiteral(stack: Value[]): void {
+/**
+ * A range literal, `0:3` (RANGE_NEW, or RANGE_NEW_WRITTEN with each side's
+ * source text), moved out of the dispatch loop.
+ *
+ * @param stack - The VM stack, holding the two bounds.
+ * @param minWritten - The first side as the reader wrote it, or "".
+ * @param maxWritten - The second side as the reader wrote it, or "".
+ */
+function rangeLiteral(stack: Value[], minWritten = "", maxWritten = ""): void {
     const maxVal = safePop(stack), minVal = safePop(stack);
     const rangeFault = faultedOperand(minVal, maxVal);
     if (rangeFault) { stack.push(rangeFault); return; }
@@ -2510,14 +2904,11 @@ function rangeLiteral(stack: Value[]): void {
     const min = minVal.value as number;
     const max = maxVal.value as number;
     if (!Number.isInteger(min) || !Number.isInteger(max)) {
-      stack.push(errorValue("NON_INTEGER_RANGE_BOUND", `A range's bounds must be whole numbers, got "${min}:${max}".`));
+      stack.push(errorValue("NON_INTEGER_RANGE_BOUND", `A range's bounds must be whole numbers, got "${numberText(min)}:${numberText(max)}".`));
       return;
     }
     if (min > max) {
-      stack.push(errorValue(
-        "DESCENDING_RANGE",
-        `A range's min (${min}) cannot be greater than its max (${max}) — did you mean "${max}:${min}"?`,
-      ));
+      stack.push(errorValue("DESCENDING_RANGE", descendingRangeMessage(min, max, minWritten, maxWritten)));
       return;
     }
     stack.push(rangeValue(min, max));
@@ -2554,7 +2945,7 @@ function matrixSlice(stack: Value[]): void {
         data[r + c * newRows] = matAt(m, rowRange.min + r, colRange.min + c);
       }
     }
-    stack.push(matrixValue(newRows, newCols, data));
+    stack.push(matrixValue(newRows, newCols, data, m.unit));
 }
 
 /** `map(...)` (MAP_INVOKE), moved out of the dispatch loop. */
@@ -2629,7 +3020,7 @@ function mapInvoke(stack: Value[], op: OpCode, kind: number, ref: number, collec
     }
     if (mapEarlyError) { stack.push(mapEarlyError); return; }
 
-    const resultData: MatrixEntry[] = checkedArray<MatrixEntry>(collectionLength, "matrix cells");
+    const resultCells: Value[] = checkedArray<Value>(collectionLength, "matrix cells");
     let mapError: Value | undefined;
     // The builtin is found by the index the bytecode carries (see builtinAt),
     // and called only when one is there.
@@ -2644,9 +3035,7 @@ function mapInvoke(stack: Value[], op: OpCode, kind: number, ref: number, collec
 
       const resultFault = faultedOperand(resultVal);
       if (resultFault) { mapError = resultFault; break; }
-      resultData[i] = resultVal.type === ValueType.Boolean ? (resultVal.value as boolean)
-        : resultVal.type === ValueType.Symbolic ? (resultVal.value as SymbolicNodeType)
-        : resultVal.toNumber();
+      resultCells[i] = resultVal;
     }
     if (mapError) { stack.push(mapError); return; }
 
@@ -2661,10 +3050,12 @@ function mapInvoke(stack: Value[], op: OpCode, kind: number, ref: number, collec
     // (and a 1xN literal) is a row either way.
     const firstCollection = rawCollections[0];
     const sourceShape = firstCollection?.type === ValueType.Matrix ? (firstCollection.value as MatrixData) : undefined;
+    // The answers are gathered as a literal's cells are, so a map over a list
+    // of quantities answers a list in their unit (#745). See vm/MatrixUnits.ts.
     if (sourceShape && sourceShape.rows * sourceShape.cols === collectionLength) {
-      stack.push(matrixValue(sourceShape.rows, sourceShape.cols, resultData));
+      stack.push(listFromCells(sourceShape.rows, sourceShape.cols, resultCells));
     } else {
-      stack.push(matrixValue(1, collectionLength, resultData));
+      stack.push(listFromCells(1, collectionLength, resultCells));
     }
 }
 
@@ -2745,12 +3136,13 @@ function plotInvoke(stack: Value[], op: OpCode, bodyRef: number, exprRef: number
 }
 
 /** `reduce(...)` (REDUCE_INVOKE), moved out of the dispatch loop. */
-function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, hasInitial: number, strings: string[], anonymousBodies: Bytecode["anonymousBodies"], vm: VM, pipeline: DiagnosticPipeline | undefined, expression: string | undefined, context: LineExecutionContext | undefined, symbolicTolerant: boolean | undefined): void {
+function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, form: number, strings: string[], anonymousBodies: Bytecode["anonymousBodies"], vm: VM, pipeline: DiagnosticPipeline | undefined, expression: string | undefined, context: LineExecutionContext | undefined, symbolicTolerant: boolean | undefined): void {
     requireKnownBodyKind(kind, ref, op);
 
     // Pushed in textual order (collection, then optional initial)
-    // pop in reverse.
-    const initialVal = hasInitial ? safePop(stack) : undefined;
+    // pop in reverse. Every form but a bare reduce has a starting value; see
+    // ReduceForm in vm/MatrixOps.ts.
+    const initialVal = form !== ReduceForm.reduce ? safePop(stack) : undefined;
     const collectionVal = safePop(stack);
 
     let paramNames: string[] = [];
@@ -2784,7 +3176,7 @@ function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, has
       program = fn.program;
     }
 
-    const cells = collectionToValues(collectionVal, vm.getMaxCollectionSize());
+    const cells = collectionToValues(collectionVal, vm.getMaxCollectionSize(), reduceFormCall(form));
     if (!Array.isArray(cells)) { stack.push(cells); return; }
     // Same post-charge, and the same note, as MAP_INVOKE above.
     chargeAllocation(cells.length, "collection elements");
@@ -2915,18 +3307,146 @@ function undefinedVariable(varName: string, vm: VM): EngineError {
     if (COLUMN_TOTAL_WORDS.has(varName.toLowerCase())) {
         return ErrorFactory.execution({
             code: "UNDEFINED_VARIABLE",
-            message: `Undefined variable: ${varName}. To add up the lines above, write "total above".`,
+            message: `Undefined variable: ${safeText(varName)}. To add up the lines above, write "total above".`,
             suggestion: "total above",
             context: { varName, didYouMean: ["total above"] },
         });
     }
-    const nearNames = nearestNames(varName, variableNameCandidates(vm), 4, unitNameIndex());
+    const nearNames = nearestNames(varName, variableNameCandidates(vm), 4, typeableUnitNameIndex());
     return ErrorFactory.execution({
         code: "UNDEFINED_VARIABLE",
-        message: `Undefined variable: ${varName}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,
+        message: `Undefined variable: ${safeText(varName)}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,
         suggestion: nearNames.length > 0 ? nearNames.join(", ") : undefined,
         context: { varName, didYouMean: nearNames },
     });
+}
+
+/**
+ * The loop's throws, each in a function of its own (#714).
+ *
+ * A `throw` made outside a promise job (from a timer callback, a top-level
+ * script, an editor's event handler) has V8 record where it was thrown, and
+ * finding that position inside a function the size of `executeBytecode` is
+ * what cost: `zz + 1` took about 46 microseconds from a timer against 0.55 for
+ * `2 + 5`. Building the error somewhere else did not help, moving the `throw`
+ * statement out did. So the loop throws nothing itself; it calls one of these,
+ * each typed `never` so the code after an arm still reads as unreachable, and
+ * its own `catch` receives the error exactly as before, with the same code,
+ * message and suggestion. It also keeps the construction bytes out of the
+ * loop, which has to stay under V8's bytecode ceiling (see the comment above
+ * the opcode bodies).
+ */
+function raise(error: unknown): never {
+    throw error;
+}
+
+/** LOAD_VAR on a name nothing defines. See {@link undefinedVariable}. */
+function throwUndefinedVariable(varName: string, vm: VM): never {
+    throw undefinedVariable(varName, vm);
+}
+
+/**
+ * An unknown met by an operation that needs one amount (a unit after it, a
+ * percentage, a base, a fraction, `as number`, a tolerance). Each read the
+ * formula as 0, so `foo percent =>` answered `0.00%` and `foo km =>` `0.00 km`
+ * where `foo percent` said `Undefined variable: foo`. The line is refused with
+ * that same error, naming the formula's first unknown (see unknownNameIn()).
+ * The arms test the type themselves, so a value that is not a formula pays one
+ * comparison and no call.
+ */
+function throwUnknownAmount(v: Value, vm: VM): never {
+    const name = unknownNameIn(v);
+    if (name !== null) throw undefinedVariable(name, vm);
+    throw ErrorFactory.execution("UNDEFINED_VARIABLE", "This needs a number, and the expression is a formula with no value yet.");
+}
+
+/** CALL_USER_FUNCTION on a name no function has, with the nearest real ones. */
+function throwUndefinedFunction(name: string, vm: VM): never {
+    const nearFunctions = nearestNames(name, functionNameCandidates(vm), 3, builtinNameIndex());
+    throw ErrorFactory.execution({
+        code: "UNDEFINED_FUNCTION",
+        message: `Undefined function: ${name}${nearFunctions.length === 0 ? "" : `.${didYouMeanSentence(nearFunctions)}`}`,
+        suggestion: nearFunctions.length > 0 ? nearFunctions.join(", ") : undefined,
+        context: { name, didYouMean: nearFunctions },
+    });
+}
+
+/** CALL_USER_FUNCTION with the wrong number of arguments. */
+function throwArityMismatch(name: string, expected: number, actual: number): never {
+    throw ErrorFactory.execution(
+        "FUNCTION_ARITY_MISMATCH",
+        `${name} expects ${expected} argument(s) but got ${actual}`,
+        { name, expected, actual },
+    );
+}
+
+/** A user function's body that came back pending. See CALL_USER_FUNCTION. */
+function throwAsyncBodyUnsupported(name: string): never {
+    throw ErrorFactory.execution(
+        "USER_FUNCTION_ASYNC_UNSUPPORTED",
+        `${name}: user-defined functions with async bodies (weather, stocks, currency, ...) aren't supported`,
+        { name },
+    );
+}
+
+/** The instruction budget ran out. */
+function throwInstructionLimit(maxInstructions: number): never {
+    throw ErrorFactory.execution("INSTRUCTION_LIMIT_EXCEEDED", `Execution exceeded maximum of ${maxInstructions} instructions`);
+}
+
+/** The stack grew past its limit. */
+function throwStackLimit(maxStackDepth: number): never {
+    throw ErrorFactory.execution("STACK_LIMIT_EXCEEDED", `Execution exceeded maximum stack depth of ${maxStackDepth}`);
+}
+
+/** An exact power past MAX_EXACT_POW_BITS. */
+function throwPowLimit(powBits: number): never {
+    throw ErrorFactory.execution(
+        "BIGINT_POW_LIMIT_EXCEEDED",
+        `That power would build an exact integer of about ${Math.round(powBits).toLocaleString("en-US")} bits, past the limit of ${MAX_EXACT_POW_BITS.toLocaleString("en-US")} bits`,
+        { limitBits: MAX_EXACT_POW_BITS },
+    );
+}
+
+/** DEFINE_USER_FUNCTION naming a body the program does not carry. */
+function throwMissingFunctionBody(bodyIdx: number): never {
+    throw ErrorFactory.internal(
+        "INTERNAL_MISSING_FUNCTION_BODY",
+        `Internal error: DEFINE_USER_FUNCTION referenced missing body index ${bodyIdx}`,
+        { bodyIdx },
+    );
+}
+
+/** BIND_UNKNOWN naming a body the program does not carry. */
+function throwMissingAnonymousBody(ref: number): never {
+    throw ErrorFactory.internal(
+        "INTERNAL_MISSING_ANONYMOUS_BODY",
+        `Internal error: BIND_UNKNOWN referenced missing anonymous body index ${ref}`,
+        { ref },
+    );
+}
+
+/** LOAD_GLOBAL_VAR before its value resolved. See that arm. */
+function throwGlobalNotResolved(varName: string): never {
+    throw ErrorFactory.internal({
+        code: "GLOBAL_VARIABLE_NOT_RESOLVED",
+        message: `Global variable "${varName}" was read before it resolved`,
+        expected: `global variable "${varName}" to already be resolved (async preflight should guarantee this)`,
+        found: "no value in the global variable store",
+        context: { varName },
+    });
+}
+
+/** An opcode the switch has no arm for. See its `default`. */
+function throwUnknownOpcode(op: number, offset: number): never {
+    throw malformedBytecode(
+        "MALFORMED_BYTECODE_UNKNOWN_OPCODE",
+        op,
+        "has no handler in this virtual machine",
+        "an opcode the dispatch switch handles (see parser/OpCode.ts)",
+        `opcode ${op} at offset ${offset}`,
+        { offset },
+    );
 }
 
 /**
@@ -2988,6 +3508,11 @@ function callPlugin(
     context: LineExecutionContext | undefined,
 ): Value | Extract<EvalResult, { type: 'pending' }> {
     const calls = vm.context.pluginCalls;
+    // The deprecated module-level slot a handler may still read the query
+    // cache from is set to this engine's here, at the one point every plugin
+    // call passes, so it names the right cache whichever engine ran last and
+    // however runs nest (#710). A handler should read `context.queryClient`.
+    if (vm.context.queryClient !== null) setActiveQueryClient(vm.context.queryClient);
     let key: string | undefined;
     let result: Value | Promise<Value>;
     if (calls.isAsync(fnIdx)) {
@@ -3158,14 +3683,14 @@ export function executeBytecode(
       // (50k) is never reached in benchmarks, so this branch is statically
       // predicted not-taken by the CPU.
       if (++localInstructionCount > maxInstructions) {
-        throw ErrorFactory.execution("INSTRUCTION_LIMIT_EXCEEDED", `Execution exceeded maximum of ${maxInstructions} instructions`);
+        throwInstructionLimit(maxInstructions);
       }
       // Same cost class as the check above, one comparison, statically
       // predicted not-taken. Catches stack growth left over from the
       // previous instruction's push(es); a bounded one-instruction delay
       // is fine for a safety limit (see the comment on `stack` above).
       if (stack.length > maxStackDepth) {
-        throw ErrorFactory.execution("STACK_LIMIT_EXCEEDED", `Execution exceeded maximum stack depth of ${maxStackDepth}`);
+        throwStackLimit(maxStackDepth);
       }
       const op = opcodes[ip++] as OpCode;
 
@@ -3235,14 +3760,9 @@ export function executeBytecode(
         case OpCode.PUSH_BIGINT:
           stack.push(bigIntValue(parseBigIntLiteral(poolString(opcodes, ip++, strings, op, "constant-pool index"), op)));
           break;
-        case OpCode.PUSH_DECIMAL: {
-          // A decimal-point literal: the exact base-ten value rides in the
-          // `exact` sidecar, the nearest double stays in `value`, so this reads
-          // as an ordinary Number everywhere except where it meets money.
-          const dec = decimalFromLiteral(poolString(opcodes, ip++, strings, op, "constant-pool index"));
-          stack.push(numberValueExact(decimalToNumber(dec), dec));
+        case OpCode.PUSH_DECIMAL:
+          stack.push(exactLiteralValue(poolString(opcodes, ip++, strings, op, "constant-pool index")));
           break;
-        }
         case OpCode.PUSH_HEX:
           stack.push(hexValue(numbers[poolIndex(opcodes, ip++, op, "constant-pool index", numbers.length, "number-pool")]));
           break;
@@ -3260,6 +3780,13 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         case OpCode.ADD: {
           const r = safePop(stack), l = safePop(stack);
+          // A list meeting a percentage, a list that carries a unit, or a plain
+          // list meeting a quantity, is worked cell by cell. One type test on
+          // the plain path. See listAddOrSubtract().
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) {
+            const listSum = listAddOrSubtract(l, r, 1);
+            if (listSum !== null) { stack.push(listSum); break; }
+          }
           // The plain case first. Two bare numbers with no sidecar are the
           // overwhelming majority of additions, and every helper below would
           // decline them one call at a time. A Number is never a faulted
@@ -3307,6 +3834,10 @@ export function executeBytecode(
             const ratAdd = exactRationalOp(l, r, "add");
             if (ratAdd) { stack.push(ratAdd); break; }
           }
+          // Text joined to a time-zone answer reads the answer's English text, as
+          // it did when the answer was text (#757): `"at " + (3pm London in Tokyo)`.
+          const zoneJoin = l.type === ValueType.String || r.type === ValueType.String ? zoneAnswerJoinedText(l, r) : null;
+          if (zoneJoin !== null) { stack.push(stringValue(zoneJoin)); break; }
           const pctAdd = combinePercentage(l, r, 1);
           const ratePeriodAdd = pctAdd === null ? unifyRatePeriods(l, r) : null;
           if (pctAdd !== null) {
@@ -3370,6 +3901,11 @@ export function executeBytecode(
         }
         case OpCode.SUB: {
           const r = safePop(stack), l = safePop(stack);
+          // As in ADD: a list meeting a percentage or a unit, cell by cell.
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) {
+            const listDifference = listAddOrSubtract(l, r, -1);
+            if (listDifference !== null) { stack.push(listDifference); break; }
+          }
           // The plain case first, as in ADD, exact past the safe range as ADD is.
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined
@@ -3418,6 +3954,10 @@ export function executeBytecode(
               // with how extractDurationMs() reads durations elsewhere.
               // Marked as a span so the formatter shows it as a clock. An
               // ordinary `40ms` carries no mark and shows as a quantity.
+              // Two calendar dates are a count of days instead; see
+              // dateDifference().
+              const days = dateDifference(l, r, vm.context.calendar);
+              if (days !== null) { stack.push(days); break; }
               const span = uomValue(l.toNumber() - r.toNumber(), "ms");
               span.datetimeSpan = true;
               stack.push(span);
@@ -3448,6 +3988,9 @@ export function executeBytecode(
         }
         case OpCode.MUL: {
           const r = safePop(stack), l = safePop(stack);
+          // A list that carries a unit, or a plain list meeting a quantity, is
+          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
+          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("mul", l, r)); break; }
           // The plain case first, as in ADD. The money and percentage helpers
           // below all decline two bare numbers, at the cost of a call each.
           // Exact past the safe range, as in ADD: `2^40 * 3^20` keeps every digit.
@@ -3552,6 +4095,9 @@ export function executeBytecode(
         }
         case OpCode.DIV: {
           const r = safePop(stack), l = safePop(stack);
+          // A list that carries a unit, or a plain list meeting a quantity, is
+          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
+          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("div", l, r)); break; }
           // The plain case first, as in ADD, with one difference: integer
           // division is the producer of exact fractions (see the general arm
           // below), so two whole numbers still seed a rational here. A
@@ -3569,9 +4115,15 @@ export function executeBytecode(
               const ratDiv = exactQuotient(l, r);
               if (ratDiv) { stack.push(ratDiv); break; }
             }
-            stack.push(numberValue(a / b));
+            const q = a / b;
+            // NaN from two numbers that are not NaN is 0/0 or ∞/∞, which has
+            // no single answer. See vm/IndeterminateQuotient.ts.
+            // A zero divisor marks the infinity it gives; see zeroDivisorQuotient().
+            stack.push(q !== q ? indeterminateQuotient(l, r) ?? numberValue(q) : b === 0 ? zeroDivisorQuotient(q) : numberValue(q));
             break;
           }
+          const noSingleQuotient = indeterminateQuotient(l, r);
+          if (noSingleQuotient) { stack.push(noSingleQuotient); break; }
           carry = combineSources(l.sources, r.sources);
           // The quantity refusal first, as in MUL. Then dividing an uncertain
           // number BY a percentage is a scalar divide, so it carries the
@@ -3598,7 +4150,7 @@ export function executeBytecode(
               // "$X per €Y" isn't a meaningful derived unit the way
               // "km/day" is, so this stays INCOMPATIBLE_UNITS rather than
               // silently becoming a nonsensical currency-pair rate.
-              stack.push(errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${l.unit} and ${r.unit}`));
+              stack.push(errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${unitForMessage(l.unit!)} and ${unitForMessage(r.unit!)}`));
             } else {
               // A quotient whose dimensions divide onto a named derived unit:
               // `J / s` is a watt, `W / A` a volt (issue #191). Only when it
@@ -3617,6 +4169,13 @@ export function executeBytecode(
               // codebase has a compound/derived-unit representation (see
               // vm/Value.ts's rateValue()), matches RATE_DIV's explicit
               // construction opcode, but reachable via plain "/" too.
+              // Not with an acceleration on either side: its time is squared, so
+              // a slash cannot join it to another unit (`kg/mps2` named nothing,
+              // and leaked the internal spelling).
+              if (accelerationSize(l.unit!) !== undefined || accelerationSize(r.unit!) !== undefined) {
+                stack.push(unitQuotientUnsupported(l.unit!, r.unit!));
+                break;
+              }
               stack.push(rateValue(lv / rv, l.unit!, r.unit!));
             }
           } else {
@@ -3648,6 +4207,9 @@ export function executeBytecode(
         }
         case OpCode.MOD: {
           const r = safePop(stack), l = safePop(stack);
+          // A list that carries a unit, or a plain list meeting a quantity, is
+          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
+          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("mod", l, r)); break; }
           carry = combineSources(l.sources, r.sources);
           // A remainder with no value, by zero or of an infinite number, is
           // refused by name in remainder() below, which the plain path ends in.
@@ -3693,6 +4255,9 @@ export function executeBytecode(
           }
           // A moment has no power; see datetimeArithmeticRefused().
           if (l.type === ValueType.Datetime || r.type === ValueType.Datetime) { stack.push(datetimeArithmeticRefused()); break; }
+          // Nor has an IPv6 address or a colour; see hasNoNumber().
+          const expIpv6 = noNumberArithmeticRefused(l, r);
+          if (expIpv6) { stack.push(expIpv6); break; }
           // A Matrix operand means matrix exponentiation, which is repeated
           // matrix multiplication and not the element-wise Math.pow the rest
           // of this case does. Falling through was the same silent-zero shape
@@ -3705,7 +4270,7 @@ export function executeBytecode(
             if (l.type !== ValueType.Matrix || r.type !== ValueType.Number) {
               stack.push(errorValue(
                 "MATRIX_POWER_UNSUPPORTED",
-                `^: a matrix may only be the base, raised to a whole number (as in "[1,2;3,4]^2"); "${ValueType[l.type]} ^ ${ValueType[r.type]}" has no matrix reading.`,
+                `^: a matrix may only be the base, raised to a whole number (as in "[1,2;3,4]^2"); ${valueKindName(l)} raised to ${valueKindName(r)} has no matrix reading.`,
               ));
               break;
             }
@@ -3735,7 +4300,7 @@ export function executeBytecode(
             const numericExponent = r.type === ValueType.Number || r.type === ValueType.BigInt;
             stack.push(numericExponent
               ? raiseQuantity(l, r.toNumber())
-              : unitPowerUnsupported(l.unit, r.unit !== undefined ? `${r.toNumber()} ${r.unit}` : ValueType[r.type].toLowerCase()));
+              : unitPowerUnsupported(l.unit, r.unit !== undefined ? `${r.toNumber()} ${r.unit}` : valueKindName(r)));
             break;
           }
           // A bigint operand raised to a whole power has an exact answer, and
@@ -3749,13 +4314,7 @@ export function executeBytecode(
               // Past the ceiling this refuses rather than handing the sum back
               // to the double path, which would report a 30,103-digit integer
               // as Infinity. See MAX_EXACT_POW_BITS for the decision.
-              if (powBits > MAX_EXACT_POW_BITS) {
-                throw ErrorFactory.execution(
-                  "BIGINT_POW_LIMIT_EXCEEDED",
-                  `That power would build an exact integer of about ${Math.round(powBits).toLocaleString("en-US")} bits, past the limit of ${MAX_EXACT_POW_BITS.toLocaleString("en-US")} bits`,
-                  { limitBits: MAX_EXACT_POW_BITS },
-                );
-              }
+              if (powBits > MAX_EXACT_POW_BITS) throwPowLimit(powBits);
               stack.push(bigIntValue(bigIntPow(toBigIntOperand(l), toBigIntOperand(r))));
               break;
             }
@@ -3774,7 +4333,7 @@ export function executeBytecode(
             ));
             break;
           }
-          stack.push(numberValue(power(l.toNumber(), r.toNumber())));
+          stack.push(plainPower(l, r));
           break;
         }
         case OpCode.NEG: {
@@ -3784,6 +4343,9 @@ export function executeBytecode(
           if (negFault) { stack.push(negFault); break; }
           // A moment has no negative; see datetimeArithmeticRefused().
           if (v.type === ValueType.Datetime) { stack.push(datetimeArithmeticRefused("neg")); break; }
+          // Nor has an IPv6 address or a colour; see hasNoNumber().
+          const negOpaque = noNumberRefused(v, "negated");
+          if (negOpaque) { stack.push(negOpaque); break; }
           carry = v.sources;
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
           // Negating money keeps it exact: "-$0.10" is exactly "-$0.10".
@@ -3807,7 +4369,12 @@ export function executeBytecode(
           // away from zero to -1.01 rather than dropping to the drifted double
           // (-1.00499...) the float path rounds toward zero.
           else if (v.type === ValueType.Number && v.exact !== undefined) stack.push(numberValueExact(-v.toNumber(), decimalNegate(v.exact)));
-          else stack.push(numberValue(-v.toNumber()));
+          // A list is negated cell by cell, its unit kept: `-[1, 2]` read the
+          // zero a list's toNumber() reports and answered 0 (#745).
+          else if (v.type === ValueType.Matrix) stack.push(unitListArithmetic("mul", v, numberValue(-1)));
+          // Text has no number to negate: `-"abc"` read 0 through toNumber().
+          else if (v.type === ValueType.String) stack.push(textSignRefused(v.value as string, "minus"));
+          else stack.push(negatedPlain(v));
           break;
         }
         case OpCode.POS: {
@@ -3815,8 +4382,12 @@ export function executeBytecode(
           const posFault = faultedOperand(v);
           if (posFault) { stack.push(posFault); break; }
           carry = v.sources;
-          // Unary plus is a no-op, so money keeps its exact decimal too.
-          if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(v.toNumber(), v.unit!, v.exact));
+          // Unary plus is a no-op, so money keeps its exact decimal too, and a
+          // list, an IPv6 address, a colour or a formula is itself rather than
+          // the reading its toNumber() reports (zero for a list or a formula,
+          // none for an address): `+foo =>` answered 0.
+          if (v.type === ValueType.Matrix || v.type === ValueType.Symbolic || hasNoNumber(v)) stack.push(v);
+          else if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(v.toNumber(), v.unit!, v.exact));
           else if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
           // Unary plus is a no-op, so it has to leave the type alone too.
           else if (v.type === ValueType.Percentage) stack.push(percentageValue(v.toNumber()));
@@ -3826,6 +4397,8 @@ export function executeBytecode(
           // And it keeps a decimal literal's exact decimal, so "+1.005" is still
           // exactly 1.005 for a later "to 2 dp".
           else if (v.type === ValueType.Number && v.exact !== undefined) stack.push(numberValueExact(v.toNumber(), v.exact));
+          // Nor is a plus sign a conversion: `+"abc"` read 0 through toNumber().
+          else if (v.type === ValueType.String) stack.push(textSignRefused(v.value as string, "plus"));
           else stack.push(numberValue(v.toNumber()));
           break;
         }
@@ -3836,6 +4409,7 @@ export function executeBytecode(
           const spread = safePop(stack), center = safePop(stack);
           const uncFault = faultedOperand(center, spread);
           if (uncFault) { stack.push(uncFault); break; }
+          if (center.type === ValueType.Symbolic) throwUnknownAmount(center, vm);
           // The center is the measured value, the spread its one-sigma tolerance.
           // The spread is taken as a magnitude, so "5 +/- -2" reads the same as
           // "5 +/- 2". A percentage spread is relative to the center and a spread
@@ -3855,12 +4429,16 @@ export function executeBytecode(
         //     its own faulted-operand check for the reason that function
         //     documents: a bit pattern read off an Error or a Pending is the
         //     bit pattern of zero, and `(5 kg to m) & 1` answered 0 with
-        //     nothing to say it had not been asked a real question.
+        //     nothing to say it had not been asked a real question. An IPv6
+        //     address and a colour are refused the same way, since neither
+        //     toNumber() has bits to give (see hasNoNumber()).
         // ═══════════════════════════════════════════════════════════════
         case OpCode.LSHIFT: {
           const r = safePop(stack), l = safePop(stack);
           const shiftFault = faultedOperand(l, r);
           if (shiftFault) { stack.push(shiftFault); break; }
+          const shiftIpv6 = noNumberArithmeticRefused(l, r);
+          if (shiftIpv6) { stack.push(shiftIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             // Bounded, unlike the plain-number path below, which cannot grow:
             // a 32-bit shift is 32 bits whatever it is asked for. See
@@ -3875,6 +4453,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const rshiftFault = faultedOperand(l, r);
           if (rshiftFault) { stack.push(rshiftFault); break; }
+          const rshiftIpv6 = noNumberArithmeticRefused(l, r);
+          if (rshiftIpv6) { stack.push(rshiftIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntShift(l, r, -1));
           } else {
@@ -3890,6 +4470,8 @@ export function executeBytecode(
           // a large number. Both operands go through the 32-bit path.
           const urshiftFault = faultedOperand(l, r);
           if (urshiftFault) { stack.push(urshiftFault); break; }
+          const urshiftIpv6 = noNumberArithmeticRefused(l, r);
+          if (urshiftIpv6) { stack.push(urshiftIpv6); break; }
           stack.push(numberValue(l.toNumber() >>> r.toNumber()));
           break;
         }
@@ -3897,6 +4479,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const andFault = faultedOperand(l, r);
           if (andFault) { stack.push(andFault); break; }
+          const andIpv6 = noNumberArithmeticRefused(l, r);
+          if (andIpv6) { stack.push(andIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) & toBigIntOperand(r)));
           } else {
@@ -3908,6 +4492,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const orFault = faultedOperand(l, r);
           if (orFault) { stack.push(orFault); break; }
+          const orIpv6 = noNumberArithmeticRefused(l, r);
+          if (orIpv6) { stack.push(orIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) | toBigIntOperand(r)));
           } else {
@@ -3919,6 +4505,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const xorFault = faultedOperand(l, r);
           if (xorFault) { stack.push(xorFault); break; }
+          const xorIpv6 = noNumberArithmeticRefused(l, r);
+          if (xorIpv6) { stack.push(xorIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) ^ toBigIntOperand(r)));
           } else {
@@ -3930,6 +4518,8 @@ export function executeBytecode(
           const v = safePop(stack);
           const notFault = faultedOperand(v);
           if (notFault) { stack.push(notFault); break; }
+          const notOpaque = noNumberRefused(v, "used in this arithmetic");
+          if (notOpaque) { stack.push(notOpaque); break; }
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(~(v.value as bigint)));
           else stack.push(numberValue(~v.toNumber()));
           break;
@@ -3964,210 +4554,67 @@ export function executeBytecode(
         case OpCode.EQ: {
           const r = safePop(stack), l = safePop(stack);
           // The plain case first: two bare numbers compare as doubles, which
-          // is what the Number arm below does once every helper has declined.
+          // is what valuesEqual() does once every other reading has declined.
           // A comparison reads the centre of a measurement, so only the
           // rational and exact-decimal sidecars have to be absent for the
           // double compare to be the right answer. Where one is present the
-          // branch below decides on it, so "0.1 + 0.2 == 0.3" is true.
+          // helper decides on it, so "0.1 + 0.2 == 0.3" is true. Everything
+          // else is decided in vm/Comparisons.ts, out of this loop.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) === (r.value as number)));
             break;
           }
-          const eqFault = faultedOperand(l, r);
-          if (eqFault) { stack.push(eqFault); break; }
-          // Equal fractions are equal on the value, not on whichever doubles
-          // they rounded to: "1/49 * 49 == 1" is true. Gated on a rational being
-          // present, so "1 == 1" keeps its double compare below.
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp === 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) === (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            // Comparing through toNumber() rounds a bigint to the nearest
-            // double first, so two giants a single digit apart landed on the
-            // same double and this answered true. See compareBigIntOperands().
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() === r.toNumber() : cmp === 0));
-          } else if (l.type === ValueType.String && r.type === ValueType.String) {
-            // Two strings compare as strings. Through toNumber() every
-            // non-numeric string reads as 0, so `"a" == "b"` answered true.
-            stack.push(boolValue((l.value as string) === (r.value as string)));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { equal, sameMeasure } = compareUom(l, r);
-            stack.push(boolValue(sameMeasure && equal));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a === b));
-          } else if (l.type === ValueType.Colour || r.type === ValueType.Colour) {
-            // A colour equals only another colour with the same canonical
-            // channels, so `#ff0000 == rgb(255,0,0)` is true regardless of
-            // format. A colour and a non-colour are never equal: NOT via
-            // toNumber() (0 for a colour), which would make `#000000 == 0` true,
-            // exactly the coercion fault this repo guards against.
-            if (l.type === ValueType.Colour && r.type === ValueType.Colour) {
-              const a = l.value as ColourData, b = r.value as ColourData;
-              stack.push(boolValue(a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a));
-            } else {
-              stack.push(boolValue(false));
-            }
-          } else {
-            stack.push(boolValue(l.toNumber() === r.toNumber()));
-          }
+          stack.push(valuesEqual(l, r, false));
           break;
         }
         case OpCode.NEQ: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in EQ.
+          // The plain case first, as in EQ; the rest in vm/Comparisons.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) !== (r.value as number)));
             break;
           }
-          const neqFault = faultedOperand(l, r);
-          if (neqFault) { stack.push(neqFault); break; }
-          // The negation of EQ's rational branch, fraction for fraction.
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp !== 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) !== (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            // The negation of EQ's bigint branch above, digit for digit.
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() !== r.toNumber() : cmp !== 0));
-          } else if (l.type === ValueType.String && r.type === ValueType.String) {
-            stack.push(boolValue((l.value as string) !== (r.value as string)));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { equal, sameMeasure } = compareUom(l, r);
-            stack.push(boolValue(!sameMeasure || !equal));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a !== b));
-          } else if (l.type === ValueType.Colour || r.type === ValueType.Colour) {
-            // The negation of EQ's colour branch: two colours differ by channel,
-            // and a colour and a non-colour are always unequal.
-            if (l.type === ValueType.Colour && r.type === ValueType.Colour) {
-              const a = l.value as ColourData, b = r.value as ColourData;
-              stack.push(boolValue(!(a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a)));
-            } else {
-              stack.push(boolValue(true));
-            }
-          } else {
-            stack.push(boolValue(l.toNumber() !== r.toNumber()));
-          }
+          stack.push(valuesEqual(l, r, true));
           break;
         }
         case OpCode.LT: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in EQ.
+          // The plain case first, as in EQ; the rest in vm/Comparisons.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) < (r.value as number)));
             break;
           }
-          const ltFault = faultedOperand(l, r);
-          if (ltFault) { stack.push(ltFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp < 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) < (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            // Digit-exact, for the reason given on EQ's matching branch.
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() < r.toNumber() : cmp < 0));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { lv, rv, equal, sameMeasure } = compareUom(l, r);
-            stack.push(sameMeasure ? boolValue(!equal && lv < rv) : incomparableUnitsError(l, r));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a < b));
-          } else {
-            stack.push(boolValue(l.toNumber() < r.toNumber()));
-          }
+          stack.push(valuesOrdered(l, r, 0));
           break;
         }
         case OpCode.LTE: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in EQ.
+          // The plain case first, as in EQ; the rest in vm/Comparisons.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) <= (r.value as number)));
             break;
           }
-          const lteFault = faultedOperand(l, r);
-          if (lteFault) { stack.push(lteFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp <= 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) <= (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() <= r.toNumber() : cmp <= 0));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { lv, rv, equal, sameMeasure } = compareUom(l, r);
-            stack.push(sameMeasure ? boolValue(equal || lv <= rv) : incomparableUnitsError(l, r));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a <= b));
-          } else {
-            stack.push(boolValue(l.toNumber() <= r.toNumber()));
-          }
+          stack.push(valuesOrdered(l, r, 1));
           break;
         }
         case OpCode.GT: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in EQ.
+          // The plain case first, as in EQ; the rest in vm/Comparisons.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) > (r.value as number)));
             break;
           }
-          const gtFault = faultedOperand(l, r);
-          if (gtFault) { stack.push(gtFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp > 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) > (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() > r.toNumber() : cmp > 0));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { lv, rv, equal, sameMeasure } = compareUom(l, r);
-            stack.push(sameMeasure ? boolValue(!equal && lv > rv) : incomparableUnitsError(l, r));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a > b));
-          } else {
-            stack.push(boolValue(l.toNumber() > r.toNumber()));
-          }
+          stack.push(valuesOrdered(l, r, 2));
           break;
         }
         case OpCode.GTE: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in EQ.
+          // The plain case first, as in EQ; the rest in vm/Comparisons.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) >= (r.value as number)));
             break;
           }
-          const gteFault = faultedOperand(l, r);
-          if (gteFault) { stack.push(gteFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp >= 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) >= (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() >= r.toNumber() : cmp >= 0));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { lv, rv, equal, sameMeasure } = compareUom(l, r);
-            stack.push(sameMeasure ? boolValue(equal || lv >= rv) : incomparableUnitsError(l, r));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a >= b));
-          } else {
-            stack.push(boolValue(l.toNumber() >= r.toNumber()));
-          }
+          stack.push(valuesOrdered(l, r, 3));
           break;
         }
 
@@ -4184,6 +4631,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const andLogicFault = faultedOperand(l, r);
           if (andLogicFault) { stack.push(andLogicFault); break; }
+          // A list of answers joins cell by cell (see vm/ListComparison.ts).
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) { stack.push(answersCellByCell(l, r, BOTH_TRUTHY)!); break; }
           stack.push(boolValue(isTruthy(l) && isTruthy(r)));
           break;
         }
@@ -4191,6 +4640,7 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const orLogicFault = faultedOperand(l, r);
           if (orLogicFault) { stack.push(orLogicFault); break; }
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) { stack.push(answersCellByCell(l, r, EITHER_TRUTHY)!); break; }
           stack.push(boolValue(isTruthy(l) || isTruthy(r)));
           break;
         }
@@ -4211,6 +4661,8 @@ export function executeBytecode(
           // asked about. A faulted condition selects nothing, so it stands.
           const conditionFault = faultedOperand(condition);
           if (conditionFault) { stack.push(conditionFault); break; }
+          // A list of answers picks no one branch (see vm/ListComparison.ts).
+          if (condition.type === ValueType.Matrix) { stack.push(listConditionRefused(condition, "if")); break; }
           stack.push(isTruthy(condition) ? thenVal : elseVal);
           break;
         }
@@ -4271,7 +4723,7 @@ export function executeBytecode(
           // engine bug naming no function. This is the only place that knows
           // both the index and the count; see vm/VMBuiltinArity.ts.
           const arityError = builtinArityError(fnIdx, argCount);
-          if (arityError) throw arityError;
+          if (arityError) raise(arityError);
           const args: Value[] = [];
           // The symbolic flag is tracked while popping rather than by a second
           // pass, so the ordinary numeric call pays one type comparison per
@@ -4290,14 +4742,29 @@ export function executeBytecode(
           // here covers all ~90 of them; see faultedOperand() in vm/Value.ts.
           const builtinArgFault = faultedIn(args);
           if (builtinArgFault) { stack.push(builtinArgFault); break; }
-          // A date or time has no size for a numeric builtin to read; see
-          // datetimeArgumentRefused() in vm/VMBuiltins.ts.
-          const builtinDatetime = datetimeArgumentRefused(fnIdx, args);
-          if (builtinDatetime) { stack.push(builtinDatetime); break; }
+          // A date or time, an IPv6 address, a colour and text have no number
+          // for a numeric builtin to read; see builtinArgumentRefused() in
+          // vm/VMBuiltins.ts, one call for every kind.
+          const builtinRefused = builtinArgumentRefused(fnIdx, args);
+          if (builtinRefused) { stack.push(builtinRefused); break; }
           carry = sourcesOfValues(args);
-          const fn = builtinFunctions[fnIdx];
+          // Read as the registry's own entry and checked to be a function, so
+          // an index from the bytecode never reaches an inherited property or
+          // calls something that is not a builtin (CodeQL's unvalidated dynamic
+          // call, raised once the call went on to listBuiltinCall()).
+          const entry = Object.prototype.hasOwnProperty.call(builtinFunctions, fnIdx) ? builtinFunctions[fnIdx] : undefined;
+          const fn = typeof entry === "function" ? entry : undefined;
           if (fn) {
             const ordered = args.reverse();
+            // A list is worked out for each number, or refused by name, where
+            // the builtin reads one number; see listBuiltinCall() in
+            // vm/VMBuiltins.ts.
+            const listed = listBuiltinCall(fnIdx, ordered, context);
+            if (listed) {
+              stack.push(listed);
+              if (observeCall !== undefined) observeCall({ kind: "builtin", index: fnIdx, name: "", args: ordered, result: listed });
+              break;
+            }
             // One dispatch point covers all ~60 builtins. Each of their
             // implementations reads args[n].toNumber(), which reports 0 for a
             // symbolic operand, so routing here is what stops `sqrt(x)` from
@@ -4332,11 +4799,7 @@ export function executeBytecode(
             // dispatch loop disagree about userFunctionBodies' contents,
             // never something reachable by writing a normal `f(x) = ...`
             // expression correctly. See ErrorCode.ts's own catalog comment.
-            throw ErrorFactory.internal(
-              "INTERNAL_MISSING_FUNCTION_BODY",
-              `Internal error: DEFINE_USER_FUNCTION referenced missing body index ${bodyIdx}`,
-              { bodyIdx },
-            );
+            throwMissingFunctionBody(bodyIdx);
           }
           vm.defineUserFunction(def.name, def.params, def.program);
           break;
@@ -4358,24 +4821,10 @@ export function executeBytecode(
           for (let i = 0; i < argCount; i++) args.push(safePop(stack));
           args.reverse();
           const fn = vm.getUserFunction(name);
-          if (!fn) {
-            // Name the nearest real functions, never silently call one; see
-            // errors/DidYouMean.ts.
-            const nearFunctions = nearestNames(name, functionNameCandidates(vm), 3, builtinNameIndex());
-            throw ErrorFactory.execution({
-              code: "UNDEFINED_FUNCTION",
-              message: `Undefined function: ${name}${nearFunctions.length === 0 ? "" : `.${didYouMeanSentence(nearFunctions)}`}`,
-              suggestion: nearFunctions.length > 0 ? nearFunctions.join(", ") : undefined,
-              context: { name, didYouMean: nearFunctions },
-            });
-          }
-          if (argCount !== fn.params.length) {
-            throw ErrorFactory.execution(
-              "FUNCTION_ARITY_MISMATCH",
-              `${name} expects ${fn.params.length} argument(s) but got ${argCount}`,
-              { name, expected: fn.params.length, actual: argCount },
-            );
-          }
+          // Name the nearest real functions, never silently call one; see
+          // errors/DidYouMean.ts.
+          if (!fn) throwUndefinedFunction(name, vm);
+          if (argCount !== fn.params.length) throwArityMismatch(name, fn.params.length, argCount);
           const frame = new Map<string, Value>();
           for (let i = 0; i < fn.params.length; i++) frame.set(fn.params[i], args[i]);
           // Two guards, because they bound two different numbers and each is
@@ -4417,17 +4866,13 @@ export function executeBytecode(
             // DEFINITION time (see PrecedenceParser.ts's
             // parseUserFunctionDefinition). This is a defense-in-depth
             // backstop, not the primary guard.
-            throw ErrorFactory.execution(
-              "USER_FUNCTION_ASYNC_UNSUPPORTED",
-              `${name}: user-defined functions with async bodies (weather, stocks, currency, ...) aren't supported`,
-              { name },
-            );
+            throwAsyncBodyUnsupported(name);
           }
           if (bodyResult.type === "error") {
             // A controlled internal-invariant error inside the body, surface
             // it as-is rather than swallowing/rewrapping (same convention as
             // unwrapEvalResult()).
-            throw bodyResult.error;
+            raise(bodyResult.error);
           }
           stack.push(bodyResult.value);
           break;
@@ -4440,17 +4885,23 @@ export function executeBytecode(
           const varName = poolString(opcodes, ip++, strings, op, "variable-name index");
           const val = vm.getVar(varName);
           if (val !== undefined) {
-            stack.push(val);
-          } else if (symbolicTolerant) {
-            stack.push(symbolicValue(varSymbolicNode(varName)));
+            // A formula stored before its unknowns had values is read with the
+            // values they hold now, so one line never holds a name as a number
+            // in one term and as an unknown in another (#732).
+            stack.push(val.type === ValueType.Symbolic ? resolveStoredFormulaIn(val, varName, vm) : val);
           } else if (varName === ANSWER_NAME) {
-            // `ans` is the line above when nothing is named that (#668).
+            // `ans` is the line above when nothing is named that (#668). Read
+            // before the arrow's unknown below, as `pi` and `e` are (they never
+            // reach this opcode): under the arrow `π km =>` was refused naming
+            // π, and `π + 1 =>` kept π as an unknown, where `π km` is 3.14 km.
             stack.push(previousLineAnswer(context));
           } else if (varName === PI_NAME) {
             // `π` is the constant when nothing is named that (#669).
             stack.push(numberValue(Math.PI));
+          } else if (symbolicTolerant) {
+            stack.push(symbolicValue(varSymbolicNode(varName)));
           } else {
-            throw undefinedVariable(varName, vm);
+            throwUndefinedVariable(varName, vm);
           }
           break;
         }
@@ -4485,13 +4936,7 @@ export function executeBytecode(
             // ordinary user expression can trigger by itself, the
             // precondition ("preflight already ran") is the CALLER's
             // (ThreeTierEvaluator's) responsibility, not the user's.
-            throw ErrorFactory.internal({
-              code: "GLOBAL_VARIABLE_NOT_RESOLVED",
-              message: `Global variable "${varName}" was read before it resolved`,
-              expected: `global variable "${varName}" to already be resolved (async preflight should guarantee this)`,
-              found: "no value in the global variable store",
-              context: { varName },
-            });
+            throwGlobalNotResolved(varName);
           }
           stack.push(globalValue);
           break;
@@ -4520,6 +4965,8 @@ export function executeBytecode(
           const v = safePop(stack);
           const toNumberFault = faultedOperand(v);
           if (toNumberFault) { stack.push(toNumberFault); break; }
+          // An unknown has no amount to read, here or below (see throwUnknownAmount()).
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           if (v.type === ValueType.String) {
             // Text reads as a number only when it is one, whole. Through
             // `toNumber()` it went by `parseFloat`: `"11:00 PM" as number` was
@@ -4529,34 +4976,29 @@ export function executeBytecode(
             break;
           }
           carry = v.sources;
-          stack.push(numberValue(v.toNumber()));
+          stack.push(numberOf(v));
           break;
         }
         case OpCode.TO_HEX: {
           const v = safePop(stack);
           const toHexFault = faultedOperand(v);
           if (toHexFault) { stack.push(toHexFault); break; }
-          // A colour already has a hex reading, so `#3366cc as rgb as hex` should
-          // round-trip rather than collapse through toNumber() (which is 0 for a
-          // colour). Re-tag its display format to hex, leaving channels intact.
-          if (v.type === ValueType.Colour) {
-            const c = v.value as ColourData;
-            stack.push(colourValue({ r: c.r, g: c.g, b: c.b, a: c.a, format: "hex" }));
-            break;
-          }
-          // A bigint keeps its bigint, exactly as ADD/SUB/MUL/DIV do:
-          // `12345678901234567890n as hex` rendered 0xAB54A98CEB1F0800 while
-          // the value ends 0AD2, because toNumber() rounded it first. An exact
-          // integer past the safe range converts from its own digits likewise.
-          stack.push(hexValue(baseConversionOperand(v)));
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
+          const toHexList = listConversionRefused(v, "written in hex");
+          if (toHexList) { stack.push(toHexList); break; }
+          // A colour keeps its channels and a bigint its digits; see inBase().
+          stack.push(inBase(v, "hex"));
           break;
         }
         case OpCode.TO_PERCENTAGE: {
           const v = safePop(stack);
           const toPercentageFault = faultedOperand(v);
           if (toPercentageFault) { stack.push(toPercentageFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toPercentageDate = datetimeConversionRefused(v, "a percentage");
           if (toPercentageDate) { stack.push(toPercentageDate); break; }
+          const toPercentageOpaque = noNumberRefused(v, "written as a percentage") ?? listConversionRefused(v, "written as a percentage");
+          if (toPercentageOpaque) { stack.push(toPercentageOpaque); break; }
           carry = v.sources;
           // A proportion on the parts-per scale; see toPercentage().
           stack.push(toPercentage(v));
@@ -4566,8 +5008,11 @@ export function executeBytecode(
           const v = safePop(stack);
           const toFractionFault = faultedOperand(v);
           if (toFractionFault) { stack.push(toFractionFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toFractionDate = datetimeConversionRefused(v, "a fraction");
           if (toFractionDate) { stack.push(toFractionDate); break; }
+          const toFractionOpaque = noNumberRefused(v, "written as a fraction") ?? listConversionRefused(v, "written as a fraction");
+          if (toFractionOpaque) { stack.push(toFractionOpaque); break; }
           // The exact fraction where the value has one, the guess otherwise;
           // see fractionString().
           stack.push(stringValue(fractionString(v)));
@@ -4577,8 +5022,9 @@ export function executeBytecode(
           const v = safePop(stack);
           const toMultiplierFault = faultedOperand(v);
           if (toMultiplierFault) { stack.push(toMultiplierFault); break; }
-          const toMultiplierDate = datetimeConversionRefused(v, "a multiplier");
-          if (toMultiplierDate) { stack.push(toMultiplierDate); break; }
+          // Text, a quantity and a date have no plain number to grow by (#829).
+          const toMultiplierRefused = multiplierRefused(v);
+          if (toMultiplierRefused) { stack.push(toMultiplierRefused); break; }
           stack.push(stringValue(toMultiplierString(v)));
           break;
         }
@@ -4586,8 +5032,11 @@ export function executeBytecode(
           const v = safePop(stack);
           const toSciFault = faultedOperand(v);
           if (toSciFault) { stack.push(toSciFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toSciDate = datetimeConversionRefused(v, "scientific notation");
           if (toSciDate) { stack.push(toSciDate); break; }
+          const toSciOpaque = noNumberRefused(v, "written in scientific notation") ?? listConversionRefused(v, "written in scientific notation");
+          if (toSciOpaque) { stack.push(toSciOpaque); break; }
           stack.push(stringValue(toScientificString(v.toNumber())));
           break;
         }
@@ -4597,18 +5046,24 @@ export function executeBytecode(
           const v = safePop(stack);
           const toBinaryFault = faultedOperand(v);
           if (toBinaryFault) { stack.push(toBinaryFault); break; }
-          stack.push(hexValue(baseConversionOperand(v), "bin"));
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
+          const toBinaryList = listConversionRefused(v, "written in binary");
+          if (toBinaryList) { stack.push(toBinaryList); break; }
+          stack.push(inBase(v, "bin"));
           break;
         }
         case OpCode.TO_OCTAL: {
           const v = safePop(stack);
           const toOctalFault = faultedOperand(v);
           if (toOctalFault) { stack.push(toOctalFault); break; }
-          stack.push(hexValue(baseConversionOperand(v), "oct"));
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
+          const toOctalList = listConversionRefused(v, "written in octal");
+          if (toOctalList) { stack.push(toOctalList); break; }
+          stack.push(inBase(v, "oct"));
           break;
         }
         case OpCode.CALL_AS_CONVERTER: {
-          const name = stringOperand(safePop(stack), op, "converter name").toLowerCase();
+          const name = stringOperand(safePop(stack), op, "converter name");
           const value = safePop(stack);
           // A registered converter is arbitrary host code reading the Value
           // it is handed, so the fault is stopped before it gets there rather
@@ -4616,7 +5071,7 @@ export function executeBytecode(
           const converterFault = faultedOperand(value);
           if (converterFault) { stack.push(converterFault); break; }
           carry = value.sources;
-          const converter = asConverterRegistry.get(name);
+          const converter = vm.context.asConverters.resolve(name);
           if (!converter) {
             stack.push(errorValue("UNKNOWN_AS_CONVERTER", `Unknown converter "as ${name}"`));
           } else {
@@ -4637,6 +5092,7 @@ export function executeBytecode(
           const operand = safePop(stack);
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          if (operand.type === ValueType.Symbolic) throwUnknownAmount(operand, vm);
           carry = operand.sources;
           // A second unit written straight after a quantity used to relabel it:
           // `5 kg m` was 5 m, the kilograms discarded without a word, and
@@ -4647,7 +5103,7 @@ export function executeBytecode(
           if (operand.type === ValueType.Uom && operand.unit !== undefined && operand.unit !== unit) {
             stack.push(errorValue(
               "UNIT_AFTER_UNIT",
-              `A quantity in ${operand.unit} cannot take a second unit, ${unit}: two units side by side are not a unit. To convert, write "in ${unit}".`,
+              `A quantity in ${unitForMessage(operand.unit)} cannot take a second unit, ${unit}: two units side by side are not a unit. To convert, write "in ${unit}".`,
             ));
             break;
           }
@@ -4663,12 +5119,22 @@ export function executeBytecode(
           // unit (km, kg, km/h, ...) is unchanged. See vm/MoneyExact.ts. A list,
           // a value carrying a tolerance and a constant with no spelled unit
           // are refused on the way (#639, #640, #648); see unitAfterValue().
+          // A list takes the unit cell by cell: `[1, 2, 3] km` is a list in km,
+          // and a list already in one unit refuses a second, as a quantity does (#745).
+          if (operand.type === ValueType.Matrix) {
+            const listUnit = (operand.value as MatrixData).unit;
+            stack.push(listUnit !== undefined && listUnit !== unit
+              ? errorValue("UNIT_AFTER_UNIT", `A list in ${listUnit} cannot take a second unit, ${unit}: two units side by side are not a unit. To convert, write "in ${unit}".`)
+              : listConverted(operand, (cell) => unitAfterValue(cell, unit)));
+            break;
+          }
           stack.push(unitAfterValue(operand, unit));
           break;
         }
         case OpCode.UOM_CONVERT_TO: {
-          const toUnit = stringOperand(safePop(stack), op, "target unit name");
+          const writtenTo = stringOperand(safePop(stack), op, "target unit name");
           const fromUnit = stringOperand(safePop(stack), op, "source unit name");
+          const toUnit = rateTargetUnit(fromUnit, writtenTo);
           const operand = safePop(stack);
           // The quantity being converted may already have failed, and a
           // conversion is the one operator that made that invisible: it reads
@@ -4681,6 +5147,7 @@ export function executeBytecode(
           // carried its fault everywhere except through here.
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          if (operand.type === ValueType.Symbolic) throwUnknownAmount(operand, vm);
           carry = operand.sources;
           // The same second-unit refusal as UOM_CONVERT, for the literal with a
           // conversion attached: `5 kg m in cm` read the five kilograms as five
@@ -4688,12 +5155,23 @@ export function executeBytecode(
           if (operand.type === ValueType.Uom && operand.unit !== undefined && operand.unit !== fromUnit) {
             stack.push(errorValue(
               "UNIT_AFTER_UNIT",
-              `A quantity in ${operand.unit} cannot take a second unit, ${fromUnit}: two units side by side are not a unit. To convert, write "in ${toUnit}".`,
+              `A quantity in ${unitForMessage(operand.unit)} cannot take a second unit, ${fromUnit}: two units side by side are not a unit. To convert, write "in ${toUnit}".`,
             ));
             break;
           }
           // `1:30 hours in minutes`, as UOM_CONVERT refuses `1:30 hours`.
           if (operand.type === ValueType.Datetime) { stack.push(datetimeTakesNoUnit(fromUnit)); break; }
+          // `[1, 2] km in m`: the list takes the unit, then each cell converts (#745).
+          if (operand.type === ValueType.Matrix) {
+            const listUnit = (operand.value as MatrixData).unit;
+            if (listUnit !== undefined && listUnit !== fromUnit) {
+              stack.push(errorValue("UNIT_AFTER_UNIT", `A list in ${listUnit} cannot take a second unit, ${fromUnit}: two units side by side are not a unit. To convert, write "in ${toUnit}".`));
+              break;
+            }
+            const withUnit = listConverted(operand, (cell) => unitAfterValue(cell, fromUnit));
+            stack.push(withUnit.type === ValueType.Matrix ? listConverted(withUnit, (cell) => convertValueIn(cell, writtenTo, vm).value) : withUnit);
+            break;
+          }
           const val = operand.toNumber();
           const measure = getMeasure(fromUnit);
           if (measure && getMeasure(toUnit) === measure) {
@@ -4727,7 +5205,7 @@ export function executeBytecode(
               stack.push(uomValue(rate, toUnit));
               if (observeCall !== undefined) observeConversion(observeCall, "rate", uomValue(val, fromUnit), stack);
             } else {
-              stack.push(incompatibleConversionError(fromUnit, toUnit));
+              stack.push(rateConversionError(vm, fromUnit, toUnit));
             }
           }
           break;
@@ -4745,13 +5223,14 @@ export function executeBytecode(
           const operand = safePop(stack);
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          if (operand.type === ValueType.Symbolic) throwUnknownAmount(operand, vm);
           carry = operand.sources;
           const { value, unit: bestUnit } = getBestUnit(operand.toNumber(), unit);
           stack.push(uomValue(value, bestUnit));
           break;
         }
         case OpCode.UOM_CONVERT_IN: {
-          const toUnit = stringOperand(safePop(stack), op, "target unit name");
+          const writtenTo = stringOperand(safePop(stack), op, "target unit name");
           const left = safePop(stack);
           // See UOM_CONVERT_TO above. This is the spelling `5 kg to m to s`
           // actually reaches, since the second conversion's source is an
@@ -4761,54 +5240,17 @@ export function executeBytecode(
           const faulted = faultedOperand(left);
           if (faulted) { stack.push(faulted); break; }
           carry = left.sources;
-          if (left.type === ValueType.Uom) {
-            const fromUnit = left.unit!;
-            const val = left.toNumber();
-            const measure = getMeasure(fromUnit);
-            if (measure && getMeasure(toUnit) === measure) {
-              stack.push(uomValue(convertUnit(val, fromUnit, toUnit), toUnit));
-              if (observeCall !== undefined) observeConversion(observeCall, "measure", left, stack);
-            } else if (sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit)) {
-              // Deferred past the measure check, as in UOM_CONVERT_TO above.
-              const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
-              if (converted !== null) {
-                stack.push(withSources(uomValue(converted, toUnit), combineSources(left.sources, sharedCurrencyExchange.rateSourcesSync(fromUnit, toUnit))));
-                if (observeCall !== undefined) observeConversion(observeCall, "currency", left, stack);
-              } else {
-                // See the matching comment in UOM_CONVERT_TO, pushing the
-                // original value here would silently pass off a missing
-                // exchange rate as a successful (non-)conversion.
-                stack.push(rateUnavailable(vm, fromUnit, toUnit));
-              }
-            } else {
-              // Rate or speed conversion, "(120 km / 2 hours) in kph". See the
-              // matching branch in UOM_CONVERT_TO above.
-              const rate = convertRate(val, fromUnit, toUnit);
-              if (rate !== null) {
-                stack.push(uomValue(rate, toUnit));
-                if (observeCall !== undefined) observeConversion(observeCall, "rate", left, stack);
-              } else {
-                stack.push(incompatibleConversionError(fromUnit, toUnit));
-              }
-            }
-          } else if (left.type === ValueType.Datetime) {
-            // `<datetime> in <zone>`. Ahead of the fall-through below, which
-            // read the epoch-millisecond payload as a magnitude and labelled it
-            // with the name: `2026-04-03 in Tokyo` answered
-            // `1,775,170,800,000.00 Tokyo`, a fourteen-digit quantity in a unit
-            // named after a city. There is no new parselet here on purpose, the
-            // currency package already owns the `IN` infix slot and a second
-            // registration would overwrite it.
-            stack.push(datetimeInZone(left, toUnit, vm));
-          } else if (left.type === ValueType.Percentage && percentageInPartsPer(left, toUnit) !== null) {
-            // `0.5% in ppm`: a percentage on the parts-per scale (#633).
-            stack.push(percentageInPartsPer(left, toUnit)!);
-          } else {
-            // A number given the unit, or a refusal by name: a value with no
-            // single amount (#547), one carrying a tolerance (#639), a constant
-            // with no spelled unit (#648), a target that is not a unit (#646).
-            // See plainValueInUnit().
-            stack.push(plainValueInUnit(left, toUnit));
+          // A list is converted cell by cell, each as the scalar it stands for
+          // (#745); `[1, 2] in km` gives the plain cells the unit, as `5 in km`
+          // does. See vm/MatrixUnits.ts.
+          if (left.type === ValueType.Matrix) {
+            stack.push(listConverted(left, (cell) => convertValueIn(cell, writtenTo, vm).value));
+            break;
+          }
+          {
+            const converted = convertValueIn(left, writtenTo, vm);
+            stack.push(converted.value);
+            if (observeCall !== undefined && converted.table !== undefined) observeConversion(observeCall, converted.table, left, stack);
           }
           break;
         }
@@ -4887,7 +5329,7 @@ export function executeBytecode(
           if (!rateMeasure || rateMeasure !== targetMeasure) {
             stack.push(errorValue(
               "RATE_CONVERT_MEASURE_MISMATCH",
-              `Cannot convert a "${denominator}"-denominated rate to "${newDenominatorUnit}" — different measures`
+              `Cannot convert a "${denominator}"-denominated rate to "${newDenominatorUnit}": they measure different things`
             ));
             break;
           }
@@ -4993,6 +5435,13 @@ export function executeBytecode(
           break;
         }
 
+        case OpCode.RANGE_NEW_WRITTEN: {
+          const minWritten = poolString(opcodes, ip++, strings, op, "range start as written");
+          const maxWritten = poolString(opcodes, ip++, strings, op, "range end as written");
+          rangeLiteral(stack, minWritten, maxWritten);
+          break;
+        }
+
         case OpCode.MAT_SLICE: {
           matrixSlice(stack);
           break;
@@ -5048,8 +5497,8 @@ export function executeBytecode(
         case OpCode.REDUCE_INVOKE: {
           const kind = operandByte(opcodes, ip++, op, "body kind");
           const ref = operandByte(opcodes, ip++, op, "body reference");
-          const hasInitial = operandByte(opcodes, ip++, op, "initial-value flag");
-          reduceInvoke(stack, op, kind, ref, hasInitial, strings, anonymousBodies, vm, pipeline, expression, context, symbolicTolerant);
+          const form = operandByte(opcodes, ip++, op, "reduce form");
+          reduceInvoke(stack, op, kind, ref, form, strings, anonymousBodies, vm, pipeline, expression, context, symbolicTolerant);
           break;
         }
 
@@ -5059,13 +5508,7 @@ export function executeBytecode(
         case OpCode.BIND_UNKNOWN: {
           const ref = operandByte(opcodes, ip++, op, "body reference");
           const def = anonymousBodies?.[ref];
-          if (!def) {
-            throw ErrorFactory.internal(
-              "INTERNAL_MISSING_ANONYMOUS_BODY",
-              `Internal error: BIND_UNKNOWN referenced missing anonymous body index ${ref}`,
-              { ref },
-            );
-          }
+          if (!def) throwMissingAnonymousBody(ref);
           // `der(x^2, x)` names x as the unknown, so inside that expression x
           // IS the unknown, whatever the document says elsewhere. Evaluated in
           // a call frame binding the name to itself, the same mechanism that
@@ -5086,14 +5529,7 @@ export function executeBytecode(
           // instruction that carries it. This includes the enum members no
           // arm handles (PUSH_VARIABLE, RETURN) and the dynamic range an
           // `OpRegistry` once claimed, which this loop never consulted.
-          throw malformedBytecode(
-            "MALFORMED_BYTECODE_UNKNOWN_OPCODE",
-            op,
-            "has no handler in this virtual machine",
-            "an opcode the dispatch switch handles (see parser/OpCode.ts)",
-            `opcode ${op} at offset ${ip - 1}`,
-            { offset: ip - 1 },
-          );
+          throwUnknownOpcode(op, ip - 1);
       }
 
       // An operation that read a sourced operand hands the sources to what it

@@ -111,7 +111,44 @@ The boundary: a symbol several currencies share reads as its default, so an
 amount the engine writes for one of the others reads back as the default. `12
 AUD` is written `$12.00`, which reads as US dollars; `12 NOK` is written `12.00
 kr`, which reads as Swedish kronor; `12 CNY` is written `¥12.00`, which reads
-as yen. Keep the code (`12 AUD`) where the currency matters.
+as yen, and is then shown as yen are, in whole yen (`¥12`, see
+[money precision](/syntax/money-precision/#each-currencys-own-places)). Keep the
+code (`12 AUD`) where the currency matters.
+
+Where the symbol goes in an answer follows the reader's language when the app
+showing the notes is set to one. The examples here are written the English
+way, `€1,234.50`; a reader whose app is set to German sees `1.234,50 €`, the
+symbol after the amount as German writes it, and a German note reads that form
+back in as the same money. Only the place and the separators change: the symbol,
+the cents and the rounding are the same in every language. See
+[formatting results](/guide/formatting/#the-words-beside-the-number).
+
+## Amounts inside a call
+
+Inside the brackets of a function call, or of a list, a comma separates one
+value from the next: `rgb(255,255,255)` is three numbers, and `max(1,000, 2)` is
+the largest of 1, 0 and 2. An amount of money is the exception. A comma after an
+amount with its currency sign in front, followed by exactly three digits and
+then the end of the amount (a comma, a decimal point, a closing bracket or a
+space), groups the thousands as it does anywhere else, since nobody writes a
+list as `$1` then `000`:
+
+```solve
+compoundInterest($1,000, 5%, 3) // $1,157.63
+max($1,000, $2) // $1,000.00
+max($1,000.50, $2) // $1,000.50
+max(1,000, 2) // 2
+```
+
+The boundary is the ambiguity the rule cannot resolve. `max($1,234)` is read as
+the one amount $1,234; to mean $1 and 234, put a space after the comma, as
+`max($1, 234)`. A plain number keeps the separator reading, so write
+`max(1000, 2)` for a thousand. The one other exception is a range's bound,
+whose comma straight against the range's colon groups the thousands, so
+`sum(1,000:2,000)` is the range from one thousand to two thousand (see
+[large bounds](/syntax/map-reduce-and-aggregates/#large-bounds)). An amount with its currency after it (`1,000 USD`)
+inside a call is not read as grouped either: write the sign in front, or no
+comma.
 
 ## Indian grouping
 
@@ -154,10 +191,51 @@ date spellings above are read by the same parser used everywhere else. Like the
 live conversion, the first result is a pending value and the real answer arrives
 later.
 
-Historical rates come from a data source you supply, so nothing is assumed and
-no live rate is passed off as a historical one. Without a provider a dated
-conversion reports that historical rates are not configured rather than falling
-back to today's rate.
+### Where a past day's rate comes from
+
+An exchange rate is how much of one currency buys one unit of another, and it
+moves through the day. So that everyone can agree on one figure for a given day,
+the European Central Bank publishes a set of reference rates each working day,
+for about thirty currencies against the euro. The engine asks Frankfurter, a free
+service that serves those reference rates with no key, for the rate on the day
+you name. It is the same service the live conversion uses, so a live rate and a
+past one come from one source. With the rate fetched for 15 January 2024 (0.78441
+pounds to the dollar), `100 USD in GBP on 2024-01-15` is `£78.44`, and the
+[record of where the rate came from](#where-a-rate-came-from) names Frankfurter
+and that day.
+
+A weekend or a bank holiday has no rate of its own: the one in force is the last
+rate published before it, so `on 2024-01-13` (a Saturday) converts at Friday's
+rate and the record says Friday. A resolved historical rate never goes stale,
+since the rate on a fixed past day does not change.
+
+Some dated conversions are refused, each with a sentence saying why, rather than
+answered with a figure from somewhere else:
+
+| Expression | Result |
+| --- | --- |
+| `100 USD in GBP on 1998-06-01` | refused: the reference rates begin on 4 January 1999 |
+| `100 USD in GBP on 2090-01-01` | refused: no rate has been published for a future day |
+| `1 BTC in USD on 2024-01-15` | refused: the reference rates cover currencies, not cryptocurrencies |
+
+The first boundary is a choice about where figures come from, not a limit of the
+service: Frankfurter does answer some earlier dates, but from another source, and
+a rate from before the euro is not a European Central Bank reference rate. A
+currency the bank does not quote is refused the same way. The live conversion
+routes cryptocurrencies to CoinGecko, which has no dated equivalent here.
+
+With live data switched off (`network.enabled: false`, see [switching live data
+off](/guide/async-and-live-data/#switching-live-data-off)) a dated conversion
+makes no request and says the setting is why.
+
+### Using your own historical rates
+
+A host with its own source of rates (a bank feed, an accounting system, a paid
+service that reaches further back) supplies it as `historicalRateProvider`, and
+it takes the place of Frankfurter for every dated conversion. It receives the two
+currency codes, the day as `YYYY-MM-DD` and an abort signal to pass to its fetch,
+and returns the rate as a number, or as `{ rate, asOf }` when the rate it found
+was published for an earlier day than the one asked about:
 
 ```ts
 import { createCurrencyPackage } from "solve-engine/packages";
@@ -167,22 +245,24 @@ const currency = createCurrencyPackage({
     const res = await fetch(`https://example.com/fx/${isoDate}?from=${from}&to=${to}`, { signal });
     return (await res.json()).rate;
   },
+  historicalProviderName: "Example FX",
 });
 ```
 
 `createCurrencyPackage()` with no argument is the default already in
-`BUILTIN_PACKAGES`, so live conversion works out of the box. Build your own with a
-`historicalRateProvider` and substitute it into the engine's `packages` array to
-answer dated ones. A resolved historical rate never goes stale, since the rate on
-a fixed past date does not change. There is no free, keyless historical-FX service
-to bake in the way the live rate has one. Pass `historicalProviderName` beside it
-to say whose rates they are.
+`BUILTIN_PACKAGES`. Build your own and substitute it into the engine's `packages`
+array. `historicalProviderName` says whose rates they are in the record (`host`
+when left out). A provider that answers with something that is not a positive
+number is refused rather than converted through. Passing `historicalRateProvider:
+null` keeps the `on <date>` form but declines every source, and a dated
+conversion then reports that historical rates are not configured rather than
+falling back to today's rate.
 
 ## Where a rate came from
 
 Every converted amount records where its rate came from: the provider
-(Frankfurter, the European Central Bank's reference rates, for the built-in live
-rate; the name a host gives for its own), whether the rate was fetched live,
+(Frankfurter, the European Central Bank's reference rates, for the built-in live and
+historical rates; the name a host gives for its own), whether the rate was fetched live,
 supplied by the host, or looked up for a past day, and when. The record travels
 with every line computed from the amount, so an app can show "reference rate, 23
 Sep 16:02" beside a total built from converted lines and mark those lines as

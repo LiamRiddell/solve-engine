@@ -1,7 +1,7 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { chargeAllocation } from "@solve-js/vm/AllocationBudget";
 import type { SymbolicNode, Rational } from "@solve-js/symbolic";
-import { decimalToString, type DecimalData } from "@solve-js/decimal";
+import { decimalToString, decimalWithinDigits, type DecimalData } from "@solve-js/decimal";
 import type { ValueSource, FrozenMark } from "@solve-js/vm/Provenance";
 
 /**
@@ -32,6 +32,22 @@ export interface MatrixData {
 	readonly cols: number;
 	readonly data: readonly MatrixEntry[];
 	readonly hasSymbolic: boolean;
+	/**
+	 * The one unit every numeric cell is read in (`km` for `[1 km, 500 m]`,
+	 * whose cells are then 1 and 0.5), or undefined for a list of plain numbers
+	 * (issue #745). A list carries one unit, taken from its first quantity
+	 * cell, as the comma aggregates take theirs.
+	 */
+	readonly unit?: string;
+	/**
+	 * The decimal places each cell is shown to, in the order of `data`, when
+	 * the list was rounded (`[0.001, 0.006] to 4 dp`, `round(v, 2)`, `to 3 sf`):
+	 * the list's own form of a number's `decimalPlaces`. A cell with no entry
+	 * (undefined) is shown the ordinary way. A display sidecar like that one, so
+	 * arithmetic on the list builds a new matrix without it and re-decides the
+	 * precision.
+	 */
+	readonly places?: readonly (number | undefined)[];
 }
 
 /** A first-class integer range `min:max`, both bounds inclusive. */
@@ -117,10 +133,46 @@ export type ChartKind = "sparkline" | "plot";
  *   instant follows from the zone it is read in.
  * - `instant`: a fixed point on the timeline, named without depending on a
  *   zone (`2026-04-03T10:30:00Z`, `...+09:00`, `now`).
+ * - `time`: a time of day, shown as the time alone with the days it has moved
+ *   from the day it is counted from beside it (see {@link Value.timeAnchor}).
+ *   A time converted into another zone takes it (`3pm London in Tokyo`, #757),
+ *   held as the instant it names and read in that zone, so arithmetic keeps
+ *   working.
  *
  * See {@link Value.grain} for why the number cannot answer this on its own.
  */
-export type DatetimeGrain = "date" | "datetime" | "instant";
+export type DatetimeGrain = "date" | "datetime" | "instant" | "time";
+
+/**
+ * How finely a time of day is written: `minute` for the time-zone answers,
+ * which have always answered to the minute (`7:00 PM`). See
+ * {@link Value.timePrecision}.
+ */
+export type TimePrecision = "minute";
+
+/**
+ * The two places a time difference was asked between, as the reader named
+ * them (`time difference between London and Tokyo`, #757). The quantity it
+ * rides on is how far the second place's clock is ahead of the first's, so a
+ * negative one means the second is behind. See {@link Value.zoneDifference}.
+ */
+export interface ZoneDifference {
+	/** The first place, as the reader wrote it (`London`). */
+	readonly from: string;
+	/** The second place, as the reader wrote it (`Tokyo`). */
+	readonly to: string;
+}
+
+/**
+ * Which name a String drawn from a date holds, so a formatter can write it in
+ * the reader's language: the day of the week (Sunday is 0) or the month
+ * (January is 0), as the calendar backends count them. See
+ * {@link Value.calendarName}.
+ */
+export interface CalendarName {
+	readonly kind: "weekday" | "month";
+	readonly index: number;
+}
 
 /**
  * A chart specification: the DATA to draw, never pixels. One shape holds every
@@ -147,16 +199,24 @@ export interface ChartData {
 }
 
 /**
- * An IPv4 address and/or subnet prefix (issue #189). `addr` is the 32-bit
- * address (`192.168.1.10` held as one number); `prefix` is the CIDR prefix
- * length in `/24`. A bare address has no `prefix`, a bare `/24` has no `addr`,
- * and a full block (`192.168.1.0/24`) has both. Lives in a {@link Value}'s
- * `value` slot as the other struct payloads do; the formatter renders it as the
- * dotted quad (plus `/prefix` when present).
+ * An IP address and/or subnet prefix, IPv4 (issue #189) or IPv6 (issue #748).
+ * `addr` is a 32-bit IPv4 address (`192.168.1.10` held as one number); `addr6`
+ * is a 128-bit IPv6 address, set exactly when the value is IPv6; `prefix` is
+ * the prefix length in `/24` or `/64`. A bare address has no `prefix`, a bare
+ * `/24` has no address, and a full block (`192.168.1.0/24`) has both. Lives in a
+ * {@link Value}'s `value` slot as the other struct payloads do; the formatter
+ * renders it as the dotted quad or the RFC 5952 text (plus `/prefix` when
+ * present).
  */
 export interface IpCidrData {
+	/** The 32-bit IPv4 address. */
 	readonly addr?: number;
+	/** The prefix length: 0 to 32 for IPv4, 0 to 128 for IPv6. */
 	readonly prefix?: number;
+	/** The 128-bit IPv6 address, present exactly when the value is IPv6. */
+	readonly addr6?: bigint;
+	/** The zone index of an IPv6 address (`eth0` in `fe80::1%eth0`, RFC 4007), when one is written. */
+	readonly zone?: string;
 }
 
 /**
@@ -195,7 +255,7 @@ export enum ValueType {
 	Split = 15,
 	/** A chart to draw (`[1,2,3] as sparkline`, `plot sin(x) from 0 to 2pi`). Value is {@link ChartData}. */
 	Chart = 16,
-	/** An IPv4 address or subnet (`192.168.1.0/24`). Value is {@link IpCidrData}. */
+	/** An IPv4 or IPv6 address or subnet (`192.168.1.0/24`, `2001:db8::/32`). Value is {@link IpCidrData}. */
 	IpCidr = 17,
 }
 
@@ -204,6 +264,17 @@ export enum ValueType {
 // Instead of allocating new Value objects per instruction, we pre-allocate a
 // block and bump an index. A single arena.reset() per scroll frame recycles all
 // Values, no per-value release overhead, no GC pressure during 60fps scrolling.
+
+/**
+ * The name a quantity is written under, and how many of its unit make one of
+ * that name. See {@link Value.unitLabel}.
+ */
+export interface UnitLabel {
+	/** The word the reader wrote (`Meile`, `sprints`). */
+	readonly name: string;
+	/** How many of the value's own unit one of `name` is: 1 for an alias, 2 for a sprint of two weeks. Always positive and finite. */
+	readonly per: number;
+}
 
 /**
  * Bump-allocator arena for zero-allocation Value reuse during scroll.
@@ -431,9 +502,11 @@ function jsonSafe(x: unknown): unknown {
 	if (typeof x === "bigint") return x.toString();
 	if (Array.isArray(x)) return x.map(jsonSafe);
 	if (x !== null && typeof x === "object") {
-		const out: Record<string, unknown> = {};
-		for (const [k, v] of Object.entries(x)) out[k] = jsonSafe(v);
-		return out;
+		// Built with fromEntries, which defines each key as an own property. An
+		// assignment `out[k] = ...` would read a `__proto__` key as a request to
+		// replace the new object's prototype, dropping the key and handing the
+		// object the payload's own value as its prototype.
+		return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, jsonSafe(v)]));
 	}
 	return x;
 }
@@ -568,6 +641,34 @@ export class Value {
 	 */
 	public zone?: string;
 	/**
+	 * For a time of day (grain `"time"`), an instant on the day it is counted
+	 * from, in epoch milliseconds. The formatter shows the time alone and the
+	 * days it has moved from this one beside it, read in the value's zone, so
+	 * `11pm London in Tokyo on 10 March 2026` is `8:00 AM (+1 day)`: Tokyo's
+	 * clock is on the day after the one the reader named. The shift is fixed
+	 * when the time is written rather than counted from whatever day it is
+	 * displayed on. Carried through duration arithmetic with the grain. Cleared
+	 * by {@link recycle} alongside the other sidecars.
+	 */
+	public timeAnchor?: number;
+	/**
+	 * For a time of day, that it is written to the minute (`7:00 PM`) rather
+	 * than to the second, as every time-zone answer is (#757). Carried through
+	 * duration arithmetic with the grain. Cleared by {@link recycle}.
+	 */
+	public timePrecision?: TimePrecision;
+	/**
+	 * For a duration that is the gap between two places' clocks (`time
+	 * difference between London and Tokyo`, #757), the two places, so the
+	 * formatter writes the gap as a direction: `Tokyo is 8 hours ahead of
+	 * London`. The quantity is a plain signed duration in hours, positive when
+	 * the second place is ahead, so it converts (`in hours`), adds and compares
+	 * as any duration does; a conversion or arithmetic gives a plain duration,
+	 * since the answer is then a new quantity. A variable holding it keeps it,
+	 * through {@link clone}. Cleared by {@link recycle}.
+	 */
+	public zoneDifference?: ZoneDifference;
+	/**
 	 * That this quantity is the gap between two datetimes, rather than a
 	 * duration someone wrote down.
 	 *
@@ -629,6 +730,42 @@ export class Value {
 	 * {@link recycle} alongside the other sidecars.
 	 */
 	public unspelledUnit?: string;
+	/**
+	 * For a String that is a weekday or month name drawn from a date (`as
+	 * weekday`, `as month`), which name it is.
+	 *
+	 * The text stays the engine's English (`"Tuesday"`), so a comparison with
+	 * `"Tuesday"`, a join with other text and a lookup all read it as before;
+	 * the formatter reads this to write the name in the reader's language
+	 * (`Dienstag` under `de`). Text built from the name (`"on " + x`) is new
+	 * text and carries nothing. A variable holding the name keeps it, through
+	 * {@link clone}. Cleared by {@link recycle} alongside the other sidecars.
+	 */
+	public calendarName?: CalendarName;
+	/**
+	 * The name a quantity is shown under when the reader wrote a word for its
+	 * unit that is not the unit's own: a package's alias (`Meile` for the mile)
+	 * or a unit the document defined (`sprints`, two weeks each). The quantity
+	 * itself stays in {@link unit}, so it converts and adds as that unit does;
+	 * only the written answer changes, to `value / per` followed by `name`
+	 * (#762).
+	 *
+	 * Set on the quantity a literal (`2 Meile`) or a conversion (`5 km in
+	 * Meile`, `84 days in sprints`) produces. Arithmetic does not carry it,
+	 * since a computed value is a new quantity; a variable holding a labelled
+	 * value does, through {@link clone}. Cleared by {@link recycle}.
+	 */
+	public unitLabel?: UnitLabel;
+	/**
+	 * Set on an infinity that a division by zero gave (`1/0`, `40 is what %
+	 * of 0`), so a refusal can name that cause; an infinity reached because a
+	 * number grew past the largest double (`2^2000`, `1e309`) carries none.
+	 * The double alone cannot tell the two apart. Set by the VM's `/` (see
+	 * vm/IndeterminateQuotient.ts's `zeroDivisorQuotient`) and carried by `+`,
+	 * `-`, `*` and `^` when an operand had it and the result is still
+	 * infinite. Cleared by {@link recycle}.
+	 */
+	public divisionByZero?: boolean;
 
 	constructor(
 		type: ValueType,
@@ -675,6 +812,9 @@ export class Value {
 		// the arena hands out next.
 		this.grain = undefined;
 		this.zone = undefined;
+		this.timeAnchor = undefined;
+		this.timePrecision = undefined;
+		this.zoneDifference = undefined;
 		this.datetimeSpan = undefined;
 		// Provenance clears too: a reused Value that once held a converted
 		// amount must not tell a host that a plain number came from a rate.
@@ -682,6 +822,12 @@ export class Value {
 		this.frozen = undefined;
 		// A reused Value that once held `planck` must not refuse a quantity later.
 		this.unspelledUnit = undefined;
+		// A reused Value that once held `Tuesday` must not render other text as a weekday.
+		this.calendarName = undefined;
+		// Nor lend a quantity it once was the name it was shown under.
+		this.unitLabel = undefined;
+		// Nor tell an overflowed infinity that it came from dividing by zero.
+		this.divisionByZero = undefined;
 	}
 
 	/**
@@ -726,17 +872,25 @@ export class Value {
 	toJSON(): Record<string, unknown> {
 		const out: Record<string, unknown> = { type: this.type, value: jsonSafe(this.value) };
 		if (this.unit !== undefined) out.unit = this.unit;
+		// A list's unit is on its payload; it is written beside the type as a
+		// quantity's is, so a host reads either the same way (#745).
+		if (this.type === ValueType.Matrix && (this.value as MatrixData).unit !== undefined) out.unit = (this.value as MatrixData).unit;
 		if (this.exact !== undefined) out.exact = decimalToString(this.exact);
 		if (this.rational !== undefined) out.rational = `${this.rational.n}/${this.rational.d}`;
 		if (this.uncertainty !== undefined) out.uncertainty = this.uncertainty;
 		if (this.decimalPlaces !== undefined) out.decimalPlaces = this.decimalPlaces;
 		if (this.grain !== undefined) out.grain = this.grain;
 		if (this.zone !== undefined) out.zone = this.zone;
+		if (this.timeAnchor !== undefined) out.timeAnchor = this.timeAnchor;
+		if (this.timePrecision !== undefined) out.timePrecision = this.timePrecision;
+		if (this.zoneDifference !== undefined) out.zoneDifference = { from: this.zoneDifference.from, to: this.zoneDifference.to };
 		if (this.datetimeSpan !== undefined) out.datetimeSpan = this.datetimeSpan;
 		if (this.timedOut !== undefined) out.timedOut = this.timedOut;
 		if (this.sources !== undefined) out.sources = this.sources;
 		if (this.frozen !== undefined) out.frozen = this.frozen;
 		if (this.unspelledUnit !== undefined) out.unspelledUnit = this.unspelledUnit;
+		if (this.calendarName !== undefined) out.calendarName = { kind: this.calendarName.kind, index: this.calendarName.index };
+		if (this.unitLabel !== undefined) out.unitLabel = { name: this.unitLabel.name, per: this.unitLabel.per };
 		return out;
 	}
 
@@ -865,8 +1019,14 @@ export class Value {
 		if (this.type === ValueType.Colour) return 0;
 		// A chart is a set of points, not a scalar; callers branch on `.isChart()`.
 		if (this.type === ValueType.Chart) return 0;
-		// An IP/CIDR reads as its 32-bit address where a number is wanted (`as int`).
-		if (this.type === ValueType.IpCidr) return (this.value as IpCidrData).addr ?? 0;
+		// An IPv4 address reads as its 32-bit address where a number is wanted
+		// (`as int`). An IPv6 address has 128 bits, more than a double holds
+		// exactly, so it has no numeric reading: the VM refuses it by name in
+		// arithmetic and converts it through its bigint (see ipv6Refused()).
+		if (this.type === ValueType.IpCidr) {
+			const ip = this.value as IpCidrData;
+			return ip.addr6 !== undefined ? NaN : ip.addr ?? 0;
+		}
 		// A split is a structured multi-share result; its scalar reading is the
 		// "each" (base) share, so a numeric consumer or the worker DTO's number
 		// field still gets a sensible value where a caller does not branch first.
@@ -1070,11 +1230,24 @@ export function uomValue(n: number, unit: string): Value {
  * decimal the amount really is. Same-currency arithmetic reads `exact` to stay
  * exact, and the formatter reads it to round a half-cent the way a ledger does
  * rather than the way `toFixed` does on a double.
+ *
+ * The decimal is held to 34 significant digits and 34 places (see
+ * `decimalWithinDigits`); one whose whole part is longer than that is not held
+ * at all, and the Value carries only the double.
  */
 export function uomValueExact(n: number, unit: string, exact: DecimalData): Value {
-	chargeAllocation(bigIntAllocationBytes(exact.coef), "decimal bytes");
+	// Held to the ceiling a plain decimal has (#735). A chain of
+	// multiplications across lines builds a longer decimal on every line, and
+	// each line is a new evaluation, so nothing else bounds it. Past the
+	// ceiling the amount is rounded to 34 significant digits rather than
+	// dropped to the double, which keeps the half-cent rule exact for any
+	// amount a till could hold; a whole part longer than that keeps only the
+	// double.
+	const held = decimalWithinDigits(exact);
+	if (held === null) return uomValue(n, unit);
+	chargeAllocation(bigIntAllocationBytes(held.coef), "decimal bytes");
 	const v = uomValue(n, unit);
-	v.exact = exact;
+	v.exact = held;
 	return v;
 }
 
@@ -1173,8 +1346,13 @@ export function timecodeFps(unit: string): number {
  * row-major source syntax (e.g. the `[1,2;3,4]` literal) must transpose
  * into column-major order before calling this; see `MatrixOps.ts`'s
  * `rowMajorToColumnMajor()`.
+ *
+ * `unit`, when given, is the unit every numeric cell is read in (see
+ * {@link MatrixData.unit}); the caller has already converted the cells into
+ * it. `places`, when given, is the place count each cell is shown to (see
+ * {@link MatrixData.places}), one entry per cell of `data`.
  */
-export function matrixValue(rows: number, cols: number, data: readonly MatrixEntry[]): Value {
+export function matrixValue(rows: number, cols: number, data: readonly MatrixEntry[], unit?: string, places?: readonly (number | undefined)[]): Value {
 	// Every matrix in the engine is born here, which makes this the one place
 	// that can charge for one without each producer having to remember to. The
 	// charge lands after `data` exists, so it is a backstop rather than a
@@ -1194,14 +1372,15 @@ export function matrixValue(rows: number, cols: number, data: readonly MatrixEnt
 	// MatrixOps.ts's symbolicToEntry() shows up as a wrong result rather than as
 	// a matrix that silently believes it is symbolic.
 	const hasSymbolic = data.some(cell => typeof cell === "object" && cell !== null && "kind" in cell);
-	const m: MatrixData = { rows, cols, data, hasSymbolic };
+	const base: MatrixData = unit === undefined ? { rows, cols, data, hasSymbolic } : { rows, cols, data, hasSymbolic, unit };
+	const m: MatrixData = places === undefined ? base : { ...base, places };
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Matrix, m);
 	return new Value(ValueType.Matrix, m);
 }
 
-/** A 1×N row-vector Matrix, row-major and column-major storage are identical for a single row. */
-export function rowVectorValue(data: readonly number[]): Value {
-	return matrixValue(1, data.length, data);
+/** A 1×N row-vector Matrix, row-major and column-major storage are identical for a single row; `unit` as {@link matrixValue} takes it. */
+export function rowVectorValue(data: readonly number[], unit?: string): Value {
+	return matrixValue(1, data.length, data, unit);
 }
 
 /** An N×1 column-vector Matrix, row-major and column-major storage are identical for a single column. */
@@ -1246,7 +1425,7 @@ export function chartValue(data: ChartData): Value {
 	return new Value(ValueType.Chart, data);
 }
 
-/** Create an IPv4 address/subnet Value. Arena-backed; the {@link IpCidrData} is immutable. */
+/** Create an IPv4 or IPv6 address/subnet Value. Arena-backed; the {@link IpCidrData} is immutable. */
 export function ipCidrValue(data: IpCidrData): Value {
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.IpCidr, data);
 	return new Value(ValueType.IpCidr, data);
@@ -1277,12 +1456,14 @@ export function boolValue(b: boolean): Value {
  * @param n - The instant, in epoch milliseconds.
  * @param grain - What the instant anchors, when the caller knows.
  * @param zone - The zone reference the instant was named in, when the line named one.
+ * @param timeAnchor - For a time of day, an instant on the day it is counted from. See {@link Value.timeAnchor}.
  * @returns The Datetime value.
  */
-export function datetimeValue(n: number, grain?: DatetimeGrain, zone?: string): Value {
+export function datetimeValue(n: number, grain?: DatetimeGrain, zone?: string, timeAnchor?: number): Value {
 	const v = _arenaActive && _arena ? _arena.acquire(ValueType.Datetime, n) : new Value(ValueType.Datetime, n);
 	if (grain !== undefined) v.grain = grain;
 	if (zone !== undefined) v.zone = zone;
+	if (timeAnchor !== undefined) v.timeAnchor = timeAnchor;
 	return v;
 }
 

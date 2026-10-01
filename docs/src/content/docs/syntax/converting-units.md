@@ -26,13 +26,60 @@ rather than guessed. The message names the dimensions rather than the units, so
 different dimensions is refused the same way: `5 kg + 3 m` reports *mass and
 length cannot be added*.
 
-Only a number or a quantity has an amount to convert. A bracketed list or a
-piece of text does not, so converting one is refused rather than answered as
-zero of the unit:
+Only a number or a quantity has an amount to convert. A piece of text or a
+colour does not, so converting one is refused rather than answered as zero of
+the unit. A list converts every cell, since each cell is an amount (see
+[lists and units](/syntax/vectors-and-matrices/#lists-and-units)):
 
 ```solve-doc
-(1, 2) in miles // ERROR: A bracketed list has no single amount to convert to miles: only a number or a quantity can be converted.
+"two" in miles // ERROR: Text has no single amount to convert to miles: only a number or a quantity can be converted.
+(1, 2) in miles // [1.00 miles, 2.00 miles]
 ```
+
+A time written as a word agrees with its count, the way it is said: one hour,
+two hours. A count of exactly one takes the singular and every other count the
+plural, whichever spelling was typed, so converting 3,600 seconds into hours
+gives one hour rather than one hours. A symbol such as `h` or `min` has no
+plural and is written as it is.
+
+```solve
+3600 seconds in hours // 1 hour
+2 hour // 2 hours
+90 minutes in hours // 1.50 hours
+0 hours // 0 hours
+```
+
+The boundary: only the time words (`second` to `year`, the words a duration is
+already written in) change their spelling. Other unit words are written as the
+value carries them, so `1609.344 m in miles` is `1.00 miles`, and a count shown
+with places is plural even when it rounds to one, because the places say it is
+a measurement rather than a count.
+
+## Asked the other way round
+
+"How many metres are in a kilometre?" is a conversion asked the other way
+round: the unit you want comes first, and the amount comes after `in`. Write it
+that way and it is the same question as `1 km in m`, with the same answer.
+
+```solve
+km in 1 mile // 1.61 km
+m in 1 furlong // 201.17 m
+km in a furlong // 0.20 km
+g in 1 carat // 0.20 g
+mW in 1 W // 1,000.00 mW
+seconds in a day // 86,400 seconds
+km in -1 mile // -1.61 km
+```
+
+Every unit a conversion reads can be asked for this way, the less common units
+such as the furlong and the carat included, and a unit is read in its own case,
+as everywhere else, so `mW` is the milliwatt and `MW` the megawatt. A currency
+works too, once its rate is known (`USD in 1 EUR`).
+
+The form is kept narrow on purpose: the line must start with the unit, and
+what follows `in` must be a plain amount and a unit, a signed amount (`-1 mile`),
+or `a` or `an` standing in for one. So `days in February 2020`, which asks how
+long a named month is, is left as its own question.
 
 ## Units written in more than one word
 
@@ -55,6 +102,36 @@ separated the way the table writes them, one space, or a hyphen in
 allowance is a plural. A few table entries have only the singular (`troy ounce`,
 `watt-hour`), and the plural a reader writes reads as that unit. A symbol takes
 no plural, so `kW h` is the kilowatt-hour and `kW hs` is not a unit.
+
+A few two-word spellings are the engine's own rather than the table's, each
+naming a size the plain word leaves ambiguous: the metric and imperial cups
+(see [cooking](/syntax/cooking/#which-cup)), miles per imperial gallon (see
+[fuel economy](/syntax/fuel-economy/#us-and-imperial-gallons)), and the
+typographic point below.
+
+### The typographic point
+
+Type is sized in **points**: a 12-point font is 12 of them tall, and a point is
+a 72nd of an inch (the desktop publishing point, which is the one CSS and every
+word processor use). The short spellings are taken, `pt` by the pint and `point`
+by ordinary English ("scored 12 points"), so after a number the point is written
+`typographic point`:
+
+```solve
+12 typographic points in mm // 4.23 mm
+72 typographic points in inches // 1.00 inches
+1 inch in typographic points // 72.00 typographic points
+1 pica in typographic points // 12.00 typographic points
+```
+
+`pt` stays the US pint, so `12 pt in mm` is refused as a volume that cannot
+become a length rather than read as type. `points` still works as a conversion
+target, where there is no prose for it to collide with:
+
+```solve
+12 pt in mm // a volume cannot be converted to a length
+1 pica in points // 12.00 points
+```
 
 ## Micro, with either µ or μ
 

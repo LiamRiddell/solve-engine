@@ -13,7 +13,7 @@
  * `__tests__/calendar/DateCalendar.spec.ts`; this file is about the threading.
  */
 
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, jest, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -150,8 +150,9 @@ describe("plugin functions and converters read it through the execution context"
 
 	test("a timezone form resolves its zones through it", () => {
 		const { engine, calendar } = recordingEngine();
-		expect(engine.evaluateExpression("time difference between Tokyo and Delhi").value).toBe(
-			"Tokyo is 3 hours 30 minutes ahead of Delhi",
+		// A zone difference is a duration that carries its two places (#757).
+		expect(formatValue(engine.evaluateExpression("time difference between Tokyo and Delhi"))).toBe(
+			"= Tokyo is 3 hours 30 minutes ahead of Delhi",
 		);
 		expect(calendar.calls).toContain("zoneOffsetMinutes");
 	});
@@ -230,14 +231,22 @@ describe("the parser reads it for the forms that read a date while parsing", () 
 		expect(calendar.calls).toContain("now");
 	});
 
-	test("the historical-currency date phrase reads the literal through it", () => {
+	test("the historical-currency date phrase reads the literal through it", async () => {
 		const { engine, calendar } = recordingEngine();
-		// The rate is looked up asynchronously (and no provider is configured,
-		// so it settles as an error), but the phrase has already read the fused
+		// The rate is looked up asynchronously, through a stubbed fetch so no
+		// request leaves the test, but the phrase has already read the fused
 		// literal by the time the line goes pending.
-		const value = engine.evaluateExpression("100 USD in GBP on 12/04/2005");
-		expect([ValueType.Pending, ValueType.Error]).toContain(value.type);
-		expect(calendar.calls).toContain("fields");
+		const offline = jest.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
+		try {
+			const value = engine.evaluateExpression("100 USD in GBP on 12/04/2005");
+			expect([ValueType.Pending, ValueType.Error]).toContain(value.type);
+			expect(calendar.calls).toContain("fields");
+			// Let the stubbed request run before the real fetch is put back.
+			for (let i = 0; i < 5; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(offline).toHaveBeenCalled();
+		} finally {
+			offline.mockRestore();
+		}
 	});
 });
 

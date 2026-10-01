@@ -25,9 +25,43 @@ dates and durations, times and timezones, matrices and vectors, statistics,
 finance, symbolic algebra, and a set of natural-language phrasings for each.
 The full list is in the [syntax reference](/syntax/cheatsheet/).
 
-Beyond evaluating single expressions it also understands a document: variables
-defined on one line and used on another, references to previous lines, and
-aggregate operations over a range of lines.
+Beyond evaluating single expressions it also understands a document, a note
+of many lines read together. A value named on one line is read by the lines
+below it, so an edit near the top flows down to every answer that depends on it:
+
+```solve-doc
+:subtotal = 240
+:tax = :subtotal * 20%
+:subtotal + :tax // 288
+```
+
+A document can also describe itself. A `#tag` marks the lines that belong
+together so they can be totalled ([category tags](/syntax/category-tags/)); a
+`check` line states something that must stay true and turns into an error when
+it stops holding ([checks](/syntax/checks/)); `with` asks what a line would say
+if one of its inputs were different, without changing the note
+([what-if](/syntax/what-if/)); and `inputs of` lists the lines that fed an
+answer, and the lines that fed those ([tracing inputs](/syntax/tracing-inputs/)).
+Headings split the note into [sections](/syntax/sections/).
+
+```solve-doc
+# Trip
+nights = 3
+rate = £95
+flights: £420 #travel
+hotel: nights * rate #travel
+total of #travel // £705.00
+check total of #travel <= £800 // ✓
+
+# Questions
+line 5 with nights = 4 // £380.00
+inputs of line 6 // £705.00 (line 6) <- £420.00 (line 4), £285.00 (line 5) <- [nights 3 (line 2), rate £95.00 (line 3)]
+```
+
+Line 5 is the hotel, so `line 5 with nights = 4` answers what the hotel would
+cost for four nights while the note keeps its three. References to earlier lines
+by number, and totals over a run of lines, are covered in
+[line references](/syntax/line-references/).
 
 ## What it is not
 
@@ -84,3 +118,9 @@ If you want to embed the engine, start with
 
 If you want to know what it can parse, go straight to the
 [syntax reference](/syntax/cheatsheet/).
+
+If a coding assistant or a language model is reading these pages for you, point
+it at [`llms.txt`](/llms.txt), a plain-text map of the syntax reference with a
+line per area, or [`llms-full.txt`](/llms-full.txt), which adds every proven
+example with its answer. Both are generated from the pages when the
+documentation is built, so they show only forms the engine is checked to read.

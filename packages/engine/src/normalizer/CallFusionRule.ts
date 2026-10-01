@@ -2,6 +2,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "./NormalizerRule";
+import { lowerCased } from "./RuleIndex";
 
 /** The single rule's name, used for fusion diagnostics and for unregistering. */
 export const CALL_FUSION_RULE_NAME = "engine:call-fusion";
@@ -38,7 +39,8 @@ export function callFusionRule(callFusions: ReadonlyMap<string, string>, priorit
 			// are not a function call, so this short-circuits without allocating.
 			if (tokens[pos + 1]?.type !== "LPAREN") return null;
 			if (tokens[pos - 1]?.type === "COLON") return null; // `:name = ...` stays a variable
-			const name = (token.value ?? "").toLowerCase();
+			// Lowered only when it has a capital, so `sha256(` is looked up as written.
+			const name = lowerCased(token.value ?? "");
 			const fusedType = callFusions.get(name);
 			if (fusedType === undefined) return null;
 

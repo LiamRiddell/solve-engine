@@ -213,9 +213,11 @@ describe("every refusal is a named error, never a number", () => {
     );
   });
 
+  // A section of percentages totals to a percentage, as `sum(10%, 20%)` does,
+  // so a percentage beside money is refused as a mix (FoundBug_aggregateOfPercentages).
   test("a percentage is refused rather than added to money", () => {
     expect(answer(["# Travel", "$450", "20%", "# Summary", 'total of section "Travel"'])).toBe(
-      'ERROR AGGREGATE_NON_NUMERIC: Line 3, under "Travel", is not a plain number or quantity, so it cannot be added.',
+      "ERROR AGGREGATE_PERCENTAGE_MIXED: A percentage (20%) and an amount in USD cannot be added together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 20% as the number 0.2; to raise an amount by a percentage, write it as 100 + 10%.",
     );
   });
 
@@ -363,10 +365,12 @@ describe("a live editor follows an edit to the section", () => {
     // Line 3 totals the Summary section, which holds line 6; line 6 totals the
     // Travel section, which holds line 3. Were the summaries read, the two
     // would read each other and both report a cycle. Each leaves the other out,
-    // so both answer once the editor has settled.
+    // so line 6 answers, and line 3 reports only that its one figure, line 7,
+    // sits below it: a note is read from the top, so that is refused on every
+    // pass, as parseDocument refuses it, and it is not a cycle.
     const doc = ["# Travel", "Flights: $450", 'Summary check: total of section "Summary"', "", "# Summary", 'total of section "Travel"', "$5"];
     const out = fresh(doc);
     expect(out[5]).toBe("$450.00");
-    expect(out[2]).toBe("$5.00");
+    expect(out[2]).toBe("ERROR LINE_NOT_YET_EVALUATED: Line 7 has not been evaluated yet (forward reference, or out of range)");
   });
 });

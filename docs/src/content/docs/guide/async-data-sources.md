@@ -12,6 +12,62 @@ This is the async half of a package. It assumes you have read
 two things: a piece of **syntax** that triggers it (a symbol, a function name, a
 phrase) and a **resolver** that fetches the data. This page is the resolver.
 
+## The short path: `createQueryResolver`
+
+Most lookups have one shape: a quoted query in the line (a place, a ticker, a
+word) and one value back. For that shape the engine's own helper,
+`createQueryResolver` from `solve-engine/resolvers`, builds the resolver and the
+plugin function that reads its answer together, so the package supplies only the
+fetch. It keeps each answer in the engine's cache, shares one fetch between
+lines that ask the same thing, runs at most six fetches at once, times out a
+service that does not answer, keeps a failure only briefly, and records where
+each value came from. The built-in weather, stocks and knowledge packages use it,
+and so does the [package
+starter](https://github.com/LiamRiddell/solve-engine/tree/main/examples/package-starter)'s
+`rainfall("Oslo")`:
+
+```ts
+import { errorValue, pluginFunctionIndexFor, uomValue } from "solve-engine/vm";
+import { createQueryResolver } from "solve-engine/resolvers";
+import type { IEnginePackage } from "solve-engine";
+
+const { resolver, pluginFunction } = createQueryResolver({
+  namespace: "starter",
+  // The index the engine files the package's `rainfall` plugin function under.
+  pluginFunctionIndex: pluginFunctionIndexFor("package-starter:rainfall"),
+  fetchQuery: async (place, signal) => {
+    const problem = placeProblem(place); // your check: null when the place may be sent on
+    if (problem !== null) return errorValue("STARTER_BAD_PLACE", problem);
+    return uomValue(await fetchRainfall(place, signal), "mm");
+  },
+  onError: (place, error) =>
+    errorValue("STARTER_RAINFALL_FAILED", `the rainfall for ${place} could not be fetched: ${String(error)}`),
+});
+
+const pkg: IEnginePackage = {
+  name: "package-starter",
+  pluginFunctions: { rainfall: pluginFunction },
+  asyncResolvers: [resolver],
+  // the phrase or call word and its parselet, which emits
+  // PUSH_STRING "<place>" then emitPluginCall("rainfall", 1)
+};
+```
+
+The contract: the parselet pushes the query as a string literal immediately
+before the plugin call, and the resolver reads it from the compiled line before
+the line runs. `fetchQuery` is where every query passes before it leaves, so it
+is the place to refuse a hostile one. The index must be the one the engine gives
+the plugin function, which `pluginFunctionIndexFor("<package name>:<function
+name>")` returns.
+
+The boundary: the query has to be written in the line. A value known only as the
+line runs (a variable, a cell of a table) is never seen by `preflight`, and the
+reading function answers `<NAMESPACE>_NOT_PREFLIGHTED`; the starter turns that
+into a refusal of its own that tells the reader to quote the place. A lookup
+whose input is computed needs the function that [fetches on a cache
+miss](#resolvers-that-never-reach-a-network), and one with two operands or a
+shape of its own needs the full contract below.
+
 ## The contract
 
 A resolver implements
@@ -20,12 +76,21 @@ A resolver implements
 
 ```ts
 import type { IAsyncResolver, AsyncCheckResult } from "solve-engine/resolvers";
+import type { Token } from "solve-engine/lexer";
+import type { BytecodeProgram } from "solve-engine/parser";
 import { uomValue, type Value } from "solve-engine/vm";
+
+/** The two currencies a line converts between, as your syntax reads them. */
+interface Pair {
+  from: string;
+  to: string;
+}
 
 class RatesResolver implements IAsyncResolver {
   readonly namespace = "myrates";
+  private readonly cache = new Map<string, Value>();
 
-  preflight(tokens, bytecode, packageId, signal): AsyncCheckResult | null {
+  preflight(tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal): AsyncCheckResult | null {
     const pair = readPairFromTokens(tokens); // your syntax, your parse
     if (!pair) return null;                  // this line is not for us
 
@@ -36,15 +101,16 @@ class RatesResolver implements IAsyncResolver {
       queryKey,
       packageId,
       signal,
-      resolver: this.fetchRate(pair, signal),
+      resolver: this.fetchRate(queryKey, pair, signal),
     };
   }
 
-  private async fetchRate(pair, signal): Promise<Value> {
+  private async fetchRate(queryKey: string, pair: Pair, signal: AbortSignal): Promise<Value> {
     const res = await fetch(`https://example.com/rate/${pair.from}/${pair.to}`, { signal });
     const rate = await res.json();
-    this.cache.set(/* queryKey */, rate);
-    return uomValue(rate.value, pair.to);
+    const value = uomValue(rate.value, pair.to);
+    this.cache.set(queryKey, value);
+    return value;
   }
 
   destroy() {
@@ -83,6 +149,50 @@ class TableResolver implements IAsyncResolver {
 Leave it unset for anything that fetches. The setting is the host's promise that
 nothing leaves the process, and a fetching resolver marked `local` would break
 that promise on the host's behalf.
+
+A plugin function that fetches on a cache miss (because its input is known only
+when the line runs, so preflight had nothing to scan) is the other place a
+request can start. The engine refuses the promise such a function returns when
+live data is off, but by then the request has already left. Check the setting
+the function is handed before starting one:
+
+```ts
+const pluginFunction = (args: Value[], context?: LineExecutionContext) => {
+  const queryClient = context?.queryClient;
+  const cached = queryClient?.getQueryData(keyFor(args));
+  if (cached !== undefined) return cached as Value;
+  if (context?.networkEnabled === false) {
+    return errorValue("NETWORK_DISABLED", "Live data is switched off for this engine (network.enabled is false)");
+  }
+  if (queryClient === undefined) return errorValue("MYRATES_NO_CACHE", "No engine cache to fetch into");
+  return queryClient.fetchQuery({ queryKey: keyFor(args), queryFn: ({ signal }) => fetchIt(args, signal) });
+};
+```
+
+The built-in historical exchange rate does exactly this for `x in GBP on
+2024-01-15`, where the source currency is the value of `x` and preflight cannot
+see it.
+
+## Reading the engine's cache
+
+Each engine keeps what its resolvers fetched in a cache of its own, a TanStack
+Query `QueryClient`. A plugin function reads that cache from the execution
+context it is handed, `context.queryClient`: the engine running the line puts
+its own cache there, on the first pass, on the re-run when a value lands, and in
+a what-if pass, which runs on a scratch engine with its own. So two engines in
+one process each read their own cache, whichever of them ran last.
+
+`preflight` is handed the same cache as its last argument, so the two halves of
+a resolver meet in one place. A resolver built with `createQueryResolver` reads
+the context for you.
+
+The boundary: `getActiveQueryClient()`, the one module-level slot a plugin
+function used to read the cache from, still works and is deprecated. The engine
+used to publish its cache there before each line and put the previous one back
+around every nested run, and a re-run that missed one of those steps read
+another engine's cache. The engine sets it at every plugin call now, so an old
+handler keeps reading the right cache, but new code should read the context.
+The slot is removed in 3.0.
 
 ## Preflight runs before the VM, and stays synchronous
 
@@ -168,6 +278,8 @@ once and queues the rest, in the order they were asked for. `maxConcurrent` sets
 the number:
 
 ```ts
+import { createQueryResolver } from "solve-engine/resolvers";
+
 const { resolver, pluginFunction } = createQueryResolver({
   namespace: "tides",
   pluginFunctionIndex: TIDES_FN,
@@ -213,9 +325,9 @@ return {
   queryKey,
   packageId,
   signal,
-  resolver: this.fetchRate(pair, signal),
+  resolver: this.fetchRate(queryKey, pair, signal),
   refetchIntervalMs: 60_000,                    // refresh an on-screen rate once a minute
-  refetch: () => this.fetchRate(pair, this.refreshSignal),
+  refetch: () => this.fetchRate(queryKey, pair, this.refreshSignal),
 };
 ```
 
@@ -239,7 +351,7 @@ engine carries it through every line computed from that value; you do nothing
 further.
 
 ```ts
-private async fetchRate(pair, signal): Promise<Value> {
+private async fetchRate(queryKey: string, pair: Pair, signal: AbortSignal): Promise<Value> {
   const res = await fetch(`https://example.com/rate/${pair.from}/${pair.to}`, { signal });
   const rate = await res.json();
   const value = uomValue(rate.value, pair.to);
@@ -249,6 +361,7 @@ private async fetchRate(pair, signal): Promise<Value> {
     fetchedAt: Date.now(),       // when it arrived, in epoch milliseconds
     subject: `${pair.from}/${pair.to}`,
   }];
+  this.cache.set(queryKey, value);
   return value;
 }
 ```
@@ -267,9 +380,10 @@ return value;
 ```
 
 The built-in packages name their providers: `Frankfurter` and `CoinGecko` for the
-rates the engine fetches itself, `Open-Meteo` for weather, and for the packages
-that take a host's fetch (stocks, crypto, knowledge, historical currency) a
-`provider` option, `host` by default.
+rates the engine fetches itself (live rates, and historical rates for a past day),
+`Open-Meteo` for weather, and for the packages that take a host's fetch (stocks,
+crypto, knowledge) a `provider` option, `host` by default. A host that replaces
+the historical exchange rate with its own names it with `historicalProviderName`.
 
 Three boundaries. A failed fetch returns an Error value, which is not a figure and
 carries no record, so do not stamp one. The record is set once, as the value
@@ -279,8 +393,73 @@ froze (`... frozen`) never reaches your resolver once its answer is kept: the
 engine answers it from its own store, so a resolver needs no special case for
 [frozen answers](/syntax/frozen-answers/).
 
+## A built-in source a host can replace
+
+A package can ship a working source and still let a host bring its own. The
+currency package's historical rate is the worked example. `createCurrencyPackage`
+takes a `historicalRateProvider` option:
+
+| Value | What answers `100 USD in GBP on 2024-01-15` |
+| --- | --- |
+| left out | the built-in Frankfurter provider (the European Central Bank's reference rates) |
+| a function | the host's function, which takes precedence |
+| `null` | nothing: the line reports `HISTORICAL_RATES_NOT_CONFIGURED` |
+
+The provider's contract is small: `(from, to, isoDate, signal) => Promise<number |
+{ rate, asOf }>`. It receives upper-case currency codes, the day as `YYYY-MM-DD`
+and the signal to pass to `fetch`; it returns the rate, with `asOf` when the rate
+it found was published for an earlier day (a weekend asked for, Friday answered).
+Three things are the package's job, not the provider's, and hold whichever
+provider answers: the query key and its never-stale cache (a past day's rate does
+not change), the timeout, and refusing an answer that is not a finite, positive
+number rather than converting through it.
+
+The built-in provider decides its own boundary before any request and says why
+in the error: a day before 4 January 1999 (`HISTORICAL_RATE_DATE_OUT_OF_RANGE`,
+since earlier figures are not ECB reference rates), a day after today (the same
+code), and a currency the ECB does not quote (`HISTORICAL_RATE_UNSUPPORTED_CURRENCY`).
+A host provider that throws an `EngineError` with one of those two codes has its
+refusal shown as it is; anything else it throws becomes
+`HISTORICAL_RATE_QUERY_FAILED`, named with the pair and the day.
+
+The same provider can be built with a stub fetch, which is how its tests run
+without the network:
+
+```ts
+import { createFrankfurterHistoricalRateProvider } from "solve-engine/packages";
+
+const provider = createFrankfurterHistoricalRateProvider({
+  fetch: async () => new Response(JSON.stringify([{ date: "2024-01-15", base: "USD", quote: "GBP", rate: 0.78441 }])),
+});
+```
+
+Tests that call a real service belong outside the gates: the engine's own run
+only with `SOLVE_LIVE_NETWORK=1` (`npm run test:live`), where a timeout, a 5xx
+and a 429 count as outages rather than failures.
+
+## Testing a data source
+
+A data source is tested by what a line resolves to, with a stub in place of the
+service, so the test never reaches the network. The first evaluation is Pending
+by contract; `toResolveTo` from `solve-engine/testing` waits for the fetch
+(through `engine.settle()`, see [waiting for every value to
+settle](/guide/async-and-live-data/#waiting-for-every-value-to-settle)), evaluates
+the line again and compares the answer. A failed fetch is a settled result too,
+read with `settled()` and `toFailWith`.
+
+Build the package from a factory that takes its fetch, the way the built-in
+stocks package takes `fetchQuote`, and the test hands it a stub. [Testing a
+package](/packages/testing-a-package/#live-values) walks a complete example
+(its code is compiled and run with the engine's own tests), and `expectDocument`
+tests a data source read across lines. The [package
+starter](https://github.com/LiamRiddell/solve-engine/tree/main/examples/package-starter)
+does the same for a live lookup, with the hostile inputs a data source should
+refuse.
+
 ## A complete reference
 
 The currency package is the smallest built-in that does all of this: a symbol
-and an `in` parselet for the syntax, and `CurrencyAsyncResolver` for the fetch.
-Read it alongside this page for the parts the skeleton above leaves to you.
+and an `in` parselet for the syntax, `CurrencyAsyncResolver` for the live fetch,
+and `uom/HistoricalCurrency.ts` with `uom/FrankfurterHistoricalRates.ts` for the
+dated one. Read them alongside this page for the parts the skeleton above leaves
+to you.

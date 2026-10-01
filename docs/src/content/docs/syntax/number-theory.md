@@ -23,6 +23,16 @@ isprime(2^61 - 1) // true
 nextprime(100) // 101
 ```
 
+The same question can be asked in words: `7 is prime` is `isprime(7)`. It is
+read only as the whole of the rest of the line, so a sentence that happens to
+contain the words, such as `7 is prime number`, is refused rather than answered.
+
+```solve
+7 is prime // true
+2^61 - 1 is prime // true
+8 is prime // false
+```
+
 561 is a trap for the simplest prime tests, which it passes although it is 3 ×
 11 × 17; the test here is not fooled. For numbers below about 3.3 × 10^24 the
 answer is a proof; above that, a number reported prime has passed a test that no
@@ -57,7 +67,10 @@ when `a` and `m` share no factor.
 modpow(7, 77, 13) // 11
 modpow(2, 100, 1000000007) // 976,371,285
 modinv(3, 11) // 4
+powmod(7, 77, 13) // 11
 ```
+
+`powmod` is the same function as `modpow`, under the name some libraries give it.
 
 ## Factorials and choosing
 

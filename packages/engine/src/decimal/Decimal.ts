@@ -114,6 +114,52 @@ export function decimalFromLiteral(text: string): DecimalData {
 	return { coef, scale: fracPart.length };
 }
 
+/**
+ * The largest exponent, either way, an exponent-form literal is read exactly
+ * at. Past it the nearest double is already infinite or zero, so an exact
+ * value would say something the number cannot, and building it would cost a
+ * coefficient of that many digits: `1e99999999` would be a hundred-million
+ * digit integer.
+ */
+export const EXACT_EXPONENT_LIMIT = 400;
+
+/** An exponent-form literal: digits with an optional point, then `e` and a signed whole exponent. */
+const EXPONENT_LITERAL = /^([+-]?)(\d*)(?:\.(\d*))?[eE]([+-]?\d+)$/;
+
+/**
+ * The exact decimal an exponent-form literal stands for (`"1e-3"` is exactly
+ * 1/1000, `"1.5e2"` exactly 150), or null when the text is not one or its
+ * exponent is past {@link EXACT_EXPONENT_LIMIT}.
+ *
+ * A literal written with a point, `0.001`, has always kept its exact base-ten
+ * value; the same amount written `1e-3` was read as the nearest double and kept
+ * nothing. The digits and the exponent are read straight into a coefficient
+ * and a scale here, with no double in between, so the two spellings are the
+ * same value.
+ *
+ * @param text - A normalized literal: grouping stripped, `.` as the decimal mark.
+ * @returns The exact decimal, or null.
+ */
+export function decimalFromExponentLiteral(text: string): DecimalData | null {
+	const match = EXPONENT_LITERAL.exec(text);
+	if (match === null) return null;
+	const [, sign, intPart, fracPart = "", exponentText] = match;
+	if (intPart === "" && fracPart === "") return null;
+	// The exponent's digits are bounded before any is turned into a number, so
+	// a thousand-digit exponent is refused rather than read as Infinity.
+	const exponentDigits = exponentText.replace(/^[+-]/, "").replace(/^0+(?=\d)/, "");
+	if (exponentDigits.length > String(EXACT_EXPONENT_LIMIT).length) return null;
+	const exponent = Number(exponentText);
+	if (Math.abs(exponent) > EXACT_EXPONENT_LIMIT) return null;
+	let coef = BigInt(intPart + fracPart);
+	let scale = fracPart.length - exponent;
+	if (scale < 0) {
+		coef *= pow10(-scale);
+		scale = 0;
+	}
+	return { coef: sign === "-" ? -coef : coef, scale };
+}
+
 /** Bring two decimals to a shared scale, returning both coefficients and it. */
 function align(a: DecimalData, b: DecimalData): { ca: bigint; cb: bigint; scale: number } {
 	if (a.scale === b.scale) return { ca: a.coef, cb: b.coef, scale: a.scale };
@@ -172,6 +218,53 @@ function roundCoefToScale(coef: bigint, scale: number, targetScale: number): big
 /** Round to `targetScale` fractional digits, half away from zero. */
 export function decimalRound(a: DecimalData, targetScale: number): DecimalData {
 	return { coef: roundCoefToScale(a.coef, a.scale, targetScale), scale: targetScale };
+}
+
+/**
+ * How many significant digits, and how many places, an exact decimal the
+ * engine carries between lines may hold: thirty-four, the precision of the
+ * IEEE 754 decimal128 format. Plain numbers stop being exact past it (see
+ * vm/ExactDecimals.ts) and money is rounded to it (see
+ * {@link decimalWithinDigits}).
+ */
+export const DECIMAL_DIGIT_CEILING = 34;
+
+/**
+ * `a` held to at most `digits` significant digits and at most `digits` places,
+ * rounded half away from zero, or null when its whole part alone has more than
+ * `digits` digits and so cannot be held at all.
+ *
+ * A decimal already inside the ceiling is returned as it is, the same object,
+ * which is every amount a person types. One past it is what a chain of
+ * multiplications builds (`x = x * 1.123456789`, line after line, adds nine
+ * digits a line): rounding it here keeps the next line's work the size of two
+ * 34-digit numbers rather than growing without end. Rounding at the 34th digit
+ * moves the value by less than one part in 10^33, so a half cent of any amount
+ * below 10^31 still rounds the way the exact value does.
+ *
+ * @param a - The decimal to hold.
+ * @param digits - The ceiling, a positive integer; {@link DECIMAL_DIGIT_CEILING} by default.
+ * @returns `a` itself, `a` rounded to the ceiling, or null.
+ */
+export function decimalWithinDigits(a: DecimalData, digits: number = DECIMAL_DIGIT_CEILING): DecimalData | null {
+	const limit = pow10(digits);
+	const magnitude = a.coef < 0n ? -a.coef : a.coef;
+	if (a.scale <= digits && magnitude < limit) return a;
+	// Places first, then significant digits: a long coefficient drops its
+	// excess digits from the fractional end, as far as there is one.
+	const excess = magnitude.toString().length - digits;
+	let target = Math.min(a.scale, digits);
+	if (excess > 0) target = Math.min(target, a.scale - excess);
+	if (target < 0) return null;
+	let rounded = decimalRound(a, target);
+	// 9.99...95 rounds up to 10.00...0, one digit longer than it was; the
+	// extra digit is a trailing zero, so dropping one more place is exact.
+	const roundedMagnitude = rounded.coef < 0n ? -rounded.coef : rounded.coef;
+	if (roundedMagnitude >= limit) {
+		if (target === 0) return null;
+		rounded = { coef: rounded.coef / 10n, scale: target - 1 };
+	}
+	return rounded;
 }
 
 /**

@@ -5,6 +5,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { Token } from "@solve-js/lexer/Token";
 import type { InfixParselet, PrefixParselet } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The three web forms, read straight from the tokens the normalizer left.
@@ -67,7 +68,7 @@ export class DimensionsParselet implements PrefixParselet {
 		const { width, height } = sidesOf(token);
 		pushNumber(builder, width);
 		pushNumber(builder, height);
-		builder.emitPluginCall("aspectRatio", 2);
+		emitBuiltinPluginCall(builder, "aspectRatio", 2);
 	}
 }
 
@@ -144,7 +145,7 @@ export class ResizeParselet implements PrefixParselet {
 		pushNumber(builder, height);
 		pushNumber(builder, Number(target.value));
 		pushString(builder, side);
-		builder.emitPluginCall("resizeDimensions", 4);
+		emitBuiltinPluginCall(builder, "resizeDimensions", 4);
 	}
 }
 
@@ -161,6 +162,31 @@ export class RootFontSizeParselet implements InfixParselet {
 
 	parse(_parser: Parser, _left: Token, token: Token, builder: BytecodeBuilder): void {
 		pushNumber(builder, Number(token.value));
-		builder.emitPluginCall("atRootFontSize", 2);
+		emitBuiltinPluginCall(builder, "atRootFontSize", 2);
+	}
+}
+
+/**
+ * `4000px at 300 dpi`: the size on the left, across a stated density. Pixels
+ * become inches, and a physical length becomes pixels (#749).
+ *
+ * It binds like a suffix, as `at 20px base` does, so `4000px + 200px at 300 dpi`
+ * reads the density against the `200px` it sits beside and not the sum, and a
+ * conversion after it (`in mm`) applies to its answer.
+ */
+export class PixelDensityParselet implements InfixParselet {
+	readonly category = "Web";
+	readonly bindingPower = BindingPower.Postfix;
+
+	parse(_parser: Parser, _left: Token, token: Token, builder: BytecodeBuilder): void {
+		if ((token.value ?? "") === "") {
+			throw ErrorFactory.parsing({
+				code: "DENSITY_EXPECTED_NUMBER",
+				message: 'a density is written as a number of dots per inch, as in "4000px at 300 dpi"',
+				span: spanOf(token),
+			});
+		}
+		pushNumber(builder, Number(token.value));
+		emitBuiltinPluginCall(builder, "atPixelDensity", 2);
 	}
 }

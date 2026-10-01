@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace=packages/engine",
+    "build": "npm run build --workspace=packages/engine && npm run build --workspace=packages/cli && npm run build --workspace=packages/mcp",
     "setup": "npm run build && npm ci --prefix docs && npm ci --prefix playground",
     "new:package": "node scripts/new-package.mjs",
     "test": "node --expose-gc node_modules/jest/bin/jest.js --logHeapUsage",
@@ -18,17 +18,19 @@
     "test:coverage": "node --expose-gc --max-old-space-size=4096 node_modules/jest/bin/jest.js --config jest.coverage.config.cjs --runInBand --forceExit",
     "test:oom": "node --expose-gc --max-old-space-size=4096 node_modules/jest/bin/jest.js --no-coverage --logHeapUsage --testPathPattern=\"BreakageTests\\.|LexerFuzz\\.|LongDocumentRobustness\\.\" --runInBand",
     "test:watch": "jest --watch",
-    "typecheck": "npm run typecheck --workspace=packages/engine",
-    "verify": "npm run typecheck && npm run test:ci && npm run build && npm run smoke && npm run smoke:bundled && npm run smoke:globals",
-    "verify:ci": "npm run lint && npm run lint:comments && npm run lint:docs && npm run lint:actions && npm run lint:action-inputs && npm run lint:licenses && npm run audit:deps && npm run typecheck && npm run test:full && npm run test:temporal && npm run lint:stats && npm run build && npm run smoke && npm run smoke:bundled && npm run smoke:globals && npm run lint:package && npm run lint:size && npm run lint:units && npm run lint:sidebar && npm run lint:cheatsheet && npm run lint:jest-configs && npm run lint:ci-parity && npm run lint:dispatch-size && npm run test:consumer",
+    "typecheck": "npm run typecheck --workspace=packages/engine && npm run typecheck --workspace=packages/cli && npm run typecheck --workspace=packages/mcp",
+    "typecheck:tests": "node scripts/check-type-baseline.mjs",
+    "verify": "npm run typecheck && npm run test:ci && npm run build && npm run smoke && npm run smoke:bundled && npm run smoke:globals && npm run smoke:cli && npm run smoke:mcp",
+    "verify:ci": "npm run lint && npm run lint:comments && npm run lint:messages && npm run lint:docs && npm run lint:actions && npm run lint:action-inputs && npm run lint:licenses && npm run audit:deps && npm run typecheck && npm run typecheck:tests && npm run test:full && npm run test:temporal && npm run lint:stats && npm run build && npm run smoke && npm run smoke:bundled && npm run smoke:globals && npm run smoke:cli && npm run smoke:mcp && npm run lint:package && npm run lint:size && npm run lint:units && npm run lint:keywords && npm run lint:sidebar && npm run lint:links && npm run lint:cheatsheet && npm run lint:error-codes && npm run lint:jest-configs && npm run lint:ci-parity && npm run lint:dispatch-size && npm run test:consumer",
     "smoke": "node scripts/smoke-package.mjs",
     "smoke:bundled": "node scripts/check-tree-shaking.mjs",
     "test:consumer": "node scripts/consumer-e2e.mjs",
-    "test:live": "node node_modules/jest/bin/jest.js --no-coverage packages/engine/__tests__/packages/weather",
+    "test:live": "node node_modules/jest/bin/jest.js --no-coverage packages/engine/__tests__/packages/weather packages/engine/__tests__/packages/currency/FrankfurterHistoricalLive",
     "test:temporal": "node scripts/test-temporal.mjs --tz=Europe/London,America/New_York,Pacific/Auckland",
     "test:temporal:native": "node scripts/test-temporal.mjs --native --tz=Europe/London,America/New_York,Pacific/Auckland",
-    "lint": "oxlint packages/engine/src packages/engine/__tests__ packages/engine/tools packages/playground-bridge/src scripts",
+    "lint": "oxlint packages/engine/src packages/engine/__tests__ packages/engine/tools packages/playground-bridge/src packages/cli/src packages/mcp/src scripts",
     "lint:comments": "node scripts/check-comment-style.mjs --all",
+    "lint:messages": "node scripts/check-message-style.mjs",
     "lint:docs": "node scripts/check-doc-coverage.mjs",
     "lint:licenses": "node scripts/check-licenses.mjs",
     "lint:package": "npx --yes publint@0.3.23 packages/engine && npx --yes @arethetypeswrong/cli@0.18.5 --pack packages/engine --ignore-rules no-resolution",
@@ -41,8 +43,14 @@
     "size": "size-limit",
     "stats:tests": "node scripts/collect-test-stats.mjs",
     "lint:stats": "node scripts/collect-test-stats.mjs --check",
+    "stats:parity": "node scripts/collect-parity-stats.mjs",
     "lint:sidebar": "node scripts/check-sidebar.mjs",
     "lint:cheatsheet": "node scripts/check-cheatsheet.mjs",
+    "docs:llms": "node scripts/generate-llms-txt.mjs",
+    "lint:links": "node scripts/check-doc-links.mjs",
+    "lint:error-codes": "node scripts/check-error-codes.mjs",
+    "docs:error-codes": "node scripts/check-error-codes.mjs --write",
+    "data:cpi": "node scripts/build-price-indices.mjs",
     "lint:jest-configs": "node scripts/check-jest-configs.mjs",
     "lint:ci-parity": "node scripts/check-ci-parity.mjs",
     "lint:dispatch-size": "node scripts/check-dispatch-size.mjs",
@@ -53,9 +61,13 @@
     "lint:size": "node scripts/collect-package-size.mjs --check",
     "stats:bench": "node scripts/collect-benchmark-stats.mjs",
     "changeset:version": "changeset version && npm install --package-lock-only --ignore-scripts && npm run build && npm run test:full && npm run stats:tests && npm run stats:units && npm run stats:size",
+    "release:check": "node scripts/release-check.mjs",
     "stats:units": "node scripts/generate-unit-reference.mjs",
     "lint:units": "node scripts/generate-unit-reference.mjs --check",
-    "smoke:globals": "node scripts/check-no-node-globals.mjs"
+    "lint:keywords": "node scripts/check-keyword-docs.mjs",
+    "smoke:globals": "node scripts/check-no-node-globals.mjs",
+    "smoke:cli": "node scripts/smoke-cli.mjs",
+    "smoke:mcp": "node scripts/smoke-mcp.mjs"
   },
   "size-limit": [
     {
@@ -76,7 +88,6 @@
     "@jest/globals": "^30.5.2",
     "@size-limit/preset-small-lib": "14.0.0",
     "@types/node": "^26.6.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "jest": "^30.5.2",
     "mitata": "1.0.34",
     "oxlint": "1.83.0",
@@ -84,7 +95,8 @@
     "size-limit": "14.0.0",
     "ts-jest": "^29.4.12",
     "tsup": "8.5.1",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "typescript7": "npm:typescript@7.0.2"
   },
   "overrides": {
     "esbuild": "^0.28.1"

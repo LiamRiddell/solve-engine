@@ -261,6 +261,24 @@ export default defineConfig({
               ],
             },
             {
+              // One document per task, rather than one page per feature: the
+              // reference is organised by what the engine does, and a visitor
+              // arrives with something they want done. Straight after the
+              // first pages, where a reader looking for a worked note finds it,
+              // rather than among the reference groups, where a reader
+              // scanning the reference met it by accident (#727).
+              label: "Recipes",
+              collapsed: true,
+              items: [
+                { slug: "recipes/a-freelance-week" },
+                { slug: "recipes/a-trip" },
+                { slug: "recipes/a-household-budget" },
+                { slug: "recipes/a-mortgage-decision" },
+                { slug: "recipes/a-developer-scratchpad" },
+                { slug: "recipes/a-lab-note" },
+              ],
+            },
+            {
               // Everyday number work: the operators, the ways a number can be
               // written, and the functions that reshape one. Foundations first,
               // then the forms a reader reaches for by name.
@@ -268,6 +286,7 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { slug: "syntax/operators" },
+                { slug: "syntax/labels" },
                 { slug: "syntax/number-suffixes" },
                 { slug: "syntax/decimals" },
                 { slug: "syntax/fractions" },
@@ -276,6 +295,9 @@ export default defineConfig({
                 { slug: "syntax/rounding" },
                 { slug: "syntax/number-functions" },
                 { slug: "syntax/uncertainty" },
+                // Comparisons and if/then/else answer within one line, so they
+                // sit with the arithmetic rather than the cross-line forms.
+                { slug: "syntax/conditionals" },
               ],
             },
             {
@@ -321,6 +343,9 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { slug: "syntax/vectors-and-matrices" },
+                // Ranges, map and reduce work on a list inside one line, which
+                // is the list work this group is about.
+                { slug: "syntax/map-reduce-and-aggregates" },
                 { slug: "syntax/statistics" },
                 { slug: "syntax/probability-distributions" },
               ],
@@ -335,6 +360,7 @@ export default defineConfig({
                 { slug: "syntax/recurring-schedules" },
                 { slug: "syntax/splitting-a-bill" },
                 { slug: "syntax/interest-and-inflation" },
+                { slug: "syntax/investments" },
                 { slug: "syntax/savings-goals" },
                 { slug: "syntax/cash-flow" },
                 { slug: "syntax/payroll" },
@@ -354,6 +380,7 @@ export default defineConfig({
                 { slug: "syntax/relative-dates" },
                 { slug: "syntax/relative-months" },
                 { slug: "syntax/nth-weekday" },
+                { slug: "syntax/weekdays-and-week-numbers" },
                 { slug: "syntax/age" },
                 { slug: "syntax/date-differences" },
                 { slug: "syntax/working-days" },
@@ -361,17 +388,6 @@ export default defineConfig({
                 { slug: "syntax/time" },
                 { slug: "syntax/time-zones" },
                 { slug: "syntax/timesheets" },
-              ],
-            },
-            {
-              // One document per task, rather than one page per feature: the
-              // reference is organised by what the engine does, and a visitor
-              // arrives with something they want done.
-              label: "Recipes",
-              collapsed: true,
-              items: [
-                { slug: "recipes/a-freelance-week" },
-                { slug: "recipes/a-trip" },
               ],
             },
             {
@@ -448,8 +464,7 @@ export default defineConfig({
                 { slug: "syntax/table-columns" },
                 { slug: "syntax/table-lookups" },
                 { slug: "syntax/banded-rates" },
-                { slug: "syntax/map-reduce-and-aggregates" },
-                { slug: "syntax/conditionals" },
+                { slug: "syntax/checks" },
                 { slug: "syntax/goal-seek" },
                 { slug: "syntax/tracing-inputs" },
                 { slug: "syntax/trigger-words" },
@@ -484,6 +499,11 @@ export default defineConfig({
               label: "Set up",
               items: [
                 { slug: "getting-started/installation" },
+                // Beside installing the package: the other way to run the
+                // engine, from a shell or a CI job, with no host to write.
+                { slug: "guide/command-line" },
+                // The command's sibling: the same engine for an AI tool.
+                { slug: "guide/mcp-server" },
                 { slug: "guide/subpath-exports" },
                 { slug: "guide/versioning-and-support" },
                 { slug: "guide/upgrading-to-2" },
@@ -497,18 +517,28 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { slug: "guide/embedding" },
+                // Straight after the page that stands the engine up: the four
+                // ways to evaluate with it, and which a host wants.
+                { slug: "guide/entry-points" },
                 { slug: "guide/typescript-usage" },
+                // Beside the TypeScript shapes it serialises.
+                { slug: "guide/results-as-json" },
+                // Straight after the page that shows a failure's code: the list
+                // of every code there is.
+                { slug: "guide/error-codes" },
                 { slug: "guide/explaining-lines" },
                 { slug: "guide/tracing-lines" },
                 { slug: "guide/formatting" },
                 // After formatting: a locale is both halves, how the engine reads
                 // a typed number and how the formatter writes one back.
                 { slug: "guide/locales" },
-                { slug: "guide/dates-on-temporal" },
                 { slug: "guide/editor-integration" },
                 // Straight after the editor page it builds on: the whole-document
                 // half of the same language service.
                 { slug: "guide/reference-aware-editing" },
+                // The evaluation half of the same editor: keeping the answers
+                // current on every keystroke.
+                { slug: "guide/live-editor" },
                 // After formatting, because choosing a zone is a decision about
                 // what a date MEANS in this host, and the page is read once the
                 // dates are already on screen and reading wrongly.
@@ -517,6 +547,9 @@ export default defineConfig({
                 { slug: "guide/async-data-sources" },
                 { slug: "guide/performance" },
                 { slug: "guide/security" },
+                // Last: pinning every outside input is what a host reaches for
+                // once the rest is wired, for tests, snapshots and reports.
+                { slug: "guide/determinism" },
               ],
             },
             {
@@ -528,6 +561,7 @@ export default defineConfig({
                 { slug: "packages/authoring-a-package" },
                 { slug: "packages/recognising-phrases" },
                 { slug: "packages/units-and-keywords" },
+                { slug: "packages/unit-aliases" },
                 { slug: "packages/functions-and-operators" },
                 { slug: "packages/as-converters" },
                 { slug: "packages/explaining-steps" },

@@ -1,9 +1,9 @@
 import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
-import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import { builtinTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import { compareCompletionItems, mergeRankedCandidates, mergeRankedCompletions, type IndexedCompletionCandidate } from "@solve-js/language/completionRanking";
+import { rankedBuiltinUnitBucket } from "@solve-js/language/builtinUnitCompletions";
 import type { Token } from "@solve-js/lexer/Token";
-import { knownUnits } from "@solve-js/lexer/units";
-import { getMeasure } from "@solve-js/uom/UomConverter";
 import {
 	DocumentReferences,
 	type DocumentPosition,
@@ -29,33 +29,27 @@ export interface CompletionItem {
 	category: TokenCategory;
 	/** e.g. a unit's measure ("length"), or the category name for keywords/functions. */
 	detail?: string;
-}
-
-/**
- * A completion candidate with its lowercased label precomputed.
- *
- * Internal to the prefix index; callers only ever see the {@link CompletionItem}.
- */
-interface IndexedCompletionCandidate {
-	item: CompletionItem;
-	lowerLabel: string;
+	/**
+	 * How many characters before the cursor the label replaces, present only
+	 * when that is more than the word under the cursor: a phrase matched across
+	 * the words already typed (`net pres` offering `net present value of`) sets
+	 * it to the length of `net pres`. Absent, the label replaces the last word.
+	 */
+	replaceLength?: number;
 }
 
 /** Completion results are capped, a document-wide candidate pool has no reason to return more than this. */
 const MAX_COMPLETIONS = 50;
 
-/** Tier ordering for completion results: user-authored variables first, then grammar, then units. */
-const CATEGORY_TIER: Partial<Record<TokenCategory, number>> = {
-	variable: 0,
-	function: 1,
-	keyword: 1,
-	operator: 1,
-	comparison: 1,
-	bitwise: 1,
-	datetime: 1,
-	vector: 1,
-	unit: 2,
-};
+/**
+ * How many typed words a phrase completion looks back over. The longest
+ * built-in phrase is five words, so a longer run of words cannot all be the
+ * start of one.
+ */
+const MAX_PHRASE_WORDS = 6;
+
+/** The trailing run of words before the cursor, one space or more between them, for matching a phrase across them. */
+const TRAILING_WORDS = /(?:[A-Za-z0-9_]+ +){0,5}[A-Za-z0-9_]+$/;
 
 /** Bounded cache size. See the eviction-policy note on `LanguageService.cache`. */
 const MAX_CACHED_LINES = 2000;
@@ -109,12 +103,12 @@ interface CacheEntry {
 	text: string;
 	tokens: SemanticToken[];
 	// When set, `tokens` is a single bare-identifier token whose validity
-	// depends on document-wide DAG state (see the bare-word gate in
+	// depends on the names the whole document defines (see the bare-word gate in
 	// getSemanticTokens), not just this line's own text, so it can't be
 	// cached as a plain pass/fail result the way every other line can. The
 	// lex+parse work that produced `tokens` is still cached normally; only
-	// the DAG membership check is re-run on every lookup (cache hit or
-	// miss alike), since it's cheap (a Set lookup) and the alternative
+	// the defined-name check is re-run on every lookup (cache hit or
+	// miss alike), since it's cheap (one lookup by default) and the alternative
 	// caching the gated result, would go stale the moment some OTHER
 	// line's edit changes what variables exist, with nothing to trigger a
 	// re-check of this untouched line.
@@ -127,16 +121,22 @@ export interface LanguageServiceOptions {
 	 * Overrides how the service discovers "variable names known in this
 	 * document", used to legitimize a lone bare identifier line (see
 	 * `getSemanticTokens`'s single-token gate) and variable-name
-	 * completions (`getCompletions`). Defaults to reading
-	 * `engine.getDag().getSnapshot()`, which works for any consumer
-	 * sharing one `ExpressionEngine` between evaluation and the language
-	 * service (the real Obsidian editor).
+	 * completions (`getCompletions`). Defaults to
+	 * `engine.documentVariableNames()`: the variables (names of several words
+	 * included) and functions the document's lines define, after whichever
+	 * pass ran (`parseDocument`, `evaluateLines`, `evaluateDocument` or a
+	 * live incremental evaluator), so the default serves any host sharing one
+	 * `ExpressionEngine` between evaluation and the language service. A name
+	 * a line only reads is not offered, nor one set outside a document
+	 * (`evaluateExpression`), and `engine.clear()` takes them all away.
 	 *
-	 * Required for consumers whose language service is backed by a
-	 * *different*, non-evaluating engine than the one that actually runs
-	 * the document (the playground's dedicated lexing-only engine, whose
-	 * own DAG is always empty), pass a function reading the real
-	 * evaluation engine's DAG snapshot instead.
+	 * Required for hosts whose language service is backed by a *different*,
+	 * non-evaluating engine than the one that runs the document (the
+	 * playground's lexing-only engine, which never defines a name): pass a
+	 * function returning the evaluating engine's names, such as
+	 * `() => evaluatingEngine.documentVariableNames()`. It is called on every
+	 * completion and every lone-word line, so it should return names it
+	 * already holds rather than build them.
 	 */
 	variableNameSource?: () => Iterable<string>;
 
@@ -212,6 +212,9 @@ export interface LanguageServiceOptions {
 export class LanguageService {
 	private engine: ExpressionEngine | null;
 	private variableNameSource: () => Iterable<string>;
+	// Whether the host passed its own source. Without one the bare-word gate
+	// asks the engine about the one name rather than walking every name.
+	private readonly customVariableNames: boolean;
 	private readonly normalizeForHighlighting: boolean;
 
 	// Bounded cache keyed by line number ALONE, not `${lineNumber}:${lineText}`
@@ -231,14 +234,22 @@ export class LanguageService {
 	// visible" cache should prioritize.
 	private cache = new Map<number, CacheEntry>();
 
-	// Keyword/unit/package-contributed completion candidates don't depend
+	// Keyword/phrase/package-contributed completion candidates don't depend
 	// on any particular line, built lazily on first getCompletions() call
 	// and reused after that, since a package registration is the only thing
 	// that could ever change this list mid-session (see invalidateCache()).
 	// Variable-name candidates are NOT part of this, they're read fresh on
 	// every call from variableNameSource(), since those genuinely change on
-	// every edit.
+	// every edit. The built-in units are not part of it either: no engine can
+	// change them, so they are made once per process and shared (see
+	// builtinUnitCompletions.ts) and merged in per first character.
 	private staticCompletionCandidates: CompletionItem[] | null = null;
+
+	// The lowercased labels of this engine's own candidates in the `unit`
+	// category. A built-in unit with one of these labels is left out, as it
+	// was when every unit went through the same one-per-label check as the
+	// engine's own candidates: the engine's entry came first and won.
+	private ownUnitLabels = new Set<string>();
 
 	// The same candidates, bucketed by their lowercased first character with the
 	// lowercased label precomputed. getCompletions() runs on every keystroke and
@@ -251,24 +262,54 @@ export class LanguageService {
 	// benchmarks regressed roughly 2.9x until this was added.
 	private staticCompletionIndex: Map<string, IndexedCompletionCandidate[]> | null = null;
 
+	// Each first character's candidates in result order, this engine's own
+	// merged with the shared built-in units (see rankedStaticBucket). Made on
+	// first use rather than all of them when the index is built, so the first
+	// completion pays for one bucket, not every one. Cleared whenever the index
+	// is rebuilt.
+	private rankedStaticBuckets = new Map<string, readonly IndexedCompletionCandidate[]>();
+
+	// The same, narrowed to the candidates whose lowercased label starts with a
+	// two-character start, for a prefix of two characters or more (see
+	// rankedStaticPair). A first-character bucket holds dozens of candidates
+	// (`s` has 78) where a two-character start holds a few, so a longer prefix
+	// tests a few labels per keystroke instead of the whole bucket. At most one
+	// entry per two-character start a reader has typed, and the prefix pattern
+	// allows 37 characters, so it cannot grow past 1,369 entries. Cleared with
+	// the buckets.
+	private rankedStaticPairs = new Map<string, readonly IndexedCompletionCandidate[]>();
+
 	// Built on the first reference query, so a host that only highlights and
 	// completes never constructs it.
 	private documentReferences: DocumentReferences | null = null;
 
+	/**
+	 * A token type's highlight category, as this service's engine reads it:
+	 * a category a registered package declared (`IEnginePackage.tokenCategories`),
+	 * then the built-in table. Without an engine, the built-in table alone.
+	 *
+	 * @param tokenType - The token's type, as a token or a highlight span carries it.
+	 * @returns The category, or `undefined` for a type that renders unstyled.
+	 */
+	getTokenCategory(tokenType: string): TokenCategory | undefined {
+		return this.engine !== null ? this.engine.getTokenCategory(tokenType) : builtinTokenCategory(tokenType);
+	}
+
 	constructor(engine?: ExpressionEngine | null, options?: LanguageServiceOptions) {
 		this.engine = engine ?? null;
 		this.variableNameSource = options?.variableNameSource ?? (() => this.defaultVariableNames());
+		this.customVariableNames = options?.variableNameSource !== undefined;
 		this.normalizeForHighlighting = options?.normalizeForHighlighting ?? false;
 	}
 
 	private defaultVariableNames(): Iterable<string> {
 		if (!this.engine) return [];
-		const snapshot = this.engine.getDag().getSnapshot();
-		const names = new Set<string>(Object.keys(snapshot.consumers));
-		for (const written of Object.values(snapshot.writes)) {
-			for (const name of written) names.add(name);
-		}
-		return names;
+		// The engine's table of defined names, which every pass fills. Not the
+		// dependency graph: only the incremental pass records a plain
+		// assignment there, and it also holds every name a line merely reads.
+		// Never a graph snapshot either, which spells out every positional
+		// edge, and a long ledger has millions of them (#733).
+		return this.engine.documentVariableNames();
 	}
 
 	/**
@@ -352,7 +393,7 @@ export class LanguageService {
 				offset: token.offset,
 				col: token.col,
 				length: end - token.offset,
-				category: getTokenCategory(token.type),
+				category: this.getTokenCategory(token.type),
 			});
 		}
 
@@ -486,12 +527,21 @@ export class LanguageService {
 	 * completions almost always. This is the safest, fastest option that
 	 * still delivers real value.
 	 *
-	 * Candidates come from three sources: keywords (which already include
-	 * function names. See `ExpressionLexer.getKeywords()`'s doc comment)
-	 * and units, both static per engine configuration and cached lazily;
-	 * package-contributed items (`IEnginePackage.completionItems`), same
-	 * cache; and variable names, read fresh from `variableNameSource()` on
-	 * every call since those change on every edit.
+	 * Candidates come from these sources. Static per engine configuration,
+	 * and cached lazily: lexer keywords that have a highlight category (which
+	 * include function names, see `ExpressionLexer.getKeywords()`), the call
+	 * words packages declare with `callFusions` (`sha256`), registered phrases
+	 * (`average of`, `net present value of`), units, and package-contributed
+	 * items (`IEnginePackage.completionItems`). Read fresh on every call,
+	 * since they change on every edit: variable names from
+	 * `variableNameSource()`, and the units the document defines
+	 * (`engine.userUnitNames()`).
+	 *
+	 * A phrase is matched by its opening words, from the word under the cursor
+	 * or across the words typed before it (`net pres`), and such a match
+	 * carries `replaceLength`. It is not continued part-way through: after
+	 * `net present` the service offers what starts with `present`, not the
+	 * rest of the phrase from the grammar.
 	 */
 	getCompletions(lineText: string, cursorOffset: number): CompletionItem[] {
 		const prefixMatch = /[A-Za-z0-9_]+$/.exec(lineText.slice(0, cursorOffset));
@@ -500,56 +550,126 @@ export class LanguageService {
 
 		if (!this.engine) return [];
 
-		const matches: CompletionItem[] = [];
+		// The result is the stable sort of everything matched, in the order it
+		// is gathered here: the document's own names, then the static
+		// vocabulary, then phrases matched across words. The static buckets are
+		// sorted once when the index is built, so only the document's names and
+		// the cross-word phrases are sorted per call, and the three runs are
+		// merged with ties going to the earlier run, as the stable sort would.
+		const documentNames: CompletionItem[] = [];
 
 		// Variables are read fresh every call and there are few of them, so they
 		// stay a linear scan.
 		for (const name of this.variableNameSource()) {
 			if (name.toLowerCase().startsWith(prefix)) {
-				matches.push({ label: name, category: "variable" });
+				documentNames.push({ label: name, category: "variable" });
+			}
+		}
+
+		// Units the document defines (`1 sprint = 2 weeks`) change with every
+		// edit, like variables, so they are read fresh and scanned the same way.
+		for (const name of this.engine.userUnitNames()) {
+			if (name.toLowerCase().startsWith(prefix)) {
+				documentNames.push({ label: name, category: "unit", detail: "defined in this document" });
 			}
 		}
 
 		// Static candidates only ever match if they share the prefix's first
-		// character, so consult that bucket alone.
-		const bucket = this.getStaticCompletionIndex().get(prefix[0]);
-		if (bucket) {
-			for (const candidate of bucket) {
-				if (candidate.lowerLabel.startsWith(prefix)) matches.push(candidate.item);
+		// character (its first two, for a longer prefix), so consult that
+		// bucket alone. It is already in result order, so the matches come out
+		// in result order too.
+		const staticMatches: CompletionItem[] = [];
+		const bucket = prefix.length >= 2 ? this.rankedStaticPair(prefix.slice(0, 2)) : this.rankedStaticBucket(prefix);
+		for (const candidate of bucket) {
+			if (candidate.lowerLabel.startsWith(prefix)) staticMatches.push(candidate.item);
+		}
+		const phraseMatches: CompletionItem[] = [];
+
+		// A phrase can also be matched across the words already typed: `net
+		// pres` is the start of `net present value of`. Each longer run of
+		// trailing words is tried against the phrases in its own first
+		// character's bucket, and only phrases (labels with a space) can match.
+		// The engine's own index is enough: a built-in unit is one token, so
+		// none has a space in it.
+		const words = TRAILING_WORDS.exec(lineText.slice(0, cursorOffset));
+		if (words !== null && words[0].length > prefixMatch[0].length) {
+			const typed = words[0];
+			let start = 0;
+			for (let n = 0; n < MAX_PHRASE_WORDS && start < typed.length - prefixMatch[0].length; n++) {
+				const tail = typed.slice(start).toLowerCase().replace(/ +/g, " ");
+				const phraseBucket = this.getStaticCompletionIndex().get(tail[0]);
+				if (phraseBucket) {
+					for (const candidate of phraseBucket) {
+						if (candidate.lowerLabel.includes(" ") && candidate.lowerLabel.startsWith(tail)) {
+							phraseMatches.push({ ...candidate.item, replaceLength: typed.length - start });
+						}
+					}
+				}
+				const nextSpace = typed.indexOf(" ", start);
+				if (nextSpace < 0) break;
+				start = nextSpace;
+				while (typed[start] === " ") start++;
 			}
 		}
 
-		matches.sort((a, b) => {
-			const tierDiff = (CATEGORY_TIER[a.category] ?? 3) - (CATEGORY_TIER[b.category] ?? 3);
-			if (tierDiff !== 0) return tierDiff;
-			return a.label.localeCompare(b.label);
-		});
-
-		return matches.slice(0, MAX_COMPLETIONS);
+		// An ordinary keystroke in a word matches nothing the document defines
+		// and no phrase across words, so the static run is the whole answer.
+		if (documentNames.length === 0 && phraseMatches.length === 0) {
+			return staticMatches.length > MAX_COMPLETIONS ? staticMatches.slice(0, MAX_COMPLETIONS) : staticMatches;
+		}
+		documentNames.sort(compareCompletionItems);
+		phraseMatches.sort(compareCompletionItems);
+		return mergeRankedCompletions([documentNames, staticMatches, phraseMatches], MAX_COMPLETIONS);
 	}
 
-	/** Lazily builds and caches the keyword/unit/package-item candidate list. See `staticCompletionCandidates`. */
+	/**
+	 * Lazily builds and caches this engine's own candidate list: its packages'
+	 * items, keywords, call words and phrases. The built-in units are shared
+	 * across engines instead. See `staticCompletionCandidates`.
+	 */
 	private getStaticCompletionCandidates(): CompletionItem[] {
 		if (this.staticCompletionCandidates) return this.staticCompletionCandidates;
 
 		const items: CompletionItem[] = [];
+		const ownUnitLabels = new Set<string>();
+		// One entry per label and category: a word can reach the list by two
+		// routes (a function a package defines is also a call word, say). The
+		// first route wins, so the package's own items go first: they carry the
+		// most detail, a signature rather than "function call".
+		const seen = new Set<string>();
+		const add = (item: CompletionItem): void => {
+			const lowerLabel = item.label.toLowerCase();
+			const key = `${item.category}\u0000${lowerLabel}`;
+			if (seen.has(key)) return;
+			seen.add(key);
+			items.push(item);
+			if (item.category === "unit") ownUnitLabels.add(lowerLabel);
+		};
+		for (const item of this.engine!.getPackageCompletionItems()) add(item);
 		for (const [word, tokenType] of Object.entries(this.engine!.getLexer().getKeywords())) {
-			const category = getTokenCategory(tokenType);
+			const category = this.getTokenCategory(tokenType);
 			if (!category) continue;
-			items.push({ label: word, category });
+			add({ label: word, category });
 		}
-		for (const unit of knownUnits) {
-			items.push({ label: unit, category: "unit", detail: getMeasure(unit) });
+		// The declarative call words (`sha256(`, `slugify(`) are fused by the
+		// normaliser rather than lexed as keywords, so they are listed apart.
+		for (const word of this.engine!.getCallWords()) {
+			add({ label: word, category: "function", detail: "function call" });
 		}
-		items.push(...this.engine!.getPackageCompletionItems());
+		// Registered phrases, the aggregates among them (`average of`, `net
+		// present value of`, `weather in`), offered whole by their opening words.
+		for (const [phrase, tokenType] of Object.entries(this.engine!.getNormalizer().getPhrases())) {
+			add({ label: phrase, category: this.getTokenCategory(tokenType) ?? "keyword", detail: "phrase" });
+		}
 
 		this.staticCompletionCandidates = items;
+		this.ownUnitLabels = ownUnitLabels;
 		return items;
 	}
 
 	/**
-	 * The static candidates bucketed by lowercased first character, built once
-	 * from {@link getStaticCompletionCandidates} and invalidated alongside it.
+	 * This engine's own candidates bucketed by lowercased first character, built
+	 * once from {@link getStaticCompletionCandidates} and invalidated alongside it.
 	 */
 	private getStaticCompletionIndex(): Map<string, IndexedCompletionCandidate[]> {
 		if (this.staticCompletionIndex) return this.staticCompletionIndex;
@@ -570,7 +690,54 @@ export class LanguageService {
 		}
 
 		this.staticCompletionIndex = index;
+		this.rankedStaticBuckets = new Map<string, readonly IndexedCompletionCandidate[]>();
+		this.rankedStaticPairs = new Map<string, readonly IndexedCompletionCandidate[]>();
 		return index;
+	}
+
+	/**
+	 * The static candidates whose label starts with `firstCharacter`, in result
+	 * order: this engine's own, sorted in place the first time a prefix asks for
+	 * them, merged with the shared built-in units, which come after them in
+	 * gathering order. Kept that way, so a keystroke reads its matches off in
+	 * order instead of sorting them. Two candidates that tie keep the order
+	 * they were gathered in, as one stable sort of the whole list would.
+	 * Empty when no candidate starts with it.
+	 *
+	 * @param firstCharacter - The lowercased first character of the prefix.
+	 */
+	private rankedStaticBucket(firstCharacter: string): readonly IndexedCompletionCandidate[] {
+		const index = this.getStaticCompletionIndex();
+		const ranked = this.rankedStaticBuckets.get(firstCharacter);
+		if (ranked !== undefined) return ranked;
+		const own = index.get(firstCharacter);
+		// Sorted in place, so the cross-word phrase scan reads this bucket in
+		// the same order whichever path reached it first.
+		own?.sort((a, b) => compareCompletionItems(a.item, b.item));
+		let units = rankedBuiltinUnitBucket(firstCharacter);
+		if (this.ownUnitLabels.size > 0) units = units.filter((unit) => !this.ownUnitLabels.has(unit.lowerLabel));
+		const merged = own === undefined ? units : units.length === 0 ? own : mergeRankedCandidates(own, units);
+		this.rankedStaticBuckets.set(firstCharacter, merged);
+		return merged;
+	}
+
+	/**
+	 * The static candidates whose lowercased label starts with `start`, in
+	 * result order: the first character's bucket (see
+	 * {@link rankedStaticBucket}) narrowed once and kept, so a prefix of two
+	 * characters or more tests only these labels. Narrowing keeps the bucket's
+	 * order. Empty when no candidate starts with it.
+	 *
+	 * @param start - The first two characters of the prefix, lowercased.
+	 */
+	private rankedStaticPair(start: string): readonly IndexedCompletionCandidate[] {
+		// Read first, so a rebuilt index has cleared the narrowed lists too.
+		this.getStaticCompletionIndex();
+		const narrowed = this.rankedStaticPairs.get(start);
+		if (narrowed !== undefined) return narrowed;
+		const pair = this.rankedStaticBucket(start[0]).filter((candidate) => candidate.lowerLabel.startsWith(start));
+		this.rankedStaticPairs.set(start, pair);
+		return pair;
 	}
 
 	// ── Reference-aware editing ─────────────────────────────────────────────
@@ -662,6 +829,7 @@ export class LanguageService {
 	}
 
 	private isKnownVariable(name: string): boolean {
+		if (!this.customVariableNames) return this.engine?.isDocumentVariableName(name) ?? false;
 		for (const known of this.variableNameSource()) {
 			if (known === name) return true;
 		}
@@ -728,5 +896,8 @@ export class LanguageService {
 		this.cache.clear();
 		this.staticCompletionCandidates = null;
 		this.staticCompletionIndex = null;
+		this.ownUnitLabels = new Set<string>();
+		this.rankedStaticBuckets = new Map<string, readonly IndexedCompletionCandidate[]>();
+		this.rankedStaticPairs = new Map<string, readonly IndexedCompletionCandidate[]>();
 	}
 }

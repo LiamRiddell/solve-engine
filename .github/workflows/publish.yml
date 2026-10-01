@@ -74,9 +74,13 @@ jobs:
           # a shallow clone gives it nothing to read.
           fetch-depth: 0
 
+      # The exact Node `.nvmrc` pins: `changeset:version` regenerates the size
+      # figures with `stats:size`, whose brotli bytes depend on the running
+      # Node's compression library, and CI checks them on this same version
+      # (#791).
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
           cache: npm
 
@@ -150,9 +154,11 @@ jobs:
             exit 1
           fi
 
+      # The exact Node `.nvmrc` pins, since `verify:ci` below runs `lint:size`,
+      # which compares brotli bytes exactly (#791).
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
           cache: npm
 
@@ -183,10 +189,55 @@ jobs:
       # can be published. This used to run `verify` and `test:consumer` only,
       # which is less than CI asks of a pull request: no lint, no full suite,
       # no size, units or stats checks, no publint. A release could ship a tree
-      # a pull request would have rejected. The list ends with the tarball
-      # check, because a version cannot be replaced once it is on the registry,
-      # so the last thing before publishing is to install it and use it.
+      # a pull request would have rejected. A version cannot be replaced once
+      # it is on the registry, so the last thing before publishing is to install
+      # the release and use it; the steps after this one do that for the exact
+      # file that is published.
       - run: npm run verify:ci
+
+      # One artefact from here to the registry (#794). `verify:ci` ends by
+      # installing a tarball it packs itself and then discards, and publishing
+      # the workspace folder made npm run `prepublishOnly` (a clean rebuild) and
+      # pack a second time, so what reached the registry was a build nothing had
+      # installed. So the release is packed once, into a known folder, from the
+      # `dist` verify:ci just built; that file is checked, installed and used,
+      # and that same file is what `npm publish` uploads. npm runs lifecycle
+      # scripts only when it publishes a folder (`spec.type === 'directory'` in
+      # its publish command), so nothing rebuilds in between. Trusted
+      # publishing is unaffected: the OIDC exchange and the provenance it turns
+      # on run on the manifest read from the tarball, the same path a folder
+      # takes once packed. `prepublishOnly` stays in package.json as the guard
+      # for anyone who publishes a folder.
+      - name: Pack the release tarball
+        id: pack
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/release"
+          mkdir -p "${out}"
+          npm pack --workspace=packages/engine --pack-destination "${out}"
+          tarballs=("${out}"/*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ]; then
+            echo "::error::Expected one tarball in ${out}, found ${#tarballs[@]}."
+            exit 1
+          fi
+          echo "tarball=${tarballs[0]}" >> "$GITHUB_OUTPUT"
+
+      # The publishable check, against what was packed rather than the folder.
+      - name: Check the packed contents are publishable
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          contents="${RUNNER_TEMP}/release-contents"
+          mkdir -p "${contents}"
+          tar -xzf "${TARBALL}" -C "${contents}"
+          node scripts/assert-publishable.mjs "${contents}/package"
+
+      # The consumer test, on the file that will be published.
+      - name: Install the release tarball and use it
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: node scripts/consumer-e2e.mjs "file:${TARBALL}"
 
       # An ordinary version publishes with no --tag, so npm applies `latest`
       # itself, and npm refuses to point `latest` at a version lower than one
@@ -199,15 +250,17 @@ jobs:
       # credential to the `npm publish` call, so a following
       # `npm dist-tag add` gets E401.
       - name: Publish
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
         run: |
           case "${RELEASE_TAG#solve-engine@}" in
             *-*)
-              echo "Publishing prerelease ${RELEASE_TAG} to the 'next' dist-tag."
-              npm publish --workspace=packages/engine --tag next
+              echo "Publishing prerelease ${RELEASE_TAG} to the 'next' dist-tag, from ${TARBALL}."
+              npm publish "${TARBALL}" --tag next
               ;;
             *)
-              echo "Publishing ${RELEASE_TAG}; npm applies 'latest' and refuses a version lower than the one it names."
-              npm publish --workspace=packages/engine
+              echo "Publishing ${RELEASE_TAG} from ${TARBALL}; npm applies 'latest' and refuses a version lower than the one it names."
+              npm publish "${TARBALL}"
               ;;
           esac
         # No NODE_AUTH_TOKEN and no --provenance. Trusted publishing

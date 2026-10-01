@@ -51,6 +51,7 @@ export type CompatibilityConflictKind =
   | "pluginFunctionName"
   | "lexerKeyword"
   | "callFusionName"
+  | "unitAlias"
   | "lexerOperator"
   | "asyncResolverNamespace"
   | "tokenCategory"
@@ -95,7 +96,7 @@ function collectParseletConflicts(
         // since deliberate override is sometimes the intended use (a
         // package explicitly built to replace a built-in's grammar).
         severity: "warning",
-        detail: `Both "${existingPkg.name}" and "${candidate.name}" register a ${fieldName === "prefixParselets" ? "prefix" : "infix"} parselet for token type "${tokenType}" — the later-registered one silently wins.`,
+        detail: `Both "${existingPkg.name}" and "${candidate.name}" register a ${fieldName === "prefixParselets" ? "prefix" : "infix"} parselet for token type "${tokenType}": the later-registered one silently wins.`,
         packages: [existingPkg.name, candidate.name],
       });
     }
@@ -117,7 +118,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "phrase",
           severity: "warning",
-          detail: `Both "${existingPkg.name}" (-> "${existingTokenType}") and "${candidate.name}" (-> "${tokenType}") fuse the phrase "${phrase}" to DIFFERENT token types — PhraseTrie has no collision detection of its own, so the later-registered mapping silently wins with no other signal.`,
+          detail: `Both "${existingPkg.name}" (-> "${existingTokenType}") and "${candidate.name}" (-> "${tokenType}") fuse the phrase "${phrase}" to DIFFERENT token types: PhraseTrie has no collision detection of its own, so the later-registered mapping silently wins with no other signal.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -133,7 +134,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "converterName",
           severity: "warning",
-          detail: `Both "${existingPkg.name}" and "${candidate.name}" register an "as ${name}" converter — the later-registered handler silently wins.`,
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register an "as ${name}" converter: the later-registered handler silently wins.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -152,7 +153,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "pluginFunctionName",
           severity: "warning",
-          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a plugin function named "${name}" — the later registration wins in the engine's name-to-index map. Give each package's functions package-unique names.`,
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a plugin function named "${name}": the later registration wins in the engine's name-to-index map. Give each package's functions package-unique names.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -172,7 +173,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "normalizerRuleName",
           severity: "warning",
-          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a normalizer rule named "${rule.name}" — the normalizer unregisters rules by name, so removing either package would drop both rules. Give each package's rules a package-unique name.`,
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a normalizer rule named "${rule.name}": the normalizer unregisters rules by name, so removing either package would drop both rules. Give each package's rules a package-unique name.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -193,7 +194,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "lexerKeyword",
           severity: "error",
-          detail: `Both "${existingPkg.name}" (-> "${existingTokenType}") and "${candidate.name}" (-> "${tokenType}") register the lexer keyword "${word}" for DIFFERENT token types — whichever package registers second wins, and the loser's grammar becomes silently unreachable for that word.`,
+          detail: `Both "${existingPkg.name}" (-> "${existingTokenType}") and "${candidate.name}" (-> "${tokenType}") register the lexer keyword "${word}" for DIFFERENT token types: whichever package registers second wins, and the loser's grammar becomes silently unreachable for that word.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -211,6 +212,22 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
           kind: "callFusionName",
           severity: "warning",
           detail: `Both "${existingPkg.name}" (-> "${existingTokenType}") and "${candidate.name}" (-> "${tokenType}") declare the call word "${word}(", so the later registration is in force, and unregistering it hands the word back.`,
+          packages: [existingPkg.name, candidate.name],
+        });
+      }
+    }
+  }
+  // Unit aliases (#762): kept per claim like call words, the newest in force,
+  // so a second package naming one word for a different unit takes it over and
+  // unregistering it hands the word back. A warning for the same reason.
+  if (existingPkg.unitAliases && candidate.unitAliases) {
+    for (const [word, unit] of Object.entries(candidate.unitAliases)) {
+      const existingUnit = Object.prototype.hasOwnProperty.call(existingPkg.unitAliases, word) ? existingPkg.unitAliases[word] : undefined;
+      if (existingUnit !== undefined && existingUnit !== unit) {
+        conflicts.push({
+          kind: "unitAlias",
+          severity: "warning",
+          detail: `Both "${existingPkg.name}" (-> "${existingUnit}") and "${candidate.name}" (-> "${unit}") declare "${word}" as a word for a unit, so the later registration is in force, and unregistering it hands the word back.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -240,7 +257,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "asyncResolverNamespace",
           severity: "error",
-          detail: `Both "${existingPkg.name}" and "${candidate.name}" register an async resolver under the namespace "${resolver.namespace}" — ResolverRegistry is keyed by namespace, so one resolver's cache/preflight state will silently clobber the other's.`,
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register an async resolver under the namespace "${resolver.namespace}": ResolverRegistry is keyed by namespace, so one resolver's cache/preflight state will silently clobber the other's.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -259,7 +276,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "tokenCategory",
           severity: "info",
-          detail: `Both "${existingPkg.name}" (-> "${existingCategory}") and "${candidate.name}" (-> "${category}") declare a highlight category for token type "${tokenType}" — cosmetic only, but the later registration wins.`,
+          detail: `Both "${existingPkg.name}" (-> "${existingCategory}") and "${candidate.name}" (-> "${category}") declare a highlight category for token type "${tokenType}": cosmetic only, but the later registration wins.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -307,7 +324,7 @@ export function checkPackageCompatibility(
  * The engine builds one of these across construction. For each candidate it
  * gathers only the already-registered packages that share at least one
  * collision-capable key (a parselet token type, a phrase, a converter name, a
- * plugin-function name, a normalizer-rule name, a lexer keyword, call word or operator, an
+ * plugin-function name, a normalizer-rule name, a lexer keyword, call word, unit alias or operator, an
  * async-resolver namespace, or a token-category token type), then runs the
  * unchanged {@link checkOnePackagePair} against exactly those. A package that
  * shares no key with the candidate can produce no conflict, so skipping it is
@@ -323,6 +340,7 @@ export class PackageCompatibilityIndex {
   private readonly ruleOwners = new Map<string, IEnginePackage>();
   private readonly keywordOwners = new Map<string, IEnginePackage>();
   private readonly callFusionOwners = new Map<string, IEnginePackage>();
+  private readonly unitAliasOwners = new Map<string, IEnginePackage>();
   private readonly operatorOwners = new Map<string, IEnginePackage>();
   private readonly resolverOwners = new Map<string, IEnginePackage>();
   private readonly categoryOwners = new Map<string, IEnginePackage>();
@@ -345,6 +363,7 @@ export class PackageCompatibilityIndex {
     if (candidate.normalizerRules) for (const r of candidate.normalizerRules) gather(this.ruleOwners, r.name);
     if (candidate.lexerVocabulary?.keywords) for (const k of Object.keys(candidate.lexerVocabulary.keywords)) gather(this.keywordOwners, k);
     if (candidate.callFusions) for (const k of Object.keys(candidate.callFusions)) gather(this.callFusionOwners, k);
+    if (candidate.unitAliases) for (const k of Object.keys(candidate.unitAliases)) gather(this.unitAliasOwners, k);
     if (candidate.lexerVocabulary?.operators) for (const k of Object.keys(candidate.lexerVocabulary.operators)) gather(this.operatorOwners, k);
     if (candidate.asyncResolvers) for (const r of candidate.asyncResolvers) gather(this.resolverOwners, r.namespace);
     if (candidate.tokenCategories) for (const k of Object.keys(candidate.tokenCategories)) gather(this.categoryOwners, k);
@@ -367,6 +386,7 @@ export class PackageCompatibilityIndex {
     if (pkg.normalizerRules) for (const r of pkg.normalizerRules) claim(this.ruleOwners, r.name);
     if (pkg.lexerVocabulary?.keywords) for (const k of Object.keys(pkg.lexerVocabulary.keywords)) claim(this.keywordOwners, k);
     if (pkg.callFusions) for (const k of Object.keys(pkg.callFusions)) claim(this.callFusionOwners, k);
+    if (pkg.unitAliases) for (const k of Object.keys(pkg.unitAliases)) claim(this.unitAliasOwners, k);
     if (pkg.lexerVocabulary?.operators) for (const k of Object.keys(pkg.lexerVocabulary.operators)) claim(this.operatorOwners, k);
     if (pkg.asyncResolvers) for (const r of pkg.asyncResolvers) claim(this.resolverOwners, r.namespace);
     if (pkg.tokenCategories) for (const k of Object.keys(pkg.tokenCategories)) claim(this.categoryOwners, k);
@@ -376,7 +396,7 @@ export class PackageCompatibilityIndex {
   rebuild(pkgs: Iterable<IEnginePackage>): void {
     for (const m of [
       this.prefixOwners, this.infixOwners, this.phraseOwners, this.converterOwners,
-      this.pluginFnOwners, this.ruleOwners, this.keywordOwners, this.callFusionOwners, this.operatorOwners,
+      this.pluginFnOwners, this.ruleOwners, this.keywordOwners, this.callFusionOwners, this.unitAliasOwners, this.operatorOwners,
       this.resolverOwners, this.categoryOwners,
     ]) m.clear();
     for (const pkg of pkgs) this.add(pkg);

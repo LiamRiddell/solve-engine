@@ -79,7 +79,7 @@ describe("the ten values the refusal replaced", () => {
   });
 
   test("31/02/2026 + 1 day is 1.01 day again", () => {
-    expect(restored("31/02/2026 + 1 day", "auto")).toBe("1.01 day");
+    expect(restored("31/02/2026 + 1 day", "auto")).toBe("1.01 days");
   });
 });
 

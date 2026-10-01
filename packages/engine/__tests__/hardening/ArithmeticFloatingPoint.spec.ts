@@ -109,11 +109,12 @@ describe("the integer precision ceiling", () => {
 		expect(value.toNumber()).toBe(9007199254740992);
 	});
 
-	test("an odd literal past the ceiling is still rounded at parse time", () => {
-		// A number typed past 2^53 is a double before the engine sees it, and
-		// seeds no exact value, since its digits may already be invented.
+	test("an odd literal past the ceiling keeps the exact integer it was typed as", () => {
+		// Its nearest double is 2^53, and until FoundBug_wholeLiteralPastSafeRange
+		// that was all the engine kept, a confident wrong number. The plain
+		// digits are all there to read, so the literal carries its exact value.
 		expect(num("9007199254740993")).toBe(9007199254740992);
-		expect(exactInteger("9007199254740993")).toBeUndefined();
+		expect(exactInteger("9007199254740993")).toBe(9007199254740993n);
 	});
 
 	test("2^53 + 2 is representable and exact", () => {
@@ -158,8 +159,9 @@ describe("overflow and underflow", () => {
 });
 
 describe("NaN", () => {
-	test("zero over zero is NaN", () => {
-		expect(num("0 / 0")).toBeNaN();
+	test("zero over zero has no single answer, and is refused by name rather than NaN", () => {
+		// It answered NaN until the found bug FoundBug_zeroOverZero.spec.ts.
+		expect(evaluate("0 / 0").errorCode).toBe("QUOTIENT_UNDEFINED");
 	});
 
 	test("Infinity minus Infinity is NaN", () => {
@@ -174,20 +176,20 @@ describe("NaN", () => {
 		// The propagation matters more than the value: an engine that turned
 		// NaN back into 0 somewhere would report a confidently wrong total for
 		// an expression that has no answer.
-		expect(num("(0 / 0) + 1")).toBeNaN();
-		expect(num("(0 / 0) * 0")).toBeNaN();
-		expect(num("(0 / 0) - (0 / 0)")).toBeNaN();
+		expect(num("(1 / 0 - 1 / 0) + 1")).toBeNaN();
+		expect(num("(1 / 0 - 1 / 0) * 0")).toBeNaN();
+		expect(num("(1 / 0 - 1 / 0) - (1 / 0 - 1 / 0)")).toBeNaN();
 	});
 
 	test("NaN is not equal to itself, which is how you detect it", () => {
-		expect(evaluate("0 / 0 == 0 / 0").value).toBe(false);
-		expect(evaluate("0 / 0 != 0 / 0").value).toBe(true);
+		expect(evaluate("(1 / 0 - 1 / 0) == (1 / 0 - 1 / 0)").value).toBe(false);
+		expect(evaluate("(1 / 0 - 1 / 0) != (1 / 0 - 1 / 0)").value).toBe(true);
 	});
 
 	test("and every ordering comparison against NaN is false", () => {
-		expect(evaluate("0 / 0 > 1").value).toBe(false);
-		expect(evaluate("0 / 0 < 1").value).toBe(false);
-		expect(evaluate("0 / 0 >= 0 / 0").value).toBe(false);
+		expect(evaluate("(1 / 0 - 1 / 0) > 1").value).toBe(false);
+		expect(evaluate("(1 / 0 - 1 / 0) < 1").value).toBe(false);
+		expect(evaluate("(1 / 0 - 1 / 0) >= (1 / 0 - 1 / 0)").value).toBe(false);
 	});
 
 	test("the root of a negative number has no real answer, and says so (#588)", () => {
@@ -274,7 +276,7 @@ describe("magnitudes far apart", () => {
 describe("everything above is still a plain Number", () => {
 	test("Infinity has not become a string or an error value", () => {
 		expect(evaluate("1 / 0").type).toBe(ValueType.Number);
-		expect(evaluate("0 / 0").type).toBe(ValueType.Number);
+		expect(evaluate("1 / 0 - 1 / 0").type).toBe(ValueType.Number);
 		expect(evaluate("1e400").type).toBe(ValueType.Number);
 	});
 });

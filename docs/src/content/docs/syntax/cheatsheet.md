@@ -22,14 +22,21 @@ are named in text rather than shown as a live line.
 ## Writing a note
 
 A note is a column of lines, and each line is worked out on its own unless it
-reads another. Text after `//` is a comment the engine skips. A label before a
-colon is kept while the rest of the line is worked out (see
-[labels](/syntax/trigger-words/#labels-are-preserved)). A line starting with `#`
-is a heading: it gives no answer, and it names a [section](/syntax/sections/).
+reads another. Text after `//` is a comment the engine skips. A line starting
+with `#` is a heading: it gives no answer, and it names a
+[section](/syntax/sections/).
 
 ```solve
 2 + 2 // comment // 4
+```
+
+**[Labels](/syntax/labels/)**: words that name a line's figure, kept as text
+while the rest is worked out, before a colon or, when an amount of money or a
+quantity ends the line, without one.
+
+```solve
 total: 5 + 3 // 8
+Rent $1200 // $1,200.00
 ```
 
 ## Arithmetic
@@ -112,6 +119,15 @@ trusted.
 
 ```solve
 (12.3 +/- 0.5) * 4 // 49.2 ± 2.0
+```
+
+**[Conditionals](/syntax/conditionals/)**: comparisons that answer true or
+false, `and`, `or` and `not`, and `if ... then ... else`.
+
+```solve
+10 == 10 // true
+not (1 > 2) // true
+if 5 > 3 then 100 else 200 // 100
 ```
 
 ## Numbers
@@ -256,7 +272,7 @@ rather than an error, and `=>` at the end of a line asks for the simplified
 expression.
 
 ```solve
-1+2+b+3+b => // 2b+6
+1+2+x+3+x => // 2x+6
 ```
 
 ## Statistics
@@ -268,6 +284,17 @@ element or with linear algebra.
 ```solve
 [1,2,3] * 10 // [10, 20, 30]
 det([1,2;3,4]) // -2
+```
+
+**[Map, reduce & aggregates](/syntax/map-reduce-and-aggregates/)**: a range
+written `start:end`, an expression applied to every item of a list, and a list
+folded down to one value. A range is read only inside brackets or a function
+call, since a bare `0:3` is a clock time.
+
+```solve
+map(10*x, 0:3) // [0, 10, 20, 30]
+sum(x, 0:4) // 10
+reduce(acc+x, [1,2,3]) // 6
 ```
 
 **[Statistics](/syntax/statistics/)**: averages, medians, totals and other
@@ -339,7 +366,16 @@ worth in another.
 ```solve
 interest on 1000 over 3 years at 5% // 157.63
 monthly repayment on 200000 over 25 years at 4% // 1,055.67
-what is $500 in 1990 worth in 2010 // $834.35
+what is $500 in 1990 worth in 2010 // $834.19
+```
+
+**[Investments](/syntax/investments/)**: what a sum grows to at a rate, what a
+future sum is worth today, and the return on what was invested.
+
+```solve
+$1,000 after 3 years at 7% // $1,225.04
+present value of $1,225.04 after 3 years at 7% // $1,000.00
+$500 invested $1,500 returned // 200.00%
 ```
 
 **[Savings goals](/syntax/savings-goals/)**: how long it takes to reach a
@@ -422,6 +458,14 @@ month, the way many holidays and meetings are set.
 last Friday of November 2026 // Friday, November 27, 2026
 ```
 
+**[Weekdays & week numbers](/syntax/weekdays-and-week-numbers/)**: the day of
+the week, the month, or the ISO week number a date falls in.
+
+```solve
+what day is it on 2026-12-25 // Friday
+week number of 2026-12-25 // 52
+```
+
 **[Age](/syntax/age/)**: whole years from a birth date, today or on a day you
 name.
 
@@ -449,7 +493,11 @@ working days between 01/01/2024 and 31/01/2024 // 23
 
 **[Displaying dates](/syntax/displaying-dates/)**: whether a date is spelled out
 or written in numbers is a setting in the host application, not something a line
-writes, so it has no line here.
+writes. A date before year 1 is written with its era.
+
+```solve
+11 March 2026 - 3000 years // Saturday, March 11, 975 BC
+```
 
 **[Time](/syntax/time/)**: clock times, durations, and the span between two
 times, with frame rates and timecode. A clock time on its own is that time
@@ -499,11 +547,13 @@ a price per kilogram times a weight comes out in money.
 3 kg * $5/kg // $15.00
 ```
 
-**[Cooking](/syntax/cooking/)**: oven gas marks, and the number to multiply a
-recipe by when it has to serve a different number of people.
+**[Cooking](/syntax/cooking/)**: oven gas marks, the US, metric and imperial
+cups, and the number to multiply a recipe by when it has to serve a different
+number of people.
 
 ```solve
 180C in gas mark // gas 4
+1 metric cup in ml // 250.00 ml
 scale 4 servings to 6 // 1.50
 ```
 
@@ -540,11 +590,13 @@ name.
 ```
 
 **[Screen and image sizes](/syntax/screen-and-image-sizes/)**: the shape of a
-screen or an image (its aspect ratio), and the other side after a resize.
+screen or an image (its aspect ratio), the other side after a resize, and how
+large it prints at a stated density.
 
 ```solve
 1920x1080 as ratio // 16:9
 resize 4000x3000 to 1200 wide // 1200 x 900
+4000px at 300 dpi // 13.33 in
 ```
 
 **[Rates & speeds](/syntax/rates-and-speeds/)**: units written with a slash,
@@ -564,11 +616,13 @@ cost to drive 500 km at 7 l/100km at £1.50/litre // £52.50
 250 miles at 60 mph // 4.17 h
 ```
 
-**[Fuel economy](/syntax/fuel-economy/)**: miles per gallon and litres per 100
-km, which run opposite ways (more miles per gallon is fewer litres per 100 km).
+**[Fuel economy](/syntax/fuel-economy/)**: miles per gallon (US or imperial) and
+litres per 100 km, which run opposite ways (more miles per gallon is fewer litres
+per 100 km).
 
 ```solve
 40 mpg in l/100km // 5.88 l/100km
+35 mpg imperial in l/100km // 8.07 l/100km
 ```
 
 **[Named derived units](/syntax/derived-units/)**: quantities multiplied into a
@@ -634,12 +688,14 @@ that data arrived intact.
 sha256("hello") // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
 ```
 
-**[Networking](/syntax/networking/)**: IPv4 subnets, the blocks of addresses a
-network is divided into: how many machines (hosts) one holds, its netmask and
-broadcast address, and whether an address falls inside it.
+**[Networking](/syntax/networking/)**: IPv4 and IPv6 subnets, the blocks of
+addresses a network is divided into: how many machines (hosts) one holds, its
+netmask, first and last address, and whether an address falls inside it. An
+IPv6 address is shown in its agreed short form.
 
 ```solve
 hosts in 192.168.1.0/24 // 254
+network of 2001:db8:85a3::8a2e:370:7334/64 // 2001:db8:85a3::
 ```
 
 ## Visual
@@ -717,8 +773,9 @@ These forms read other lines of the note, so each is shown as a small note of
 its own, worked out as one document.
 
 **[Variables](/syntax/variables/)**: a name for a value, to use it again later,
-written with or without a leading colon. `+=` and `-=` keep a running total, and
-a function of your own is defined the same way.
+written with or without a leading colon, and of one word or a few (`hourly rate
+= $50`). `+=` and `-=` keep a running total, and a function of your own is
+defined the same way.
 
 ```solve
 :a = 10
@@ -734,7 +791,8 @@ f(5) // 11
 ```
 
 **[Line references](/syntax/line-references/)**: an earlier line read by its
-number or its position, and the lines above totalled.
+number or its position, and the lines above totalled, by `total above` or by a
+line that is only `sum` or `total`.
 
 ```solve-doc
 10
@@ -806,25 +864,14 @@ amount inside its band.
 45,000 through bands above   // 8,000
 ```
 
-**[Map, reduce & aggregates](/syntax/map-reduce-and-aggregates/)**: a range
-written `start:end`, an expression applied to every item of a list, and a list
-folded down to one value. A range is read only inside brackets or a function
-call, since a bare `0:3` is a clock time.
+**[Checks](/syntax/checks/)**: `check` and a comparison, a line stating
+something the note should keep true, with a margin written `≈ ... within`.
 
-```solve
-map(10*x, 0:3) // [0, 10, 20, 30]
-sum(x, 0:4) // 10
-reduce(acc+x, [1,2,3]) // 6
-```
-
-**[Conditionals](/syntax/conditionals/)**: comparisons that answer true or
-false, `and` and `or`, `if ... then ... else`, and `check`, which marks a line
-stating something the note should keep true.
-
-```solve
-10 == 10 // true
-if 5 > 3 then 100 else 200 // 100
-check 1 km == 1000 m // ✓
+```solve-doc
+:budget = $1950
+:spent = $2010
+check :spent <= :budget // ERROR: check failed: $2,010.00 is more than $1,950.00
+check 22/7 ≈ pi within 0.1% // ✓ (differs by 0.04%)
 ```
 
 **[Goal seek](/syntax/goal-seek/)**: working backwards to the input that makes

@@ -31,6 +31,8 @@ export enum OpCode {
 	// index holding the normalized "." decimal text (thousands grouping already
 	// stripped), read back into a Number-typed Value whose `exact` sidecar makes
 	// money that combines with it exact. See vm/Value.ts's numberValueExact().
+	// Text with no point is a whole number past 2^53, pushed as a Number
+	// carrying its exact integer instead (see parser/WholeLiteral.ts).
 	PUSH_DECIMAL = 16,
 
 	// Arithmetic (BinaryOperator)
@@ -191,6 +193,11 @@ export enum OpCode {
 	// for the DIV to divide by; otherwise the value on the stack becomes the rate
 	// `<value> per <unit>` and the DIV is stepped over. See rateOver() in vm/VM.ts.
 	RATE_OR_DIVIDE = 164,
+	// A range whose bounds are not both plain numbers as written, `1 + 24:00`
+	// or `x:1`: RANGE_NEW with each side's source text, so a refusal names the
+	// bounds as the reader wrote them. Operands: the string-pool indexes of the
+	// first side's text, then the second's. See rangeLiteral() in vm/VM.ts.
+	RANGE_NEW_WRITTEN = 165,
 }
 
 // Reverse lookup built once at module load, getOpCodeName() is called once

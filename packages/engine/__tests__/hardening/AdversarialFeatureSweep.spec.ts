@@ -19,6 +19,8 @@
  */
 
 import { describe, test } from "@jest/globals";
+import { newTrackedEngine } from "@tools/trackedEngine";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import {
 	DOCUMENT_EDGES,
 	NUMERIC_EDGES,
@@ -58,19 +60,475 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"planck * X Hz",
 		"inflationAdjust($X, 1990, 2020)",
 	],
+	// The UK and euro-area price indices, chosen by the amount's currency (#756).
+	priceIndices: [
+		"inflationAdjust(£X, 1990, 2020)",
+		"inflationAdjust(€X, 2000, 2020)",
+		"inflationAdjust(£100, X, 2020)",
+		"inflationAdjust(€100, 2000, X)",
+		"what was £X worth in 1965",
+		// The pound and euro spellings of `in <year> dollars`, an amount worked
+		// out on the line, and a word where a currency would be.
+		"£X in 1990 pounds",
+		"€X in 2010 euros",
+		"£100 in X pounds",
+		"what is $X * 2 from 1990",
+		// The year is one factor and a plain whole number, and an operator
+		// after it is the line's; a colon form as sum's first argument is a
+		// clock time (batch U).
+		"what is $100 from X",
+		"what is $100 from 1990 + X",
+		"what is $100 in X worth in 2010",
+		"sum(X, 10:15)",
+		"what is X apples from 1990",
+		// The flat-rate projection reads its year as the other forms do (batch V).
+		"value of $100 in X assuming 3% inflation",
+		"value of $X in 2030 assuming 3% inflation",
+	],
+	// A large quantity keeps its exact value, and the aggregates refuse a range
+	// they would read as a clock time.
+	largeQuantities: ["ceil((X) m)", "round((X) m) + 1 m", "(X) kg * 2", "trunc((X) days)"],
+	aggregateRanges: ["average(X:3)", "mean(1:X)", "total(X:3)", "median(X)"],
+	// A range's bounds named as written in its refusal (FoundBug_rangeBoundsAsWritten).
+	writtenRangeBounds: ["total(1 + X:00)", "sum(2*X:1)", "map(10*x, X:2*1)", "[1,2,3;4,5,6][X+1:1, 1]"],
+	// A derived unit's prefix read in its own case after `as` and `in` (#824).
+	derivedPrefixes: ["X W as mW", "X W as MW", "X W as mw", "X V in MV", "X J as pJ"],
+	// The qualified cups, the typographic point, imperial mpg and a stated
+	// density (#752, #749, #736).
+	qualifiedUnits: [
+		"X metric cups in ml",
+		"X imperial cups flour in grams",
+		"X US cups in ml",
+		"X typographic points in mm",
+		"X mpg imperial in l/100km",
+		"8 l/100km in X mpg uk",
+		"fuel for 300 miles at X UK mpg",
+		"X px at 300 dpi in mm",
+		"X in at 300 dpi",
+		"4000px at X dpi",
+	],
 	money: ["$X * 3", "$X split 3 ways", "X% of $200", "₹1,00,000 * X", "X INR + 12,34,567 INR"],
+	// Each currency's own places and a split in its smallest unit (#731), a money
+	// rate with its symbol and a time word that agrees with its count (#753),
+	// and the reversed conversion over every unit table (#825).
+	currencyPlaces: ["¥X / 3", "X KWD / 3", "X BTC", "¥X split 3 ways", "split (X KWD) between 3", "$X per hour", "¥X/kWh"],
+	unitWords: ["X seconds in hours", "X hour", "X hours in minutes"],
+	reversedConversion: ["km in X furlong", "mW in X W", "m in X mile", "km in -X mile"],
+	// Speed, acceleration, frequency and the ampere in unit algebra (#737), a
+	// rate target written with per or a symbol (#738), a price per kWh in
+	// reading order (#758), a power after a slash (#834), and a price per unit
+	// written short.
+	unitAlgebra: [
+		"X m/s^2 * 3 s",
+		"100 km/h / X s",
+		"X Hz * 2 s",
+		"X W / 20 V",
+		"X Hz in /min",
+		"X ft/s^2 in m/s^2",
+		"X km/h in miles per hour",
+		"$X/hour in $/day",
+		"$X/week in /month",
+		"$0.30/kWh * X kW * 3 h",
+		"$0.30/kWh * 2 kW * X h",
+		"X kg/m^3",
+		"check X g/mL == X g/cm^3",
+		"$X/hour as compact",
+	],
 	finance: ["npv of -1000, X, 400 at 10%", "irr of -1000, X, 400"],
+	// The investment grammar the investments page documents (#778). The amount
+	// invested is swept too, now that an infinite one is refused by name.
+	investments: [
+		"$X after 3 years at 7%",
+		"X invested $1,500 returned",
+		"$1,000 after X years at 7%",
+		"$1,000 for 3 years at X% compounding monthly",
+		"present value of $X after 3 years at 7%",
+		"$1,000 invested X returned",
+		"annual return on $1,000 invested $X returned after 5 years",
+		// `payment on` beside `repayment on`, and `compounded` with an interval (#746).
+		"monthly payment on $X over 25 years at 4%",
+		"total payment on 200000 over X years at 4%",
+		"$1,000 for 3 years at X% compounded monthly",
+	],
+	// Lists that carry a unit (#745).
+	unitLists: [
+		"[X km, 500 m] * 2",
+		"[1 km, 2 km] + X m",
+		"[X, 2] km in m",
+		"[$X, $6][1]",
+		"map(x * 2, [X km, 1 km])",
+		"-[X kg, 1 kg]",
+	],
+	// Scotland, student loans and pensions on the take-home forms (#747).
+	payrollCases: [
+		"£X after tax in Scotland",
+		"take home on £X with plan 2 student loan",
+		"£50,000 after tax with X% pension",
+		"£X per month after tax in Scotland with postgraduate loan and 5% pension",
+	],
+	// An IPv6 address wherever it stands, its subnet forms and its number (#748).
+	ipv6: [
+		"fe80::1 + X",
+		"X + fe80::1",
+		"X * 2001:db8::/32",
+		"fe80::1 in X",
+		"hosts in /X",
+		"netmask of /X",
+		"fe80::1 == X",
+		"X < fe80::1",
+		"fe80::1 as int + X",
+		"round(fe80::1, X)",
+		"2001:db8::X",
+		"network of 2001:db8::/X",
+	],
+	// A savings goal over a duration, read as in one is.
+	savingsGoals: ["how much per month to reach $X over 2 years", "how much per month to reach $10,000 over X years"],
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
 	solving: ["solve(x^2 = X, x)", "integral(x, x, 0, X)"],
+	// The forms #828, #829, #830 and #835 changed.
+	vectorsAndWords: [
+		"vec2(X, 1)",
+		"vec3(X, 1, 2)",
+		"dot([X, 1], [2, 3])",
+		"float(X)",
+		"X as multiplier",
+		"add X to 10",
+		"X is prime",
+		"asin(X) in degrees",
+		"larger of X and 4 and 12",
+		"smaller of 10 and X and 12",
+		"compoundInterest($1,000, X, 3)",
+		"$1,000 invested X returned",
+	],
 	dates: ["1 Jan 2026 + X days", "1 Jan 2026 + X", "1 Jan 2026 to X", "X to 1 Jan 2026", "X * 9:00", "round(9:00) + X", "(9:30 - 8:30) + X minutes", "X as iso8601"],
+	// A signed offset after a date or in a conversion (#730).
+	utcOffsets: ["2026-04-03T15:00 in UTC-X", "2026-04-03T15:00 in GMT+X", "2026-04-03 in UTC+X:30", "3pm London in UTC-X", "now in UTC+X"],
+	// Negation (#751), a label without its colon (#742) and a name of several
+	// words on its definition line (#743).
+	negation: ["not (X > 0)", "!(X > 0)", "not X", "!X", "if not X > 0 then 1 else 2"],
+	wordLabels: ["Rent $X", "Petrol X l", "Flight to Paris X EUR", "Chapter X", "take home $X"],
+	// What may stand before a label's colon: a time the clock rules refused, a
+	// choice written with "?" and ":", a comparison, a calculation with no word
+	// (FoundBug_labelBeforeAColon).
+	colonLabels: ["1 + X:00", "X:23:99", "true ? X : 30", "X > 0 ? 1 : 2", "X > 0: 1", "Week X: 75", "(X+1): 5", "Rent: X"],
+	// A label whose name ends on a number, before a figure that would make a
+	// clock time with it (FoundBug_labelColonBeforeAClockTime).
+	labelNumberColons: ["Item X: 45", "Item 2: X", "Weeks 1-X: 40", "Day 1: X:30", "X 2: 45"],
+	multiWordNames: ["hourly rate = X", "take home = X", "tax on = X"],
+	// An unknown given a unit or a percentage under the arrow, a possessive
+	// name with either apostrophe, an operator word ending a name, and an
+	// equation line with several unknowns (FoundBug_unknownUnderTheArrow,
+	// FoundBug_possessiveName, FoundBug_operatorWordEndingAName,
+	// FoundBug_equationWithSeveralUnknowns).
+	unknownsAndNames: [
+		"X percent =>",
+		"(X + foo) km =>",
+		"foo * X km =>",
+		"$(foo + X) =>",
+		"Alice's food = X",
+		"Alice’s food = X",
+		"the Smiths' rent = X",
+		"monthly take = X",
+		"(salary / 12) * rate / X = net",
+		"x + y = X",
+	],
+	// A constant under the arrow, a quantity or a percentage met by an unknown,
+	// a formula the printer must write so it reads back, and a product equation
+	// solved by `solve` (FoundBug_constantUnderTheArrow, FoundBug_unitInAFormula,
+	// FoundBug_percentOfAnUnknown, FoundBug_formulaDisplayRoundTrip,
+	// FoundBug_productEquationUndefinedFactor).
+	formulaArithmetic: [
+		"π X km =>",
+		"X * π + foo =>",
+		"2x = π + X",
+		"foo + X km =>",
+		"hypot(foo, X km) =>",
+		"solve(2x = X km, x)",
+		"foo + X% =>",
+		"foo - X% =>",
+		"solve(x + X% = 220, x)",
+		"solve(net = rate * salary / X, salary)",
+		"-(foo^X) =>",
+		"foo / (1/X) =>",
+		"solve(a*x = X, x)",
+		// An irrational constant in a polynomial, an infinity with a unit, a
+		// constant before the word percent, and an unknown named like a unit
+		// (FoundBug_irrationalConstantRoots, FoundBug_infinityInAResult,
+		// FoundBug_constantPercentWord, FoundBug_unitNamedUnknown).
+		"solve(x^2 = X * pi, x)",
+		"solve(x^3 = e + X, x)",
+		"(X) * 1e308 * 10 km",
+		"$(X) * 1e308 * 10",
+		"(X) km / 0 in m",
+		"pi percent of X",
+		"X + e percent",
+		"(X) * b + b =>",
+		"(X) / m =>",
+		// A mathematical constant in a held expression and written against an
+		// amount, a quadratic over pi factored, and a tiny value in a list and
+		// a tolerance (FoundBug_constantInAHeldExpression,
+		// FoundBug_factorOverAnIrrationalConstant, FoundBug_tinyValueShownAsZero).
+		"solve(x^2 = (X) * tau, x)",
+		"(X)tau",
+		"factor(x^2 - (X) * pi)",
+		"[X, 1e-6]",
+		"(X) +/- 1e-6",
+		// A constant with a unit in a map and in a formula, and an amount of
+		// money in scientific notation (FoundBug_unitConstantInAHeldExpression,
+		// FoundBug_moneyInExponentForm).
+		"map(x * gravity, [X])",
+		"solve(x = (X) * gravity, x)",
+		"$(X) * 1e-3",
+		"(X) * 1e-3 USD",
+		// A range bound with its thousands grouped in a call, and a synchronous
+		// plugin call in a map (FoundBug_groupedRangeBoundInACall,
+		// FoundBug_synchronousPluginCalls).
+		"sum(1,000:X)",
+		"sum(X:1,002)",
+		"map(erf(x), [X])",
+		"map(x + erf(X), 0:2)",
+		// A malformed group against a range's colon, a list whose cells take
+		// three significant digits together, the weekday asked with `of`, a
+		// body that reads another line, and a range total after a label
+		// (FoundBug_malformedRangeBoundGroup, FoundBug_listCellPrecision,
+		// FoundBug_weekdayOfInAFunctionBody, FoundBug_functionBodyReadsLines,
+		// FoundBug_labelledRangeTotal).
+		"sum(1,0000:X)",
+		"map(x * (X) px at 300 dpi, 1:2)",
+		"weekday of X",
+		"f(x) = x + (X) + prev",
+		"Total: total(X:1002)",
+		// A list rounded cell by cell and refused a one-number conversion, a
+		// time after a label, a label's own expression error, a held
+		// expression that reads a line, and a range before another argument
+		// (FoundBug_listRounding, FoundBug_labelColonTime,
+		// FoundBug_labelledRetryError, FoundBug_heldExpressionReadsLines,
+		// FoundBug_rangeBeforeAnotherArgument).
+		"[X, 0.006] to 4 dp",
+		"[X, 2] to 2 sf",
+		"[X, 2] as sci",
+		"Total: X:00",
+		"Total: average(X:12)",
+		"map(x + (X) + prev, 1:3)",
+		"sum(100:200, X)",
+		// A list given to a function of one number, worked for each cell or
+		// refused by name, and a figure in another script's digits before a
+		// colon (FoundBug_listBuiltins, FoundBug_otherScriptDigitsLabel).
+		"sqrt([X, 9])",
+		"gcd([X, 6], 2)",
+		"٢٤:X",
+		"Total: ٢X:00",
+		// A percentage added to a list, a bracketed figure before a colon, and
+		// a figure with an invisible character in it before a colon
+		// (FoundBug_listPercentage, FoundBug_bracketedFigureLabel,
+		// FoundBug_hiddenFigureLabel).
+		"[X, 200] + 10%",
+		"[100 m, 200 m] - X%",
+		"(X):00",
+		"‮X:00",
+		"‍X:00",
+		// A list compared with one value cell by cell, lists of answers joined
+		// and negated, a list as an if's condition, and a percentage as a cell
+		// of a list (FoundBug_listComparison, FoundBug_listOfPercentages).
+		"[X, 200] > 150",
+		"X <= [100 m, 200 m]",
+		"[100, 200] != X",
+		"([X, 2] > 1) and true",
+		"not ([X, 2] > 1)",
+		"if [X, 2] > 1 then 1 else 2",
+		"[X%, 20%]",
+		"[100, 200] + [X%, 20%]",
+		// An aggregate of percentages, alone and beside a number, and not
+		// before a bracketed list (FoundBug_aggregateOfPercentages,
+		// FoundBug_notBeforeAList).
+		"sum(X%, 20%)",
+		"average of X%, 20%",
+		"max(X%, 20%)",
+		"sum(X%, 100)",
+		"not [X]",
+		"not [X > 0, true]",
+		// A share of a share, half a share and a power of one, and a sum of
+		// percentages compared with the one it shows
+		// (FoundBug_percentageArithmetic).
+		"X% * 20%",
+		"product of X%, 20%",
+		"X% / 3",
+		"10% / X",
+		"X% ^ 2",
+		"X% + 20% == 30%",
+	],
+	// The forms the found-bug batch changed: a difference in words, two rates
+	// added, an approximate check to its written places, two booleans checked,
+	// an inverse trigonometric call to a unit that is not an angle, a quotient
+	// by zero in the algebra, and a rate solved for as a percentage.
+	foundBugs: [
+		"subtract X from 10",
+		"take 3 from X",
+		"10 m/s + X km/h",
+		"check X ≈ 96.56",
+		"check (X > 0) == true",
+		"asin(X) in km",
+		"expand((x+1)/X)",
+		"X:30",
+		// The second found-bug batch: half a dinar split, a finance refusal in
+		// the reader's terms, a one-letter label, a knot, a literal past 2^53
+		// and a quotient with no single answer.
+		"split X/2 KWD between 3",
+		"compound interest on 1000 over 3 years at X",
+		"x:X",
+		"5 mph + X knots",
+		"X + 9007199254740993",
+		"X / 0",
+		// The third: a decimal literal past 2^53, a take-home in a check, and a
+		// sum or product of a range or a list on its own.
+		"X + 9007199254740993.5",
+		"check £X after tax > £30,000",
+		"£50,000 after tax == £X",
+		"sum(X:3)",
+		"prod(1:X)",
+		"sum([X, 2])",
+		// The fourth: a salary below zero, a number past 2^53 as an integer and
+		// as a percentage, and a map or reduce over a single value.
+		"-£X after tax",
+		"hourly for -£X",
+		"-X after 20% tax",
+		"X + 0.5 as int",
+		"-(X) as int",
+		"X + 0.5 as percent",
+		"map(x * 2, X)",
+		"reduce(acc + x, X)",
+		// The fifth: an exact fraction past 2^53 through each rounding, and a
+		// number whose percentage, a hundred times it, overflows.
+		"floor((X) + 2^60 + 1/2)",
+		"round(-(X) - 2^60 - 1/2)",
+		"(X) + 2^60 + 1/3 as int",
+		"(X) * 1e306 as %",
+		"-(X) * 1e306 in %",
+		"50% + (X) * 1e308",
+		// The sixth: a colon pair that is no clock time inside a bracket, clock
+		// times as the element or in a list of a map-reduce call, and sum of two
+		// values that are not a list.
+		"(X:00)",
+		"max(24:00, X)",
+		"total(X:61, 0:00)",
+		"prod(X, 10:15)",
+		"sum(x, [X, 10:15])",
+		"sum(2 hours, X)",
+	],
+	// A timecode in its own notation, its arithmetic and its conversions out
+	// (#759), and an ISO 8601 duration beside a value, spread through a date
+	// and written back (#760).
+	timecodes: [
+		"01:02:03:04 at 30 fps + X",
+		"00:00:00:00 at 30 fps - X",
+		"(01:02:03:04 at 30 fps) * X",
+		"(01:02:03:04 at 30 fps) / X",
+		"X frames at 30 fps",
+		"01:02:03:04 at 30 fps + X seconds",
+		"(01:02:03:04 at 30 fps + X) in seconds",
+		"(01:02:03:04 at 30 fps + X) as timespan",
+	],
+	isoDurations: [
+		"PT1H30M + X",
+		"PT1H30M * X",
+		"X * P1DT1H",
+		"X - P1DT1H",
+		"2026-01-31 + P1M1D + X days",
+		"PT1H30M + X minutes",
+		"(PT1H30M * X) as iso8601",
+		"X seconds as iso8601",
+		"X months as iso8601",
+	],
+	// Arithmetic straight on a value written in a base, a base conversion of
+	// a value with no digits, and checks between colours and addresses.
+	basesAndIdentities: [
+		"X in hex + 1",
+		"(X in hex) * 2",
+		"(X in hex) mod 3",
+		"(X in binary) ^ 2",
+		"-(X in hex)",
+		"(X in hex) > 2^100",
+		"X in octal",
+		"hex(X)",
+		"check (X in hex) == (X in hex)",
+		"check #ff0000 == rgb(X, 0, 0)",
+		"check 192.168.1.1 < X",
+	],
+	// A conversion on each side of a comparison, each bound to its own side,
+	// and a check whose sides carry one (FoundBug_checkWithBaseConversion).
+	conversionsBesideComparisons: [
+		"check X in hex == X",
+		"check X in hex == X in hex",
+		"check X as binary < X in octal",
+		"X in hex == X in hex",
+		"X == X to hex",
+		"check X to hex != X + 1",
+	],
+	// A fraction written in a base, which the value now drops as the display
+	// does (FoundBug_fractionInABase); a check against text, refused by name
+	// (FoundBug_checkAgainstText); a chained check and a check joined with
+	// `and`, each read as every comparison at once (FoundBug_chainedCheck,
+	// FoundBug_checkJoinedWithAnd).
+	checksOfSeveralThings: [
+		"(X + 0.5) in hex == X in hex",
+		"check ((X + 0.7) in hex) == X in hex",
+		"check X == \"X\"",
+		"check X in hex == \"X\"",
+		"check 0 <= X <= X",
+		"check X == X == X",
+		"check X > -1/0 and X < 1/0",
+		"check X == X and X ≈ X within 1%",
+		"check X == X or X == 1",
+	],
+	// A number against text in a plain comparison, a base prefix read by
+	// `as number`, a decimal past 2^53 in a base, money through a rounding,
+	// and a large percentage or quantity written in full (the sixth
+	// found-bug batch).
+	textNumbersAndLargeResults: [
+		"X == \"X\"",
+		"X != \"X\"",
+		"\"X\" > X",
+		"\"0xFF\" as number + X",
+		"(X + 12345678901234567890.5) in hex",
+		"floor($9007199254740993.5 + (X))",
+		"round(-(X) * $1)",
+		"(X) * 1e22 as %",
+		"(X) * 1e22 m",
+		"(X) / 0 as %",
+	],
+	// A typed hex literal past 2^53, a sign before text, a base prefix read by
+	// int and float, the difference of two dates, and an ISO duration with no
+	// digit before its decimal mark (the seventh found-bug batch).
+	baseLiteralsSignsAndDateDifferences: [
+		"0xFFFFFFFFFFFFFFFFFFFF + X",
+		"-(\"0xFF\" as number) + X",
+		"-\"X\"",
+		"int(\"0xFF\") + X",
+		"float(\"0b101\") * X",
+		"(25/12/2026 - 24/12/2026) * X",
+		"2026-12-24 + (2026-12-25 - 2026-12-24) * X",
+		"P.5D + X",
+		"P * .5 + X",
+	],
+	// A length of several units led by a day or longer, applied to a date a
+	// part at a time, after a plus or minus and in front of after or before.
+	compoundLengthsOnADate: [
+		"2026-01-31 + 1 month 1 day + X days",
+		"2026-03-31 - 1 month 1 day - X days",
+		"1 month 1 day after 2026-01-31 + X days",
+		"1 month 1 day before 2026-03-31 * X",
+		"X + 1 month 1 day",
+		"(2026-01-31 + 1 year 1 month 1 day) * X",
+	],
 };
 
 describe("every form stays honest over the numeric edges", () => {
 	for (const [feature, forms] of Object.entries(LINE_FORMS)) {
 		const lines = forms.flatMap((form) => fill(form, NUMERIC_EDGES));
 		test.each(lines)(`${feature}: %s`, (line) => {
-			// 0/0 is documented as NaN (the floating-point standard's answer), and a
-			// form fed it may answer NaN in turn; that is not a leak.
+			// 1/0 - 1/0 is NaN (the floating-point standard's answer), and a form
+			// fed an infinity may answer NaN in turn; that is not a leak. 0/0 is
+			// refused by name, so the allowance is only for the lines naming it.
 			expectHonestLine(line, { allowNaN: line.includes("0/0") });
 		});
 	}
@@ -83,6 +541,41 @@ describe("text edges are read as text, not acted on", () => {
 
 	test.each(fill("X + 1", TEXT_EDGES.filter((t) => t.trim() !== "")))("inside an expression: %j", (line) => {
 		expectHonestLine(line);
+	});
+});
+
+/**
+ * An ISO 8601 duration is read from an identifier, so the text edges go inside
+ * it as well as beside it, and the prototype words go where a duration's
+ * letters, a converter or a unit would be (#760). A timecode's conversion
+ * target is a word the reader typed too (#759).
+ */
+describe("an ISO 8601 duration and a timecode stay honest over the text edges and the prototype words", () => {
+	test.each([...fill("PTX1H", TEXT_EDGES), ...fill("P1DX", TEXT_EDGES), ...fill("X + PT1H30M", TEXT_EDGES.filter((t) => t.trim() !== ""))])("%j", (line) => {
+		expectHonestLine(line);
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`P${word}`, `${word} + PT1H`, `PT1H in ${word}`, `01:02:03:04 at 30 fps in ${word}`, `(01:02:03:04 at 30 fps) in ${word}`]))("%s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line);
+		});
+	});
+});
+
+/**
+ * A length of several units is read from the words after its numbers, so the
+ * prototype words go where a unit or the connector of an offset would be, and
+ * the text edges beside the length.
+ */
+describe("a compound length on a date stays honest over the text edges and the prototype words", () => {
+	test.each(fill("2026-01-31 + 1 month 1 day + X", TEXT_EDGES.filter((t) => t.trim() !== "")))("%j", (line) => {
+		expectHonestLine(line);
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`2026-01-31 + 1 month 1 ${word}`, `1 month 1 day ${word} 2026-01-31`, `5 days ${word} 3`]))("%s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line);
+		});
 	});
 });
 
@@ -108,8 +601,79 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "# S\nX\n5\ntotal of section \"S\"" },
 	{ form: "| item | cost |\n| --- | --- |\n| food | X |\n\ncolumn \"cost\" for \"food\"" },
 	{ form: "X\n5\ntotal above\naverage above" },
+	// A column of percentages, gathered by position, by range and by tag.
+	{ form: "X%\n20%\ntotal above\nmax above\naverage(line 1 : line 2)" },
+	{ form: "X% #r\n20% #r\ntotal of #r" },
+	// A sweep of a line that answers a percentage, refused by name, and the
+	// line of its points that sweeps (FoundBug_percentageArithmetic).
+	{ form: "r = X%\nz = r * 20%\nline 2 for r from 10% to 30% step 10%" },
+	{ form: "r = 10%\nz = r * 20%\nline 2 * 100\nline 3 for r from X% to 30% step 10%" },
 	{ form: "X\ninputs of line 1" },
 	{ form: "x = 1\ny = x * 3\nsolve line 2 for x = X", agree: false },
+	{ form: ":price = £200\nprice * 3\nsolve line 2 for price = £X", agree: false },
+	// Both signs, a gap in the scan and a stated range (#739).
+	{ form: "x = 1\ny = 2^x\nsolve line 2 for x = X", agree: false },
+	{ form: "x = 1\ny = 1/x\nsolve line 2 for x = X between -10 and 10", agree: false },
+	{ form: "x = 1\ny = x * 3\nsolve line 2 for x = 6 between X and 10", agree: false },
+	// A formula stored before its unknown had a value, read below it (#732).
+	{ form: "y = x + 1\nx = X\ny + x" },
+	{ form: "y = x * 2\nx = X\ny" },
+	// A document's own unit as a conversion target, and a rename (#762).
+	{ form: "1 sprint = 2 weeks\nX days in sprints" },
+	{ form: "1 click = 1 km\nX km in clicks" },
+	{ form: "1 click = 1 km\nX clicks" },
+	// A lone sum or total under labelled lines (#742), and a name of several
+	// words read below its definition (#743).
+	{ form: "Rent $X\nFood $300\nsum" },
+	{ form: "total = X\ntotal" },
+	{ form: "hourly rate = X\nhours = 8\nhourly rate * hours" },
+	// A possessive name read with the other apostrophe, a stored formula given
+	// a unit, and an equation left with one unknown once the others have
+	// values (the eighth found-bug batch).
+	{ form: "Alice's food = X\nAlice’s food * 2" },
+	{ form: "y = x + X\ny km\ny percent =>" },
+	{ form: "salary = X\nnet = 1000\n(salary / 12) * rate / 100 = net\nrate =>" },
+	// `ans` under the arrow, a percentage of a stored unknown, a quantity met
+	// by one, and a product equation with a factor and without (the ninth
+	// found-bug batch).
+	{ form: "X\nans km =>\nans + x =>" },
+	{ form: "y = x + 10%\nx = X\ny" },
+	{ form: "y = x * 2\ny * X km" },
+	{ form: "a*x = X\nx =>" },
+	{ form: "a = 4\na*x = X\nx =>" },
+	{ form: "x*π = X\nx =>" },
+	// An equation that reads the line above it, solved below a line between
+	// (FoundBug_lineReadInAnEquation).
+	{ form: "X\nx + ans = 7\n100\nx =>" },
+	{ form: "X\nx * prev = 1\nx =>" },
+	// A named scenario and a date sweep (#744).
+	{ form: "a = 1\nb = a * 2\nscenario s with a = X\nline 2 under s" },
+	{ form: "d = 2026-01-01\n(d - 2026-01-01) in days\nline 2 for d from 2026-01-01 to 2026-06-01 step X months" },
+	{ form: "d = 2026-01-01\n(d - 2026-01-01) in days\nline 2 for d from 2026-01-01 to 2026-06-01 step X days" },
+	// A list that carries a unit, from a line above (#745).
+	{ form: "a = X km\n[a, 500 m] * 2" },
+	// A time held in a variable, converted from a zone named after it; a
+	// variable named salary after tax; a one-letter label beside the variable
+	// of that name (the second found-bug batch).
+	{ form: "t = 3pm\n(t + X hours) London in Tokyo" },
+	{ form: "t = X\nt London in Tokyo" },
+	{ form: "salary = £X\nsalary after tax" },
+	{ form: "x = X\nx:3\nx + 1" },
+	// A label before a colon beside the refusals its boundary gives
+	// (FoundBug_labelBeforeAColon).
+	{ form: "start = 9:30\nRent: X\nstart + 24:00\ntrue ? X : 0\ntotal above" },
+	// Membership through a variable holding a block, and a variable holding
+	// anything else after `in`.
+	{ form: "lab = 192.168.1.0/24\nX in lab" },
+	{ form: "lab = X\n192.168.1.7 in lab" },
+	{ form: "big = (2^100 + X) in hex\nbig + 1" },
+	{ form: "A = X\nB = X\nA in hex == B in hex\ncheck A in hex == B in binary" },
+	// A chained check and a check joined with `and` over the lines above.
+	{ form: "A = X\ncheck A - 1 < A < A + 1\ncheck A == A and A >= A" },
+	{ form: "A = X + 0.5\nB = A in hex\ncheck B == A and B in hex == B" },
+	// A number in a base inside a column the span aggregates read.
+	{ form: "X in hex\n0b101 as binary\ntotal above\naverage above\ntotal above in hex" },
+	{ form: "X in hex\n2\nsum(line 1 : line 2)" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {
@@ -128,8 +692,38 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"X(5)",
 		"X",
 		"time in X",
+		"2026-04-03T15:00 in X-5",
 		"total of #X",
 		"5 X",
+		"5 metric X",
+		"35 mpg X",
+		"4000px at X dpi",
+		"X at 300 dpi",
+		"X is prime",
+		"add X to 10",
+		"larger of X and 4 and 12",
+		"5 kg/X^3",
+		"9.81 m/s^2 in X/s^2",
+		"60 km/h in miles per X",
+		"$20/hour in $/X",
+		"10 Hz in /X",
+		"$0.30/kWh * 2 X * 3 h",
+		"84 days in X",
+		"X(16)",
+		"fe80::1%X",
+		"fe80::1 in X",
+		"192.168.1.7 in X",
+		"check X == #ff0000",
+		"check 1 < X < 2",
+		"check X == 1 and 1 == X",
+		"check X == \"X\"",
+		"X == \"X\"",
+		"\"X\" < 1",
+		"\"X\" as number",
+		"-\"X\"",
+		"int(\"0xX\")",
+		"P.5X",
+		"hosts in X",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {
 		expectPrototypeUntouched(() => {
@@ -140,6 +734,16 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 	test.each(PROTOTYPE_WORDS)("as a variable, a section and a table column: %s", (word) => {
 		expectPrototypeUntouched(() => {
 			expectHonestDocument(`${word} = 5\n${word} * 2`);
+			// As a label, before a lone total, and in a name of several words.
+			expectHonestDocument(`${word} $5\nsum`);
+			expectHonestDocument(`${word} rate = 5\n${word} rate * 2`);
+			// With a possessive, under the arrow, and in an equation of several unknowns.
+			expectHonestDocument(`${word}'s rate = 5\n${word}’s rate * 2`);
+			expectHonestDocument(`${word} percent =>\n${word} km =>`);
+			expectHonestDocument(`${word} + y = 10\n${word} =>`);
+			// Met by a quantity or a percentage, and as a product equation's factor.
+			expectHonestDocument(`${word} * 5 km =>\n${word} + 10% =>`);
+			expectHonestDocument(`${word}*x = 10\nx =>`);
 			expectHonestDocument(`# ${word}\n10\ntotal of section "${word}"`, { agree: false });
 			expectHonestDocument(`| ${word} | cost |\n| --- | --- |\n| food | 10 |\n\ncolumn "${word}" for "food"`, { agree: false });
 		});
@@ -154,11 +758,65 @@ describe("inputs sized to exhaust time are answered or refused in time", () => {
 		["a long name", RESOURCE_PROBES.longIdentifier()],
 		["a huge power", RESOURCE_PROBES.hugePower()],
 		["a huge range", RESOURCE_PROBES.hugeRange()],
+		["a long run of words before an amount", `${RESOURCE_PROBES.longIdentifier(10).concat(" ").repeat(2_000)}$5`],
+		["a long run of words before an =", `${RESOURCE_PROBES.longIdentifier(10).concat(" ").repeat(2_000)}= 5`],
+		["a long chain of negations", `${"not ".repeat(1_000)}true`],
 	])("%s", (_name, line) => {
 		expectHonestLine(line, { budgetMs: 5_000 });
 	});
 
 	test("a long chain of previous-line reads", () => {
 		expectHonestDocument(RESOURCE_PROBES.manyLines(1_000), { budgetMs: 10_000 });
+	});
+});
+
+/**
+ * The forms that depend on how an engine is configured: a sentence ending read
+ * when the host opts in (#741), and the decimal comma and `;` separator of a
+ * comma-decimal locale (#740).
+ */
+describe("the configured forms stay honest over the numeric and text edges", () => {
+	const punctuated = newTrackedEngine({ config: { validation: { allowTrailingPunctuation: true } } });
+	test.each([...fill("X?", NUMERIC_EDGES), ...fill("X + 1.", NUMERIC_EDGES), ...fill("what is X km in miles?", NUMERIC_EDGES), ...TEXT_EDGES.map((t) => `${t}?`)])(
+		"a trailing mark, opted in: %j",
+		(line) => {
+			expectHonestLine(line, { engine: punctuated, allowNaN: line.includes("0/0") });
+		},
+	);
+
+	const german = newTrackedEngine({ locale: "de" });
+	const french = newTrackedEngine({ locale: "fr" });
+	const COMMA_FORMS = ["X + 1,5", "max(X; 2,5)", "max(X, 1,5)", "[X, 1,5; 2, 3]", "€X * 1,5", "X * 12,5%"];
+	test.each(COMMA_FORMS.flatMap((form) => fill(form, NUMERIC_EDGES)))("a decimal comma under de and fr: %j", (line) => {
+		expectHonestLine(line, { engine: german, allowNaN: line.includes("0/0") });
+		expectHonestLine(line, { engine: french, allowNaN: line.includes("0/0") });
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`${word} + 1,5`, `max(${word}; 1,5)`, `${word}?`]))("a prototype word beside the configured forms: %s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line, { engine: german });
+			expectHonestLine(line, { engine: punctuated });
+		});
+	});
+
+	// A pack's own function names and conversion words, which add to English
+	// (#833), and a package's unit aliases (#762).
+	const PACK_FORMS: ReadonlyArray<readonly [string, typeof german]> = [
+		["wurzel(X)", german], ["runden(X)", german], ["aufrunden(X)", german], ["sqrt(X)", german], ["X km in m", german], ["3pm Tokyo in Dubai + X", german],
+		["racine(X)", french], ["plafond(X)", french], ["X km en m", french], ["convertir X km en m", french],
+	];
+	test.each(PACK_FORMS.flatMap(([form, engine]) => fill(form, NUMERIC_EDGES).map((line) => [line, engine] as const)))("a pack's word over the numeric edges: %s", (line, engine) => {
+		expectHonestLine(line, { engine, allowNaN: line.includes("0/0") });
+	});
+
+	const aliased = newTrackedEngine({ packages: [...BUILTIN_PACKAGES, { name: "sweep-aliases", unitAliases: { Meile: "mile", Tage: "days" } }] });
+	test.each(["X Meile", "X km in Meile", "X Tage in hours", "X Meile to 2 dp"].flatMap((form) => [...fill(form, NUMERIC_EDGES), ...fill(form, TEXT_EDGES)]))("a unit alias over the edges: %j", (line) => {
+		expectHonestLine(line, { engine: aliased, allowNaN: line.includes("0/0") });
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`2 ${word}`, `5 km in ${word}`]))("a prototype word where an alias is read: %s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line, { engine: aliased });
+		});
 	});
 });

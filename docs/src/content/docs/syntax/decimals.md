@@ -103,6 +103,14 @@ total above // 0.30
 line 3 == 0.3 // true
 ```
 
+A percentage is a decimal too, so its sums, products and totals are worked out
+the same way, and `10% + 20% == 30%` is true (see
+[percentages that add up exactly](/syntax/percentages/#percentages-that-add-up-exactly)).
+
+```solve
+10% + 20% == 30% // true
+```
+
 ## Where exactness ends
 
 Some answers have no exact decimal or fraction to keep, and a few inputs are read
@@ -121,7 +129,9 @@ as floating point on purpose. There, Solve uses floating point, as it always has
   them after the point, which is the precision of IEEE 754's decimal128 format and
   about twice what floating point holds. A longer answer is given in floating
   point. Compound growth over thirty years, `1.05 ^ 30`, is 61 digits long, so it
-  is floating point, and shows the same `4.32` either way.
+  is floating point, and shows the same `4.32` either way. An amount of money
+  has the same ceiling and is rounded to it rather than dropped, so it keeps its
+  cent (see [money precision](/syntax/money-precision/#how-many-digits-an-amount-keeps)).
 - **Other kinds of value.** A quantity with a unit other than money, a
   measurement with an [uncertainty](/syntax/uncertainty/), a
   [statistic](/syntax/statistics/) such as a median, and the entries of a
@@ -157,7 +167,47 @@ countable, and in exponent form once they are not.
 ```
 
 A percentage follows the same rule, and is grouped by thousands like any other
-figure: `1234567%` is `1,234,567.00%`.
+figure: `1234567%` is `1,234,567.00%`. So does each figure of a list and both
+sides of a tolerance (a measurement written with `±`), which used to round to
+`0.00` and `0 ± 0.0`.
+
+```solve
+[1e-6, 1] // [1e-6, 1]
+[0.001, 0.5] // [0.001, 0.50]
+0.004 ± 0.001 // 0.004 ± 0.001
+```
+
+The figures of one list are read side by side, so they are shown alike. Once a
+list shows one figure to three significant digits, every other figure below one
+that two decimal places would cut short is shown to three significant digits
+too. A pixel at 300 dots per inch is a third of a hundredth of an inch and two
+pixels are two thirds of one: the first rounds away at two places and the second
+does not, and they used to read `0.00333 in` and `0.01 in` side by side, as if
+the second were measured less finely. A figure two places already show in full
+keeps them, as `0.5` keeps `0.50` above, and a figure of one or more keeps the
+two places.
+
+```solve
+map(x px at 300 dpi, 1:2) // [0.00333 in, 0.00667 in]
+map(x px at 300 dpi, 1:4) // [0.00333 in, 0.00667 in, 0.01 in, 0.0133 in]
+[0.001, 0.123] // [0.001, 0.123]
+[0.5, 0.25] // [0.50, 0.25]
+```
+
+A list of money keeps its currency's places for every figure that does not
+round away, since a cent is the precision of an amount (see below).
+
+The one zero that is real is a number too small for the computer to hold. A
+number is stored as a double, which reaches down to about 4.94e-324 and no
+further, so a result below that is zero before it is ever shown, as a result
+past about 1.8e308 is `∞`. `1e-320 / 1e10` is zero for that reason, and so is
+the same quotient with a unit.
+
+```solve
+1e-320 / 2 // 5e-321
+1e-320 / 1e10 // 0
+1e-320 km / 1e10 // 0.00 km
+```
 
 Three digits, rather than everything the double holds, because a conversion is
 not more precise than what went into it: `1 second in years` is
@@ -195,6 +245,21 @@ in is 3,300,000 again.
 3 million + 10% as compact // 3.3M
 1234 as compact // 1.23k
 $3300000 as compact // $3.3M
+$15/hour as compact // $15/hour
+```
+
+Money keeps its currency symbol, and a price per unit keeps the unit after a
+slash, as the full answer writes it.
+
+Past the trillions there is no letter left, so a figure of a thousand trillion
+or more is written in scientific notation instead, still to three significant
+figures. It is never given both an exponent and a letter, which would state its
+size twice in two ways.
+
+```solve
+1e20 as compact // 1e+20
+999.95e12 as compact // 1e+15
+$1e308/hour as compact // $1e+308/hour
 ```
 
 Both answer text, the way `as scientific` does, so they end a line rather than

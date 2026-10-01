@@ -28,14 +28,23 @@ describe("daysInMonth", () => {
 		expect(daysInMonth(2025, -1)).toBe(31);
 	});
 
-	test("is the Date expression it replaced, two-digit years included", () => {
-		// `new Date(y, m + 1, 0).getDate()` read a year from 0 to 99 as the
-		// 1900s; so does `Date.UTC`, and the shared helper keeps that reading.
-		for (const year of [24, 99, 1900, 2000, 2024, 2100]) {
+	test("is the Date expression it replaced, for every year the constructor reads as written", () => {
+		for (const year of [1900, 2000, 2024, 2100]) {
 			for (let month0 = 0; month0 < 12; month0++) {
 				expect(daysInMonth(year, month0)).toBe(new Date(year, month0 + 1, 0).getDate());
 			}
 		}
+	});
+
+	test("reads a year from 0 to 99 as written, not as the 1900s (#823)", () => {
+		// `Date.UTC` reads year 0 as 1900, which is not a leap year; year 0
+		// (1 BC) is one, as every year divisible by 400 is.
+		expect(daysInMonth(0, 1)).toBe(29);
+		expect(daysInMonth(4, 1)).toBe(29);
+		expect(daysInMonth(1, 1)).toBe(28);
+		expect(daysInMonth(99, 11)).toBe(31);
+		expect(daysInMonth(-1, 1)).toBe(28);
+		expect(daysInMonth(-4, 1)).toBe(29);
 	});
 });
 

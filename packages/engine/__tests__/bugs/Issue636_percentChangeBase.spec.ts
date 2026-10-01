@@ -42,7 +42,7 @@ describe("a percentage of a value that is not finite", () => {
 		expect(percentageNotFinite().errorCode).toBe("PERCENTAGE_NOT_FINITE");
 	});
 
-	test.each(["40 is what % of 0", "1/0 as %", "(0/0) as %", "40 as % of 0"])("%s is refused", (line) => {
+	test.each(["40 is what % of 0", "1/0 as %", "(1/0 - 1/0) as %", "40 as % of 0"])("%s is refused", (line) => {
 		expect(value(line).errorCode).toBe("PERCENTAGE_NOT_FINITE");
 	});
 });

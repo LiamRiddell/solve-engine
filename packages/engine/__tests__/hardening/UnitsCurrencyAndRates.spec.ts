@@ -254,9 +254,9 @@ describe("rate arithmetic", () => {
 	});
 
 	test("a rate scales by a bare number and keeps its period", () => {
-		expect(display("$100/hour * 24")).toBe("2,400.00 USD/hour");
-		expect(display("$100/hour / 4")).toBe("25.00 USD/hour");
-		expect(display("$100/hour + $100/hour")).toBe("200.00 USD/hour");
+		expect(display("$100/hour * 24")).toBe("$2,400.00/hour");
+		expect(display("$100/hour / 4")).toBe("$25.00/hour");
+		expect(display("$100/hour + $100/hour")).toBe("$200.00/hour");
 	});
 
 	test("multiplying a rate by something unrelated is refused", () => {
@@ -290,17 +290,16 @@ describe("rate conversion", () => {
 	 * made the engine strictly worse. See this file's header, and
 	 * `DifferentialRegressions.spec.ts` for the run that caught it.
 	 *
-	 * A money target written with a symbol and slash, `in $/day`, is still not
-	 * captured: `$` lexes as a currency token, not a UNIT, so the slash-notation
-	 * normalizer leaves it alone and the target reads as `$` with a stray `/day`.
-	 * That pair stays `test.failing`, deferred with #89.
+	 * A money target written with a symbol and slash, `in $/day`, is captured
+	 * too: the rate-target rule reads `$` and the denominator after it as the one
+	 * unit `USD/day` (#738). The pair that was `test.failing` here passes.
 	 */
 
-	test.failing("changes the period", () => {
+	test("changes the period", () => {
 		expect(evaluate("$100/hour in $/day").toNumber()).toBeCloseTo(2400, 6);
 	});
 
-	test.failing("and answers in a unit rather than an error", () => {
+	test("and answers in a unit rather than an error", () => {
 		expect(evaluate("$100/hour in $/day").type).toBe(ValueType.Uom);
 	});
 

@@ -79,8 +79,14 @@ describe("adversarial: ans where prev has nothing to read gives prev's answer", 
 });
 
 describe("a bare sum or total points at total above", () => {
-	test.each(["sum", "total", "Total", "SUM"])("%s", (word) => {
-		expect(both(["10", "20", word])[2]).toBe(`ERROR: Undefined variable: ${word}. To add up the lines above, write "total above".`);
+	// A line that is only the word is `total above` itself since #742; the
+	// pointer stays for the word inside an expression, where it is still a name.
+	test.each(["sum", "total", "Total", "SUM"])("%s on its own totals the block", (word) => {
+		expect(both(["10", "20", word])[2]).toBe("= 30");
+	});
+
+	test.each(["sum", "total", "Total", "SUM"])("%s inside an expression", (word) => {
+		expect(both(["10", "20", `${word} * 2`])[2]).toBe(`ERROR: Undefined variable: ${word}. To add up the lines above, write "total above".`);
 	});
 
 	test("a defined sum or total is the variable", () => {

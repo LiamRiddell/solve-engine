@@ -128,7 +128,6 @@ describe("documented examples evaluate as documented", () => {
       ["stocks.md", "prices come from a host-supplied network provider"],
       ["crypto.md", "prices come from a host-supplied network provider"],
       ["knowledge.md", "answers come from a host-supplied provider"],
-      ["displaying-dates.md", "the output form is a host formatting setting, not an expression, so there is no line to assert"],
     ]);
 
     const syntaxDir = path.join(DOCS_ROOT, "syntax");

@@ -43,31 +43,106 @@ combination(56, 23) // 3,167,295,784,216,200
 
 ## Where exactness stops
 
-A number **typed** past the safe range is still a double, because it is rounded
-as it is read, before any arithmetic happens. Its digits may already be different
-from the ones typed, so working on it exactly would present invented digits as
-though they were real. It keeps its double, and so does arithmetic on it. The same
-number built from whole numbers within the range is exact:
+A whole number **typed** past the safe range in plain digits keeps the digits
+typed. A double would round `9007199254740993` to the nearest number it can
+hold, 9,007,199,254,740,992, and show that as if it were the number written, so
+the digits are read as an exact integer instead, the same one `2^53 + 1` builds.
+
+A number typed in scientific notation is different: `1e16` names a double, and a
+double past the safe range may already be a rounding, so it keeps its double, and
+so does arithmetic on it. The same number built from whole numbers within the
+range is exact:
 
 ```solve
-12345678901234567890 + 1 // 12,345,678,901,234,567,000
+9007199254740993 // 9,007,199,254,740,993
+12345678901234567890 + 1 // 12,345,678,901,234,567,891
 1e16 + 1 - 1e16 // 0
 10^16 + 1 - 10^16 // 1
 ```
 
-The other limits:
-
-- **A fractional part.** Only a whole-number result is kept exact, so a sum with
-  a decimal in it is a double.
-- **Past the largest double.** A double has no finite value beyond about
-  1.8 × 10^308, and the answer there is infinity, as it always was.
-- **A unit or a percentage.** A quantity with a unit, and a percentage of a
-  number, read the nearest double.
+A number typed with a decimal point keeps its digits too. Past the safe range a
+double holds no fraction at all, so `9007199254740993.5` would be the double
+9,007,199,254,740,994, and the half the reader typed would be gone. The engine
+reads a decimal written in plain digits exactly, and where a double is too
+coarse to hold the places shown, the digits come from that exact reading, and
+from exact arithmetic on it:
 
 ```solve
-2^60 + 0.5 // 1,152,921,504,606,847,000
+9007199254740993.5 // 9,007,199,254,740,993.50
+9007199254740993.5 + 1 // 9,007,199,254,740,994.50
+9007199254740993.5 / 2 // 4,503,599,627,370,496.75
+9007199254740993.5 == 9007199254740994 // false
+2^60 + 0.5 // 1,152,921,504,606,846,976.50
+```
+
+Converting such a number keeps the exact reading too. `as int` drops the
+fraction the way `int` and `trunc` do, towards zero, so a negative number loses
+its fraction upwards; and `as percent`, which writes a number as a share of a
+hundred, moves the point of the exact decimal two places:
+
+```solve
+9007199254740993.5 as int // 9,007,199,254,740,993
+-9007199254740993.5 as int // -9,007,199,254,740,993
+floor(9007199254740993.5) // 9,007,199,254,740,993
+(2^53 + 1) as int // 9,007,199,254,740,993
+9007199254740993.5 as percent // 900,719,925,474,099,350.00%
+(2^53 + 1) as percent // 900,719,925,474,099,300.00%
+```
+
+A fraction is kept exactly as well. `2^60 + 0.5` is not a decimal anyone typed
+but a sum, held as the exact fraction 2,305,843,009,213,693,953 over 2, while
+its double, which holds no fraction at that size, is 2^60 itself. The rounding
+functions and `as int` read the exact fraction first, then an exact decimal, and
+the double only when there is neither, so each one rounds the number written.
+`floor` rounds down and `ceil` up, `int`, `trunc` and `as int` drop the fraction
+towards zero, and `round` takes a half away from zero, as it does for a small
+number (`round(2.5)` is 3 and `round(-2.5)` is -3):
+
+```solve
+floor(2^60 + 0.5) // 1,152,921,504,606,846,976
+ceil(2^60 + 0.5) // 1,152,921,504,606,846,977
+round(2^60 + 0.5) // 1,152,921,504,606,846,977
+(2^60 + 0.5) as int // 1,152,921,504,606,846,976
+floor(-(2^60 + 0.5)) // -1,152,921,504,606,846,977
+int(-(2^60 + 0.5)) // -1,152,921,504,606,846,976
+round(-(2^60 + 0.5)) // -1,152,921,504,606,846,977
+round(2^60 + 1/3) // 1,152,921,504,606,846,976
+```
+
+The other limits:
+
+- **A result with no exact reading.** A square root, a power with a fractional
+  exponent or a logarithm has no exact decimal, so its result is a double, and so
+  is arithmetic on it.
+- **Past the largest double.** A double has no finite value beyond about
+  1.8 × 10^308, and the answer there is infinity, as it always was. A
+  percentage is a hundred times its number, so one past that point is refused
+  by name rather than written as an infinity (see
+  [percentages](/syntax/percentages/#a-number-as-a-percentage)).
+- **A percentage typed with its sign.** A percentage written with `%` after a
+  number that large reads the nearest double (`900719925474099350%`); `as
+  percent` of the number is the exact form.
+- **Some work on a large quantity.** A quantity with a unit (a length, a mass, a
+  number of days) past 2^53 keeps the exact value it was written as, so
+  `9007199254740993.5 m` is 9,007,199,254,740,993.50 m, and `floor`, `ceil`,
+  `round`, `trunc`, `int` and `as int` of it round that value, not the nearest
+  double. Adding or subtracting another amount in the same unit, and multiplying
+  or dividing by a plain number, keep it exact too. Converting it into another
+  unit (`in km`), multiplying two quantities together, and `mod` read the
+  nearest double, since a conversion factor is itself a double. Money goes
+  further: an amount of money keeps its exact decimal at any size, so
+  `floor($9007199254740993.5)` is $9,007,199,254,740,993.00, where the nearest
+  double would round from $9,007,199,254,740,994.
+
+```solve
+sqrt(2^106) + 0.5 // 9,007,199,254,740,992
 2^1024 // ∞
-(2^53 + 1) kg // 9,007,199,254,740,992.00 kg
+(2^53 + 1) kg // 9,007,199,254,740,993.00 kg
+ceil((2^60 + 0.5) m) // 1,152,921,504,606,846,977.00 m
+round((2^60 + 0.5) m) // 1,152,921,504,606,846,977.00 m
+(2^60 + 0.5) m + 1 m // 1,152,921,504,606,846,977.50 m
+floor($9007199254740993.5) // $9,007,199,254,740,993.00
+ceil($9007199254740993.5) // $9,007,199,254,740,994.00
 ```
 
 For a program embedding the engine, the value of such a result is still the

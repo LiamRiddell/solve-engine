@@ -1,0 +1,29 @@
+---
+"solve-engine": minor
+---
+
+An engine formats its own results: `engine.formatValue(value)` writes a date in the zone the engine computed in and numbers in its locale, a settings object names only what it changes, `dateCalendarInZone` takes a clock, and a worker writes its results the same way
+
+The free `formatValue` has no engine in hand, so it wrote a date in the host process's zone unless the host passed the engine's calendar backend itself, and on an engine computing in `Pacific/Kiritimati` that printed `next friday` as a Thursday (#721). The one-key settings object the calendar option asked every host to pass, `{ calendar }`, threw an uncoded `TypeError`, because settings had to be complete. The `Date` backend could not pin its clock short of replacing `Date.now` for the whole process. And the worker runtime wrote every result with the default settings, so a `de-DE` engine behind a worker answered `€1,250.00` where the same engine on the main thread would write `€1.250,00` (#827).
+
+`engine.formatValue(value, overrides?)` formats with `engine.getFormattingSettings()`: the defaults, the engine's calendar backend, and a number locale from its `locale` option. `formatValue` merges a partial settings object over the defaults group by group and field by field, and `mergeFormattingSettings` does the same for a host layering its own. `dateCalendarInZone(zone, { now })` reads a clock the host supplies, checked as described in the Temporal clock change. The worker runtime writes each result with its engine's settings, the host's `formatting` merged over them.
+
+| line | before | now |
+| --- | --- | --- |
+| `next friday` on a Kiritimati engine at 14:24:57 UTC on 25 September 2026, bare `formatValue` in a UTC process | Thursday, October 1, 2026, 2:24:57 PM | Thursday, October 1, 2026, 2:24:57 PM (the process zone, kept by design) |
+| the same, `engine.formatValue` | no such method | Friday, October 2, 2026, 4:24:57 AM |
+| the same, `formatValue(value, { calendar })` | TypeError: Cannot read properties of undefined (reading 'decimalSeparatorLocale') | Friday, October 2, 2026, 4:24:57 AM |
+| `3000 m`, `formatValue(value, { unitOfMeasurementResult: { decimalPlaces: 0 } })` | TypeError | 3,000 m |
+| `€1250` on a `de-DE` engine behind the worker | €1,250.00 | €1.250,00 |
+| `today` on `dateCalendarInZone("UTC", { now: () => Date.UTC(2020, 0, 1) })` | the real date (the option was ignored) | Wednesday, January 1, 2020 |
+| `dateCalendarInZone("Asia/Tokyo ")` | not a time zone this runtime knows | the same refusal, adding: The name has space around it; "Asia/Tokyo" is one. |
+
+A complete settings object is used exactly as it is, so a host that passes one formats as before, and an edit made to it in place is seen on the next call; nothing is cached against it. A bare `formatValue` with no calendar keeps the process zone, since changing that default would change every host's output. The engine's number locale is its tag in canonical form when `Intl` has number data for it; the default `en`, and a tag with none (`xx`, `__proto__`), write `en-US`, so a result does not change with the machine's own locale. A group that is not an object, a key that is not a group and a prototype key in an override are ignored, and `Object.prototype` is never written.
+
+The boundary: this changes how an engine's results are written, not what it computes. A worker still takes its calendar from `WorkerRuntimeOptions.calendar`, because a backend is an object of functions and cannot cross `postMessage`. The free `formatValue` still hands an explicit `numberResult.decimalSeparatorLocale` to `Intl` as it is. The formatting guide is rewritten around the engine's formatter and partial settings, the locales and Temporal guides show it, and a new guide, The same answer on every run, lists every outside input a document can read (the clock, the zone, random draws, live data and the `network: false` trap, globals, the formatter, an error's timestamp) and the setting that pins each.
+
+## Verification
+
+`Issue721_engineFormatValue.spec.ts` holds 49 tests: `engine.formatValue` on a Kiritimati engine with the clock pinned across the day boundary; its agreement with `formatValue(value, { calendar })` and a full settings object; overrides per group; an engine with no calendar matching the bare formatter; a `de-DE` engine; a partial object for every group; a complete object edited in place; the pinned clock; the parts (`checkedClock`, `mergeFormattingSettings`, `resolveFormattingSettings`, `numberLocaleFor`) with ordinary, boundary and hostile arguments; and the adversarial cases (clocks answering `NaN`, an infinity, past the range or throwing, a clock that is not a function, zone names with space around them or none, prototype keys in settings, a bad clock through both document passes, the epoch and the range edge). `Issue827_workerEngineFormatting.spec.ts` holds 7 tests: a `de-DE` engine and a Kiritimati engine behind the worker matching `engine.formatValue` through `evaluateExpression`, `evaluateLines` and `parseDocument`, the host's formatting merged per group, a complete host object winning, prototype words as groups, locales `Intl` cannot read, and a worker with no calendar. `DATE_CLOCK_INVALID` is catalogued, in the catalogue snapshot and the reachability map, and the error-code page is regenerated.
+
+The date and time suites ran under the `Temporal` backend in Europe/London, America/New_York and Pacific/Auckland (3,179 tests in 94 suites each, this change's specs included), and the fast suite (18,304 of 18,308 tests in 650 suites, 4 skipped), the proven docs examples, `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:docs`, `lint:error-codes`, `lint:cheatsheet` and `lint:sidebar` passed.

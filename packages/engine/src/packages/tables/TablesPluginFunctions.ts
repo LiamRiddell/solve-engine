@@ -57,6 +57,10 @@ export const TablesErrorCodes = {
   TABLE_BAND_AMOUNT_INVALID: "TABLE_BAND_AMOUNT_INVALID",
   /** The amount, the band starts and the rates name currencies that do not go together. */
   TABLE_BAND_UNIT_MISMATCH: "TABLE_BAND_UNIT_MISMATCH",
+  /** A column form (`sum of column`, `column ... for`) not followed by a column name in quotes. */
+  TABLE_COLUMN_NAME_EXPECTED: "TABLE_COLUMN_NAME_EXPECTED",
+  /** A table lookup not followed by `for` and a row, as in `column "cost" for "food"`. */
+  TABLE_LOOKUP_FOR_EXPECTED: "TABLE_LOOKUP_FOR_EXPECTED",
 } as const;
 
 /** The reductions a column aggregate can apply to its numeric cells. */

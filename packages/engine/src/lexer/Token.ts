@@ -55,6 +55,10 @@ export interface Token {
 	 * well as a unit's. A variable of that name, when one is defined, is divided
 	 * by instead of read as the unit (#642). Set by the bare-rate rule; the
 	 * parselet compiles the choice and the dependency graph records the read.
+	 *
+	 * Also set on a line that is only `sum` or `total` (#742), which reads a
+	 * variable of that name when the note defines one and totals the block
+	 * above when it does not.
 	 */
 	mayNameVariable?: boolean;
 }
@@ -121,6 +125,10 @@ export const TokenTypes = {
   DATETIME_LITERAL: "DATETIME_LITERAL",
   DURATION: "DURATION",
   UNIT: "UNIT",
+  // The name a quantity is shown under, after a unit a reader wrote as a
+  // package alias or a document-defined unit (#762). Produced only by the
+  // normaliser; see packages/uom/normalizer/UserUnitNormalizerRule.ts.
+  UNIT_LABEL: "UNIT_LABEL",
   ROLL: "ROLL",
   PI: "PI",
   E: "E",
@@ -430,9 +438,11 @@ export const TokenTypes = {
   // assuming" before parsing ever ran.
   ASSUMING: "ASSUMING",
   // Fused by a custom NormalizerRule (not `phrases`), carrying the
-  // year as its value -- see
-  // finance/normalizer/InYearDollarsNormalizerRule.ts.
+  // year as its value, one type per currency the phrase names -- see
+  // finance/normalizer/InYearMoneyNormalizerRule.ts.
   IN_YEAR_DOLLARS: "IN_YEAR_DOLLARS",
+  IN_YEAR_POUNDS: "IN_YEAR_POUNDS",
+  IN_YEAR_EUROS: "IN_YEAR_EUROS",
   // Cooking/UoM (packages/uom/) -- fused ingredient name (single- or
   // multi-word, e.g. "butter"/"olive oil") carrying the matched name
   // as its value. NOT a bare-word phrase-trie keyword -- see
@@ -572,6 +582,16 @@ export function registerTokenType(name: string): number {
  */
 export function tokenTypeId(name: string): number {
 	return registerTokenType(name);  // registerTokenType is idempotent
+}
+
+/**
+ * The integer ID of a token type name that is already registered, or
+ * `undefined` for one that is not. Unlike {@link tokenTypeId} it never
+ * registers, so asking about a name nothing declared (a typo, a hostile word
+ * such as `__proto__`) leaves the table as it was.
+ */
+export function knownTokenTypeId(name: string): number | undefined {
+	return _tokenTypeNameToId.get(name);
 }
 
 /**

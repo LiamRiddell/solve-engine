@@ -18,6 +18,10 @@ import { currencyExchangeService } from "@solve-js/uom/CurrencyExchange";
  * The choice for a bare number follows payroll too, which refuses a bare
  * salary: `what is 100 from 1990` would assume dollars without saying so, and
  * is refused, pointing at `$100`.
+ *
+ * #756 then bundled indices for the pound and the euro, so this spec now pins
+ * the refusal for a currency with no index (INFLATION_NO_INDEX), and the pound
+ * and euro answers live in Issue756_ukAndEuroPriceIndices.spec.ts.
  */
 
 const PRESENT_YEAR = new Date().getFullYear();
@@ -34,42 +38,52 @@ function code(line: string): string | undefined {
 	return newTrackedEngine().evaluateExpression(line).errorCode;
 }
 
-describe("an amount that is not US dollars is refused by every form", () => {
+describe("an amount no bundled index measures is refused by every form", () => {
+	// #756 bundled indices for the pound and the euro, so those amounts now read
+	// their own index (see Issue756_ukAndEuroPriceIndices.spec.ts); a currency
+	// with no bundled index keeps the refusal, now INFLATION_NO_INDEX.
 	test.each([
-		"what is £100 from 1990",
-		"what is €100 from 1990",
 		"what is ¥100 from 1990",
-		"what is 100 GBP from 1990",
-		"what was £100 worth in 1990",
-		"£100 in 1990 dollars",
-		"what is £500 in 1990 worth in 2010",
-		"inflationAdjust(£100, 1990, 2020)",
+		"what is 100 CHF from 1990",
+		"what was ¥100 worth in 1990",
+		"what is ¥500 in 1990 worth in 2010",
+		"inflationAdjust(¥100, 1990, 2020)",
 	])("%s", (line) => {
-		expect(code(line)).toBe("INFLATION_EXPECTED_USD");
+		expect(code(line)).toBe("INFLATION_NO_INDEX");
 	});
 
-	test("the message names the US index and the currency", () => {
-		expect(shown("what is £100 from 1990")).toBe(
-			"this is the US consumer price index, which says nothing about what GBP bought: only an amount in US dollars, such as $100, can be adjusted with it",
+	test("pounds and euros read their own index rather than the US one (#756)", () => {
+		expect(newTrackedEngine().evaluateExpression("inflationAdjust(£100, 1990, 2020)").unit).toBe("GBP");
+		expect(shown("inflationAdjust(£100, 1990, 2020)")).toBe("= £232.44");
+		expect(shown("inflationAdjust(€100, 2000, 2020)")).toBe("= €138.15");
+	});
+
+	test("in <year> dollars of a pound amount asks for dollars, and is refused", () => {
+		expect(code("£100 in 1990 dollars")).toBe("INFLATION_EXPECTED_USD");
+	});
+
+	test("the message names the currency and the indices that are bundled", () => {
+		expect(shown("what is ¥100 from 1990")).toBe(
+			"no price index for JPY is bundled, so there is no record of what it bought in another year: only an amount in US dollars, pounds sterling or euros, such as $100, £100 or €100, can be adjusted",
 		);
 	});
 
 	test("a quantity that is not money is refused", () => {
-		expect(shown("what is 100 kg from 1990")).toBe("this is the US consumer price index, which adjusts money, and kg is a mass: give an amount in US dollars, such as $100");
-		expect(code("inflationAdjust(100 kg, 1990, 2020)")).toBe("INFLATION_EXPECTED_USD");
+		expect(shown("what is 100 kg from 1990")).toBe("a price index adjusts money, and kg is a mass: give an amount in US dollars, pounds sterling or euros, such as $100, £100 or €100");
+		expect(code("inflationAdjust(100 kg, 1990, 2020)")).toBe("INFLATION_NO_INDEX");
 	});
 
 	test("a bare number is refused rather than read as dollars, as payroll refuses one", () => {
-		expect(shown("what is 100 from 1990")).toBe("this is the US consumer price index, so it adjusts an amount in US dollars: write the amount with its currency, as $100 or 100 USD");
-		expect(code("inflationAdjust(100, 1990, 2020)")).toBe("INFLATION_EXPECTED_USD");
-		expect(code("what is 10% from 1990")).toBe("INFLATION_EXPECTED_USD");
+		expect(shown("what is 100 from 1990")).toBe("a price index measures one currency, and this amount has none: write it with its currency, in US dollars, pounds sterling or euros, such as $100, £100 or €100");
+		expect(code("inflationAdjust(100, 1990, 2020)")).toBe("INFLATION_NO_INDEX");
+		expect(code("what is 10% from 1990")).toBe("INFLATION_NO_INDEX");
 	});
 });
 
 describe("the boundary: US dollars are adjusted as before", () => {
 	test.each([
-		["inflationAdjust($100, 1990, 2020)", "= $198.01"],
-		["what is $500 in 1990 worth in 2010", "= $834.35"],
+		["inflationAdjust($100, 1990, 2020)", "= $198.02"],
+		["what is $500 in 1990 worth in 2010", "= $834.19"],
 	])("%s", (line, expected) => {
 		expect(shown(line)).toBe(expected);
 	});
@@ -93,14 +107,16 @@ describe("the boundary: US dollars are adjusted as before", () => {
 
 describe("adversarial", () => {
 	test("a currency is refused before a year outside the table is looked at", () => {
-		expect(code("inflationAdjust(£100, 1900, 2020)")).toBe("INFLATION_EXPECTED_USD");
+		expect(code("inflationAdjust(¥100, 1900, 2020)")).toBe("INFLATION_NO_INDEX");
 		expect(code("inflationAdjust($100, 1900, 2020)")).toBe("INFLATION_YEAR_OUT_OF_RANGE");
 	});
 
-	test("an amount converted from dollars into pounds is pounds, and refused", () => {
+	test("an amount converted from dollars into pounds is pounds, and reads the UK index (#756)", () => {
 		currencyExchangeService.primeRates("USD", { GBP: 0.75 });
-		expect(code("what is ($100 in GBP) from 1990")).toBe("INFLATION_EXPECTED_USD");
-		expect(code("inflationAdjust($100 in GBP, 1990, 2020)")).toBe("INFLATION_EXPECTED_USD");
+		expect(newTrackedEngine().evaluateExpression("what is ($100 in GBP) from 1990").unit).toBe("GBP");
+		expect(shown("inflationAdjust($100 in GBP, 1990, 2020)")).toBe("= £174.33");
+		currencyExchangeService.primeRates("USD", { JPY: 150 });
+		expect(code("inflationAdjust($100 in JPY, 1990, 2020)")).toBe("INFLATION_NO_INDEX");
 	});
 
 	test("every numeric edge as an amount or a year is answered honestly", () => {
@@ -111,24 +127,26 @@ describe("adversarial", () => {
 	});
 
 	test("an amount held in a variable, through both passes", () => {
-		const { batch } = expectHonestDocument("pounds = £100\ndollars = $100\ninflationAdjust(pounds, 1990, 2020)\ninflationAdjust(dollars, 1990, 2020)");
+		const { batch } = expectHonestDocument("yen = ¥100\ndollars = $100\ninflationAdjust(yen, 1990, 2020)\ninflationAdjust(dollars, 1990, 2020)");
 		expect(batch).toEqual([
-			"= £100.00",
+			"= ¥100",
 			"= $100.00",
-			"ERROR this is the US consumer price index, which says nothing about what GBP bought: only an amount in US dollars, such as $100, can be adjusted with it",
-			"= $198.01",
+			"ERROR no price index for JPY is bundled, so there is no record of what it bought in another year: only an amount in US dollars, pounds sterling or euros, such as $100, £100 or €100, can be adjusted",
+			"= $198.02",
 		]);
 	});
 });
 
 describe("inflationAmountRefused", () => {
-	test("US dollars pass", () => {
+	test("US dollars pass, and since #756 pounds and euros do too", () => {
 		expect(inflationAmountRefused(uomValue(100, "USD"))).toBeNull();
+		expect(inflationAmountRefused(uomValue(100, "GBP"))).toBeNull();
+		expect(inflationAmountRefused(uomValue(100, "EUR"))).toBeNull();
 	});
 
 	test("another currency, a quantity, a bare number and a percentage are refused", () => {
-		for (const amount of [uomValue(100, "GBP"), uomValue(100, "kg"), numberValue(100), percentageValue(0.1)]) {
-			expect(inflationAmountRefused(amount)?.errorCode).toBe("INFLATION_EXPECTED_USD");
+		for (const amount of [uomValue(100, "JPY"), uomValue(100, "kg"), numberValue(100), percentageValue(0.1)]) {
+			expect(inflationAmountRefused(amount)?.errorCode).toBe("INFLATION_NO_INDEX");
 		}
 	});
 

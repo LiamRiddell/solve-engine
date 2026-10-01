@@ -13,21 +13,67 @@ import { Value, ValueType, enableValueArena, disableValueArena } from "@solve-js
 import type { EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { AllocationTracker } from "@solve-js/telemetry/AllocationTracker";
 import type { PipelineTelemetry } from "@solve-js/telemetry/AllocationTracker";
-import { BUILTIN_PACKAGES, createStocksPackage, createKnowledgePackage } from "@solve-js/packages/builtins";
-import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
+import { PLAYGROUND_PACKAGES } from "./playgroundPackages.js";
+import { documentAnswers, isFailure } from "./hostCalls.js";
+import type { ParsedLine } from "@solve-js/types/ParsingResult";
+
+export { PLAYGROUND_PACKAGES };
+
+/** Options for a playground evaluation. */
+export interface RunOptions {
+	/**
+	 * Whether live lookups (currency, weather) may reach the network. On by
+	 * default; a document opened from a shared link starts with it off, so a
+	 * link cannot make a reader's browser send a request they did not ask for.
+	 */
+	networkEnabled?: boolean;
+}
 
 /**
- * OSRS is an example package (not a built-in) demonstrating the packages
- * framework — registered here so the playground demo keeps working.
+ * Each line's answer through the incremental document pass, by line number,
+ * for the lines the debug loop should show from it.
  *
- * Stocks/Knowledge are opt-in, pluggable-provider packages (see their own
- * module docs) — registered here with NO fetchQuote/answerQuery configured
- * so the demo's "stock(AAPL)"/"<query> = ?" gallery examples actually parse
- * and evaluate to the real, honest "provider not configured" error, rather
- * than failing at parse time with an unrelated "unknown token" error
- * because the function/grammar was never registered at all.
+ * The debug loop evaluates a line at a time, which is what lets it trace each
+ * stage, and cannot re-run another line, so a goal seek answered
+ * `GOAL_SEEK_LINE_NOT_READY` there while `evaluateDocument` solves it (#776).
+ * The loop keeps its pipeline data for every line and takes the answer from
+ * here. A line the document pass could not answer for want of the network
+ * (it runs with live data off, so it never fetches a second time) keeps the
+ * debug loop's own answer, which may be live.
  */
-export const PLAYGROUND_PACKAGES = [...BUILTIN_PACKAGES, OSRS_PACKAGE, createStocksPackage(), createKnowledgePackage()];
+function documentAnswerMap(text: string): { answers: Map<number, ParsedLine>; markup: Set<number> } {
+	const answers = new Map<number, ParsedLine>();
+	// The lines the document pass reads as markup or prose (a table row, a
+	// heading), which it leaves unanswered; the debug loop skips them too.
+	const markup = new Set<number>();
+	const result = documentAnswers(text);
+	if (isFailure(result)) return { answers, markup };
+	for (const line of result.lines) {
+		if (line.isEmpty) {
+			markup.add(line.lineNumber);
+			continue;
+		}
+		const value = line.result;
+		if (value?.isPending()) continue;
+		if (value?.type === ValueType.Error && (value.value === "NETWORK_DISABLED" || String(value.value).endsWith("_NOT_PREFLIGHTED"))) continue;
+		answers.set(line.lineNumber, line);
+	}
+	return { answers, markup };
+}
+
+/**
+ * The debug loop's result for one line, with the answer replaced by the
+ * document pass's where it has one. The pipeline data (tokens, program,
+ * stages) stays the debug loop's.
+ */
+function withDocumentAnswer<R extends { value: Value; error?: string; engineError?: EngineError }>(result: R, answer: ParsedLine | undefined): R {
+	if (answer === undefined) return result;
+	if (answer.error !== null) {
+		return { ...result, value: new Value(ValueType.Error, answer.errorCode ?? "", answer.error), error: answer.error, engineError: undefined };
+	}
+	if (answer.result === null) return result;
+	return { ...result, value: answer.result, error: undefined, engineError: undefined };
+}
 export type { ParseletInfo, Token };
 import {
 	buildDocumentStats,
@@ -65,6 +111,13 @@ export interface DebugResult {
 	pipelineStagesByLine: Record<number, PipelineStageResult[]>;
 	/** DAG dependency graph snapshot */
 	dagSnapshot: DagSnapshot;
+	/**
+	 * The names the document defines and the evaluating engine still holds
+	 * (`ExpressionEngine.documentVariableNames`), for the editor's completions.
+	 * Read in the worker, where the evaluating engine lives, since the editor's
+	 * own engine only highlights and never evaluates.
+	 */
+	documentNames: string[];
 	/** VM checkpoints snapshot */
 	checkpoints: CheckpointSnapshot[];
 	/** Batcher metrics for async resolution */
@@ -578,7 +631,8 @@ function extractPageHeatmap(
  */
 export function runEngineWithStreaming(
 	expression: string,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	options: RunOptions = {},
 ): {
 	result: DebugResult;
 	stream: ReadableStream<DiagnosticEventInfo>;
@@ -656,7 +710,10 @@ export function runEngineWithStreaming(
 			try {
 				engine = new ExpressionEngine({
 					diagnostics: true,
-					config: { diagnostic: { enabled: true, vmTraceEnabled: true } },
+					config: {
+						diagnostic: { enabled: true, vmTraceEnabled: true },
+						network: { enabled: options.networkEnabled ?? true },
+					},
 					packages: PLAYGROUND_PACKAGES,
 				});
 				// Cross-line data access (packages/lines: prev, line<N>, sum/
@@ -792,19 +849,21 @@ export function runEngineWithStreaming(
 				// ── Evaluate all lines ──
 				markdownOutline = generateMarkdownOutline(expression);
 				allLines = expression.split("\n");
+				const { answers: streamAnswers, markup: streamMarkup } = documentAnswerMap(expression);
 
 				for (let idx = 0; idx < allLines.length; idx++) {
 					const trimmed = allLines[idx].trim();
 					if (!trimmed) continue;
 					const lineNum = idx + 1;
 
-					// Skip markdown structure and pure-prose lines.
-					if (!shouldEvaluateLine(engine!, trimmed)) continue;
+					// Skip markdown structure and pure-prose lines, and what the
+					// document pass reads as markup (a table's rows).
+					if (!shouldEvaluateLine(engine!, trimmed) || streamMarkup.has(lineNum)) continue;
 
-					const result = engine!.evaluateLineWithDebug(
+					const result = withDocumentAnswer(engine!.evaluateLineWithDebug(
 						lineNum,
 						trimmed
-					);
+					), streamAnswers.get(lineNum));
 					const lineState = streamDocumentModel.getLineAt(lineNum);
 					if (lineState) lineState.result = result.value;
 
@@ -1112,6 +1171,7 @@ export function runEngineWithStreaming(
 		pipelineStages: lastPipelineStages,
 		pipelineStagesByLine,
 		dagSnapshot,
+		documentNames: engineRef ? [...engineRef.documentVariableNames()] : [],
 		checkpoints,
 		batcherMetrics,
 		pageHeatmap,
@@ -1125,7 +1185,7 @@ export function runEngineWithStreaming(
 	return { result, stream };
 }
 
-export function runEngine(expression: string): DebugResult {
+export function runEngine(expression: string, options: RunOptions = {}): DebugResult {
 	const errors: string[] = [];
 	let rawTokens: Token[] = [];
 	let ast = "";
@@ -1175,6 +1235,7 @@ export function runEngine(expression: string): DebugResult {
 
 		const engine = new ExpressionEngine({ diagnostics: true, config: {
 			diagnostic: { enabled: true, vmTraceEnabled: true },
+			network: { enabled: options.networkEnabled ?? true },
 		}, packages: PLAYGROUND_PACKAGES });
 
 		// Cross-line data access (packages/lines: prev, line<N>, sum/total/
@@ -1196,16 +1257,18 @@ export function runEngine(expression: string): DebugResult {
 
 		markdownOutline = generateMarkdownOutline(expression);
 		const allLines = expression.split("\n");
+		const { answers, markup } = documentAnswerMap(expression);
 
 		allLines.forEach((line, idx) => {
 			const trimmed = line.trim();
 			if (!trimmed) return;
 			const lineNum = idx + 1;
 
-			// Skip markdown structure and pure-prose lines.
-			if (!shouldEvaluateLine(engine, trimmed)) return;
+			// Skip markdown structure and pure-prose lines, and what the
+			// document pass reads as markup (a table's rows).
+			if (!shouldEvaluateLine(engine, trimmed) || markup.has(lineNum)) return;
 
-			const result = engine.evaluateLineWithDebug(lineNum, trimmed);
+			const result = withDocumentAnswer(engine.evaluateLineWithDebug(lineNum, trimmed), answers.get(lineNum));
 			const lineState = documentModel.getLineAt(lineNum);
 			if (lineState) lineState.result = result.value;
 
@@ -1429,6 +1492,7 @@ export function runEngine(expression: string): DebugResult {
 			pipelineStages: lastPipelineStages,
 			pipelineStagesByLine,
 			dagSnapshot: dagSnap,
+			documentNames: [...engine.documentVariableNames()],
 			checkpoints: ckpts,
 			batcherMetrics: bm,
 			pageHeatmap: ph,
@@ -1487,6 +1551,7 @@ export function runEngine(expression: string): DebugResult {
 		pipelineStages: lastPipelineStages,
 		pipelineStagesByLine,
 			dagSnapshot,
+			documentNames: [],
 			checkpoints,
 			batcherMetrics,
 			pageHeatmap,

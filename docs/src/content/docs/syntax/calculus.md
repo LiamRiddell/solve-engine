@@ -43,6 +43,15 @@ der(x*y, x) // y
 A function whose derivative is not known is left as an unevaluated `der` call
 rather than guessed at.
 
+The expression is a formula worked out away from the line, so it cannot read
+another line of the note: `prev` or `line 1` inside `der`, `integral` or
+`solve` is refused by name, with the way to write it (name the value on a line
+above, then use the name).
+
+```solve-doc
+der(x^2 + prev, x) // ERROR: der's expression reads other lines of the document, and it is worked out away from the line, where there are no lines to read: give the line's value a name first, as in p = prev, and use p in the expression
+```
+
 ## Integrals
 
 `integral(expression, variable)` finds an indefinite integral, the expression
@@ -51,7 +60,7 @@ is conventional for a calculator. With two bounds after the variable it is a
 [definite integral](#definite-integrals) instead, an area.
 
 ```solve
-integral(x^2, x) // 1/3x^3
+integral(x^2, x) // x^3/3
 integral(3x^2+2x+1, x) // x^3+x^2+x
 integral(cos(x), x) // sin(x)
 integral(1/x, x) // log(x)
@@ -240,8 +249,8 @@ expression with a second unknown in it.
 `taylor(expression, variable = point, degree)` expands about a point.
 
 ```solve
-taylor(exp(x), x=0, 4) // 1/24x^4+1/6x^3+0.5x^2+x+1
-taylor(sin(x), x=0, 5) // 1/120x^5-1/6x^3+x
+taylor(exp(x), x=0, 4) // x^4/24+x^3/6+0.5x^2+x+1
+taylor(sin(x), x=0, 5) // x^5/120-x^3/6+x
 ```
 
 The coefficients are exact, because each one is a derivative evaluated at the

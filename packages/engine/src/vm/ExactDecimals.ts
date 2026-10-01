@@ -43,10 +43,11 @@
  * operation takes the plain fast path again.
  */
 
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational, errorValue } from "@solve-js/vm/Value";
-import { decimalCompare, decimalToString, type DecimalData } from "@solve-js/decimal";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, uomValueExact, errorValue } from "@solve-js/vm/Value";
+import { nonFiniteText } from "@solve-js/utilities/Number";
+import { DECIMAL_DIGIT_CEILING, decimalCompare, decimalToString, type DecimalData } from "@solve-js/decimal";
 import { rational, rationalToNumber, type Rational } from "@solve-js/symbolic";
-import { bigIntPow, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemainder } from "@solve-js/vm/ExactIntegers";
+import { bigIntPow, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemainder, wholeNumberUnchanged } from "@solve-js/vm/ExactIntegers";
 
 /**
  * How many digits an exact decimal result may carry before it falls back to the
@@ -60,7 +61,7 @@ import { bigIntPow, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemai
  * grows past it (compound growth, `1.05 ^ 30`, is 61 digits) answers the double
  * it answered before this module existed.
  */
-export const EXACT_DECIMAL_DIGITS = 34;
+export const EXACT_DECIMAL_DIGITS = DECIMAL_DIGIT_CEILING;
 
 /**
  * The globals this module calls on every exact operation, read once.
@@ -293,7 +294,7 @@ export function roundHalfAwayFromZero(x: number): number {
 
 /** A number as a message writes it: at most twelve significant figures. */
 function shownNumber(x: number): string {
-	return String(Number(x.toPrecision(12)));
+	return nonFiniteText(x) ?? String(Number(x.toPrecision(12)));
 }
 
 /**
@@ -560,21 +561,106 @@ export function exactDecimalTotal(values: readonly Value[], mean: boolean): Valu
 	return quotientResult(rational(coef, pow10(scale) * toBigInt(values.length)), approx / values.length);
 }
 
+/** The rounding a whole-number function applies: `floor`, `ceil`, `trunc` (`int`, `as int`) or `round`. */
+export type WholeRounding = "floor" | "ceil" | "trunc" | "round";
+
 /**
- * Round a plain number carrying an exact decimal to a whole number, or null.
+ * Round a plain number to a whole number from the exact value it carries, or
+ * null when it carries none.
  *
- * `floor`, `ceil`, `trunc` and `round` read the decimal rather than its double,
- * which can sit on the far side of a whole number from the value typed:
- * 2.99999999999999999 is a double of exactly 3, so its floor was 3. `round`
- * keeps the rule it has always had, a half rounds up (towards positive
- * infinity), so `round(-2.5)` is -2 as before. Null for anything without the
- * sidecar, which keeps its path.
+ * `floor`, `ceil`, `trunc`, `int`, `round` and `as int` read an exact value
+ * before the double, which past 2^53 holds no fraction at all: `2^60 + 0.5` is
+ * the exact fraction 2305843009213693953/2, and its double is the whole number
+ * 2^60, which the formatter wrote as 1,152,921,504,606,847,000. The exact
+ * integer comes first (handed back as it is, see `wholeNumberUnchanged` in
+ * vm/ExactIntegers.ts), then the exact fraction ({@link roundExactRationalToWhole}),
+ * then the exact decimal ({@link roundExactDecimalToWhole}). A quantity that
+ * carries an exact decimal (an amount of money, or any quantity past 2^53, see
+ * `exactPastTheDouble` in vm/MoneyExact.ts) is rounded from it and keeps its
+ * unit ({@link roundExactQuantityToWhole}). Null for a value with none of
+ * these (a length below 2^53, a `sqrt` result, a double past the safe range),
+ * which keeps its double; a plain double is turned away on its first
+ * two reads, so the common path allocates nothing.
  *
  * @param v - The operand.
  * @param mode - Which rounding.
  * @returns The whole-number result, or null.
  */
-export function roundExactDecimalToWhole(v: Value, mode: "floor" | "ceil" | "trunc" | "round"): Value | null {
+export function roundExactToWhole(v: Value, mode: WholeRounding): Value | null {
+	if (v.rational === undefined && v.exact === undefined) return null;
+	if (v.type === ValueType.Uom) return roundExactQuantityToWhole(v, mode);
+	if (v.type !== ValueType.Number) return null;
+	return wholeNumberUnchanged(v, false) ?? roundExactRationalToWhole(v, mode) ?? roundExactDecimalToWhole(v, mode);
+}
+
+/**
+ * Round a quantity carrying an exact decimal to a whole number of its unit,
+ * from the decimal, or null when it carries none.
+ *
+ * An amount of money keeps the decimal it was typed as (see
+ * `uomValueExact`), but `floor`, `ceil`, `trunc` and `round` read its double,
+ * which past 2^53 holds no fraction: `floor($9007199254740993.5)` answered
+ * $9,007,199,254,740,994.00, a dollar above the amount. The decimal is
+ * rounded by the rules of {@link roundExactDecimalToWhole} and the unit kept,
+ * with the whole number as the new exact decimal.
+ *
+ * A quantity in another unit carries one too once it is past 2^53, where its
+ * double holds no fraction: `ceil((2^60 + 0.5) m)` is ...977.00 m, where the
+ * double answered ...976.00 m.
+ *
+ * The boundary: a quantity with no exact decimal (a length below 2^53, a
+ * converted amount) has nothing exact to round, and is null here, keeping its
+ * double.
+ *
+ * @param v - The operand.
+ * @param mode - Which rounding.
+ * @returns The rounded quantity in the same unit, or null.
+ */
+export function roundExactQuantityToWhole(v: Value, mode: WholeRounding): Value | null {
+	if (v.type !== ValueType.Uom || v.exact === undefined || v.unit === undefined) return null;
+	const { coef, scale } = v.exact;
+	const whole = scale <= 0 ? coef * pow10(-scale) : wholeOfQuotientBig(coef, pow10(scale), mode);
+	const approx = Number(whole);
+	// A whole amount that is zero keeps the sign the value had, as a number's does.
+	const shown = whole === 0n && (coef < 0n || Object.is(v.value, -0)) ? -0 : approx;
+	return uomValueExact(shown, v.unit, { coef: whole, scale: 0 });
+}
+
+/**
+ * Round a plain number carrying an exact fraction to a whole number, or null.
+ *
+ * The fraction is divided in whole numbers, so nothing is lost to the double:
+ * `floor(2^60 + 0.5)` is 1,152,921,504,606,846,976 where the double's floor
+ * printed 1,152,921,504,606,847,000. The rounding rules are those of
+ * {@link roundExactDecimalToWhole}. Null for anything without the sidecar, and
+ * for a whole fraction (n/1), which `wholeNumberUnchanged` hands back as it is.
+ *
+ * @param v - The operand.
+ * @param mode - Which rounding.
+ * @returns The whole-number result, or null.
+ */
+export function roundExactRationalToWhole(v: Value, mode: WholeRounding): Value | null {
+	const r = v.rational;
+	if (v.type !== ValueType.Number || r === undefined || r.d <= 1n) return null;
+	return wholeOfQuotient(r.n, r.d, mode, r.n < 0n || Object.is(v.value, -0));
+}
+
+/**
+ * Round a plain number carrying an exact decimal to a whole number, or null.
+ *
+ * `floor`, `ceil`, `trunc` and `round` read the decimal rather than its double,
+ * which can sit on the far side of a whole number from the value typed:
+ * 2.99999999999999999 is a double of exactly 3, so its floor was 3. `floor`
+ * goes down and `ceil` up, `trunc` towards zero, and `round` takes a half away
+ * from zero, the rule `to N dp` rounds by (#584): `round(2.5)` is 3 and
+ * `round(-2.5)` is -3. Null for anything without the sidecar, which keeps its
+ * path.
+ *
+ * @param v - The operand.
+ * @param mode - Which rounding.
+ * @returns The whole-number result, or null.
+ */
+export function roundExactDecimalToWhole(v: Value, mode: WholeRounding): Value | null {
 	if (v.type !== ValueType.Number || v.exact === undefined) return null;
 	const { coef, scale } = v.exact;
 	// A negative value rounding to zero is IEEE's negative zero, as Math.ceil,
@@ -582,26 +668,44 @@ export function roundExactDecimalToWhole(v: Value, mode: "floor" | "ceil" | "tru
 	// negative zero rounded; see decimalResult for why that sign is kept.
 	const negative = coef < 0n || Object.is(v.value, -0);
 	if (scale === 0) return wholeResult(coef, negative);
-	const divisor = pow10(scale);
-	// BigInt division truncates towards zero; the remainder takes coef's sign.
-	const truncated = coef / divisor;
-	const remainder = coef % divisor;
-	if (remainder === 0n) return wholeResult(truncated, negative);
-	let whole: bigint;
+	return wholeOfQuotient(coef, pow10(scale), mode, negative);
+}
+
+/**
+ * The whole number `numerator / divisor` rounds to, as a Value.
+ *
+ * @param numerator - The signed numerator.
+ * @param divisor - The divisor, strictly positive.
+ * @param mode - Which rounding.
+ * @param negative - Whether the value is below zero (or a negative zero), so a zero result keeps that sign.
+ */
+function wholeOfQuotient(numerator: bigint, divisor: bigint, mode: WholeRounding, negative: boolean): Value {
+	return wholeResult(wholeOfQuotientBig(numerator, divisor, mode), negative);
+}
+
+/**
+ * The whole number `numerator / divisor` rounds to.
+ *
+ * @param numerator - The signed numerator.
+ * @param divisor - The divisor, strictly positive.
+ * @param mode - Which rounding: `floor` down, `ceil` up, `trunc` toward zero, `round` a half away from zero.
+ */
+export function wholeOfQuotientBig(numerator: bigint, divisor: bigint, mode: WholeRounding): bigint {
+	// BigInt division truncates towards zero; the remainder takes the numerator's sign.
+	const truncated = numerator / divisor;
+	const remainder = numerator % divisor;
+	if (remainder === 0n) return truncated;
 	switch (mode) {
-		case "trunc": whole = truncated; break;
-		case "floor": whole = remainder < 0n ? truncated - 1n : truncated; break;
-		case "ceil": whole = remainder > 0n ? truncated + 1n : truncated; break;
+		case "trunc": return truncated;
+		case "floor": return remainder < 0n ? truncated - 1n : truncated;
+		case "ceil": return remainder > 0n ? truncated + 1n : truncated;
 		case "round": {
-			// A half goes away from zero, the rule `to N dp` rounds by (#584):
-			// 2.5 is 3 and -2.5 is -3.
+			// A half goes away from zero: 2.5 is 3 and -2.5 is -3.
 			const doubled = 2n * remainder;
-			if (remainder > 0n) whole = doubled >= divisor ? truncated + 1n : truncated;
-			else whole = -doubled >= divisor ? truncated - 1n : truncated;
-			break;
+			if (remainder > 0n) return doubled >= divisor ? truncated + 1n : truncated;
+			return -doubled >= divisor ? truncated - 1n : truncated;
 		}
 	}
-	return wholeResult(whole, negative);
 }
 
 /** A whole number as a Value, a zero carrying the sign of the value it came from. */
@@ -742,6 +846,197 @@ export function absExactDecimal(v: Value): Value | null {
 	if (v.type !== ValueType.Number || v.exact === undefined) return null;
 	const { coef, scale } = v.exact;
 	return numberValueExact(Math.abs(v.value as number), coef < 0n ? { coef: -coef, scale } : v.exact);
+}
+
+/**
+ * The nearest double to `coef / 10^places`, or `approx` when the decimal does
+ * not fit the one-division route (a coefficient past 2^53, or more places than
+ * a double power of ten holds exactly). A zero keeps the sign `approx` gives
+ * it, as {@link decimalResult} does.
+ */
+function proportionOfDecimal(coef: number, places: number, approx: number): number {
+	if (!isSafeInteger(coef) || places >= POW10_DOUBLE.length) return approx;
+	if (coef === 0) return approx === 0 ? approx : 0;
+	return coef / POW10_DOUBLE[places];
+}
+
+/**
+ * The nearest double to `numerator / denominator`, two whole numbers, or
+ * `approx` when either is past 2^53 (where the double may not be the whole
+ * number meant). One IEEE division of two exact doubles is correctly rounded,
+ * so the answer is the double nearest the exact fraction.
+ */
+function proportionOfRatio(numerator: number, denominator: number, approx: number): number {
+	if (!isSafeInteger(numerator) || !isSafeInteger(denominator) || denominator === 0) return approx;
+	if (numerator === 0) return approx === 0 ? approx : 0;
+	return numerator / denominator;
+}
+
+/**
+ * The fraction a sum or difference of two percentages stands for, formed in
+ * base ten: `10% + 20%` is the double nearest 0.3, the same double `30%` holds,
+ * where the doubles' own 0.1 + 0.2 is 0.30000000000000004 and compared unequal
+ * to it.
+ *
+ * A percentage keeps no decimal sidecar: it is a double, and the double a
+ * typed percentage holds is the one nearest its decimal (see the PERCENT
+ * parselet, whose divide by a hundred is exact). So an answer that is the
+ * nearest double to the exact decimal compares equal to the percentage
+ * written as that decimal, and `==`, `!=` and `check` agree with what is
+ * shown, with no change to how a comparison reads a percentage. The other
+ * operand may be a plain number (`30% + 0.4`), read the same way.
+ *
+ * The boundary: an operand with no short typed decimal (a computed
+ * proportion such as `(1/3) as %`, a percentage past about 1e15), or a result
+ * whose digits do not fit a double's one-division route, keeps the double sum,
+ * exactly as before.
+ *
+ * @param a - The left fraction (0.1 for 10%).
+ * @param b - The right fraction.
+ * @param sign - `1` to add, `-1` to subtract.
+ * @returns The fraction of the answer.
+ */
+export function percentSum(a: number, b: number, sign: 1 | -1): number {
+	const approx = sign === 1 ? a + b : a - b;
+	if (!readPercent(a)) return approx;
+	const ca = percentCoef, pa = percentPlaces;
+	if (!readPercent(b)) return approx;
+	const cb = percentCoef, pb = percentPlaces;
+	const places = pa > pb ? pa : pb;
+	const left = ca * POW10_DOUBLE[places - pa];
+	const right = cb * POW10_DOUBLE[places - pb];
+	if (!isSafeInteger(left) || !isSafeInteger(right)) return approx;
+	return proportionOfDecimal(sign === 1 ? left + right : left - right, places, approx);
+}
+
+/**
+ * The fraction a product of two percentages stands for, a share of a share,
+ * formed in base ten: `10% * 20%` is the double nearest 0.02, the double `2%`
+ * holds, where the doubles give 0.020000000000000004. The boundary is
+ * {@link percentSum}'s.
+ *
+ * @param a - One fraction.
+ * @param b - The other.
+ * @returns The fraction of the product.
+ */
+export function percentProduct(a: number, b: number): number {
+	const approx = a * b;
+	if (!readPercent(a)) return approx;
+	const ca = percentCoef, pa = percentPlaces;
+	if (!readPercent(b)) return approx;
+	return proportionOfDecimal(ca * percentCoef, pa + percentPlaces, approx);
+}
+
+/**
+ * The fraction a percentage divided by a plain number stands for, formed as
+ * the exact fraction of the two decimals: `10% / 2` is the double nearest
+ * 0.05, and `10% / 3` the double nearest 1/30. The divisor must not be zero;
+ * the caller refuses that. The boundary is {@link percentSum}'s.
+ *
+ * @param a - The percentage's fraction.
+ * @param divisor - The plain number it is divided by, not zero.
+ * @returns The fraction of the quotient.
+ */
+export function percentQuotient(a: number, divisor: number): number {
+	const approx = a / divisor;
+	if (!readPercent(a)) return approx;
+	const ca = percentCoef, pa = percentPlaces;
+	if (!readPercent(divisor)) return approx;
+	const cd = percentCoef, pd = percentPlaces;
+	// (ca / 10^pa) / (cd / 10^pd) is (ca * 10^pd) / (cd * 10^pa).
+	return proportionOfRatio(ca * POW10_DOUBLE[pd], cd * POW10_DOUBLE[pa], approx);
+}
+
+/**
+ * The fraction a percentage raised to a whole power stands for, formed in
+ * base ten: `10% ^ 2` is the double nearest 0.01, the double `1%` holds, and
+ * `10% ^ -1` the double nearest 10. A power that is not a whole number, or
+ * one whose digits outgrow a double, keeps `approx`, the double power.
+ *
+ * @param a - The percentage's fraction.
+ * @param exponent - The power.
+ * @param approx - The double power, the answer when no exact one is formed.
+ * @returns The fraction of the power.
+ */
+export function percentPower(a: number, exponent: number, approx: number): number {
+	if (!isSafeInteger(exponent) || exponent > POW10_DOUBLE.length || exponent < -POW10_DOUBLE.length) return approx;
+	if (!readPercent(a)) return approx;
+	const n = exponent < 0 ? -exponent : exponent;
+	let coef = 1;
+	for (let i = 0; i < n; i++) {
+		coef *= percentCoef;
+		if (!isSafeInteger(coef)) return approx;
+	}
+	const places = percentPlaces * n;
+	if (places >= POW10_DOUBLE.length) return approx;
+	// A negative power is the reciprocal: 10^places over the coefficient.
+	return exponent < 0 ? proportionOfRatio(POW10_DOUBLE[places], coef, approx) : proportionOfDecimal(coef, places, approx);
+}
+
+/**
+ * The fraction a total, or mean, of percentages stands for, formed in base
+ * ten: `sum(10%, 20%)` is the double nearest 0.3, which `30%` holds, and
+ * `average of 10%, 20%, 30%` the double nearest 0.2. A value with no short
+ * typed decimal, or a total whose digits outgrow a double, keeps the double
+ * sum (or that sum over the count), as before. The boundary is
+ * {@link percentSum}'s.
+ *
+ * @param fractions - The percentages' fractions, at least one.
+ * @param mean - Divide by the count when true.
+ * @returns The fraction of the total or mean.
+ */
+export function percentTotal(fractions: readonly number[], mean: boolean): number {
+	let approx = 0;
+	for (const f of fractions) approx += f;
+	if (mean) approx /= fractions.length;
+	let coef = 0;
+	let places = 0;
+	for (const f of fractions) {
+		if (!readPercent(f)) return approx;
+		if (percentPlaces > places) {
+			coef *= POW10_DOUBLE[percentPlaces - places];
+			places = percentPlaces;
+		}
+		const term = percentCoef * POW10_DOUBLE[places - percentPlaces];
+		coef += term;
+		if (!isSafeInteger(term) || !isSafeInteger(coef)) return approx;
+	}
+	if (!mean) return proportionOfDecimal(coef, places, approx);
+	return places >= POW10_DOUBLE.length ? approx : proportionOfRatio(coef, POW10_DOUBLE[places] * fractions.length, approx);
+}
+
+/**
+ * The fraction a weighted mean of percentages stands for, formed as the exact
+ * fraction of two decimal sums: `weighted average of 10% at 1, 20% at 3` is
+ * the double nearest 0.175, which `17.5%` holds. Each weight may be a number
+ * or a percentage's fraction. A value or weight with no short typed decimal,
+ * or sums whose digits outgrow a double, keep `approx`. The caller refuses
+ * weights that sum to zero.
+ *
+ * @param interleaved - The values and their weights, `[v1, w1, v2, w2, ...]`.
+ * @param approx - The double weighted mean, the answer when no exact one is formed.
+ * @returns The fraction of the weighted mean.
+ */
+export function percentWeightedMean(interleaved: readonly number[], approx: number): number {
+	let sum = 0, sumPlaces = 0, weights = 0, weightPlaces = 0;
+	for (let i = 0; i + 1 < interleaved.length; i += 2) {
+		if (!readPercent(interleaved[i])) return approx;
+		const cv = percentCoef, pv = percentPlaces;
+		if (!readPercent(interleaved[i + 1])) return approx;
+		const cw = percentCoef, pw = percentPlaces;
+		const term = cv * cw, termPlaces = pv + pw;
+		if (!isSafeInteger(term) || termPlaces >= POW10_DOUBLE.length) return approx;
+		// Each running sum is brought to the larger of its places and the term's.
+		if (termPlaces > sumPlaces) { sum *= POW10_DOUBLE[termPlaces - sumPlaces]; sumPlaces = termPlaces; }
+		const scaledTerm = term * POW10_DOUBLE[sumPlaces - termPlaces];
+		sum += scaledTerm;
+		if (pw > weightPlaces) { weights *= POW10_DOUBLE[pw - weightPlaces]; weightPlaces = pw; }
+		const scaledWeight = cw * POW10_DOUBLE[weightPlaces - pw];
+		weights += scaledWeight;
+		if (!isSafeInteger(scaledTerm) || !isSafeInteger(sum) || !isSafeInteger(scaledWeight) || !isSafeInteger(weights)) return approx;
+	}
+	// (sum / 10^sumPlaces) / (weights / 10^weightPlaces).
+	return proportionOfRatio(sum * POW10_DOUBLE[weightPlaces], weights * POW10_DOUBLE[sumPlaces], approx);
 }
 
 /**

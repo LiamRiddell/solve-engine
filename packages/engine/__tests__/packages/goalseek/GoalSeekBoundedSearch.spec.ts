@@ -20,6 +20,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { formatValue } from "@solve-js/format/FormatEngine";
 
 /**
  * A bound with room to spare. Every document here answers in single-digit
@@ -92,7 +93,13 @@ describe("the answers that were already right are unchanged", () => {
 	});
 
 	test("a quadratic, which still goes through the rational-root search", () => {
-		expect(lastLine([":x = 1", "x * x - 4", "solve line 2 for x = 0"]).display).toBe("2");
+		// Both roots now, as solve(...) gives them, rather than the positive one
+		// picked (#739); a stated range chooses one.
+		const engine = newTrackedEngine();
+		const parsed = evaluateDocument(engine, [":x = 1", "x * x - 4", "solve line 2 for x = 0"].join("\n"));
+		expect(formatValue(parsed.lines[2].result!)).toBe("= [-2, 2]");
+		engine.clear();
+		expect(lastLine([":x = 1", "x * x - 4", "solve line 2 for x = 0 between 0 and 10"]).display).toBe("2");
 	});
 
 	test("a quadratic with an untidy target still finishes", () => {

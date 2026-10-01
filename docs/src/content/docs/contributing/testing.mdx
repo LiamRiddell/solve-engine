@@ -60,6 +60,13 @@ request, because the per-file coverage conversion makes the run several times
 slower than the suite itself. `npm run test:coverage` is the same check
 locally; run it for a change that removes tests.
 
+No pull request shows a scheduled run's result, so the coverage workflow and
+the nightly fuzz soak each end in a report job: when the run does not succeed,
+including when it is cancelled at its time limit, the job reopens (or opens)
+one issue for that workflow and comments with the run's link, and for the fuzz
+soak the start seed and the seed of each finding the log names. A manual run is
+watched by whoever started it, so it does not report.
+
 ## Tests that call a real service
 
 A test that makes a real network call proves the integration works rather than
@@ -198,6 +205,21 @@ A ratio near one means nothing changed. A large ratio on a case whose timed
 function constructs an engine (`new ExpressionEngine(...)` inside the loop) is
 usually the machine rather than the code, because those cases are dominated by
 construction and construction is where the drift lands.
+
+So one pass over the limit is not yet a failure. When the first comparison puts
+a case or a suite over its limit, the job measures again: it re-runs only the
+suites that hold an over-limit case, on the merge base (kept in a worktree of
+its own, with its own install) and on this branch, for three rounds, switching
+which side goes first each round so neither always gets the warmer machine. An
+item fails only if the median of its re-measured ratios is still over the
+limit. The job summary and the pull-request comment show both measurements
+side by side, so a confirmed regression reads **confirmed regression** and a
+cleared one reads "cleared: noise on the first measurement". The limits and the
+reference are the same for both passes; a real regression still fails, a few
+minutes later than before.
+
+A suite file is the smallest unit the harness can run, so the re-measure runs
+whole suites, and judges only the items that were over.
 
 When a result matters, measure it directly rather than trusting one run: build
 both revisions, load the two bundles into one process, and interleave the passes

@@ -13,6 +13,8 @@ import {
 } from "@solve-js/vm/Value";
 import { type DecimalData, decimalFromInteger, decimalToFixed, decimalToNumber, decimalToString } from "@solve-js/decimal";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
+import { valueKindName } from "@solve-js/vm/VMConversion";
+import { fixedDecimalText } from "@solve-js/utilities/Number";
 import { decimalOfNumber, internalRateOfReturn, netPresentValue, paybackPeriod } from "../CashFlowMath";
 
 /** A series read off the arguments: exact amounts and the one currency they share, if any. */
@@ -52,7 +54,10 @@ function readFlows(name: string, args: readonly Value[]): CashFlows | Value {
 
 	if (args.length === 1 && args[0].type === ValueType.Matrix) {
 		const m = args[0].value as MatrixData;
-		if (m.hasSymbolic || (m.rows !== 1 && m.cols !== 1)) {
+		// A list of money carries its currency (#745); a list in any other unit
+		// is not a series of cash flows.
+		const listCurrency = m.unit !== undefined && sharedCurrencyExchange.isCurrency(m.unit) ? m.unit : undefined;
+		if (m.hasSymbolic || (m.rows !== 1 && m.cols !== 1) || (m.unit !== undefined && listCurrency === undefined)) {
 			return errorValue("CASH_FLOW_EXPECTED_AMOUNT", `${name} expects a list of numbers, one flow per period, as in [-1000, 300, 400, 500]`);
 		}
 		const numbers = m.data as number[];
@@ -60,7 +65,7 @@ function readFlows(name: string, args: readonly Value[]): CashFlows | Value {
 			return errorValue("CASH_FLOW_EXPECTED_AMOUNT", `${name}: every cash flow must be a finite amount`);
 		}
 		if (numbers.length < 2) return tooFew(name, numbers.length, usage);
-		return { amounts: numbers.map(decimalOfNumber), currency: undefined };
+		return { amounts: numbers.map(decimalOfNumber), currency: listCurrency };
 	}
 
 	const amounts: DecimalData[] = [];
@@ -107,18 +112,14 @@ function tooFew(name: string, count: number, usage: string): Value {
 
 /** A short name for a value that is not a cash flow, for the refusal. */
 function describe(value: Value): string {
-	switch (value.type) {
-		case ValueType.Percentage: return "a percentage";
-		case ValueType.Uom: return `an amount in ${value.unit}`;
-		case ValueType.String: return "text";
-		case ValueType.Boolean: return "true or false";
-		default: return `a ${ValueType[value.type].toLowerCase()}`;
-	}
+	// The shared names, so an expression in unknowns is "an unknown" rather
+	// than the internal "a symbolic".
+	return valueKindName(value);
 }
 
 /** A rate as a percentage with two decimals, for the messages. */
 function percent(rate: number): string {
-	return `${(rate * 100).toFixed(2)}%`;
+	return `${fixedDecimalText(rate * 100, 2)}%`;
 }
 
 /**

@@ -72,6 +72,8 @@ interface DiagnosticReportState {
   wasCached: boolean
   hasAsync: boolean
   dagSnapshot: DagSnapshot
+  /** The names the document defines and the evaluating engine still holds, for completions. */
+  documentNames: string[]
   checkpoints: CheckpointSnapshot[]
   batcherMetrics: BatcherMetrics
   cacheSnapshot: CacheSnapshot
@@ -130,6 +132,7 @@ export const useDiagnosticReportStore = create<DiagnosticReportState>((set, get)
   wasCached: false,
   hasAsync: false,
   dagSnapshot: EMPTY_DAG_SNAPSHOT,
+  documentNames: [],
   checkpoints: [],
   batcherMetrics: EMPTY_BATCHER_METRICS,
   cacheSnapshot: EMPTY_CACHE_SNAPSHOT,
@@ -224,6 +227,7 @@ export const useDiagnosticReportStore = create<DiagnosticReportState>((set, get)
         wasCached,
         hasAsync,
         dagSnapshot: r.dagSnapshot ?? EMPTY_DAG_SNAPSHOT,
+        documentNames: r.documentNames ?? [],
         checkpoints: r.checkpoints ?? [],
         batcherMetrics: r.batcherMetrics ?? EMPTY_BATCHER_METRICS,
         cacheSnapshot: r.cacheSnapshot ?? EMPTY_CACHE_SNAPSHOT,

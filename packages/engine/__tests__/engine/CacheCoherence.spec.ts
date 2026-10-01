@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
-import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
+import { ThreeTierEvaluator, EvalTier } from "@solve-js/engine/ThreeTierEvaluator";
 
 /**
  * Cache Coherence Tests — Phase 6.2
@@ -216,21 +216,49 @@ describe("Cache Coherence", () => {
 			const evaluator = new ThreeTierEvaluator(doc, engine);
 			evaluator.evaluate({ startLine: 1, endLine: 3 });
 
-			// Replace line 1 (variable definition changed) — triggers applyTransaction
-			// which propagates dirty state to downstream consumers via DAG
+			// Delete line 1 and insert two in its place, a structural change,
+			// which propagates dirty state to downstream consumers via the DAG
+			// before the next pass. (A one-for-one replacement is an edit in
+			// place since #713, and reaches its readers during the pass
+			// instead; see the test below.)
 			evaluator.applyTransaction([
-				{ startLine: 1, deleteCount: 1, insertLines: [":x = 99"] },
+				{ startLine: 1, deleteCount: 1, insertLines: [":x = 99", "// note"] },
 			]);
 
 			// Line 1 is new, so dirty
 			expect(doc.getLineAt(1)!.dirty).toBe(true);
 
-			// Line 2 was a consumer of "x" written by the deleted line 1.
-			// applyTransaction's Phase 4 marks downstream by lineId — line 2 should be dirty.
-			expect(doc.getLineAt(2)!.dirty).toBe(true);
+			// `:x + 5`, now line 3, was a consumer of "x" written by the deleted
+			// line 1. applyTransaction's Phase 4 marks downstream by lineId.
+			expect(doc.getLineAt(3)!.dirty).toBe(true);
 
-			// Line 3 was not a consumer, should remain clean
-			expect(doc.getLineAt(3)!.dirty).toBe(false);
+			// `42` was not a consumer, should remain clean
+			expect(doc.getLineAt(4)!.dirty).toBe(false);
+		});
+
+		test("a one-for-one replacement reaches its consumers during the next pass (#713)", () => {
+			const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+			const doc = new DocumentModel();
+			doc.setDocument(":x = 10\n:x + 5\n42");
+
+			const evaluator = new ThreeTierEvaluator(doc, engine);
+			evaluator.evaluate({ startLine: 1, endLine: 3 });
+			const idBefore = doc.getLineAt(1)!.lineId;
+
+			evaluator.applyTransaction([
+				{ startLine: 1, deleteCount: 1, insertLines: [":x = 99"] },
+			]);
+
+			// Edited in place: the same line, dirty, with the new text.
+			expect(doc.getLineAt(1)!.lineId).toBe(idBefore);
+			expect(doc.getLineAt(1)!.dirty).toBe(true);
+
+			// The consumer answers from the new definition, and the line that
+			// reads nothing is served from cache.
+			const result = evaluator.evaluate({ startLine: 1, endLine: 3 });
+			expect(result.lines[1].result?.toNumber()).toBe(104);
+			expect(result.lines[2].tier).toBe(EvalTier.Tier2);
+			evaluator.terminateWorker();
 		});
 	});
 

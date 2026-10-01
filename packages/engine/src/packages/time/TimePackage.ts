@@ -8,12 +8,16 @@ import { TimeDifferenceParselet } from "./parselets/TimeDifferenceParselet";
 import { HoursOverlapParselet } from "./parselets/HoursOverlapParselet";
 import { VideoTimecodeParselet } from "./parselets/VideoTimecodeParselet";
 import { FrameCountParselet } from "./parselets/FrameCountParselet";
+import { IsoDurationParselet, UnreadableIsoDurationParselet, ISO_DURATION_FAULT_FN, isoDurationFaultHandler } from "./parselets/IsoDurationParselets";
+import { isoDurationNormalizerRule } from "./normalizer/IsoDurationNormalizerRule";
 import {
-  ZONE_CONVERT_FN, ZONE_CONVERT_AT_FN, TIME_IN_ZONE_FN, DATE_IN_ZONE_FN, TIME_DIFFERENCE_FN, CLOCK_TIME_ON_DATE_FN,
-  zoneConvertHandler, zoneConvertAtHandler, timeInZoneHandler, dateInZoneHandler, timeDifferenceHandler, clockTimeOnDateHandler,
+  ZONE_CONVERT_FN, ZONE_CONVERT_AT_FN, ZONE_CONVERT_NAMED_FN, TIME_IN_ZONE_FN, DATE_IN_ZONE_FN, TIME_DIFFERENCE_FN, CLOCK_TIME_ON_DATE_FN,
+  zoneConvertHandler, zoneConvertAtHandler, zoneConvertNamedHandler, timeInZoneHandler, dateInZoneHandler, timeDifferenceHandler, clockTimeOnDateHandler,
 } from "./parselets/TimezonePluginFunctions";
 import { HOURS_OVERLAP_FN, hoursOverlapHandler } from "./parselets/OverlapPluginFunctions";
 import { clockTimeNormalizerRule } from "./normalizer/ClockTimeNormalizerRule";
+import { invalidClockTimeNormalizerRule, INVALID_CLOCK_TIME } from "./normalizer/InvalidClockTimeNormalizerRule";
+import { InvalidClockTimeParselet } from "./parselets/InvalidClockTimeParselet";
 import { paceNotationNormalizerRule } from "./normalizer/PaceNotationNormalizerRule";
 import { clockTimeIntervalNormalizerRule } from "./normalizer/ClockTimeIntervalNormalizerRule";
 import { clockTimeSumNormalizerRule } from "./normalizer/ClockTimeSumNormalizerRule";
@@ -22,6 +26,8 @@ import { fpsRateNormalizerRule } from "./normalizer/FpsRateNormalizerRule";
 import { laptimeNormalizerRule } from "./normalizer/LaptimeNormalizerRule";
 import { videoTimecodeNormalizerRule } from "./normalizer/VideoTimecodeNormalizerRule";
 import { frameCountNormalizerRule } from "./normalizer/FrameCountNormalizerRule";
+import { zoneAfterNameNormalizerRule } from "./normalizer/ZoneAfterNameNormalizerRule";
+import { ZoneSourceParselet } from "./parselets/ZoneSourceParselet";
 import { MULTI_WORD_CITY_ZONES } from "./timezones/CityZones";
 
 import { toTimespanString, toLaptimeString } from "./TimespanConverters";
@@ -50,7 +56,8 @@ import { toTimespanString, toLaptimeString } from "./TimespanConverters";
  * laptime`) is a `converters` package (Phase 1c) concern. This package
  * only produces the underlying `Uom` values.
  *
- * Also: timezone conversion (`6pm Sydney in Chicago`), into several zones
+ * Also: timezone conversion (`6pm Sydney in Chicago`, or a time held in a
+ * variable, `t Sydney in Chicago`), into several zones
  * at once and on a named day (`3pm London on 23 September 2026 in Tokyo, New
  * York and Sydney`), the shared stretch of the same hours across zones
  * (`overlap of 9am to 5pm in London and New York`), current
@@ -97,6 +104,11 @@ export const TIME_PACKAGE: IEnginePackage = {
     OVERLAP_OF: new HoursOverlapParselet(),
     VIDEO_TIMECODE: new VideoTimecodeParselet(),
     FRAME_COUNT: new FrameCountParselet(),
+    // `PT1H30M`, an ISO 8601 duration (#760). See normalizer/IsoDurationNormalizerRule.ts.
+    ISO_DURATION: new IsoDurationParselet(),
+    ISO_DURATION_UNREADABLE: new UnreadableIsoDurationParselet(),
+    // `(24:00)`: a colon pair no time rule read, refused as `24:00` is. See normalizer/InvalidClockTimeNormalizerRule.ts.
+    [INVALID_CLOCK_TIME]: new InvalidClockTimeParselet(),
   },
   normalizerRules: [
     clockTimeNormalizerRule(),
@@ -104,23 +116,39 @@ export const TIME_PACKAGE: IEnginePackage = {
     clockTimeIntervalNormalizerRule(),
     clockTimeSumNormalizerRule(),
     compactDurationNormalizerRule(),
+    isoDurationNormalizerRule(),
     fpsRateNormalizerRule(),
     laptimeNormalizerRule(),
     videoTimecodeNormalizerRule(),
     frameCountNormalizerRule(),
+    zoneAfterNameNormalizerRule(),
+    invalidClockTimeNormalizerRule(),
   ],
+  infixParselets: {
+    // `t London in Tokyo`: a time held in a variable, from the zone after it.
+    ZONE_SOURCE: new ZoneSourceParselet(),
+  },
   pluginFunctions: {
     [ZONE_CONVERT_FN]: zoneConvertHandler,
     [ZONE_CONVERT_AT_FN]: zoneConvertAtHandler,
+    [ZONE_CONVERT_NAMED_FN]: zoneConvertNamedHandler,
     [TIME_IN_ZONE_FN]: timeInZoneHandler,
     [DATE_IN_ZONE_FN]: dateInZoneHandler,
     [TIME_DIFFERENCE_FN]: timeDifferenceHandler,
     [CLOCK_TIME_ON_DATE_FN]: clockTimeOnDateHandler,
     [HOURS_OVERLAP_FN]: hoursOverlapHandler,
+    [ISO_DURATION_FAULT_FN]: isoDurationFaultHandler,
   },
   tokenCategories: {
     // The phrase is the keyword, as `time in` is; a bare `overlap` stays a
     // variable. The other timezone phrases are declared in the core map.
     OVERLAP_OF: "keyword",
+    // The source zone after a time held in a variable, as `3pm London` shows it.
+    ZONE_SOURCE: "keyword",
+    // An ISO 8601 duration is a length of time, read or refused as one token.
+    ISO_DURATION: "datetime",
+    ISO_DURATION_UNREADABLE: "datetime",
+    // A colon pair that is no clock time is refused as one token, the way a time is shown.
+    [INVALID_CLOCK_TIME]: "datetime",
   },
 };

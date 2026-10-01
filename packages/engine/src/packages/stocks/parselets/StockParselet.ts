@@ -1,4 +1,5 @@
 import { PrefixParselet } from "@solve-js/parser/Parselet";
+import { quoteToken } from "@solve-js/parser/ParseMessages";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
@@ -8,6 +9,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { stripQuotes } from "@solve-js/utilities/Strings";
 import { tryParseDatePhrase, type ParsedDatePhrase } from "../DatePhrase";
 import { STOCK_TICKER_TYPE } from "../normalizer/StockTickerNormalizerRule";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 interface DateSuffix {
 	field: "close" | "volume";
@@ -78,10 +80,10 @@ function emitStockQuery(
 	builder.emitOpcode(OpCode.PUSH_STRING);
 	if (!suffix) {
 		builder.emitString(ticker);
-		builder.emitPluginCall(currentFn, 1);
+		emitBuiltinPluginCall(builder, currentFn, 1);
 	} else {
 		builder.emitString(`${suffix.field}:${ticker}:${suffix.date.isoDate}`);
-		builder.emitPluginCall(historicalFn, 1);
+		emitBuiltinPluginCall(builder, historicalFn, 1);
 	}
 }
 
@@ -163,7 +165,7 @@ export function stockFnParselet(currentFn: string, historicalFn: string): Prefix
 			} else {
 				throw ErrorFactory.parsing(
 					"STOCKS_INVALID_TICKER",
-					`Expected a ticker symbol inside stock(...), got "${tickerToken.value}" (${tickerToken.type})`,
+					`Expected a ticker symbol inside stock(...), but found ${quoteToken(tickerToken)}`,
 				);
 			}
 			parser.consume("RPAREN");

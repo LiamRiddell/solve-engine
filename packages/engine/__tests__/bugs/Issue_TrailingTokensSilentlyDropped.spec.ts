@@ -41,7 +41,7 @@ describe("Bug: trailing tokens after a complete expression were silently dropped
   ])("%s throws UNEXPECTED_TRAILING_TOKEN instead of silently evaluating a partial result", (expression, leftoverToken) => {
     const engine = newTrackedEngine();
     expect(() => engine.evaluateLine(1, expression)).toThrow(
-      `Unexpected token after expression: "${leftoverToken}"`
+      `Expected an operator or the end of the line, but found "${leftoverToken}"`
     );
   });
 
@@ -60,7 +60,7 @@ describe("Bug: trailing tokens after a complete expression were silently dropped
   test("multi-target comma syntax ('X in Y, Z') is not special-cased — it's a trailing-token error like any other", () => {
     const engine = newTrackedEngine();
     expect(() => engine.evaluateLine(1, "10 USD in EUR, GBP")).toThrow(
-      'Unexpected token after expression: ","'
+      'Expected an operator or the end of the line, but found ","'
     );
   });
 });

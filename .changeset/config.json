@@ -7,5 +7,6 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["solve-playground-bridge"]
+  "ignore": ["solve-playground-bridge"],
+  "privatePackages": { "version": true, "tag": false }
 }

@@ -1,4 +1,4 @@
-import { type MatrixData, type MatrixEntry, type RangeData, Value, ValueType, matrixValue, numberValue, boolValue, symbolicValue, errorValue, faultedOperand } from "@solve-js/vm/Value";
+import { type MatrixData, type MatrixEntry, type RangeData, Value, ValueType, matrixValue, numberValue, boolValue, symbolicValue, errorValue, faultedOperand, uomValue } from "@solve-js/vm/Value";
 import { type SymbolicNode, constNode, simplifySymbolic, isRationalZero, rationalToNumber } from "@solve-js/symbolic";
 import { checkedArray } from "@solve-js/vm/AllocationBudget";
 
@@ -100,6 +100,25 @@ export function columnMajorToRowMajor(m: MatrixData): MatrixEntry[] {
 }
 
 /**
+ * The refusal for a matrix algebra form given a list with a unit, or null for
+ * a list without one (issue #745). A determinant of lengths is an area or a
+ * volume, and a product of two matrices of metres mixes units cell by cell,
+ * neither of which one list unit can say, so each is refused by name rather
+ * than answered in plain numbers.
+ *
+ * @param m - The matrix.
+ * @param form - The form, for the message ("a determinant").
+ * @returns The `MATRIX_UNIT_ALGEBRA` error Value, or null.
+ */
+export function unitListAlgebraRefused(m: MatrixData, form: string): Value | null {
+	if (m.unit === undefined) return null;
+	return errorValue(
+		"MATRIX_UNIT_ALGEBRA",
+		`${form[0].toUpperCase()}${form.slice(1)} of a list in ${m.unit} is not covered: matrix algebra works on plain numbers, so write the list without its unit to work on the amounts.`,
+	);
+}
+
+/**
  * `*` between two matrices, genuinely different from `+`/`-`/comparisons
  * which stay element-wise. Distinguishes three cases per the Calca spec:
  * a `1×1` operand ("scalar") broadcasts (multiplies every cell of the
@@ -128,6 +147,8 @@ export function columnMajorToRowMajor(m: MatrixData): MatrixEntry[] {
  * `*` spelling of the identical product was refused in 18 milliseconds.
  */
 export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
+	const unitRefused = unitListAlgebraRefused(l, "a matrix product") ?? unitListAlgebraRefused(r, "a matrix product");
+	if (unitRefused) return unitRefused;
 	const lIsScalar = l.rows === 1 && l.cols === 1;
 	const rIsScalar = r.rows === 1 && r.cols === 1;
 	const useSymbolic = l.hasSymbolic || r.hasSymbolic;
@@ -147,7 +168,7 @@ export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
 	if (l.cols !== r.rows) {
 		return errorValue(
 			"DIMENSION_MISMATCH",
-			`Cannot multiply a ${l.rows}x${l.cols} matrix by a ${r.rows}x${r.cols} matrix — inner dimensions must match (${l.cols} !== ${r.rows}).`,
+			`Cannot multiply a ${l.rows}x${l.cols} matrix by a ${r.rows}x${r.cols} matrix: the first has ${l.cols} column${l.cols === 1 ? "" : "s"} and the second ${r.rows} row${r.rows === 1 ? "" : "s"}, and the two must match.`,
 		);
 	}
 
@@ -176,6 +197,63 @@ export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
 }
 
 /**
+ * The number of components a matrix has when it is a vector (one row or one
+ * column), or null when it is neither.
+ *
+ * @param m - The matrix.
+ */
+export function vectorLength(m: MatrixData): number | null {
+	return m.rows === 1 || m.cols === 1 ? m.rows * m.cols : null;
+}
+
+/**
+ * The dot product of two vectors: the sum of the products of their matching
+ * components, a single number. `dot([1,2,3], [4,5,6])` is 1*4 + 2*5 + 3*6, 32.
+ *
+ * A row and a column read alike, since a vector's components are the same
+ * whichever way it is written. Two vectors of different lengths have no dot
+ * product, and a matrix that is not a vector is not one of its operands (the
+ * matrix product is `*`); each is refused with `DIMENSION_MISMATCH`, naming
+ * the shapes. A symbolic component keeps the sum symbolic.
+ *
+ * @param l - The first vector.
+ * @param r - The second vector.
+ * @returns The dot product, or the refusal as an error Value.
+ */
+export function dotProduct(l: MatrixData, r: MatrixData): Value {
+	const unitRefused = unitListAlgebraRefused(l, "a dot product") ?? unitListAlgebraRefused(r, "a dot product");
+	if (unitRefused) return unitRefused;
+	const lLength = vectorLength(l);
+	const rLength = vectorLength(r);
+	if (lLength === null || rLength === null) {
+		const offender = lLength === null ? l : r;
+		return errorValue(
+			"DIMENSION_MISMATCH",
+			`dot takes two vectors, and a ${offender.rows}x${offender.cols} matrix is not one. For a matrix product, write "*".`,
+		);
+	}
+	if (lLength !== rLength) {
+		return errorValue(
+			"DIMENSION_MISMATCH",
+			`dot needs two vectors of the same length, but one has ${lLength} ${lLength === 1 ? "component" : "components"} and the other ${rLength}.`,
+		);
+	}
+	// Column-major storage of a single row or a single column is its
+	// components in order, so both read the same way.
+	if (l.hasSymbolic || r.hasSymbolic) {
+		let acc: SymbolicNode = constNode(0);
+		for (let k = 0; k < lLength; k++) {
+			const term: SymbolicNode = { kind: "mul", left: entryToSymbolic(l.data[k]), right: entryToSymbolic(r.data[k]) };
+			acc = simplifySymbolic({ kind: "add", left: acc, right: term });
+		}
+		return matrixEntryToValue(symbolicToEntry(acc));
+	}
+	let sum = 0;
+	for (let k = 0; k < lLength; k++) sum += Number(l.data[k]) * Number(r.data[k]);
+	return numberValue(sum);
+}
+
+/**
  * `a^k` for a square matrix and a whole, non-negative `k`, by repeated
  * multiplication.
  *
@@ -200,6 +278,8 @@ export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
  * @returns The resulting Matrix, or an error Value describing the refusal.
  */
 export function matrixPower(m: MatrixData, exponent: number): Value {
+	const unitRefused = unitListAlgebraRefused(m, "a matrix power");
+	if (unitRefused) return unitRefused;
 	if (!isSquare(m)) {
 		return errorValue("MATRIX_POWER_REQUIRES_SQUARE_MATRIX", `^: only a square matrix can be raised to a power (got ${m.rows}x${m.cols}).`);
 	}
@@ -264,7 +344,8 @@ export function transpose(m: MatrixData): Value {
 			data[r + c * m.cols] = matAt(m, c, r);
 		}
 	}
-	return matrixValue(m.cols, m.rows, data);
+	// Only rearranges, so a list's unit comes with it.
+	return matrixValue(m.cols, m.rows, data, m.unit);
 }
 
 /**
@@ -455,6 +536,8 @@ function symbolicDeterminant(m: MatrixData): Value {
 
 /** `|a|` / `det(a)`, dispatches to the symbolic or plain-numeric implementation based on `m.hasSymbolic`. */
 export function determinant(m: MatrixData): Value {
+	const unitRefused = unitListAlgebraRefused(m, "a determinant");
+	if (unitRefused) return unitRefused;
 	if (!isSquare(m)) {
 		return errorValue("DETERMINANT_REQUIRES_SQUARE_MATRIX", `det: matrix must be square (got ${m.rows}x${m.cols}).`);
 	}
@@ -549,7 +632,7 @@ function symbolicInverse(m: MatrixData): Value {
 		if (pivot.kind === "const" && isRationalZero(pivot.value)) {
 			return errorValue(
 				"SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT",
-				`Symbolic inverse: the pivot at row/col ${col} is exactly zero — this matrix's structure isn't invertible via this engine's diagonal-first symbolic elimination (no row-swapping); try reordering rows manually.`,
+				`Symbolic inverse: the pivot at row/col ${col} is exactly zero, and this engine's symbolic elimination works down the diagonal without swapping rows, so it cannot invert this matrix as written; try reordering its rows.`,
 			);
 		}
 		// Eliminate first, divide the pivot row through afterwards, which is
@@ -583,6 +666,8 @@ function symbolicInverse(m: MatrixData): Value {
 
 /** `a^-1` / `inv(a)`, dispatches to the symbolic or plain-numeric implementation based on `m.hasSymbolic`. */
 export function inverse(m: MatrixData): Value {
+	const unitRefused = unitListAlgebraRefused(m, "an inverse");
+	if (unitRefused) return unitRefused;
 	if (!isSquare(m)) {
 		return errorValue("INVERSE_REQUIRES_SQUARE_MATRIX", `inv: matrix must be square (got ${m.rows}x${m.cols}).`);
 	}
@@ -610,8 +695,11 @@ function tooLarge(length: number, maxElements: number): Value {
  * unbounded so that a caller with no configured engine (a direct unit test
  * of this helper) behaves as before, every VM call site passes
  * `vm.getMaxCollectionSize()`.
+ *
+ * `call` is the word the reader typed, so a value that is not a collection is
+ * refused in their terms (see {@link notACollection}).
  */
-export function collectionToValues(v: Value, maxElements = Number.POSITIVE_INFINITY): Value[] | Value {
+export function collectionToValues(v: Value, maxElements = Number.POSITIVE_INFINITY, call: CollectionCall = "map"): Value[] | Value {
 	// Pending as well as Error: neither is a collection, and a collection that
 	// has not arrived is not an empty one. See `faultedOperand()` in vm/Value.ts.
 	const faulted = faultedOperand(v);
@@ -619,6 +707,9 @@ export function collectionToValues(v: Value, maxElements = Number.POSITIVE_INFIN
 	if (v.type === ValueType.Matrix) {
 		const m = v.value as MatrixData;
 		if (m.data.length > maxElements) return tooLarge(m.data.length, maxElements);
+		// A list with a unit hands each cell out as the quantity it stands for (#745).
+		const unit = m.unit;
+		if (unit !== undefined) return m.data.map((cell) => (typeof cell === "number" ? uomValue(cell, unit) : matrixEntryToValue(cell)));
 		return m.data.map(matrixEntryToValue);
 	}
 	if (v.type === ValueType.Range) {
@@ -632,8 +723,91 @@ export function collectionToValues(v: Value, maxElements = Number.POSITIVE_INFIN
 		for (let i = 0; i < length; i++) out[i] = numberValue(r.min + i);
 		return out;
 	}
+	return notACollection(call, v);
+}
+
+/** The words that walk a collection: the call the reader typed, which a refusal names. */
+export type CollectionCall = "map" | "reduce" | "sum" | "prod";
+
+/**
+ * The form a `REDUCE_INVOKE` was written as, in its third operand. The operand
+ * was a flag, 0 or 1, for whether a starting value was given; `sum` and `prod`
+ * always give one (0 and 1), so each has a value of its own above the flag,
+ * and any value but 0 still means a starting value is on the stack.
+ */
+export const ReduceForm = {
+	/** `reduce(acc + x, [1, 2, 3])`, no starting value. */
+	reduce: 0,
+	/** `reduce(acc + x, [1, 2, 3], 10)`, starting from 10. */
+	reduceFrom: 1,
+	/** `sum(1:3)` and `sum(x^2, 1:3)`, starting from 0. */
+	sum: 2,
+	/** `prod(1:3)` and `prod(x, [2, 3])`, starting from 1. */
+	prod: 3,
+} as const;
+
+/**
+ * The word a `REDUCE_INVOKE` form was written with: `sum` or `prod` for their
+ * own forms, `reduce` for everything else, a value no parselet emits included.
+ *
+ * @param form - The instruction's third operand.
+ */
+export function reduceFormCall(form: number): CollectionCall {
+	if (form === ReduceForm.sum) return "sum";
+	if (form === ReduceForm.prod) return "prod";
+	return "reduce";
+}
+
+/** What each call does with a collection, as the refusal says it. */
+const COLLECTION_VERBS: Readonly<Record<CollectionCall, string>> = {
+	map: "works through the items of",
+	reduce: "folds into one the items of",
+	sum: "adds up the items of",
+	prod: "multiplies together the items of",
+};
+
+/**
+ * A value that is not a collection, named as a reader would name it.
+ *
+ * @param v - The value given where a list or a range belongs.
+ */
+export function describeNonCollection(v: Value): string {
+	switch (v.type) {
+		case ValueType.Number:
+		case ValueType.Hex:
+		case ValueType.BigInt:
+			return "a single number";
+		case ValueType.Uom:
+			return "a single quantity";
+		case ValueType.Percentage:
+			return "a single percentage";
+		case ValueType.String:
+			return "text";
+		case ValueType.Boolean:
+			return "true or false";
+		case ValueType.Datetime:
+			return "a date or time";
+		default:
+			return "a single value";
+	}
+}
+
+/**
+ * The refusal for a `map`, `reduce`, `sum` or `prod` over something that is
+ * not a list or a range. It opened "map/reduce requires a Matrix or Range
+ * collection", which named neither the word the reader typed nor anything they
+ * would call a list; it now says what the call does, the two things it takes,
+ * and what it was given, and a `sum` of one value points at the form that adds
+ * values one by one.
+ *
+ * @param call - The word the reader typed.
+ * @param v - What was given.
+ */
+export function notACollection(call: CollectionCall, v: Value): Value {
+	const verb = Object.prototype.hasOwnProperty.call(COLLECTION_VERBS, call) ? COLLECTION_VERBS[call] : COLLECTION_VERBS.map;
+	const hint = call === "sum" ? `; to add values one by one, list them, as in sum(5, 6)` : "";
 	return errorValue(
 		"MAP_REDUCE_REQUIRES_COLLECTION",
-		`map/reduce requires a Matrix or Range collection (e.g. "[1,2,3]" or "0:3").`,
+		`${call} ${verb} a list or a range, such as [1, 2, 3] or 1:3, and this is ${describeNonCollection(v)}${hint}.`,
 	);
 }

@@ -90,10 +90,11 @@ describe("as sci", () => {
 		// The conversion splits the exponential form on "e", and an infinity
 		// or a NaN has no "e" in it, so the exponent half was undefined and
 		// the answer read "NaNeundefined": a string that is not a number, not
-		// an error, and not anything a reader can act on.
-		expect(text("0 / 0 as sci")).toBe("NaN");
-		expect(text("1 / 0 as sci")).toBe("Infinity");
-		expect(text("-1 / 0 as sci")).toBe("-Infinity");
+		// an error, and not anything a reader can act on. An infinity is
+		// written as the engine writes it, never as JavaScript's `Infinity`.
+		expect(text("1 / 0 - 1 / 0 as sci")).toBe("NaN");
+		expect(text("1 / 0 as sci")).toBe("∞");
+		expect(text("-1 / 0 as sci")).toBe("-∞");
 	});
 });
 
@@ -215,7 +216,7 @@ describe("rounding to decimal places", () => {
 
 	test("a non-finite value has no decimals either", () => {
 		expect(num("1 / 0 to 2 dp")).toBe(Infinity);
-		expect(num("0 / 0 to 2 dp")).toBeNaN();
+		expect(num("(1 / 0 - 1 / 0) to 2 dp")).toBeNaN();
 	});
 });
 

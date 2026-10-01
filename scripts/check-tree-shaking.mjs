@@ -17,7 +17,8 @@
  *
  * A bare import exists only for its side effects, so `"sideEffects": false`
  * tells the bundler to delete every one of them. esbuild says so out loud when
- * `npm run size` runs, once per import:
+ * a host bundles the package with it, once per import (`npm run size` bundles
+ * with rolldown, which drops them without a word):
  *
  *     Ignoring this import because "..." was marked as having no side effects
  *     [ignored-bare-import]

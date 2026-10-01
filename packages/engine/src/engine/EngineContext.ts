@@ -12,13 +12,14 @@
  * by that engine. Anything that needs one of these registries receives the
  * context rather than importing a singleton.
  *
- * Runtime imports here are restricted to leaf modules of `vm/` and
- * `calendar/`. This file is imported by `vm/`, which `engine/` imports in
+ * Runtime imports here are restricted to leaf modules of `vm/`, `calendar/`
+ * and `language/`. This file is imported by `vm/`, which `engine/` imports in
  * turn, so pulling in anything that reaches back into `engine/` would close a
  * cycle. `OpRegistry` is safe because it imports only types plus the error
- * factory, and the `Date` calendar backend imports nothing of the engine's at
- * all. Everything else arrives through `import type`, which is erased before
- * the code runs.
+ * factory, `AsConverterRegistry` only the value constructors,
+ * `TokenCategoryMap` only a type, and the `Date` calendar backend imports
+ * nothing of the engine's at all. Everything else arrives through
+ * `import type`, which is erased before the code runs.
  */
 
 import type { Value } from "@solve-js/vm/Value";
@@ -29,6 +30,9 @@ import { FrozenValueStore } from "@solve-js/vm/FrozenValues";
 import { mintScope, type ScopeId } from "@solve-js/vm/CellScope";
 import { resolveCalendar, type CalendarOption } from "@solve-js/calendar/resolveCalendar";
 import { PluginCallCache } from "@solve-js/vm/PluginCallCache";
+import { AsConverterRegistry } from "@solve-js/vm/AsConverterRegistry";
+import { TokenCategoryTable } from "@solve-js/language/TokenCategoryMap";
+import type { QueryClient } from "@tanstack/query-core";
 
 /**
  * A function a package contributes to the VM, reachable from bytecode through
@@ -155,6 +159,35 @@ export interface EngineContext {
 	 * path that runs one. See `vm/FrozenValues.ts`.
 	 */
 	readonly frozenValues: FrozenValueStore;
+
+	/**
+	 * The `as <name>` converters this engine's packages registered
+	 * (`IEnginePackage.asConverters`), read by the VM when a line converts with
+	 * `as` and by the normaliser rule that reads `in <converter>`.
+	 *
+	 * Per engine (#710): it used to be one registry for the whole process, so a
+	 * converter one engine registered answered on every other engine, and
+	 * unregistering a package from one engine took the converter away from all
+	 * of them.
+	 */
+	readonly asConverters: AsConverterRegistry;
+
+	/**
+	 * The highlight categories this engine's packages registered for their own
+	 * token types (`IEnginePackage.tokenCategories`), over the built-in table.
+	 * Read through `ExpressionEngine.getTokenCategory` and the language
+	 * service. Per engine for the reason {@link asConverters} is (#710).
+	 */
+	readonly tokenCategories: TokenCategoryTable;
+
+	/**
+	 * The engine's query cache, where its asynchronous resolvers keep what they
+	 * fetched, or null for a context no engine owns. A plugin function reads it
+	 * from the line's execution context (`LineExecutionContext.queryClient`),
+	 * which the engine fills from here, so two engines in one process each read
+	 * their own cache whatever the other is doing (#710).
+	 */
+	readonly queryClient: QueryClient | null;
 }
 
 /** What {@link createEngineContext} takes: the settings a context carries on the engine's behalf. */
@@ -163,6 +196,8 @@ export interface EngineContextOptions {
 	networkEnabled?: boolean;
 	/** How to pick the calendar backend: `"auto"` (the default: Temporal where the runtime has it), `"temporal"`, `"date"`, or a backend. See {@link CalendarOption}. */
 	calendar?: CalendarOption;
+	/** The owning engine's query cache; see {@link EngineContext.queryClient}. Defaults to null. */
+	queryClient?: QueryClient | null;
 }
 
 /**
@@ -181,6 +216,9 @@ export function createEngineContext(options: EngineContextOptions = {}): EngineC
 		calendar: resolveCalendar(options.calendar),
 		scope: mintScope(),
 		frozenValues: new FrozenValueStore(),
+		asConverters: new AsConverterRegistry(),
+		tokenCategories: new TokenCategoryTable(),
+		queryClient: options.queryClient ?? null,
 	};
 }
 

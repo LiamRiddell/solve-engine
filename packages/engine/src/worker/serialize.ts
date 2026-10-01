@@ -8,18 +8,22 @@
  * byte-for-byte the same DTO.
  */
 
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type ChartData, type IpCidrData } from "@solve-js/vm/Value";
+import { Value, ValueType, isTimecodeUnit, timecodeFps, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type ChartData, type IpCidrData } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { toHexString, formatColour } from "@solve-js/packages/colour/ColourMath";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import { formatSymbolic } from "@solve-js/symbolic";
 import type { ParsedLine, InlineSolvePosition, ParsingResult } from "@solve-js/types/ParsingResult";
+import type { Explanation, LineTrace } from "@solve-js/explain/Explanation";
+import type { SourceSpan } from "@solve-js/errors/EngineError";
 import type {
 	SerializedWorkerValue,
 	SerializedMatrix,
 	SerializedParsedLine,
 	SerializedInlineSolve,
 	SerializedParsingResult,
+	SerializedExplanation,
+	SerializedLineTrace,
 } from "./dto";
 
 /**
@@ -45,7 +49,9 @@ function serializeMatrix(m: MatrixData): SerializedMatrix {
 		if (typeof cell === "number" && !Number.isFinite(cell)) return nonFiniteTag(cell);
 		return cell;
 	});
-	return { rows: m.rows, cols: m.cols, cells, hasSymbolic: m.hasSymbolic };
+	return m.unit === undefined
+		? { rows: m.rows, cols: m.cols, cells, hasSymbolic: m.hasSymbolic }
+		: { rows: m.rows, cols: m.cols, cells, hasSymbolic: m.hasSymbolic, unit: m.unit };
 }
 
 /**
@@ -64,13 +70,33 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 		// A non-finite reading (1/0, 0/0, an overflow) cannot cross JSON, which
 		// turns it into null and breaks the round-trip the DTO guarantees. Keep
 		// `number` finite and name the real value in `nonFinite` instead.
-		number: Number.isFinite(reading) ? reading : 0,
+		// Negative zero is written as zero: JSON has no negative zero, so a DTO
+		// holding one read `-0` after `structuredClone` and `0` after `JSON`,
+		// which broke the one-shape guarantee this module exists for. The text
+		// already reads `= 0` (#725).
+		number: Number.isFinite(reading) ? (reading === 0 ? 0 : reading) : 0,
 	};
-	if (!Number.isFinite(reading)) {
+	// An IPv6 address has no numeric reading (its 128 bits are past a double),
+	// which is not the NaN of a quotient with no answer, so it carries no tag;
+	// its address crosses in `ipCidr` below.
+	if (!Number.isFinite(reading) && value.type !== ValueType.IpCidr) {
 		dto.nonFinite = nonFiniteTag(reading);
 	}
 
-	if (value.unit !== undefined) dto.unit = value.unit;
+	// An error keeps its message where other values keep a unit, and the DTO's
+	// `unit` is units only, so an error's message stays out of it: it crosses
+	// as `text` (#836).
+	if (value.unit !== undefined && value.type !== ValueType.Error) {
+		// A timecode's unit is the internal `timecode@<fps>`: it crosses as its
+		// count of frames and its rate instead (#759).
+		if (isTimecodeUnit(value.unit)) {
+			dto.unit = "frames";
+			dto.timecodeFps = timecodeFps(value.unit);
+		} else {
+			dto.unit = value.unit;
+		}
+	}
+	if (value.unitLabel !== undefined) dto.unitLabel = { name: value.unitLabel.name, per: value.unitLabel.per };
 	// An error keeps its code in `value`, which no other field carries, so a
 	// host on the far side of the boundary could branch only on the message.
 	if (value.type === ValueType.Error) dto.errorCode = value.value as string;
@@ -80,6 +106,13 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 	// dropped them would answer a different question from the synchronous one.
 	if (value.grain !== undefined) dto.grain = value.grain;
 	if (value.zone !== undefined) dto.zone = value.zone;
+	// A time in a zone and a zone difference cross with what they need to be
+	// shown again (#757), as fresh plain copies.
+	if (value.timeAnchor !== undefined) dto.timeAnchor = value.timeAnchor;
+	if (value.timePrecision !== undefined) dto.timePrecision = value.timePrecision;
+	if (value.zoneDifference !== undefined) dto.zoneDifference = { from: value.zoneDifference.from, to: value.zoneDifference.to };
+	// A weekday or month name crosses with which one it is, as a fresh plain copy.
+	if (value.calendarName !== undefined) dto.calendarName = { kind: value.calendarName.kind, index: value.calendarName.index };
 	// Provenance and the frozen mark cross as plain copies, for the same reason:
 	// a worker result that dropped them could not tell a host where a converted
 	// amount's rate came from, or that the answer is frozen.
@@ -114,12 +147,35 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 		const ip = raw as IpCidrData;
 		dto.ipCidr = {
 			...(ip.addr !== undefined ? { addr: ip.addr } : {}),
+			// A bigint crosses as its decimal string, as it does in a snapshot:
+			// JSON cannot encode one.
+			...(ip.addr6 !== undefined ? { addr6: ip.addr6.toString() } : {}),
+			...(ip.zone !== undefined ? { zone: ip.zone } : {}),
 			...(ip.prefix !== undefined ? { prefix: ip.prefix } : {}),
 			text: formatValue(value).replace(/^=\s*/, ""),
 		};
 	}
 
 	return dto;
+}
+
+/**
+ * A failure's position as a fresh plain object, or null.
+ *
+ * Copied field by field rather than passed through, so the DTO holds only the
+ * four numbers a span is (never an object the engine might hold elsewhere),
+ * and an absent `line` or `col` stays absent rather than crossing as
+ * `undefined`, which a deep-equal between the two paths would trip on.
+ *
+ * @param span - The span a document line or inline solve carries, if any.
+ * @returns The span as plain JSON, or null when there is none.
+ */
+export function serializeSpan(span: SourceSpan | null | undefined): SourceSpan | null {
+	if (span === null || span === undefined || typeof span !== "object") return null;
+	const out: SourceSpan = { start: span.start, end: span.end };
+	if (span.line !== undefined) out.line = span.line;
+	if (span.col !== undefined) out.col = span.col;
+	return out;
 }
 
 /** Serialise a nullable value, the shape both `result` fields carry. */
@@ -137,6 +193,8 @@ function serializeInlineSolve(solve: InlineSolvePosition, settings?: FormattingS
 		columnNumber: solve.columnNumber,
 		result: serializeMaybe(solve.result, settings),
 		error: solve.error ?? null,
+		errorCode: solve.errorCode ?? null,
+		errorSpan: serializeSpan(solve.errorSpan),
 	};
 }
 
@@ -153,6 +211,11 @@ export function serializeParsedLine(line: ParsedLine, settings?: FormattingSetti
 		expression: line.expression,
 		result: serializeMaybe(line.result, settings),
 		error: line.error,
+		// The code and position of a line that threw, as the line carries them
+		// on the main thread (#709), so a host behind the worker branches on
+		// the same code (#725).
+		errorCode: line.errorCode ?? null,
+		errorSpan: serializeSpan(line.errorSpan),
 	};
 }
 
@@ -168,4 +231,46 @@ export function serializeParsingResult(result: ParsingResult, settings?: Formatt
 	if (result.diagnostics !== undefined) dto.diagnostics = result.diagnostics;
 	if (result.checks !== undefined) dto.checks = { ...result.checks };
 	return dto;
+}
+
+/**
+ * Project a derivation (`ExpressionEngine.explainLine`) onto its DTO, each
+ * step's value and the result serialised.
+ */
+export function serializeExplanation(explanation: Explanation, settings?: FormattingSettings): SerializedExplanation {
+	return {
+		expression: explanation.expression,
+		steps: explanation.steps.map((step) => ({ description: step.description, value: serializeValue(step.value, settings) })),
+		result: serializeValue(explanation.result, settings),
+	};
+}
+
+/**
+ * Project a line trace (`ExpressionEngine.traceLine`) onto its DTO, following
+ * every input. The engine already bounds a trace's depth and size (`maxDepth`,
+ * `maxLines`); the walk here is a loop over an explicit stack all the same, so
+ * no trace can exhaust the call stack on the way across.
+ */
+export function serializeLineTrace(trace: LineTrace, settings?: FormattingSettings): SerializedLineTrace {
+	const project = (node: LineTrace): SerializedLineTrace => ({
+		line: node.line,
+		name: node.name,
+		value: serializeMaybe(node.value, settings),
+		via: [...node.via],
+		inputs: [],
+		cycle: node.cycle,
+		forward: node.forward,
+		truncated: node.truncated,
+	});
+	const root = project(trace);
+	const stack: Array<[LineTrace, SerializedLineTrace]> = [[trace, root]];
+	while (stack.length > 0) {
+		const [node, out] = stack.pop()!;
+		for (const input of node.inputs) {
+			const child = project(input);
+			out.inputs.push(child);
+			stack.push([input, child]);
+		}
+	}
+	return root;
 }

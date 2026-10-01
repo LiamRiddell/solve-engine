@@ -72,6 +72,6 @@ describe("adversarial: a host that holds on to the error", () => {
 		const engine = newTrackedEngine();
 		thrown(() => engine.evaluateExpression("3 + * 4"));
 		const lines = engine.parseDocument("1\n3 + * 4").lines;
-		expect(lines[1].error).toMatch(/No prefix parselet/);
+		expect(lines[1].error).toMatch(/^Expected a value after "\+"/);
 	});
 });

@@ -1,18 +1,25 @@
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData, type IpCidrData } from "@solve-js/vm/Value";
+import { Value, ValueType, isTimecodeUnit, timecodeFps, type TimePrecision, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData, type IpCidrData, type UnitLabel } from "@solve-js/vm/Value";
+import { timecodeText } from "@solve-js/packages/time/timecode/TimecodeMath";
 import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { formatIp } from "@solve-js/packages/ip/IpMath";
-import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
+import { formatIpv6 } from "@solve-js/packages/ip/Ipv6Math";
+import { decimalCompare, decimalDivide, decimalFromInteger, decimalRound, decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
-import { autoFormatIntegerOrFloat, tooSmallToPrintText } from "@solve-js/utilities/Number";
+import { autoFormatIntegerOrFloat, compactParts, fixedDecimalText, hiddenDigitsText, nonFiniteText, shortestText, tooSmallToPrintText } from "@solve-js/utilities/Number";
+import { localCalendarName, localClockTime, localCurrencyPlacement, localDayShift, localZoneDifference, localisesWords, withLocalUnitName } from "./LocaleWords";
+import { clockInZone, dayShiftWords, zoneDifferenceMinutes, zoneDifferenceText } from "@solve-js/vm/ZoneAnswers";
 import { getMeasure } from "@solve-js/uom/UomConverter";
-import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSettings";
+import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS, resolveFormattingSettings, type FormattingOverrides } from "./FormattingSettings";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
-import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
-import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
+import { isIso4217 } from "@solve-js/uom/Iso4217";
+import { isCryptoCurrency, moneyDisplayPlaces, trimFractionZeros, type MoneyPlaces } from "@solve-js/uom/CurrencyMinorUnits";
+import { matAt } from "@solve-js/vm/MatrixOps";
+import { cellDecimal } from "@solve-js/vm/ListRounding";
+import { formatSymbolic, type Rational, type SymbolicNode } from "@solve-js/symbolic";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
-import { isFixedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
+import { decodeFixedOffsetMinutes, isFixedOffset, isNamedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
 
-function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number, exact?: DecimalData): string {
+function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number, exact?: DecimalData, rational?: Rational): string {
   // A zero is written without a sign. IEEE's negative zero is kept on the value,
   // where `1 / (0 * -1)` can tell it apart, but `-0` is no use to a reader (#585).
   if (value === 0) value = 0;
@@ -38,14 +45,107 @@ function formatNumber(value: number, locale: ILocale, settings: FormattingSettin
     });
     return `${locale.display.resultPrefix}${formatted}`;
   }
+  const compact = compactText(value, settings);
+  if (compact !== undefined) return `${locale.display.resultPrefix}${compact}`;
   const dp = settings.floatResult.decimalPlaces;
+  // Past the magnitude where a double holds the places shown, the digits come
+  // from the exact value the number carries, less the padding zeros where the
+  // host asked for that.
+  let exactText = exactDigitsWhereDoubleCannot(value, { exact, rational }, dp);
+  if (exactText !== undefined) {
+    if (settings.floatResult.trimTrailingZeros === true && exactText.includes(".")) exactText = exactText.replace(/\.?0+$/, "");
+    return `${locale.display.resultPrefix}${localiseFixedDecimal(exactText, loc || "en-US", sep)}`;
+  }
   // A value below the decimal budget is shown to three significant digits
   // rather than as a zero it cannot be told apart from. Only when the budget is
   // the default one: an explicit `to N dp` above asked for those places and is
   // given them, zeros included.
   const tooSmall = tooSmallToPrintText(value, dp, loc || "en-US");
-  const formatted = tooSmall ?? autoFormatIntegerOrFloat(value, dp, sep, loc);
+  const formatted = tooSmall ?? autoFormatIntegerOrFloat(value, dp, sep, loc, settings.floatResult.trimTrailingZeros === true);
   return `${locale.display.resultPrefix}${formatted}`;
+}
+
+/**
+ * A number's digits taken from the exact value it carries, where its double
+ * cannot hold the places shown; undefined where the double prints them right.
+ *
+ * A double keeps about sixteen significant digits, so the larger the number the
+ * fewer places after the point it can hold: none at all past 2^53, where the
+ * literal `9007199254740993.5` is the double 9,007,199,254,740,994 and was
+ * printed as that, a confident wrong number. A literal with a point keeps its
+ * exact decimal beside the double (see VM's `exactLiteralValue`), exact
+ * arithmetic keeps it or an exact fraction (`9007199254740993.5 + 1/3`), and
+ * where the double's spacing could reach half of the last place shown the
+ * digits come from there instead, rounded half away from zero. A whole value
+ * shows no places, a fraction shows `places` of them.
+ *
+ * The boundary: below that magnitude the double already rounds to the right
+ * digits, so nothing changes there; a value with neither (a result of `sqrt`,
+ * a quantity with a unit) keeps its double, since there are no exact digits to
+ * show; and a whole number carrying an exact integer is written by
+ * {@link formatExactInteger} before this is reached.
+ *
+ * @param value - The double the value carries.
+ * @param source - Its exact decimal or exact fraction, when it has one; the decimal is read first.
+ * @param places - The places a fraction shows: a whole number from 0 to 100.
+ * @returns The digits in ASCII (`"-12.50"`), not grouped or localised, or undefined.
+ */
+export function exactDigitsWhereDoubleCannot(
+  value: number,
+  source: { readonly exact?: DecimalData; readonly rational?: Rational },
+  places: number,
+): string | undefined {
+  const { exact, rational } = source;
+  if ((exact === undefined && rational === undefined) || !Number.isFinite(value)) return undefined;
+  // A place count that is not a small whole number is a host's setting gone
+  // wrong, not a reason to print a hundred digits: the double's path has it.
+  if (!Number.isInteger(places) || places < 0 || places > 100) return undefined;
+  const whole = exact !== undefined ? decimalCompare(decimalRound(exact, 0), exact) === 0 : rational!.d === 1n;
+  const shown = whole ? 0 : places;
+  if (Math.abs(value) * Number.EPSILON < 0.5 * 10 ** -shown) return undefined;
+  // A fraction is divided out to exactly the places shown, one rounding, so
+  // no digit is rounded twice.
+  const decimal = exact ?? decimalDivide(decimalFromInteger(rational!.n), decimalFromInteger(rational!.d), shown);
+  return decimalToFixed(decimal, shown);
+}
+
+/**
+ * A number in the compact form `as compact` writes (`1.5M`, `-2.3k`), in the
+ * locale's digits and decimal mark, when `floatResult.compactFrom` asks for it
+ * and the number reaches it (#750). Undefined otherwise: the setting is off,
+ * the number is below the threshold or below a thousand, it has reached a
+ * thousand trillion, or it is not finite. A threshold that is not a finite
+ * number is off rather than thrown on, since it is a host's setting and not a
+ * reader's line.
+ *
+ * A number past the largest suffix keeps its ordinary form, as one below the
+ * smallest does: there is no suffix left to shorten it with, and `as compact`'s
+ * exponent form there (`1e+308`) would turn an exact `2^64` into
+ * `1.84e+19` on a line that never asked for a rounding.
+ *
+ * @param value - The number, or a quantity's number.
+ * @param settings - The settings in force.
+ * @returns The compact text without a unit, or undefined for the ordinary form.
+ */
+export function compactText(value: number, settings: FormattingSettings): string | undefined {
+  const from = settings.floatResult.compactFrom;
+  if (typeof from !== "number" || !Number.isFinite(from) || !Number.isFinite(value)) return undefined;
+  const magnitude = Math.abs(value);
+  if (magnitude < Math.max(from, 1000)) return undefined;
+  const parts = compactParts(value);
+  if (parts === undefined || parts.suffix === "") return undefined;
+  const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
+  return `${parts.sign}${localiseFixedDecimal(parts.figure, loc, false)}${parts.suffix}`;
+}
+
+/**
+ * The locale an answer's words are written in, or undefined for the engine's
+ * own: `wordsResult.spelling` set to `"engine"` keeps them (#754, #755, #757).
+ * Whether the locale has words of its own is the caller's lookup to make.
+ */
+function wordsLocale(settings: FormattingSettings): string | undefined {
+  if (settings.wordsResult?.spelling === "engine") return undefined;
+  return settings.numberResult.decimalSeparatorLocale || "en-US";
 }
 
 /**
@@ -92,8 +192,15 @@ function formatUncertain(center: number, uncertainty: number, locale: ILocale, s
   // The spread needs room for at least one fractional digit, so a zero-decimal
   // budget cannot leave minimumFractionDigits above maximumFractionDigits.
   const spreadMax = Math.max(dp, 1);
-  const centerText = center.toLocaleString(loc, { useGrouping, minimumFractionDigits: 0, maximumFractionDigits: dp });
-  const spreadText = Math.abs(uncertainty).toLocaleString(loc, { useGrouping, minimumFractionDigits: 1, maximumFractionDigits: spreadMax });
+  // A centre or a spread below the budget is shown to three significant
+  // digits, as a plain number is, rather than as a zero: `0.004 ± 0.001` was
+  // `0 ± 0.0`. A zero centre is written unsigned, as a zero result is.
+  const shownCenter = center === 0 ? 0 : center;
+  const spread = Math.abs(uncertainty);
+  const centerText = tooSmallToPrintText(shownCenter, dp, loc)
+    ?? shownCenter.toLocaleString(loc, { useGrouping, minimumFractionDigits: 0, maximumFractionDigits: dp });
+  const spreadText = tooSmallToPrintText(spread, spreadMax, loc)
+    ?? spread.toLocaleString(loc, { useGrouping, minimumFractionDigits: 1, maximumFractionDigits: spreadMax });
   return `${locale.display.resultPrefix}${centerText} ± ${spreadText}`;
 }
 
@@ -109,7 +216,7 @@ function formatHex(value: number | bigint, settings: FormattingSettings, base?: 
   // An infinity or a NaN has no digits in any base, and asking for them
   // produced `0xINFINITY`, a literal that reads back as nothing at all. Render
   // the value itself, which is what every other non-finite result shows.
-  if (typeof value === "number" && !Number.isFinite(value)) return `= ${value}`;
+  if (typeof value === "number" && !Number.isFinite(value)) return `= ${nonFiniteText(value)}`;
 
   // Truncate and take the sign off before converting. `Number.toString(radix)`
   // does neither: it renders -255 as "-ff", which lands the minus inside the
@@ -217,8 +324,50 @@ function formatString(value: string): string {
   return `= ${value}`;
 }
 
+/**
+ * A weekday or month name answered from a date, in the reader's language
+ * where the locale has its own (`= Dienstag` under `de`, #757), and the
+ * engine's English text otherwise.
+ */
+function formatCalendarName(value: Value, settings: FormattingSettings): string {
+  const name = value.calendarName;
+  const words = wordsLocale(settings);
+  const local = name === undefined || words === undefined ? undefined : localCalendarName(name.kind, name.index, words);
+  return formatString(local ?? (value.value as string));
+}
+
 function formatBoolean(value: boolean): string {
   return `= ${value}`;
+}
+
+/**
+ * A year as ISO 8601 writes it (#823): four digits from year 0 to 9999
+ * (`0975`, not `975`, which no ISO reader takes as a year), and outside them
+ * a sign and six digits, the expanded form `Date` and `Temporal` both write
+ * and read. The year counts astronomically, so 1 BC is `0000` and 975 BC is
+ * `-000974`, which is the numbering ISO 8601 itself uses.
+ *
+ * @param year - The astronomical year, as a backend's fields give it.
+ * @returns The year's ISO spelling.
+ */
+export function isoYear(year: number): string {
+  if (!Number.isInteger(year)) return String(year);
+  if (year >= 0 && year <= 9999) return String(year).padStart(4, "0");
+  return `${year < 0 ? "-" : "+"}${String(Math.abs(year)).padStart(6, "0")}`;
+}
+
+/**
+ * A year as the day-first and month-first forms write it (#823): as it always
+ * was from year 1, and before it with `BC` after the year, counted as a reader counts, so the
+ * astronomical year -974 is `975 BC`. Without the era a date before year 1
+ * read as one in the common era.
+ *
+ * @param year - The astronomical year, as a backend's fields give it.
+ * @returns The year for a `dmy` or `mdy` date.
+ */
+export function slashYear(year: number): string {
+  if (!Number.isInteger(year) || year >= 1) return String(year);
+  return `${1 - year} BC`;
 }
 
 /**
@@ -246,7 +395,7 @@ function formatBoolean(value: boolean): string {
  * backend its engine computes with (`FormattingSettings.calendar`) and a
  * date shows the day it was computed on, in that backend's zone.
  */
-function formatDatetime(value: number, locale: ILocale, settings: FormattingSettings, zone?: string): string {
+function formatDatetime(instant: number, locale: ILocale, settings: FormattingSettings, valueZone?: string): string {
   const calendar = settings.calendar ?? DATE_CALENDAR;
   const format = settings.dateResult?.format ?? "long";
 
@@ -258,6 +407,13 @@ function formatDatetime(value: number, locale: ILocale, settings: FormattingSett
   // records the synthetic fixed-offset form, and how those display is a
   // separate question this does not answer: they keep reading in the zone the
   // engine computes in, as they always have.
+  //
+  // An offset the reader named (`in UTC-5`) is the clock they asked to see, so
+  // it displays as a named zone does: the instant moved by the offset and read
+  // in UTC, which needs no zone data and so reads the same on every runtime.
+  const namedOffset = valueZone !== undefined && isNamedOffset(valueZone);
+  const value = namedOffset ? instant + decodeFixedOffsetMinutes(valueZone) * 60000 : instant;
+  const zone = namedOffset ? "UTC" : valueZone;
   const named = zone !== undefined && !isFixedOffset(zone);
   const d = named ? calendar.fieldsInZone(zone, value) : calendar.fields(value);
   const millisecond = named ? 0 : calendar.fields(value).millisecond;
@@ -276,18 +432,83 @@ function formatDatetime(value: number, locale: ILocale, settings: FormattingSett
   // The numeric forms, built from the local calendar fields so they read the
   // same regardless of the JS runtime's own default locale.
   const p2 = (n: number) => String(n).padStart(2, "0");
-  const year = d.year;
   const month = p2(d.month0 + 1);
   const day = p2(d.day);
   let datePart: string;
-  if (format === "iso") datePart = `${year}-${month}-${day}`;
-  else if (format === "dmy") datePart = `${day}/${month}/${year}`;
-  else datePart = `${month}/${day}/${year}`; // mdy
+  if (format === "iso") datePart = `${isoYear(d.year)}-${month}-${day}`;
+  else if (format === "dmy") datePart = `${day}/${month}/${slashYear(d.year)}`;
+  else datePart = `${month}/${day}/${slashYear(d.year)}`; // mdy
 
   if (isMidnight) return `= ${datePart}`;
   const time = `${p2(d.hour)}:${p2(d.minute)}:${p2(d.second)}`;
   // ISO joins date and time with `T`; the slash forms with a space.
   return format === "iso" ? `= ${datePart}T${time}` : `= ${datePart} ${time}`;
+}
+
+/** How far either side of 1970 an instant a calendar holds can be, in milliseconds: the range of a JavaScript `Date`. */
+const MAX_INSTANT_MS = 8.64e15;
+
+/**
+ * A time of day: the time alone, in the long form's words or the numeric
+ * forms' `HH:MM:SS`, and the days it has moved from the day it is counted from
+ * beside it, as the timezone forms write a day shift. A time with no anchor
+ * recorded shows no shift.
+ *
+ * A time in another zone (#757) is written to the minute (`precision`
+ * `"minute"`): under an English locale exactly as the timezone forms always
+ * wrote it, `7:00 PM` and `8:00 AM (+1 day)`, and under a locale with words of
+ * its own on that locale's clock with the shift in its words, `19:00` and
+ * `08:00 (+1 Tag)` under `de`; the numeric forms write `HH:MM`. An offset the
+ * reader named is shown on its own clock, as a date in it is.
+ */
+function formatTimeOfDayValue(value: number, locale: ILocale, settings: FormattingSettings, zone?: string, anchor?: number, precision?: TimePrecision): string {
+  const calendar = settings.calendar ?? DATE_CALENDAR;
+  // An instant past the calendar's range reads as every such date does, rather
+  // than throwing where a zone is read for it.
+  if (!(Math.abs(value) <= MAX_INSTANT_MS) || (anchor !== undefined && !(Math.abs(anchor) <= MAX_INSTANT_MS))) return "= Invalid Date";
+  const offsetMs = zone !== undefined && isNamedOffset(zone) ? decodeFixedOffsetMinutes(zone) * 60000 : 0;
+  const readZone = zone !== undefined && isNamedOffset(zone) ? "UTC" : zone;
+  const at = value + offsetMs;
+  const named = readZone !== undefined && !isFixedOffset(readZone);
+  const d = named ? calendar.fieldsInZone(readZone, at) : calendar.fields(at);
+  const format = settings.dateResult?.format ?? "long";
+  const toMinute = precision === "minute";
+  const words = wordsLocale(settings);
+  const localTag = words !== undefined && localisesWords(words) ? words : undefined;
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  let time: string;
+  if (format !== "long") {
+    time = toMinute ? `${p2(d.hour)}:${p2(d.minute)}` : `${p2(d.hour)}:${p2(d.minute)}:${p2(d.second)}`;
+  } else if (toMinute && named) {
+    time = (localTag === undefined ? undefined : localClockTime(at, readZone, localTag)) ?? clockInZone(at, readZone);
+  } else {
+    const tag = dateNamesLocale(settings.numberResult.decimalSeparatorLocale || "en-US", locale);
+    time = named ? timeOfDayInZone(readZone, at, tag) : calendar.formatTimeOfDay(at, tag);
+  }
+  let shift = 0;
+  if (anchor !== undefined) {
+    const from = named ? calendar.fieldsInZone(readZone, anchor + offsetMs) : calendar.fields(anchor + offsetMs);
+    shift = Math.round((Date.UTC(d.year, d.month0, d.day) - Date.UTC(from.year, from.month0, from.day)) / 86_400_000);
+  }
+  const suffix = (localTag === undefined ? undefined : localDayShift(shift, localTag)) ?? dayShiftWords(shift);
+  return `= ${time}${suffix}`;
+}
+
+/**
+ * A time difference between two places (#757): under an English locale the
+ * sentence the timezone forms always answered, `Tokyo is 8 hours ahead of
+ * London`, and under a locale with words of its own a form every language
+ * reads, `Tokyo: London + 8 Stunden` under `de`. Undefined for a quantity that
+ * does not hold one, which is then shown as the quantity it is.
+ */
+function formatZoneDifference(value: Value, settings: FormattingSettings): string | undefined {
+  const minutes = zoneDifferenceMinutes(value);
+  const places = value.zoneDifference;
+  if (minutes === undefined || places === undefined) return undefined;
+  const words = wordsLocale(settings);
+  const local = words === undefined ? undefined : localZoneDifference(minutes, places.from, places.to, words);
+  const text = local ?? zoneDifferenceText(value);
+  return text === undefined ? undefined : formatString(text);
 }
 
 /**
@@ -299,11 +520,18 @@ function formatDatetime(value: number, locale: ILocale, settings: FormattingSett
  * which keeps through adding spans, scaling one, or adding or taking away a
  * length of time (see binaryOp in vm/VMConversion.ts). A reader can type `ms`
  * (`40ms + 120ms` is 160 ms), and such a quantity carries no mark, so it keeps
- * its milliseconds rather than being rounded onto a clock.
+ * its milliseconds rather than being rounded onto a clock. A span that rounds
+ * to no whole second is written without a sign, whichever side of zero it fell.
  */
-function formatMsDuration(ms: number): string {
-  const sign = ms < 0 ? "-" : "";
+export function formatMsDuration(ms: number): string {
+  // An infinite span has no hours and minutes; the clock below would read
+  // `Infinity:NaN:NaN`.
+  const infinite = nonFiniteText(ms);
+  if (infinite !== undefined) return infinite;
   const totalSeconds = Math.round(Math.abs(ms) / 1000);
+  // The sign is the rounded span's: `now - now` reads the clock twice and can
+  // land a millisecond below zero, which rounds to no time at all, not `-0:00`.
+  const sign = ms < 0 && totalSeconds > 0 ? "-" : "";
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
@@ -418,6 +646,40 @@ function localiseDigits(ascii: string, loc: string): string {
   return out;
 }
 
+/** The most grouping formatters {@link groupedIntegerFormatFor} keeps before starting again. */
+const GROUPED_INTEGER_FORMAT_LIMIT = 64;
+
+/** Grouping formatters by locale; see {@link groupedIntegerFormatFor}. */
+const groupedIntegerFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * The formatter that groups a whole number's digits for a locale, built once
+ * and reused.
+ *
+ * `BigInt.prototype.toLocaleString(loc, { useGrouping: true })` builds a new
+ * `Intl.NumberFormat` on every call. A long money chain met that on every line
+ * once batch L wrote money past 1e21 in full digits rather than in exponent
+ * form, and 4,000 lines of `x = x * 1.123456789` from `$1` took about four
+ * times as long to show. `format` on a formatter built from the same locale and
+ * options writes what `toLocaleString` writes, since that is how the
+ * specification defines it. `useGrouping: true` is kept as it was, which under
+ * current `Intl` groups every number of four digits or more, so the text is
+ * unchanged. The cache is bounded because the locale is a host string; an
+ * unusable locale throws the constructor's `RangeError` and caches nothing.
+ *
+ * @param loc - `Intl` locale tag.
+ * @returns The formatter.
+ */
+export function groupedIntegerFormatFor(loc: string): Intl.NumberFormat {
+  let format = groupedIntegerFormats.get(loc);
+  if (format === undefined) {
+    format = new Intl.NumberFormat(loc, { useGrouping: true });
+    if (groupedIntegerFormats.size >= GROUPED_INTEGER_FORMAT_LIMIT) groupedIntegerFormats.clear();
+    groupedIntegerFormats.set(loc, format);
+  }
+  return format;
+}
+
 /**
  * Write a fixed-decimal string (`"1234567.50"`) the way `loc` writes numbers:
  * its digits, its decimal mark, and its digit grouping when `useGrouping` is on.
@@ -443,12 +705,21 @@ export function localiseFixedDecimal(fixed: string, loc: string, useGrouping: bo
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(fixed);
   if (!match) return fixed;
   const [, sign, integer, fraction] = match;
-  const integerText = useGrouping ? BigInt(integer).toLocaleString(loc, { useGrouping: true }) : localiseDigits(integer, loc);
+  const integerText = useGrouping ? groupedIntegerFormatFor(loc).format(BigInt(integer)) : localiseDigits(integer, loc);
   if (fraction === undefined) return `${sign}${integerText}`;
   return `${sign}${integerText}${decimalMark(loc)}${localiseDigits(fraction, loc)}`;
 }
 
-function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean, explicitPlaces?: number): string {
+function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean, explicitPlaces?: number, label?: UnitLabel, significantBelowOne?: boolean): string {
+  // A quantity with a name of its own is written under that name, counted in
+  // it (`= 6 sprints` for twelve weeks); money keeps its symbol. See
+  // Value.unitLabel.
+  if (label !== undefined && unit !== undefined && moneyUnitOf(unit) === undefined) {
+    return formatLabelledUom(value, unit, label, settings, explicitPlaces);
+  }
+  // A timecode answers as the timecode it is, never as its frame count under
+  // the internal unit name (#759). See timecodeText().
+  if (isTimecodeUnit(unit)) return `= ${timecodeText(value, timecodeFps(unit))}`;
   // A time over a distance is a pace, and a runner reads a pace on a clock.
   // Not when the line named its own place count, which asked for digits.
   if (unit !== undefined && explicitPlaces === undefined) {
@@ -471,107 +742,407 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   const useGrouping = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
 
+  // Money, and a price per unit of something, is shown to the currency's own
+  // places (#731) and with its symbol (#753). See formatMoney.
+  const money = unit === undefined ? undefined : moneyUnitOf(unit);
+  if (money !== undefined) {
+    const places = explicitPlaces !== undefined
+      ? { min: explicitPlaces, max: explicitPlaces }
+      : settings.unitOfMeasurementResult.currencyPlaces === "setting"
+        ? { min: dp, max: dp }
+        : moneyDisplayPlaces(money.code, dp, money.per !== undefined);
+    const compact = explicitPlaces === undefined ? compactText(value, settings) : undefined;
+    return `= ${formatMoney(value, money, places, exact, explicitPlaces !== undefined, loc, useGrouping, wordsLocale(settings), compact)}`;
+  }
+
   // For TimeSpan values (days, weeks, hours, etc.), format as integer if the value is a whole number
-  const timeSpanUnits = ["days", "weeks", "months", "years", "hours", "minutes", "seconds", "day", "week", "month", "year", "hour", "minute", "second"];
-  const isTimeSpan = unit && timeSpanUnits.includes(unit);
+  const isTimeSpan = unit !== undefined && TIME_SPAN_UNITS.has(unit);
 
   // A conversion can land far below the decimal budget, and `1 Hz in MHz`
   // printing `0.00 MHz` is indistinguishable from a real zero. Three
   // significant digits instead, in exponent form once the zeros stop being
-  // countable. Not for an explicit `to N dp`, which asked for those places, and
-  // not for money below: a currency zero is a real answer, and `$0.001` is
-  // `$0.00` because a tenth of a penny is not a payable amount.
-  const tooSmall = explicitPlaces === undefined ? tooSmallToPrintText(value, dp, loc) : undefined;
+  // countable. Not for an explicit `to N dp`, which asked for those places.
+  // Money has its own rule, in formatMoney.
+  // A list cell below one whose places would hide its digits, in a list that
+  // already shows a cell to three significant digits, takes the same form, so
+  // the cells read alike (see listTakesSignificantForm).
+  const tooSmall = explicitPlaces !== undefined
+    ? undefined
+    : (significantBelowOne === true ? hiddenDigitsText(value, dp, loc) : undefined) ?? tooSmallToPrintText(value, dp, loc);
+  const compact = explicitPlaces === undefined ? compactText(value, settings) : undefined;
 
   let formatted: string;
-  if (tooSmall !== undefined) {
+  // The places the text shows, for the grammatical form of a localised unit
+  // name; undefined when the text is not a plain decimal.
+  let shownPlaces: number | undefined;
+  if (compact !== undefined) {
+    formatted = compact;
+  } else if (tooSmall !== undefined) {
     formatted = tooSmall;
-  } else if (isTimeSpan && value === Math.floor(value)) {
+  } else if (isTimeSpan && (exact !== undefined ? decimalCompare(decimalRound(exact, 0), exact) === 0 : value === Math.floor(value))) {
     // For whole number TimeSpan values, format as integer
-    formatted = localiseFixedDecimal(value.toString(), loc, useGrouping);
+    formatted = localiseFixedDecimal(exact !== undefined ? decimalToFixed(exact, 0) : fixedDecimalText(value, 0), loc, useGrouping);
+    shownPlaces = 0;
   } else {
-    // For other values, use the configured decimal places
-    formatted = localiseFixedDecimal(value.toFixed(dp), loc, useGrouping);
+    // For other values, use the configured decimal places, less the zeros
+    // that only pad them when the host asked for that (#750). An explicit
+    // `to N dp` keeps every place it asked for.
+    // In full digits at any size; see fixedDecimalText. A quantity past 2^53
+    // carries the exact value its double cannot hold (see exactPastTheDouble
+    // in vm/MoneyExact.ts), and that is what is written.
+    const fixed = exact !== undefined ? decimalToFixed(exact, dp) : fixedDecimalText(value, dp);
+    const shown = explicitPlaces === undefined && settings.floatResult.trimTrailingZeros === true ? trimFractionZeros(fixed, 0) : fixed;
+    formatted = localiseFixedDecimal(shown, loc, useGrouping);
+    const point = shown.indexOf(".");
+    shownPlaces = /e/i.test(shown) ? undefined : point < 0 ? 0 : shown.length - point - 1;
   }
 
-  // Currency display: symbol + culturally-conventional placement (e.g.
-  // "$100.00" prefix vs "100.00 kr" suffix) instead of the generic
-  // "amount CODE" fallback below. See uom/CurrencyAliases.ts's
-  // CURRENCY_DISPLAY table for the exact set covered and the reasoning
-  // behind each placement choice. Any currency code NOT in that table
-  // (most of the ~150 `CurrencyExchange.isCurrency()` recognizes) falls
-  // through to the unchanged "amount CODE" format below.
-  const currencyDisplay = unit ? CURRENCY_DISPLAY[unit.toUpperCase()] : undefined;
-  if (currencyDisplay) {
-    // An exact money amount rounds from its decimal, not from the double: a
-    // half-cent like "$1.005" reads as "$1.01" here, where "(1.005).toFixed(2)"
-    // answers "1.00" because the double it is handed already sits below the
-    // value the user typed. Amounts with no exact decimal (a currency
-    // conversion, whose rate is a double) keep the toFixed rendering above.
-    const moneyText = exact ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
-    const sep = currencyDisplay.spaced ? " " : "";
-    // A prefix symbol goes after the sign, as money is written: -$5.00, not
-    // $-5.00, which is what putting the symbol in front of the signed amount
-    // text produced (#554). A suffix symbol follows the amount either way.
-    const negative = moneyText.startsWith("-");
-    const withSymbol = currencyDisplay.position === "prefix"
-      ? `${negative ? "-" : ""}${currencyDisplay.symbol}${sep}${negative ? moneyText.slice(1) : moneyText}`
-      : `${moneyText}${sep}${currencyDisplay.symbol}`;
-    return `= ${withSymbol}`;
+  // A unit's long name in the reader's language where Intl has one (#754):
+  // `3,11 Meilen` under `de`. A symbol (`km`) is written as it is, and an
+  // English locale keeps the engine's own names.
+  const words = unit === undefined ? undefined : wordsLocale(settings);
+  if (unit !== undefined && words !== undefined) {
+    // The count as shown, so `1.00` takes the form a count with places takes.
+    const count = shownPlaces === undefined ? value : Number(value.toFixed(shownPlaces));
+    const local = withLocalUnitName(formatted, unit, count, shownPlaces, words);
+    if (local !== undefined) return `= ${local}`;
   }
 
-  // The unit is written as the symbol the value carries. There used to be a
-  // `unitOfMeasurementResult.unitNames` setting here whose two branches were
-  // the same expression, so it never changed anything, and it was removed
-  // rather than implemented: the engine has no unit-name data to render from.
-  // The generated unit table maps a spelling to [measure, ratio] only, and
-  // names cannot be recovered from it, because units that differ by an OFFSET
-  // share a ratio, so "20 C" would come back as "20 kelvins". A real
-  // implementation needs a hand-authored name per unit plus pluralization and
-  // per-locale spelling (metre against meter), which is a feature rather than
-  // the repair of a dead ternary.
-  //
-  // An exact currency with no symbol in the display table above (one of the
-  // less common ISO codes) still rounds from its decimal here, so "1.005 UYW"
-  // reads the same way "$1.005" does. A price per unit carries its decimal too
-  // (see vm/MoneyExact.ts) and rounds from it the same way, so "$1.005/kg" is
-  // 1.01 USD/kg, except below the decimal budget: a tenth of a cent a
-  // kilowatt-hour is a real price, so it keeps its significant digits as any
-  // small quantity does, where "$0.001" on its own is not a payable amount.
-  // Every other Uom carries no exact, so this leaves "1.50 kg" as it was.
-  const perUnitBelowBudget = tooSmall !== undefined && unit !== undefined && unit.includes("/");
-  const genericText = exact && !perUnitBelowBudget ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
-  return `= ${genericText} ${unit || ""}`.trim();
+  // Otherwise the unit is written as the spelling the value carries. Names
+  // cannot be recovered from the generated unit table, which maps a spelling
+  // to [measure, ratio] only (units that differ by an OFFSET share a ratio, so
+  // "20 C" would come back as "20 kelvins"), which is why a localised name
+  // above starts from the long spelling the value already carries and a
+  // symbol is never turned into a name. The time words come in pairs and
+  // agree with their count in English: see timeWordForCount.
+  const shownUnit = unit !== undefined && isTimeSpan ? timeWordForCount(unit, value) : unit;
+  return `= ${formatted} ${shownUnit || ""}`.trim();
 }
 
-function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): string {
+/**
+ * A quantity written under the name the reader gave its unit (#762): the
+ * count in that name, then the name as written. The count is `value / per`,
+ * and it follows the places rule its own unit follows, so a whole number of
+ * days renamed `Tage` is `= 3 Tage`, as `= 3 days` would be, and a distance
+ * keeps the setting's places.
+ *
+ * @param value - The quantity, in its own unit.
+ * @param unit - Its own unit, which decides the places rule.
+ * @param label - The name and how many of `unit` one of it is.
+ * @param settings - The formatting settings.
+ * @param explicitPlaces - A place count the line asked for, if any.
+ */
+function formatLabelledUom(value: number, unit: string, label: UnitLabel, settings: FormattingSettings, explicitPlaces: number | undefined): string {
+  const count = label.per === 1 ? value : value / label.per;
+  const dp = explicitPlaces ?? settings.unitOfMeasurementResult.decimalPlaces;
+  const useGrouping = settings.floatResult.enableSeperator;
+  const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
+  const tooSmall = explicitPlaces === undefined ? tooSmallToPrintText(count, dp, loc) : undefined;
+  let formatted: string;
+  if (tooSmall !== undefined) formatted = tooSmall;
+  else if (explicitPlaces === undefined && TIME_SPAN_UNITS.has(unit) && Number.isInteger(count)) formatted = localiseFixedDecimal(fixedDecimalText(count, 0), loc, useGrouping);
+  else formatted = localiseFixedDecimal(fixedDecimalText(count, dp), loc, useGrouping);
+  return `= ${formatted} ${label.name}`;
+}
+
+/**
+ * The time words a value can carry, singular and plural, each paired with its
+ * other form. A whole number of them is shown without places (`= 3 days`).
+ */
+const TIME_WORD_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["second", "seconds"], ["minute", "minutes"], ["hour", "hours"], ["day", "days"],
+  ["week", "weeks"], ["month", "months"], ["year", "years"],
+];
+const TIME_SPAN_UNITS: ReadonlySet<string> = new Set(TIME_WORD_PAIRS.flat());
+const SINGULAR_OF: ReadonlyMap<string, string> = new Map(TIME_WORD_PAIRS.map(([one, many]) => [many, one]));
+const PLURAL_OF: ReadonlyMap<string, string> = new Map(TIME_WORD_PAIRS.map(([one, many]) => [one, many]));
+
+/**
+ * The time word that agrees with its count (#753): the singular for exactly
+ * one (`= 1 hour`, and `= -1 hour`), the plural for every other count (`= 2
+ * hours`, `= 0 hours`, `= 1.50 hours`). The value keeps whichever spelling it
+ * was typed or converted into, so `3600 seconds in hours` used to show `= 1
+ * hours`, and `2 hour` showed `= 2 hour`.
+ *
+ * A value a little off one is plural, and is shown with places (`1.00 hours`),
+ * since it is a measurement and not a count. A word that is not one of the
+ * time words, and every symbol (`h`, `min`), is returned as it came.
+ *
+ * @param unit - The unit the value carries.
+ * @param value - The value.
+ */
+export function timeWordForCount(unit: string, value: number): string {
+  if (Math.abs(value) === 1) return SINGULAR_OF.get(unit) ?? unit;
+  if (SINGULAR_OF.has(unit)) return unit;
+  return PLURAL_OF.get(unit) ?? unit;
+}
+
+/** A currency, and the unit it is priced per when the amount is a rate (`USD/hour`). */
+export interface MoneyUnit {
+  readonly code: string;
+  readonly per?: string;
+}
+
+/**
+ * Whether `unit` is money: a currency code as the engine stores one, upper case
+ * (`USD`, `BTC`), or such a code over something else (`USD/hour`, `JPY/kWh`).
+ * A code with a symbol in the display table is matched in any case, as the
+ * display lookup always was (`usd` is shown `$`). Any other code must be in
+ * upper case, since `cup` is the cooking unit although `CUP` is the Cuban peso.
+ *
+ * @param unit - The unit a value carries.
+ * @returns The currency, upper case, and what it is per, or undefined for anything else.
+ */
+export function moneyUnitOf(unit: string): MoneyUnit | undefined {
+  const slash = unit.indexOf("/");
+  const written = slash < 0 ? unit : unit.slice(0, slash);
+  if (written.length < 3 || written.length > 4) return undefined;
+  const code = written.toUpperCase();
+  const hasSymbol = Object.prototype.hasOwnProperty.call(CURRENCY_DISPLAY, code);
+  if (!hasSymbol && (written !== code || (!isIso4217(code) && !isCryptoCurrency(code)))) return undefined;
+  if (slash < 0) return { code };
+  const per = unit.slice(slash + 1);
+  return per === "" ? undefined : { code, per };
+}
+
+/**
+ * An amount of money as it is written: its symbol where the display table has
+ * one (`$33.33`, `12.00 kr`, `-€5.00`), its code otherwise (`33.333 KWD`), and
+ * a price per unit with the unit after a slash (`$15.00/hour`, `12.00 kr/hour`).
+ * A rate used to fall through to the code (`15.00 USD/hour`), because only a
+ * bare code was looked up in the display table (#753).
+ *
+ * The places come from `places`: exactly the currency's minor unit for an
+ * amount, a range for a price per unit or a cryptocurrency, trailing zeros past
+ * the minimum dropped (see uom/CurrencyMinorUnits.ts).
+ *
+ * An exact money amount rounds from its decimal, not from the double: a
+ * half-cent like "$1.005" reads as "$1.01" here, where "(1.005).toFixed(2)"
+ * answers "1.00" because the double it is handed already sits below the value
+ * the user typed. An amount with no exact decimal (a currency conversion, whose
+ * rate is a double) rounds from the double, and one that lands below the places
+ * keeps three significant digits (`$100 in BTC` at a high rate), since a
+ * conversion's fraction of a cent is still an answer. A typed amount below them
+ * rounds to zero (`$0.001` is `$0.00`, a tenth of a penny is not payable),
+ * except a price per unit: a tenth of a cent a kilowatt-hour is a real price,
+ * so `$0.001/kWh` keeps its digits.
+ *
+ * A prefix symbol goes after the sign, as money is written: -$5.00, not
+ * $-5.00 (#554). A suffix symbol follows the amount either way.
+ *
+ * Under a locale that is not English the symbol takes the place that locale
+ * gives it (#755): after the amount with a space under `de` (`5,00 €`), before
+ * it under `ja`. The symbol itself, the places and the sign rule stay the
+ * engine's, so `$` stays `$` for every dollar and the amount rounds as it
+ * always did. The space is a plain one, where `Intl` writes a no-break space,
+ * so the answer reads back in as typed text.
+ *
+ * @param words - The locale the symbol is placed for, or undefined for the engine's own placement.
+ * @param compact - The amount already written compactly (`3.3M`), or undefined for the ordinary form.
+ */
+function formatMoney(value: number, money: MoneyUnit, places: MoneyPlaces, exact: DecimalData | undefined, placesAsked: boolean, loc: string, useGrouping: boolean, words?: string, compact?: string): string {
+  const tooSmall = compact !== undefined || placesAsked || (exact !== undefined && money.per === undefined)
+    ? undefined
+    : tooSmallToPrintText(value, places.max, loc);
+  let text: string;
+  if (compact !== undefined) {
+    text = compact;
+  } else if (tooSmall !== undefined) {
+    text = tooSmall;
+  } else {
+    const fixed = exact !== undefined ? decimalToFixed(exact, places.max) : fixedDecimalText(value, places.max);
+    text = localiseFixedDecimal(trimFractionZeros(fixed, places.min), loc, useGrouping);
+  }
+  const per = money.per === undefined ? "" : `/${money.per}`;
+  // An own-property read: the code has passed the ISO check, but the table is
+  // a plain object and a lookup must never find an inherited name.
+  const display = Object.prototype.hasOwnProperty.call(CURRENCY_DISPLAY, money.code) ? CURRENCY_DISPLAY[money.code] : undefined;
+  if (display === undefined) return `${text} ${money.code}${per}`;
+  const placed = words === undefined ? undefined : localCurrencyPlacement(money.code, words);
+  const position = placed?.position ?? display.position;
+  const sep = (placed?.spaced ?? display.spaced) ? " " : "";
+  const negative = text.startsWith("-");
+  const amount = position === "prefix"
+    ? `${negative ? "-" : ""}${display.symbol}${sep}${negative ? text.slice(1) : text}`
+    : `${text}${sep}${display.symbol}`;
+  return `${amount}${per}`;
+}
+
+/**
+ * Whether the cells of a list below one are written to three significant
+ * digits together: true when at least one shown cell is a magnitude its
+ * place budget would round to zero, the cell {@link tooSmallToPrintText} writes
+ * that way.
+ *
+ * Each cell was formatted on its own, so `map(x px at 300 dpi, 1:2)` showed
+ * `[0.00333 in, 0.01 in]`: the first cell rounds away at two places and took
+ * three significant digits, the second (0.00667) did not round away and was
+ * cut to two places, so the two cells of one list read to different
+ * precisions. Once one cell needs the significant form, every cell below one
+ * whose places would hide its digits takes it too (see hiddenDigitsText in
+ * utilities/Number.ts): `[0.00333 in, 0.00667 in]`. A cell the places show in
+ * full keeps them (`[0.001, 0.5]` is `[0.001, 0.50]`), a cell of one or more
+ * keeps the place budget, and money keeps its currency's places (a cent is the
+ * precision of an amount), so a money list is never switched.
+ *
+ * @param m - The matrix being written.
+ * @param settings - The resolved formatting settings, for each cell's place budget.
+ * @param rows - How many rows are shown.
+ * @param cols - How many columns are shown.
+ */
+export function listTakesSignificantForm(m: MatrixData, settings: FormattingSettings, rows: number, cols: number): boolean {
+  if (m.unit !== undefined && moneyUnitOf(m.unit) !== undefined) return false;
+  const dp = m.unit !== undefined ? settings.unitOfMeasurementResult.decimalPlaces : settings.floatResult.decimalPlaces;
+  const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
+  const shownRows = Math.min(rows, m.rows);
+  const shownCols = Math.min(cols, m.cols);
+  for (let r = 0; r < shownRows; r++) {
+    for (let c = 0; c < shownCols; c++) {
+      const entry = matAt(m, r, c);
+      if (typeof entry === "number" && tooSmallToPrintText(entry, dp, loc) !== undefined) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The places a list's cell at `row`, `col` is shown to, when the list was
+ * rounded (see MatrixData.places), or undefined for the ordinary form.
+ */
+function cellPlacesAt(m: MatrixData, row: number, col: number): number | undefined {
+  return m.places?.[row + col * m.rows];
+}
+
+/**
+ * A rounded list cell written to the places its rounding set, as the same
+ * number rounded on its own line is: `0.0010` for `0.001` at four places, with
+ * the digits taken from the cell's decimal (see cellDecimal), so twenty places
+ * of 0.1 are 0.1 and zeros, not the double's tail.
+ *
+ * @param entry - The cell's number.
+ * @param places - The places it was rounded to.
+ * @param settings - The resolved formatting settings.
+ * @param unit - The list's unit, if any.
+ * @param locale - The display locale.
+ */
+function formatRoundedCell(entry: number, places: number, settings: FormattingSettings, unit: string | undefined, locale: ILocale): string {
+  const exact = cellDecimal(entry);
+  const text = unit === undefined
+    ? formatNumber(entry, locale, settings, places, exact)
+    : formatUom(entry, unit, locale, settings, exact, undefined, places);
+  return text.startsWith(locale.display.resultPrefix) ? text.slice(locale.display.resultPrefix.length) : text;
+}
+
+function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings, unit?: string, locale?: ILocale, significantBelowOne?: boolean, places?: number): string {
   if (typeof entry === "boolean") return entry ? "true" : "false";
+  if (places !== undefined && typeof entry === "number" && Number.isFinite(entry)) {
+    return formatRoundedCell(entry, places, settings, unit, locale ?? getLocale(settings.numberResult.decimalSeparatorLocale || "en"));
+  }
+  // A cell of a list with a unit is written as the quantity it stands for, so
+  // `[1 km, 500 m]` shows as `[1.00 km, 0.50 km]` and money as money (#745).
+  if (unit !== undefined && locale !== undefined && typeof entry === "number") {
+    const quantity = formatUom(entry, unit, locale, settings, undefined, undefined, undefined, undefined, significantBelowOne);
+    return quantity.startsWith(locale.display.resultPrefix) ? quantity.slice(locale.display.resultPrefix.length) : quantity;
+  }
   if (typeof entry === "object" && entry !== null) return formatSymbolic(entry);
   const dp = settings.floatResult.decimalPlaces;
   const sep = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale;
-  // A zero entry is written without a sign, as a zero result is (#585).
-  return autoFormatIntegerOrFloat(entry === 0 ? 0 : entry, dp, sep, loc);
+  // A zero entry is written without a sign, as a zero result is (#585), and an
+  // entry drops its padding zeros when a plain number does (#750). An entry
+  // below the budget is shown to three significant digits, as a plain number
+  // is, rather than as a zero: `[1e-6, 1]` was `[0.00, 1]`.
+  const shown = entry === 0 ? 0 : entry;
+  // A cell below one whose places would hide its digits, in a list that
+  // already shows a cell to three significant digits, is shown that way too;
+  // see listTakesSignificantForm.
+  if (significantBelowOne === true) {
+    const significant = hiddenDigitsText(shown, dp, loc || "en-US");
+    if (significant !== undefined) return significant;
+  }
+  return tooSmallToPrintText(shown, dp, loc || "en-US") ?? autoFormatIntegerOrFloat(shown, dp, sep, loc, settings.floatResult.trimTrailingZeros === true);
+}
+
+/**
+ * The element ceiling a settings object asks for, or undefined for none: a
+ * number of at least 1, rounded down. Anything else (absent, zero, negative,
+ * `NaN`, infinite, not a number at all) is no ceiling, since the setting is
+ * opt-in and an unusable one must not hide a result.
+ */
+export function matrixElementCeiling(settings: FormattingSettings): number | undefined {
+  const group = settings.matrixResult;
+  if (typeof group !== "object" || group === null) return undefined;
+  const max = group.maxElements;
+  if (typeof max !== "number" || !Number.isFinite(max) || max < 1) return undefined;
+  return Math.floor(max);
+}
+
+/**
+ * How much of `m` is written under a ceiling of `max` elements.
+ *
+ * - `whole`: all of it, the matrix is within the ceiling (or there is none).
+ * - `elements`: a list (one row or one column) past the ceiling: its first
+ *   `shown` elements, and `leftOut` more.
+ * - `rows`: a matrix past the ceiling: its first `shown` whole rows, and
+ *   `leftOut` rows more.
+ * - `shape`: a matrix one of whose rows is already past the ceiling, so not
+ *   one row fits and only its shape is written.
+ */
+export type MatrixPreview =
+  | { kind: "whole" }
+  | { kind: "elements" | "rows"; shown: number; leftOut: number }
+  | { kind: "shape" };
+
+/** What {@link formatMatrix} and {@link formatMatrixAligned} write of `m` under `max`; see {@link MatrixPreview}. */
+export function matrixPreview(m: MatrixData, max: number | undefined): MatrixPreview {
+  const cells = m.rows * m.cols;
+  if (max === undefined || cells <= max) return { kind: "whole" };
+  if (m.rows === 1 || m.cols === 1) return { kind: "elements", shown: max, leftOut: cells - max };
+  const rows = Math.floor(max / m.cols);
+  if (rows === 0) return { kind: "shape" };
+  return { kind: "rows", shown: rows, leftOut: m.rows - rows };
+}
+
+/**
+ * How many more there are, as the short form writes it: `and 99,997 more`, or
+ * `and 3 more rows`. The count is grouped the English way whatever the number
+ * locale, as the trace's short form writes it, so the two read alike.
+ */
+function leftOutText(preview: { kind: "elements" | "rows"; leftOut: number }): string {
+  const count = autoFormatIntegerOrFloat(preview.leftOut, 0, true, "en-US");
+  return preview.kind === "rows" ? `and ${count} more ${preview.leftOut === 1 ? "row" : "rows"}` : `and ${count} more`;
 }
 
 /**
  * Renders a Matrix matching its own literal syntax: a single row (1xN,
  * including plain vectors) as `[a, b, c]`, a single column (Nx1) as
  * `[a; b; c]`, and a general shape as `[r0c0, r0c1; r1c0, r1c1]`, row-major
- * textual output read back out of the column-major storage
- * (`columnMajorToRowMajor()`), matching how `[1,2;3,4]` is written.
+ * textual output read back out of the column-major storage, matching how
+ * `[1,2;3,4]` is written.
+ *
+ * Under `matrixResult.maxElements` a larger one is written short (see
+ * {@link matrixPreview}): `[0, 10, 20, and 99,997 more]`, `[1, 2; 3, 4; and 8
+ * more rows]`, or `[2x5000 matrix]`. Only what is shown is formatted.
  */
 function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettings): string {
-  const rowMajor = columnMajorToRowMajor(m);
+  const preview = matrixPreview(m, matrixElementCeiling(settings));
+  if (preview.kind === "shape") return `${locale.display.resultPrefix}[${m.rows}x${m.cols} matrix]`;
+  const shownRows = preview.kind === "rows" ? preview.shown : preview.kind === "elements" && m.cols === 1 ? preview.shown : m.rows;
+  const shownCols = preview.kind === "elements" && m.rows === 1 ? preview.shown : m.cols;
+  const significant = listTakesSignificantForm(m, settings, shownRows, shownCols);
   const rows: string[] = [];
-  for (let r = 0; r < m.rows; r++) {
+  for (let r = 0; r < shownRows; r++) {
     const cells: string[] = [];
-    for (let c = 0; c < m.cols; c++) {
-      cells.push(formatMatrixEntry(rowMajor[r * m.cols + c], settings));
+    for (let c = 0; c < shownCols; c++) {
+      cells.push(formatMatrixEntry(matAt(m, r, c), settings, m.unit, locale, significant, cellPlacesAt(m, r, c)));
     }
     rows.push(cells.join(", "));
   }
-  return `${locale.display.resultPrefix}[${rows.join("; ")}]`;
+  if (preview.kind === "whole") return `${locale.display.resultPrefix}[${rows.join("; ")}]`;
+  // A row list continues with a comma, a column or a matrix with a semicolon,
+  // the separator the next element would have had.
+  const joiner = preview.kind === "elements" && m.rows === 1 ? ", " : "; ";
+  return `${locale.display.resultPrefix}[${rows.join("; ")}${joiner}${leftOutText(preview)}]`;
 }
 
 /**
@@ -588,34 +1159,46 @@ function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettin
  * This is deliberately separate from {@link formatValue}, whose single-line
  * matrix form stays the stable, assertable text the API and the worker DTO use.
  * A 1xN row vector is one line; an Nx1 column vector is N lines.
+ *
+ * Under `matrixResult.maxElements` a larger one shows what fits (see
+ * {@link matrixPreview}) and ends with a line saying how much was left out,
+ * `and 99,997 more` or `and 8 more rows`; a matrix none of whose rows fits
+ * is written as its shape, `[2x5000 matrix]`.
  */
-export function formatMatrixAligned(m: MatrixData, settings?: FormattingSettings): string {
-  const us = settings || DEFAULT_FORMATTING_SETTINGS;
-  const rowMajor = columnMajorToRowMajor(m);
+export function formatMatrixAligned(m: MatrixData, settings?: FormattingOverrides): string {
+  const us = resolveFormattingSettings(settings);
+  const preview = matrixPreview(m, matrixElementCeiling(us));
+  if (preview.kind === "shape") return `[${m.rows}x${m.cols} matrix]`;
+  const shownRows = preview.kind === "rows" ? preview.shown : preview.kind === "elements" && m.cols === 1 ? preview.shown : m.rows;
+  const shownCols = preview.kind === "elements" && m.rows === 1 ? preview.shown : m.cols;
+  const locale = getLocale(us.numberResult.decimalSeparatorLocale || "en");
+  const significant = listTakesSignificantForm(m, us, shownRows, shownCols);
   const cells: string[][] = [];
-  for (let r = 0; r < m.rows; r++) {
+  for (let r = 0; r < shownRows; r++) {
     const row: string[] = [];
-    for (let c = 0; c < m.cols; c++) {
-      row.push(formatMatrixEntry(rowMajor[r * m.cols + c], us));
+    for (let c = 0; c < shownCols; c++) {
+      row.push(formatMatrixEntry(matAt(m, r, c), us, m.unit, locale, significant, cellPlacesAt(m, r, c)));
     }
     cells.push(row);
   }
   const colWidth: number[] = [];
-  for (let c = 0; c < m.cols; c++) {
+  for (let c = 0; c < shownCols; c++) {
     let width = 0;
-    for (let r = 0; r < m.rows; r++) width = Math.max(width, cells[r][c].length);
+    for (let r = 0; r < shownRows; r++) width = Math.max(width, cells[r][c].length);
     colWidth.push(width);
   }
-  return cells
+  const grid = cells
     .map((row) => `[ ${row.map((cell, c) => cell.padStart(colWidth[c])).join("  ")} ]`)
     .join("\n");
+  // Past the ceiling, one more line says how much was left out.
+  return preview.kind === "whole" ? grid : `${grid}\n${leftOutText(preview)}`;
 }
 
 function formatRange(min: number, max: number, locale: ILocale): string {
-  return `${locale.display.resultPrefix}${min}:${max}`;
+  return `${locale.display.resultPrefix}${shortestText(min)}:${shortestText(max)}`;
 }
 
-function formatPercentage(value: number, locale: ILocale, settings: FormattingSettings): string {
+function formatPercentage(value: number, locale: ILocale, settings: FormattingSettings, exact?: DecimalData): string {
   // ValueType.Percentage stores a fraction (0.25 for 25%). See Value.ts's
   // documented contract and the sole producer, VM.ts's TO_PERCENTAGE opcode
   // (`right/left - 1`, e.g. 0.25 for "800 to 1000"). Multiply by 100 before
@@ -629,7 +1212,19 @@ function formatPercentage(value: number, locale: ILocale, settings: FormattingSe
   // locale's grouping and decimal mark (`1234567%` was 1234567.00%, and 25%
   // under de-DE was 25.00%), as formatUom's figures do.
   const tooSmall = tooSmallToPrintText(percent, dp, loc);
-  const fixed = percent.toFixed(dp);
+  // Past the magnitude where the double holds the places shown, the digits come
+  // from the exact fraction the percentage keeps (see VMConversion's
+  // percentageExact), a hundred times over: `9007199254740993.5 as percent` is
+  // 900,719,925,474,099,350.00%, where the double wrote ...456.00%. A
+  // percentage keeps its places even when whole, so the digits are written to
+  // them rather than in the whole-number form a plain number takes.
+  const exactPercent = exact === undefined ? undefined : percentOfFraction(exact);
+  const exactText = exactPercent !== undefined && exactDigitsWhereDoubleCannot(percent, { exact: exactPercent }, dp) !== undefined ? decimalToFixed(exactPercent, dp) : undefined;
+  // Written to its places in full digits at any size: `toFixed` writes 1e21
+  // and above in exponent form, so `1e306 as %` showed `1e+308%`.
+  const plain = exactText ?? fixedDecimalText(percent, dp);
+  // Less the zeros that only pad the places, when the host asked for that (#750).
+  const fixed = settings.floatResult.trimTrailingZeros === true ? trimFractionZeros(plain, 0) : plain;
   let formatted = tooSmall ?? localiseFixedDecimal(fixed, loc, settings.floatResult.enableSeperator);
   // A proportion that is zero at these places is written without a sign, as a
   // zero is (#585): never -0.00%.
@@ -637,8 +1232,25 @@ function formatPercentage(value: number, locale: ILocale, settings: FormattingSe
   return `= ${formatted}${locale.display.percentageSuffix}`;
 }
 
+/**
+ * An exact fraction as the exact percentage it is, a hundred times over: 0.125
+ * is 12.5, and 9007199254740993.5 is 900719925474099350. Moving the point two
+ * places is exact, so no digit is rounded on the way.
+ *
+ * @param fraction - The exact decimal a percentage stands for (0.25 for 25%).
+ * @returns The same value in percent.
+ */
+export function percentOfFraction(fraction: DecimalData): DecimalData {
+  if (fraction.scale >= 2) return { coef: fraction.coef, scale: fraction.scale - 2 };
+  // A scale below two: the point moves past the digits, so a zero is appended
+  // for each place it moves beyond them.
+  let coef = fraction.coef;
+  for (let scale = fraction.scale; scale < 2; scale++) coef *= 10n;
+  return { coef, scale: 0 };
+}
+
 function formatUnit(value: number, unit: string | undefined): string {
-  return `= ${value} ${unit || ""}`.trim();
+  return `= ${shortestText(value)} ${unit || ""}`.trim();
 }
 
 /**
@@ -651,10 +1263,15 @@ function formatUnit(value: number, unit: string | undefined): string {
  * per share.
  */
 /**
- * An IP/CIDR as text: the dotted quad, plus `/prefix` when present, or a bare
- * `/prefix` when there is no address (`netmask of /24` before it resolves).
+ * An IP/CIDR as text: the dotted quad, or for IPv6 the RFC 5952 text with its
+ * `%zone`, plus `/prefix` when present, or a bare `/prefix` when there is no
+ * address (`netmask of /24` before it resolves).
  */
 function formatIpCidr(data: IpCidrData): string {
+	if (data.addr6 !== undefined) {
+		const zoned = data.zone === undefined ? formatIpv6(data.addr6) : `${formatIpv6(data.addr6)}%${data.zone}`;
+		return data.prefix === undefined ? zoned : `${zoned}/${data.prefix}`;
+	}
 	if (data.addr === undefined) return `/${data.prefix}`;
 	const dotted = formatIp(data.addr);
 	return data.prefix === undefined ? dotted : `${dotted}/${data.prefix}`;
@@ -690,15 +1307,19 @@ function formatSplit(data: SplitData, locale: ILocale, settings: FormattingSetti
  *
  * @param value - The evaluated value to format.
  * @param settings - Locale/precision/separator options; defaults to
- *   {@link DEFAULT_FORMATTING_SETTINGS} when omitted.
+ *   {@link DEFAULT_FORMATTING_SETTINGS} when omitted. A partial object names
+ *   only what it changes and is merged over the defaults group by group
+ *   (`{ calendar }`, `{ numberResult: { decimalSeparatorLocale: "de-DE" } }`);
+ *   a complete one is used as it is. To format with an engine's own calendar
+ *   and locale, `ExpressionEngine.formatValue` is the shorter call.
  * @example
  * ```typescript
  * const value = engine.evaluateExpression("10 USD to GBP");
  * formatValue(value); // "= £7.85" (exact output depends on live exchange rates)
  * ```
  */
-export function formatValue(value: Value, settings?: FormattingSettings): string {
-  const us = settings || DEFAULT_FORMATTING_SETTINGS;
+export function formatValue(value: Value, settings?: FormattingOverrides): string {
+  const us = resolveFormattingSettings(settings);
   const localeCode = us.numberResult.decimalSeparatorLocale || "en";
   const locale = getLocale(localeCode);
 
@@ -712,21 +1333,30 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       // An exact integer past the safe range shows its own digits. Within the
       // range the double is already exact and renders as it always has.
       if (value.rational !== undefined && value.rational.d === 1n && !Number.isSafeInteger(value.value as number)) {
+        // Compact is a display rounding, so an exact integer takes it as a double does.
+        const compact = value.decimalPlaces === undefined ? compactText(value.value as number, us) : undefined;
+        if (compact !== undefined) return `${locale.display.resultPrefix}${compact}`;
         return formatExactInteger(value.rational.n, locale, us, value.decimalPlaces);
       }
-      return formatNumber(value.value as number, locale, us, value.decimalPlaces, value.exact);
+      return formatNumber(value.value as number, locale, us, value.decimalPlaces, value.exact, value.rational);
     case ValueType.Hex:
       return formatHex(value.value as number | bigint, us, value.unit);
     case ValueType.BigInt:
       return formatBigInt(value.value as bigint);
     case ValueType.String:
+      if (value.calendarName !== undefined) return formatCalendarName(value, us);
       return formatString(value.value as string);
     case ValueType.Boolean:
       return formatBoolean(value.value as boolean);
     case ValueType.Datetime:
+      if (value.grain === "time") return formatTimeOfDayValue(value.value as number, locale, us, value.zone, value.timeAnchor, value.timePrecision);
       return formatDatetime(value.value as number, locale, us, value.zone);
     case ValueType.Uom:
-      return formatUom(value.value as number, value.unit, locale, us, value.exact, value.datetimeSpan, value.decimalPlaces);
+      if (value.zoneDifference !== undefined) {
+        const gap = formatZoneDifference(value, us);
+        if (gap !== undefined) return gap;
+      }
+      return formatUom(value.value as number, value.unit, locale, us, value.exact, value.datetimeSpan, value.decimalPlaces, value.unitLabel);
     case ValueType.Matrix:
       return formatMatrix(value.value as MatrixData, locale, us);
     case ValueType.Range: {
@@ -746,7 +1376,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     case ValueType.Symbolic:
       return formatSymbolic(value.value as SymbolicNode);
     case ValueType.Percentage:
-      return formatPercentage(value.value as number, locale, us);
+      return formatPercentage(value.value as number, locale, us, value.exact);
     case ValueType.Unit:
       return formatUnit(value.value as number, value.unit);
     case ValueType.Error:

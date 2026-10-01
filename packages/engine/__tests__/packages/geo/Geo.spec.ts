@@ -246,7 +246,8 @@ describe("on a line", () => {
 	});
 
 	test("inside a list the angles stay separate elements", () => {
-		expect(answer("[51.5°N, 0.12°W]")).toBe("[51.50, -0.12]");
+		// A list carries its cells' unit since #745.
+		expect(answer("[51.5°N, 0.12°W]")).toBe("[51.50 degrees, -0.12 degrees]");
 		expect(answer("max(51°N, 12°E)")).toBe("51.00 degrees");
 	});
 
@@ -316,7 +317,11 @@ describe("what it leaves alone", () => {
 	});
 
 	test("time in a city is the time package's, unchanged", () => {
-		expect(evaluate("time in London").type).toBe(ValueType.String);
+		// The time package answers a time of day in that zone (#757).
+		const value = evaluate("time in London");
+		expect(value.type).toBe(ValueType.Datetime);
+		expect(value.grain).toBe("time");
+		expect(value.zone).toBe("Europe/London");
 	});
 });
 

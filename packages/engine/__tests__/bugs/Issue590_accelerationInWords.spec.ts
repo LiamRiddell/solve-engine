@@ -22,7 +22,8 @@ describe("a refusal names the acceleration in words", () => {
 		["5 kg in m/s^2", "a mass cannot be converted to an acceleration"],
 		["1 m in m/s^2", "a length cannot be converted to an acceleration"],
 		["9.81 m/s^2 in N", "an acceleration cannot be converted to a force"],
-		["9.81 m/s^2 * 3 s", "acceleration and duration cannot be multiplied"],
+		["9.81 m/s^2 + 3 s", "acceleration and duration cannot be added"],
+		["9.81 m/s^2 * 3 m", "acceleration and length cannot be multiplied"],
 	])("%s", (source, message) => {
 		const value = evaluate(source);
 		expect(value.errorCode).toBe("INCOMPATIBLE_UNITS");

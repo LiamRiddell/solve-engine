@@ -20,9 +20,12 @@ import { utcMs } from "./Gregorian";
  * A "zone reference" is either a real IANA identifier (`"Australia/Sydney"`) or
  * the synthetic fixed-offset form `"UTCOFFSET:<minutes>"`, which the numeric
  * `GMT+N`/`UTC-N` spelling needs because it has no IANA identifier of its own
- * and no daylight-saving rule to consult. {@link encodeFixedOffset},
- * {@link isFixedOffset} and {@link decodeFixedOffsetMinutes} are the only code
- * that knows the encoding exists.
+ * and no daylight-saving rule to consult. An offset the reader named after a
+ * date (`in UTC-5`) is encoded as `"UTCNAMED:<minutes>"`, the same arithmetic
+ * with one difference in how the date displays. {@link encodeFixedOffset},
+ * {@link encodeNamedOffset}, {@link isFixedOffset}, {@link isNamedOffset} and
+ * {@link decodeFixedOffsetMinutes} are the only code that knows the encoding
+ * exists.
  *
  * The encoding and {@link zonedWallClockToUtcMs} were written in the time
  * package (`packages/time/timezones/ZoneMath.ts`, which still re-exports every
@@ -36,6 +39,7 @@ import { utcMs } from "./Gregorian";
  */
 
 const FIXED_OFFSET_PREFIX = "UTCOFFSET:";
+const NAMED_OFFSET_PREFIX = "UTCNAMED:";
 
 /**
  * Encode a fixed UTC offset as a zone reference.
@@ -48,13 +52,43 @@ export function encodeFixedOffset(offsetMinutes: number): string {
 }
 
 /**
- * Whether a zone reference is a fixed offset rather than a named IANA zone.
+ * Encode a fixed UTC offset the reader named as the zone to read a date in,
+ * `2026-04-03T15:00 in UTC-5`.
+ *
+ * The same arithmetic as {@link encodeFixedOffset}, and every function here
+ * treats the two alike, because an offset is an offset. They differ only in
+ * what a date carrying one shows: an offset a reader named is the clock they
+ * asked to see the answer on, as a named zone is, while an offset an ISO
+ * literal carried (`...+09:00`) only records how the instant was written and
+ * leaves the display in the engine's own zone. See {@link isNamedOffset}.
+ *
+ * @param offsetMinutes - Minutes ahead of UTC, negative behind it.
+ * @returns The `"UTCNAMED:<minutes>"` reference.
+ */
+export function encodeNamedOffset(offsetMinutes: number): string {
+	return `${NAMED_OFFSET_PREFIX}${offsetMinutes}`;
+}
+
+/**
+ * Whether a zone reference is a fixed offset rather than a named IANA zone,
+ * in either encoding.
  *
  * @param zoneRef - The reference to test.
- * @returns True for the `"UTCOFFSET:<minutes>"` form.
+ * @returns True for the `"UTCOFFSET:<minutes>"` and `"UTCNAMED:<minutes>"` forms.
  */
 export function isFixedOffset(zoneRef: string): boolean {
-	return zoneRef.startsWith(FIXED_OFFSET_PREFIX);
+	return zoneRef.startsWith(FIXED_OFFSET_PREFIX) || zoneRef.startsWith(NAMED_OFFSET_PREFIX);
+}
+
+/**
+ * Whether a zone reference is a fixed offset the reader named, which a date
+ * is shown in. See {@link encodeNamedOffset}.
+ *
+ * @param zoneRef - The reference to test.
+ * @returns True for the `"UTCNAMED:<minutes>"` form only.
+ */
+export function isNamedOffset(zoneRef: string): boolean {
+	return zoneRef.startsWith(NAMED_OFFSET_PREFIX);
 }
 
 /**
@@ -64,7 +98,8 @@ export function isFixedOffset(zoneRef: string): boolean {
  * @returns Minutes ahead of UTC, negative behind it.
  */
 export function decodeFixedOffsetMinutes(zoneRef: string): number {
-	return parseInt(zoneRef.slice(FIXED_OFFSET_PREFIX.length), 10);
+	const prefix = zoneRef.startsWith(NAMED_OFFSET_PREFIX) ? NAMED_OFFSET_PREFIX : FIXED_OFFSET_PREFIX;
+	return parseInt(zoneRef.slice(prefix.length), 10);
 }
 
 /**
@@ -145,6 +180,64 @@ export function zonedWallClockToUtcMs(
 }
 
 /**
+ * A named zone's offset from UTC at an instant, in milliseconds, to the
+ * second: the zone's wall clock read back as if it were UTC, less the instant
+ * with its own milliseconds set aside.
+ *
+ * Whole minutes are not enough before a zone adopted standard time. London
+ * kept local mean time until 1847, 1 minute 15 seconds behind UTC, and a wall
+ * clock resolved with the offset rounded to a minute landed 15 seconds before
+ * midnight, on the day before the one asked for (#823).
+ */
+function offsetMsInZone(zone: string, epochMs: number): number {
+	const f = zonedFields(zone, epochMs);
+	const wholeSecond = epochMs - (((epochMs % 1000) + 1000) % 1000);
+	return utcMs(f.year, f.month0, f.day, f.hour, f.minute, f.second) - wholeSecond;
+}
+
+/**
+ * The UTC instant a wall-clock reading names in a named IANA zone, to the
+ * second, in epoch milliseconds.
+ *
+ * The same two passes and the same choice for a skipped or repeated reading as
+ * {@link zonedWallClockToUtcMs}, with the offset read to the second rather
+ * than rounded to a minute, which is what the zone-bound `Date` backend needs
+ * for the local mean times in force before standard time. A fixed-offset
+ * reference has no such offsets and keeps the minute version.
+ *
+ * @param year - The calendar year, as written.
+ * @param month0 - Zero-based month; overflow rolls into the adjacent year.
+ * @param day - Day of the month; overflow rolls into the adjacent month.
+ * @param hour - Hour of the day.
+ * @param minute - Minute of the hour; overflow rolls into the adjacent hour.
+ * @param zone - An IANA zone name `Intl` accepts.
+ * @returns Epoch milliseconds, or `NaN` when a field is not finite or the
+ *   instant is past the range `Date` holds.
+ */
+export function namedZoneWallClockToUtcMs(year: number, month0: number, day: number, hour: number, minute: number, zone: string): number {
+	const naive = utcMs(year, month0, day, hour, minute, 0);
+	if (!Number.isFinite(naive)) return Number.NaN;
+	const offsetAt = (t: number): number => {
+		try {
+			return offsetMsInZone(zone, t);
+		} catch {
+			// Past the range `Intl` formats: the reading names no instant.
+			return Number.NaN;
+		}
+	};
+	const naiveOffset = offsetAt(naive);
+	const firstGuess = naive - naiveOffset;
+	const refinedOffset = offsetAt(firstGuess);
+	if (Number.isNaN(naiveOffset) || Number.isNaN(refinedOffset)) return Number.NaN;
+	if (refinedOffset === naiveOffset) return firstGuess;
+	const secondGuess = naive - refinedOffset;
+	const shows = (candidate: number): boolean => candidate + offsetAt(candidate) === naive;
+	if (shows(firstGuess)) return firstGuess;
+	if (shows(secondGuess)) return secondGuess;
+	return Math.max(firstGuess, secondGuess);
+}
+
+/**
  * Whether this runtime's `Intl` can format in a named zone.
  *
  * Asked once, at the point a host names a zone, so a backend that cannot
@@ -179,15 +272,68 @@ export function zonedFields(zone: string, epochMs: number): ZonedFields {
 	// `h23` so midnight reads as hour 0 rather than 24.
 	const dtf = formatter(zone, {
 		hourCycle: "h23",
+		era: "short",
 		year: "numeric", month: "2-digit", day: "2-digit",
 		hour: "2-digit", minute: "2-digit", second: "2-digit",
 	});
 	const parts: Record<string, string> = {};
 	for (const p of dtf.formatToParts(epochMs)) parts[p.type] = p.value;
+	// `Intl` writes the year of its era, so 975 BC comes back as 975, which
+	// read as a number is AD 975 (#823). The formatter is pinned to `en-US`,
+	// whose era before year 1 is `BC`, and the fields count astronomically as
+	// `Date` does: 1 BC is year 0, 975 BC is year -974.
+	const eraYear = +parts.year;
+	const year = parts.era === "BC" ? 1 - eraYear : eraYear;
 	return {
-		year: +parts.year, month0: +parts.month - 1, day: +parts.day,
+		year, month0: +parts.month - 1, day: +parts.day,
 		hour: +parts.hour, minute: +parts.minute, second: +parts.second,
 	};
+}
+
+/**
+ * Midnight UTC on 1 January of year 1, the first day of the common era, in
+ * epoch milliseconds. `Date.UTC` cannot be asked for it, since it reads year 1
+ * as 1901.
+ */
+export const YEAR_ONE_UTC_MS = -62_135_596_800_000;
+
+/**
+ * Two days, the margin {@link mayPrecedeYearOne} allows either side of
+ * {@link YEAR_ONE_UTC_MS}: more than any zone's offset from UTC, the
+ * local mean times before standard time included.
+ */
+const ERA_MARGIN_MS = 2 * 86_400_000;
+
+/**
+ * Whether an instant could fall before year 1 in some zone, the cheap test a
+ * formatter makes before it asks the zone which year it is. False for every
+ * date since the second day of the common era, so a modern date pays one
+ * comparison and no `Intl` call.
+ *
+ * @param epochMs - The instant.
+ * @returns True within two days of the start of year 1 or before it, and
+ *   false for `NaN`.
+ */
+export function mayPrecedeYearOne(epochMs: number): boolean {
+	return epochMs < YEAR_ONE_UTC_MS + ERA_MARGIN_MS;
+}
+
+/**
+ * The `Intl` options for a spelled-out date, `Tuesday, March 10, 2026` in
+ * `en`, with the era added when the date is before year 1.
+ *
+ * A year before the common era is written as the year of that era, so 975 BC
+ * is shown as `975`; without its era that reads as AD 975 (#823). The era is
+ * asked for only then, because every other date has always been written with
+ * none and adding `AD` to them would change every date a host shows.
+ *
+ * @param beforeYearOne - Whether the date falls before year 1 where it is read.
+ * @returns The options, a fresh object each call.
+ */
+export function longDateOptions(beforeYearOne: boolean): Intl.DateTimeFormatOptions {
+	const options: Intl.DateTimeFormatOptions = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+	if (beforeYearOne) options.era = "short";
+	return options;
 }
 
 /**
@@ -211,12 +357,15 @@ export function timeInZone(zone: string, epochMs: number): string {
  * @returns The formatted date.
  */
 export function dateInZone(zone: string, epochMs: number): string {
-	return formatter(zone, { year: "numeric", month: "long", day: "numeric" }).format(epochMs);
+	// The era only before year 1, as the spelled-out date writes it; see longDateOptions.
+	const beforeYearOne = mayPrecedeYearOne(epochMs) && zonedFields(zone, epochMs).year < 1;
+	return formatter(zone, { year: "numeric", month: "long", day: "numeric", ...(beforeYearOne ? { era: "short" } : {}) }).format(epochMs);
 }
 
 /**
  * The spelled-out date a named zone shows for an instant, in a locale:
- * `Tuesday, March 10, 2026` in `en`.
+ * `Tuesday, March 10, 2026` in `en`, and `Saturday, March 10, 975 BC` for a
+ * date before year 1 (see {@link longDateOptions}).
  *
  * The zone-bound counterpart of `CalendarBackend.formatLongDate`, which reads
  * the backend's own zone. Separate from {@link dateInZone} because that one is
@@ -229,9 +378,8 @@ export function dateInZone(zone: string, epochMs: number): string {
  * @returns The formatted date.
  */
 export function longDateInZone(zone: string, epochMs: number, locale: string): string {
-	return new Intl.DateTimeFormat(locale, {
-		timeZone: zone, weekday: "long", year: "numeric", month: "long", day: "numeric",
-	}).format(epochMs);
+	const beforeYearOne = mayPrecedeYearOne(epochMs) && zonedFields(zone, epochMs).year < 1;
+	return new Intl.DateTimeFormat(locale, { timeZone: zone, ...longDateOptions(beforeYearOne) }).format(epochMs);
 }
 
 /**

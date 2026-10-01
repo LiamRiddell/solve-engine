@@ -22,19 +22,15 @@ real document it clears per second.
 <BenchmarkStats />
 
 The per-line rate rises from the small document to the medium one, because the
-fixed cost of standing an engine up is spread across more lines. It eases back
-on the two largest documents, and there the warm re-parse is no faster than the
-cold one. That is the compile cache running out of room, not the processor: it
-holds 2,000 compiled lines by default (see [Caching, in layers](#caching-in-layers)
-below), each of the two largest benchmark documents holds more distinct lines
-than that, and a document that does not fit compiles most of its lines again on
-every pass. A host whose documents run that long raises
-`config.performance.defaultCacheSize` to hold them.
+fixed cost of standing an engine up is spread across more lines. Every line of
+the benchmark document evaluates: each one that reads a variable reads one
+assigned above it, so the figure is the rate of a document that works, not of
+one that fails on an undefined name.
 
 The number to take from the table is its size: an engine meant to run on every
 keystroke keeps pace with a document far larger than anyone types into one, and
-re-parsing an unchanged document that fits in the cache is quicker still, since
-its bytecode is already compiled. The sections below are why.
+re-parsing an unchanged document is quicker still, since its bytecode is
+already compiled. The sections below are why.
 
 ## Bytecode, not tree walking
 
@@ -57,12 +53,17 @@ normalising and the throw, and re-runs only the forms that read other lines'
 values. The memory is cleared with the compiled caches whenever a package or a
 user-defined unit changes what a line means.
 
-The compiled caches are bounded (`performance.defaultCacheSize`, 2,000 entries
-by default) and, when full, drop the entry that has gone longest without being
-used. The lines a document re-evaluates on every keystroke are used constantly,
-so they stay compiled while one-off expressions cycle out. A document with more
-distinct lines than the cap does not fit, and every pass then compiles it again
-whatever the eviction order; a host with such documents raises the cap.
+The compiled caches are bounded and, when full, drop the entry that has gone
+longest without being used. The bound is `performance.defaultCacheSize` (2,000
+entries by default) plus the line count of the open document, so a whole
+document always fits: a pass visits its lines in the same order every time, and
+a cache smaller than the document would drop each line just before the next
+pass wanted it, so that a warm pass over 10,000 distinct lines compiled every
+one of them again. The lines a document re-evaluates on every keystroke stay
+compiled while one-off expressions cycle out of the room on top. The cost is a
+compiled program per distinct line while the document is open (about 3.4 MB more
+at 10,000 lines than the old fixed bound held); `clear()` gives it back, and
+with no document open the bound is `defaultCacheSize` alone.
 
 <Explainer id="caches" client:load />
 
@@ -95,6 +96,57 @@ document. A variable's value depends on where in the note it is read, so the
 lines are run in order from the top, and the only lines that can be left alone
 are the ones nobody is looking at. Making `parseDocument` skip unchanged lines
 is not proposed, for the same reason.
+
+### Telling the evaluator about an edit
+
+An evaluator hears about an edit in one of two ways. `DocumentModel.editLine`
+replaces the text of one line. `ThreeTierEvaluator.applyTransaction` takes a
+list of changes, each a first line, a number of lines to delete and the lines
+to insert in their place, which is how most editors describe what happened
+(CodeMirror's change sets, for one).
+
+A change that deletes as many lines as it inserts moves no line: a keystroke
+inside a line arrives as "delete this line, insert its new text". The
+evaluator applies such a transaction line by line, in place, exactly as
+`editLine` would: each line keeps its id and its compiled program, and only
+the edited lines and whatever reads them run again. The result lists the ids
+of the lines whose text changed in `edited`, with `inserted` and `removed`
+empty. Any change that alters the line count (an insertion, a deletion, a
+paste of a different number of lines) makes the whole transaction structural:
+the lines below move, and each is followed to its new position.
+
+```ts
+// A keystroke on line 3: an edit in place, no line moves.
+evaluator.applyTransaction([{ startLine: 3, deleteCount: 1, insertLines: [":v2 = 8"] }]);
+// Enter pressed at the end of line 3: a structural edit, every line below moves down one.
+evaluator.applyTransaction([{ startLine: 4, deleteCount: 0, insertLines: [""] }]);
+evaluator.evaluate({ startLine: 1, endLine: 40 });
+```
+
+The difference is the cost, and what survives below the viewport. On a
+20,000-line note, a keystroke followed by evaluating the first 40 lines took
+33.75 ms as a structural edit and 2.24 ms in place (#713), and a line far
+below, which did not read the edited one, kept its answer instead of losing it
+until it was scrolled to again. A host that already sends one-for-one
+replacements gets this without changing anything.
+
+Two other costs of a long-lived evaluator are linear in the note since 2.42. A
+repeat pass over bare assignments (`price = 4`, with no colon) used to cost the
+square of the note, 5,975 ms for a second pass over 10,000 of them on the
+machine these figures come from, and costs 212 ms now (#712). A line reading a
+name nothing defines, evaluated from a timer callback or an event handler
+rather than after an `await`, cost about 22 microseconds against under one for
+`2 + 5`, and costs about 7 now (#714).
+
+What an evaluator keeps between passes is linear in the note too. It records
+which lines read which, so an edit or a live value reaches every line that
+depends on it, and a running total used to record one entry for every line it
+read: a ledger with `total above` after each entry held the square of its
+length, and 3,000 such lines through `evaluateDocument` kept over 500 MB. A
+span is one entry now, a tag total one entry on its tag and a section total
+one on its block, and the same note keeps under 10 MB (#733). `total by tag`
+is worked out once for all the breakdown lines that ask it of the same figures,
+so 500 of them cost about what one does (#734).
 
 ## Off the main thread
 
@@ -233,6 +285,50 @@ engine.onAsyncError(({ queryKey, packageId, error }) => {
 });
 ```
 
+### Every host call, off the thread
+
+The worker client is not limited to evaluating. `parseDocument` is the batch
+pass, which cannot re-run a line and so refuses goal seek; a host that moved its
+evaluation to a worker used to lose goal seek, and kept a second engine on the
+main thread for everything else. The client now proxies the calls a document's
+features rely on, each answering a clone-safe object (a DTO, data with no
+functions or class instances in it, so it survives `postMessage` and `JSON`):
+
+| Call | Mirrors | Answers |
+| --- | --- | --- |
+| `evaluateDocument(text)` | the `evaluateDocument` helper | the document through the incremental pass, goal seek included |
+| `whatIf(text, overrides)` | `engine.whatIf` | the document re-run with inputs changed |
+| `explainLine(expression)` | `engine.explainLine` | the steps and the result |
+| `traceLine(text, line, { maxDepth, maxLines })` | `engine.traceLine` | the line's inputs, each traced the same way |
+| `settle({ timeoutMs })` | `engine.settle` | once no live value is in flight |
+| `getSemanticTokens`, `getCompletions` | `LanguageService` | highlighting and completions |
+| `findReferences`, `getDefinition`, `rename`, `shiftLineReferences` | `LanguageService` | positions and edits, refusals included |
+
+```ts
+const doc = await engine.evaluateDocument(
+  ":deposit = 100000\n:rate = 4%\nmonthly repayment on deposit over 25 years at rate\nsolve line 3 for deposit = 900",
+);
+doc.lines[3].result?.text; // "= 170,507.23"
+```
+
+Through the worker, `evaluateDocument` agrees with the main thread's value for
+value, and `parseDocument` still refuses goal seek with `GOAL_SEEK_NO_DOCUMENT`,
+as the batch pass does in process.
+
+A what-if's overrides cross as a finite number or as text the worker evaluates
+on its own (`{ price: "$120" }`); a `Value` cannot keep its type across
+`postMessage`, so send its text. An argument `postMessage` cannot copy at all (a
+function, a symbol) is refused before anything is sent, with
+`WORKER_ARGUMENT_NOT_CLONEABLE`, rather than surfacing as a raw `DataCloneError`.
+A trace reads the document given; when it is the text the worker evaluated last,
+it reads those answers rather than evaluating again.
+
+The boundary: an `AbortSignal` rejects the caller's promise at once, but a goal
+seek already running in the worker runs to the end, since the worker handles one
+message at a time; its answer is then dropped. Packages still cross as names, and
+the worker's language service reads the worker's own engine, so a package the
+worker entry does not bake in is not highlighted there either.
+
 Nothing about the synchronous API changes. `solve-engine/worker` is a separate,
 side-effect-free entry point, so a host that never imports it pays nothing.
 
@@ -257,16 +353,22 @@ read here from the same data the home page quotes rather than typed in:
 
 An engine constructed with a handful of packages, such as
 `new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE] })`, lands between the
-two, and where it lands depends on the bundler. Under rolldown it leaves out a
-real share of the built-ins it never imports. Under esbuild it saves almost
-nothing today: the built-in packages share chunks of the published build, and
-esbuild keeps those chunks whole, so an arithmetic-only engine bundles to
-nearly the size of `createEngine()`.
+two. Each built-in package is built into files of its own, so a bundler can
+leave out every package nothing imports. That matters most under esbuild, which
+Obsidian plugins build with: esbuild leaves out whole files and keeps
+everything inside a file it keeps, so while the built-ins shared one file, an
+arithmetic-only engine bundled to nearly the size of `createEngine()`. The same
+two programs bundled with esbuild, minified and compressed with brotli, measured
+on every commit alongside the figures above:
 
-The boundary: until the build is split so that each package stands on its own,
-a slim engine is not a size saving under esbuild, and a host bundling with it
-gains little by leaving packages out. The split, and a table generated from it
-for each bundler, are open work. `createEngine` stays the plain choice when
+| Bundled with esbuild | Minified and compressed |
+| --- | --- |
+| `createEngine()` | {kb(sizes.esbuildFullBrotli)} |
+| `new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE] })` | {kb(sizes.esbuildSlimBrotli)} |
+
+The boundary: the shared core stays shared. The lexer, the parser, the VM and
+the unit table are in every engine, so a slim engine is never much smaller than
+the core with no package registered. `createEngine` stays the plain choice when
 bundle size is not the concern. Each [syntax page](/syntax/cheatsheet/) names
 the package its feature needs, so a slim build registers exactly what it uses.
 See [choosing packages](/getting-started/installation/).

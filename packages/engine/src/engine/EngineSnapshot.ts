@@ -32,7 +32,7 @@
  * `JSON.parse` unchanged.
  */
 
-import { Value, ValueType, type MatrixData, type MatrixEntry, type DatetimeGrain } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type DatetimeGrain, type CalendarName, type TimePrecision } from "@solve-js/vm/Value";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { DecimalData } from "@solve-js/decimal";
 import type { Rational } from "@solve-js/symbolic";
@@ -134,7 +134,7 @@ export interface SerializedValueSidecars {
  * function result, or a cached line are represented; {@link ValueType.Pending}
  * is filtered out upstream (an in-flight async result). A symbolic value, a
  * symbolic matrix cell, a colour, a split, a chart and an IP subnet have no form
- * here: {@link serializeValue} refuses them with
+ * here: {@link snapshotValue} refuses them with
  * {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE}, and
  * `ExpressionEngine.toJSON` catches that refusal and leaves the variable or
  * cached line out of the snapshot (#665).
@@ -146,11 +146,19 @@ export type SerializedValue = SerializedValueSidecars & (
 	| { t: ValueType.Number; v: SerializedNumber; exact?: SerializedDecimal; rational?: SerializedRational; uu?: string }
 	| { t: ValueType.Hex; v: SerializedNumber | string; big?: boolean; base?: string }
 	| { t: ValueType.BigInt; v: string }
-	| { t: ValueType.String; v: string }
-	| { t: ValueType.Datetime; v: SerializedNumber; g?: DatetimeGrain; z?: string }
+	| { t: ValueType.String; v: string; cn?: CalendarName }
+	// `ta` and `tp`: a time of day's anchor day and its precision (#757), so a
+	// restored `t = 3pm London in Tokyo` still reads `11:00 PM`. Optional, so no
+	// version bump.
+	| { t: ValueType.Datetime; v: SerializedNumber; g?: DatetimeGrain; z?: string; ta?: SerializedNumber; tp?: TimePrecision }
 	| { t: ValueType.Percentage; v: SerializedNumber }
-	| { t: ValueType.Uom; v: SerializedNumber; unit: string; exact?: SerializedDecimal }
-	| { t: ValueType.Matrix; rows: number; cols: number; data: (SerializedNumber | boolean)[] }
+	// `ul`: the name a quantity is shown under (Value.unitLabel, #762), so a
+	// restored `x = 5 km in Meile` still reads `3.11 Meile`. Optional, so no
+	// version bump.
+	// `zd`: the two places a time difference was asked between (#757). Optional,
+	// so no version bump.
+	| { t: ValueType.Uom; v: SerializedNumber; unit: string; exact?: SerializedDecimal; ul?: { name: string; per: number }; zd?: { from: string; to: string } }
+	| { t: ValueType.Matrix; rows: number; cols: number; data: (SerializedNumber | boolean)[]; unit?: string }
 	| { t: ValueType.Range; min: SerializedNumber; max: SerializedNumber }
 	| { t: ValueType.Boolean; v: boolean }
 	| { t: ValueType.Error; code: string; message: string }
@@ -310,7 +318,13 @@ function unsupportedValue(type: ValueType, where: string): never {
 }
 
 /**
- * Turn a runtime {@link Value} into its JSON-safe form.
+ * Turn a runtime {@link Value} into its JSON-safe snapshot form, the one
+ * {@link deserializeValue} restores.
+ *
+ * Internal to the snapshot. It is not the worker's public `serializeValue`,
+ * which writes a display-ready shape (`text`, `number`, `unit`) that does not
+ * restore. The two are named apart so that a reader of the source does not
+ * take one for the other (#725).
  *
  * @param value - The value to serialise.
  * @param where - A short human label for the value's origin (`variable "x"`, a
@@ -321,7 +335,7 @@ function unsupportedValue(type: ValueType, where: string): never {
  *   chart or an IP subnet. `ExpressionEngine.toJSON` catches it and leaves the
  *   value out of the snapshot.
  */
-export function serializeValue(value: Value, where: string): SerializedValue {
+export function snapshotValue(value: Value, where: string): SerializedValue {
 	const out = serializeValueBody(value, where);
 	// Plain copies, so the snapshot shares nothing with the live value.
 	if (value.sources !== undefined) out.src = value.sources.map((s) => ({ ...s }));
@@ -329,7 +343,7 @@ export function serializeValue(value: Value, where: string): SerializedValue {
 	return out;
 }
 
-/** The type-specific half of {@link serializeValue}. */
+/** The type-specific half of {@link snapshotValue}. */
 function serializeValueBody(value: Value, where: string): SerializedValue {
 	switch (value.type) {
 		case ValueType.Number: {
@@ -348,8 +362,13 @@ function serializeValueBody(value: Value, where: string): SerializedValue {
 		}
 		case ValueType.BigInt:
 			return { t: ValueType.BigInt, v: (value.value as bigint).toString() };
-		case ValueType.String:
-			return { t: ValueType.String, v: value.value as string };
+		case ValueType.String: {
+			// A weekday or month name keeps which one it is, an optional field a
+			// snapshot written before it existed simply lacks, so no version bump.
+			const out: Extract<SerializedValue, { t: ValueType.String }> = { t: ValueType.String, v: value.value as string };
+			if (value.calendarName !== undefined) out.cn = { kind: value.calendarName.kind, index: value.calendarName.index };
+			return out;
+		}
 		case ValueType.Datetime: {
 			// The two sidecars ride along as optional fields, which is why this
 			// needs no `SNAPSHOT_VERSION` bump: a snapshot written before they
@@ -359,6 +378,8 @@ function serializeValueBody(value: Value, where: string): SerializedValue {
 			const out: Extract<SerializedValue, { t: ValueType.Datetime }> = { t: ValueType.Datetime, v: encodeNumber(value.value as number) };
 			if (value.grain !== undefined) out.g = value.grain;
 			if (value.zone !== undefined) out.z = value.zone;
+			if (value.timeAnchor !== undefined) out.ta = encodeNumber(value.timeAnchor);
+			if (value.timePrecision !== undefined) out.tp = value.timePrecision;
 			return out;
 		}
 		case ValueType.Percentage:
@@ -366,13 +387,19 @@ function serializeValueBody(value: Value, where: string): SerializedValue {
 		case ValueType.Uom: {
 			const out: Extract<SerializedValue, { t: ValueType.Uom }> = { t: ValueType.Uom, v: encodeNumber(value.value as number), unit: value.unit ?? "" };
 			if (value.exact !== undefined) out.exact = serializeDecimal(value.exact);
+			if (value.unitLabel !== undefined) out.ul = { name: value.unitLabel.name, per: value.unitLabel.per };
+			if (value.zoneDifference !== undefined) out.zd = { from: value.zoneDifference.from, to: value.zoneDifference.to };
 			return out;
 		}
 		case ValueType.Matrix: {
 			const m = value.value as MatrixData;
 			if (m.hasSymbolic) unsupportedValue(ValueType.Symbolic, `${where} (symbolic matrix cell)`);
 			const data = m.data.map((cell) => serializeMatrixCell(cell, where));
-			return { t: ValueType.Matrix, rows: m.rows, cols: m.cols, data };
+			// A list's unit (#745) is written only when it has one, so a plain
+			// list's snapshot is byte-for-byte what it was.
+			return m.unit === undefined
+				? { t: ValueType.Matrix, rows: m.rows, cols: m.cols, data }
+				: { t: ValueType.Matrix, rows: m.rows, cols: m.cols, data, unit: m.unit };
 		}
 		case ValueType.Range: {
 			const r = value.value as { min: number; max: number };
@@ -397,7 +424,7 @@ function serializeMatrixCell(cell: MatrixEntry, where: string): SerializedNumber
 	return unsupportedValue(ValueType.Symbolic, `${where} (symbolic matrix cell)`);
 }
 
-/** Reverse {@link serializeValue}. Builds a fresh {@link Value}; never touches the arena, so it is safe to call outside evaluation. */
+/** Reverse {@link snapshotValue}. Builds a fresh {@link Value}; never touches the arena, so it is safe to call outside evaluation. */
 export function deserializeValue(sv: SerializedValue): Value {
 	const value = deserializeValueBody(sv);
 	if (sv.src !== undefined) value.sources = sv.src.map((s) => ({ ...s }));
@@ -421,12 +448,17 @@ function deserializeValueBody(sv: SerializedValue): Value {
 		}
 		case ValueType.BigInt:
 			return new Value(ValueType.BigInt, BigInt(sv.v));
-		case ValueType.String:
-			return new Value(ValueType.String, sv.v);
+		case ValueType.String: {
+			const v = new Value(ValueType.String, sv.v);
+			if (sv.cn !== undefined) v.calendarName = { kind: sv.cn.kind, index: sv.cn.index };
+			return v;
+		}
 		case ValueType.Datetime: {
 			const v = new Value(ValueType.Datetime, decodeNumber(sv.v));
 			if (sv.g !== undefined) v.grain = sv.g;
 			if (sv.z !== undefined) v.zone = sv.z;
+			if (sv.ta !== undefined) v.timeAnchor = decodeNumber(sv.ta);
+			if (sv.tp !== undefined) v.timePrecision = sv.tp;
 			return v;
 		}
 		case ValueType.Percentage:
@@ -434,13 +466,17 @@ function deserializeValueBody(sv: SerializedValue): Value {
 		case ValueType.Uom: {
 			const v = new Value(ValueType.Uom, decodeNumber(sv.v), sv.unit);
 			if (sv.exact !== undefined) v.exact = deserializeDecimal(sv.exact);
+			if (sv.ul !== undefined) v.unitLabel = { name: sv.ul.name, per: sv.ul.per };
+			if (sv.zd !== undefined) v.zoneDifference = { from: sv.zd.from, to: sv.zd.to };
 			return v;
 		}
 		case ValueType.Matrix: {
 			const data: MatrixEntry[] = sv.data.map((cell) => (typeof cell === "boolean" ? cell : decodeNumber(cell)));
 			// hasSymbolic is always false: a symbolic matrix is refused at serialise
 			// time, so anything restored here is purely numeric/boolean.
-			const m: MatrixData = { rows: sv.rows, cols: sv.cols, data, hasSymbolic: false };
+			const m: MatrixData = sv.unit === undefined
+				? { rows: sv.rows, cols: sv.cols, data, hasSymbolic: false }
+				: { rows: sv.rows, cols: sv.cols, data, hasSymbolic: false, unit: sv.unit };
 			return new Value(ValueType.Matrix, m);
 		}
 		case ValueType.Range:
@@ -463,7 +499,7 @@ function deserializeValueBody(sv: SerializedValue): Value {
 
 /** Turn one frozen answer into its JSON-safe form. */
 export function serializeFrozenRecord(record: FrozenRecord): SerializedFrozenRecord {
-	return { key: record.key, at: record.at, day: record.day, value: serializeValue(record.value, `frozen "${record.key}"`) };
+	return { key: record.key, at: record.at, day: record.day, value: snapshotValue(record.value, `frozen "${record.key}"`) };
 }
 
 /** Reverse {@link serializeFrozenRecord}. */
@@ -770,6 +806,13 @@ function isSerializedNumber(value: unknown): boolean {
 	return typeof value === "number" || value === "NaN" || value === "Infinity" || value === "-Infinity";
 }
 
+/** Whether a snapshot's `cn` is a weekday (0 to 6) or a month (0 to 11), as a restore will assign it. */
+function isCalendarName(value: unknown): boolean {
+	if (!isRecord(value) || !Number.isInteger(value.index) || (value.index as number) < 0) return false;
+	if (value.kind === "weekday") return (value.index as number) <= 6;
+	return value.kind === "month" && (value.index as number) <= 11;
+}
+
 function isIntegerString(value: unknown): boolean {
 	return typeof value === "string" && /^-?\d+$/.test(value);
 }
@@ -848,16 +891,19 @@ function assertValueShape(sv: unknown, where: string): void {
 			return;
 		case ValueType.String:
 			if (typeof sv.v !== "string") malformed(`${where}.v`, "a string", sv.v);
+			if (sv.cn !== undefined && !isCalendarName(sv.cn)) malformed(`${where}.cn`, "a weekday (0 to 6) or month (0 to 11)", sv.cn);
 			return;
 		case ValueType.Datetime:
 			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
 			// Both sidecars are optional, so a snapshot written before they
 			// existed passes here unchanged; present, they must still be the
 			// strings a restore will assign to a `Value`.
-			if (sv.g !== undefined && sv.g !== "date" && sv.g !== "datetime" && sv.g !== "instant") {
-				malformed(`${where}.g`, 'one of "date", "datetime" or "instant"', sv.g);
+			if (sv.g !== undefined && sv.g !== "date" && sv.g !== "datetime" && sv.g !== "instant" && sv.g !== "time") {
+				malformed(`${where}.g`, 'one of "date", "datetime", "instant" or "time"', sv.g);
 			}
 			if (sv.z !== undefined && typeof sv.z !== "string") malformed(`${where}.z`, "a zone reference", sv.z);
+			if (sv.ta !== undefined && !isSerializedNumber(sv.ta)) malformed(`${where}.ta`, "a number", sv.ta);
+			if (sv.tp !== undefined && sv.tp !== "minute") malformed(`${where}.tp`, '"minute"', sv.tp);
 			return;
 		case ValueType.Percentage:
 			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
@@ -866,6 +912,20 @@ function assertValueShape(sv: unknown, where: string): void {
 			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
 			if (typeof sv.unit !== "string") malformed(`${where}.unit`, "a unit name", sv.unit);
 			if (sv.exact !== undefined) assertDecimalShape(sv.exact, `${where}.exact`);
+			if (sv.ul !== undefined) {
+				const ul: unknown = sv.ul;
+				const label = typeof ul === "object" && ul !== null ? (ul as { name?: unknown; per?: unknown }) : null;
+				if (label === null || typeof label.name !== "string" || label.name.length === 0 || typeof label.per !== "number" || !Number.isFinite(label.per) || label.per <= 0) {
+					malformed(`${where}.ul`, "a unit label (a name and a positive count)", ul);
+				}
+			}
+			if (sv.zd !== undefined) {
+				const zd: unknown = sv.zd;
+				const places = typeof zd === "object" && zd !== null ? (zd as { from?: unknown; to?: unknown }) : null;
+				if (places === null || typeof places.from !== "string" || typeof places.to !== "string") {
+					malformed(`${where}.zd`, "two place names", zd);
+				}
+			}
 			return;
 		case ValueType.Matrix: {
 			const { rows, cols, data } = sv;
@@ -877,6 +937,7 @@ function assertValueShape(sv: unknown, where: string): void {
 			if (!data.every((cell) => typeof cell === "boolean" || isSerializedNumber(cell))) {
 				malformed(`${where}.data`, "numeric or boolean cells", data);
 			}
+			if (sv.unit !== undefined && (typeof sv.unit !== "string" || sv.unit === "")) malformed(`${where}.unit`, "a unit name", sv.unit);
 			return;
 		}
 		case ValueType.Range:
