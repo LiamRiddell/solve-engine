@@ -34,6 +34,55 @@ x:3 // 3
 x + 1 // 3
 ```
 
+## What can stand before the colon
+
+A label is a name, the way a ledger names a figure: words, with the numbers and
+joining marks a name has. `Week 12`, `Year-end`, `Cost/unit` and `Food + drink`
+are all names, so each is a label and the figure after the colon is the answer:
+
+```solve
+Week 12: 75 // 75
+Year-end: 5 // 5
+Food + drink: $40 // $40.00
+Done?: 5 // 5
+Orders over $100: 12 // 12
+```
+
+A colon has other jobs too, and when the text before it is doing something
+other than naming, reading it as a label would throw that text away and answer
+with whatever followed: `1 + 24:00` used to answer 0. So the text before the
+colon is refused, with what it is instead, when it is:
+
+- **Part of a time.** A colon between two numbers belongs to a clock time, so a
+  number that starts the line or follows an operator is an operand, and a pair
+  that is no real time (`24:00`, a seconds field of 99) is refused as one. A
+  number that follows a word, as in `Week 12`, is part of the name.
+- **A choice written with `?` and `:`.** There is no such operator; the refusal
+  spells the line as the `if ... then ... else` the engine reads (see
+  [conditionals](/syntax/conditionals/)).
+- **A comparison.** `>`, `<`, `>=`, `<=`, `==` or `!=` written as a symbol make
+  the text a condition, not a name. The same idea written in words
+  (`Orders over $100`) is a name and stays a label.
+- **A calculation with no word in it**, such as `(1+2)`, which names nothing.
+
+```solve-doc
+1 + 24:00 // ERROR: "24:00" is not a valid time
+1:23:99 // ERROR: "1:23:99" is not a valid time
+true ? 25 : 30 // ERROR: There is no choice written with "?" and ":": write if true then 25 else 30
+a > b: 1 // ERROR: "a > b" before the colon is a comparison, not a label: a label names the figure in words, and a choice is written if ... then ... else
+(1+2): 5 // ERROR: "(1+2)" before the colon is a calculation, not a label: a label names the figure in words
+```
+
+The boundary: arithmetic between words stays a label (`Food + drink`,
+`Year-end`, `Q1/Q2`), since that is how ledgers name things and the figure after
+the colon is still the one the reader wrote. A question mark that ends the
+label (`Done?: 5`) is part of the name, but one with more words after it
+(`Paid? yes: 5`) reads as the start of a choice and is refused. And a pair
+after an operator is read as a time only when it is written as one, with the
+colon touching both numbers: in `Score >= 90: 12` the colon has a space after
+it, so the text before it is judged as a label, and refused as a comparison
+rather than as the time 90:12.
+
 ## A label without the colon
 
 The colon is the part people leave out, and other notepads read a line without

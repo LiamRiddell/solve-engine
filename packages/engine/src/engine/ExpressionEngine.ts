@@ -136,6 +136,7 @@ import type { ObservedCall } from "@solve-js/vm/VM";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { trailingTokenWording } from "@solve-js/parser/ParseMessages";
 import { wordLabelEnd } from "@solve-js/engine/WordLabel";
+import { colonLabelFault, ternaryAtQuestion } from "@solve-js/engine/ColonLabel";
 import { MultiWordNameTable, multiWordDefinitionRule, multiWordNameRule, multiWordNameRefusal } from "@solve-js/packages/variables/MultiWordNames";
 import { isTopLevel, namesSomething, severalUnknownsRefusal, typedText, undefinedFactorMessage } from "@solve-js/engine/SeveralUnknowns";
 import { documentErrors, errorOnLine, inlineExpressionOffset, lineFailureOf, recordLineFailure } from "@solve-js/engine/LineDiagnostics";
@@ -4856,6 +4857,16 @@ export class ExpressionEngine {
                     );
                 }
 
+                // Text before the colon that is not a name at all: a time the
+                // clock rules refused (`1 + 24:00`, `1:23:99`), a choice
+                // written `a ? b : c`, a comparison or an assignment. Read as
+                // a label, each answered with whatever followed the colon. See
+                // engine/ColonLabel.ts for the shapes and the boundary.
+                const fault = colonLabelFault(tokens, i);
+                if (fault !== null) {
+                    throw ErrorFactory.parsing(fault.code, fault.message, { tokenType: tokens[i].type, tokenValue: tokens[i].value });
+                }
+
                 builder.reset();
                 try {
                     // `false`: the retry gets a plain parse, with no fallback
@@ -4902,6 +4913,15 @@ export class ExpressionEngine {
                     } catch {
                         // Not an amount after all; the line's own error stands.
                     }
+                }
+            }
+
+            // A choice written `a > b ? 1 : 2`, whose `1 : 2` the clock rules
+            // read as a time, so no colon was left for the label loop above.
+            if (leftover.type === "QUESTION") {
+                const choice = ternaryAtQuestion(tokens, tokens.indexOf(leftover));
+                if (choice !== null) {
+                    throw ErrorFactory.parsing(choice.code, choice.message, { tokenType: leftover.type, tokenValue: leftover.value });
                 }
             }
 

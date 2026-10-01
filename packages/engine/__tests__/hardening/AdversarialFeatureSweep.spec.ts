@@ -207,6 +207,10 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	// words on its definition line (#743).
 	negation: ["not (X > 0)", "!(X > 0)", "not X", "!X", "if not X > 0 then 1 else 2"],
 	wordLabels: ["Rent $X", "Petrol X l", "Flight to Paris X EUR", "Chapter X", "take home $X"],
+	// What may stand before a label's colon: a time the clock rules refused, a
+	// choice written with "?" and ":", a comparison, a calculation with no word
+	// (FoundBug_labelBeforeAColon).
+	colonLabels: ["1 + X:00", "X:23:99", "true ? X : 30", "X > 0 ? 1 : 2", "X > 0: 1", "Week X: 75", "(X+1): 5", "Rent: X"],
 	multiWordNames: ["hourly rate = X", "take home = X", "tax on = X"],
 	// An unknown given a unit or a percentage under the arrow, a possessive
 	// name with either apostrophe, an operator word ending a name, and an
@@ -562,6 +566,9 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "t = X\nt London in Tokyo" },
 	{ form: "salary = £X\nsalary after tax" },
 	{ form: "x = X\nx:3\nx + 1" },
+	// A label before a colon beside the refusals its boundary gives
+	// (FoundBug_labelBeforeAColon).
+	{ form: "start = 9:30\nRent: X\nstart + 24:00\ntrue ? X : 0\ntotal above" },
 	// Membership through a variable holding a block, and a variable holding
 	// anything else after `in`.
 	{ form: "lab = 192.168.1.0/24\nX in lab" },
