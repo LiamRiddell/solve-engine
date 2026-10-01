@@ -101,6 +101,7 @@ import {
 } from "@solve-js/engine/ExpressionEngineSafety";
 import { containsSymbolicCall } from "@solve-js/packages/symbolic";
 import { solveEquationValues } from "@solve-js/vm/SymbolicOps";
+import { readsWithoutValue } from "@solve-js/vm/LineReads";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
@@ -136,7 +137,7 @@ import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { trailingTokenWording } from "@solve-js/parser/ParseMessages";
 import { wordLabelEnd } from "@solve-js/engine/WordLabel";
 import { MultiWordNameTable, multiWordDefinitionRule, multiWordNameRule, multiWordNameRefusal } from "@solve-js/packages/variables/MultiWordNames";
-import { isTopLevel, namesSomething, severalUnknownsRefusal } from "@solve-js/engine/SeveralUnknowns";
+import { isTopLevel, namesSomething, severalUnknownsRefusal, typedText, undefinedFactorMessage } from "@solve-js/engine/SeveralUnknowns";
 import { documentErrors, errorOnLine, inlineExpressionOffset, lineFailureOf, recordLineFailure } from "@solve-js/engine/LineDiagnostics";
 import {
     type DiagnosticPipelineResult,
@@ -4900,10 +4901,9 @@ export class ExpressionEngine {
         for (const name of equation.factorNames) {
             const v = this.vm.getVar(name);
             if (v === undefined) {
-                return errorValue(
-                    'EQUATION_FACTOR_UNDEFINED',
-                    `Cannot solve for "${equation.variable}": "${name}" is not yet defined.`,
-                );
+                // Pointing at `solve`, which answers `b/a` for `a*x = b`; the
+                // product path multiplies values and has none here.
+                return errorValue('EQUATION_FACTOR_UNDEFINED', undefinedFactorMessage(equation.variable, name, equation.text));
             }
             if (v.type !== ValueType.Matrix) {
                 return errorValue(
@@ -5224,7 +5224,13 @@ export class ExpressionEngine {
         if (refusedName !== null) throw refusedName;
 
         const names = this.parseFactorChain(normalizedTokens.slice(0, eqIdx));
-        if (names === null) {
+        // A chain with `π` or `ans` in it (`x*π = 2`) is not a product of
+        // matrices: those names read as values, so the line is the scalar
+        // equation it looks like, solved for its one real unknown rather than
+        // keyed by π. A single name (`π = 3`) is still an assignment.
+        const chainReadsAValue = names !== null && names.length > 1
+            && names.some(name => readsWithoutValue(name) && this.vm.getVar(name) === undefined);
+        if (names === null || chainReadsAValue) {
             // Not a product chain. It may still be a general scalar equation
             // (`x^2-4 = 0`), which is a strictly narrower attempt made only
             // after every existing shape has declined. See
@@ -5263,7 +5269,7 @@ export class ExpressionEngine {
             this.compileAdHoc(normalizedTokens.slice(0, eqIdx));
             return { value: CHECKED_NOT_RUN, assigned: null };
         }
-        this.vm.defineEquation(freeVar, factorNames, this.compileAdHoc(rhsTokens));
+        this.vm.defineEquation(freeVar, factorNames, this.compileAdHoc(rhsTokens), typedText(normalizedTokens));
         this.noteEquationOwner("matrix", freeVar, lineNumber);
         // Also stored as a scalar equation, so that `a*n = 10` with a numeric
         // `a` still has an answer. Which of the two kinds applies depends on
@@ -5360,6 +5366,7 @@ export class ExpressionEngine {
             const token = tokens[i];
             if (!namesSomething(tokens, i) || named.includes(token.value)) continue;
             if (this.vm.getVar(token.value) !== undefined || this.vm.hasUserFunction(token.value)) continue;
+            if (readsWithoutValue(token.value)) continue;
             named.push(token.value);
         }
         if (named.length < 2 || !isTopLevel(tokens, eqIdx)) return null;
@@ -5391,6 +5398,8 @@ export class ExpressionEngine {
             if (token.type !== 'IDENT' && token.type !== 'UNIT') continue;
             if (this.vm.getVar(token.value) !== undefined) continue;
             if (this.vm.hasUserFunction(token.value)) continue;
+            // `π` and `ans` read as values, so `2x = π` has one unknown.
+            if (readsWithoutValue(token.value)) continue;
             if (!unknowns.includes(token.value)) unknowns.push(token.value);
         }
         return unknowns;

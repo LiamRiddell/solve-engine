@@ -68,7 +68,7 @@ describe("verbs compose with the rest of the language", () => {
 	});
 
 	test("a Taylor series of cos has only even powers", () => {
-		expect(evaluate("taylor(cos(x), x=0, 4)")).toBe("1/24x^4-0.5x^2+1");
+		expect(evaluate("taylor(cos(x), x=0, 4)")).toBe("x^4/24-0.5x^2+1");
 	});
 
 	test("a verb applied to a concrete value still evaluates numerically", () => {

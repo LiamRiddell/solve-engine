@@ -6,7 +6,7 @@ import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { decimalAdd, decimalSubtract, decimalMultiply, decimalDivide, decimalIsZero, decimalToNumber, decimalFromNumberIfExact, decimalCompare, type DecimalData } from "@solve-js/decimal";
 import { sameShape } from "@solve-js/vm/MatrixOps";
 import { type SymbolicNode, type Rational, simplifySymbolic, rational, rationalAdd, rationalSub, rationalMul, rationalDiv, rationalToNumber, rationalCompare, isRationalZero, dividesByZero } from "@solve-js/symbolic";
-import { valueToSymbolic, symbolicDivisionByZero } from "@solve-js/vm/SymbolicOps";
+import { valueToSymbolic, symbolicDivisionByZero, symbolicQuantityRefused } from "@solve-js/vm/SymbolicOps";
 import { rationalOfExactDecimal, exactDecimalDivide, compareExactDecimals } from "@solve-js/vm/ExactDecimals";
 import { exactIntegerOf, bigBaseInteger, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemainder, wholeFromBase } from "@solve-js/vm/ExactIntegers";
 import { ErrorFactory, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
@@ -1840,6 +1840,10 @@ export function binaryOp(
     // don't support this (currently just MOD), those fall through to the
     // ordinary numeric path below unchanged.
     if (symbolicOp && (l.type === ValueType.Symbolic || r.type === ValueType.Symbolic)) {
+        // A formula has nowhere to keep a unit: `foo * 5 km` was `5foo`, the
+        // kilometres dropped. See symbolicQuantityRefused().
+        const quantity = symbolicQuantityRefused(l, r);
+        if (quantity) return quantity;
         const left = valueToSymbolic(l);
         const right = valueToSymbolic(r);
         // An operand with no exact rational image (NaN, ±Infinity) used to be

@@ -1732,6 +1732,37 @@ describe("an unknown under the arrow across entry points", () => {
   });
 });
 
+describe("a product equation and the line above under the arrow, across entry points", () => {
+  // `a*x = b` with `a` unknown points at `solve`, which answers `b/a`
+  // (FoundBug_productEquationUndefinedFactor); `ans` under the arrow is the
+  // line above, as it is without the arrow (FoundBug_constantUnderTheArrow).
+  const solveHint = 'Cannot solve for "x": "a" is not yet defined. Give "a" a value on a line above, or solve for "x" in terms of it with solve(a*x = b, x).';
+
+  test("both passes give the refusal, and the solve it names answers", () => {
+    const doc = ["a*x = b", "x =>", "solve(a*x = b, x)"];
+    expect(batch(doc)).toEqual(['x stored as an equation: solve with "x =>"', `ERROR: ${solveHint}`, "b/a"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an edit that gives the factor a value solves it in a live editor, as a fresh pass does", () => {
+    const { shown, edited } = editThenEvaluate(["b = 1", "a*x = 10", "x =>"], [[1, "a = 4"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[2]).toBe("2.5");
+  });
+
+  test("the single-expression path: the equation has no document to keep it, and the solve answers", () => {
+    expect(single("solve(a*x = b, x)").message).toBe("b/a");
+    expect(single("x =>").message).toBe("x");
+  });
+
+  test("ans under the arrow reads the line above on both passes, and needs a document on its own", () => {
+    const doc = ["2 + 3", "ans km =>", "3", "ans * x =>"];
+    expect(batch(doc)).toEqual(["5", "5.00 km", "3", "3x"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+    expectNeedsDocument("ans km =>");
+  });
+});
+
 // The worker is a further entry point (#770): `evaluateDocument` through the
 // worker client must agree with the main thread's `evaluateDocument` value for
 // value on every whole-document form, and its `parseDocument` with the main
