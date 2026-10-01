@@ -233,7 +233,28 @@ export function nonFiniteInBase(n: number | bigint, base: DisplayBase): Value | 
  */
 export function valueInBase(v: Value, base: DisplayBase): Value {
     const n = baseConversionOperand(v);
-    return nonFiniteInBase(n, base) ?? hexValue(n, base);
+    return nonFiniteInBase(n, base) ?? hexValue(wholeForBase(n), base);
+}
+
+/**
+ * The whole number a value written in a base holds: its fraction cut off,
+ * toward zero, as the digits it is shown with are.
+ *
+ * A base has no useful way to write a fractional digit, so `255.7 in hex` has
+ * always shown `0xFF`, but the value under it kept the .7: `255.7 in hex ==
+ * 255` was false, `(255.7 in hex) + 1` was 256.70, and `check (0.5 in hex) ==
+ * 0` failed with "0x0 is not equal to 0", two sides that read alike. The value
+ * is now the number shown, so what the line reads and what it holds agree. A
+ * fraction of a negative number goes toward zero as well, and one that leaves
+ * nothing (`-0.5`) is 0 rather than a negative zero.
+ *
+ * @param n - What {@link baseConversionOperand} read, already known to be finite or a bigint.
+ * @returns The whole number, unchanged for a bigint or a number that is already whole.
+ */
+export function wholeForBase(n: number | bigint): number | bigint {
+    if (typeof n === "bigint" || !Number.isFinite(n) || Number.isInteger(n)) return n;
+    const whole = Math.trunc(n);
+    return whole === 0 ? 0 : whole;
 }
 
 /** `Number.MAX_SAFE_INTEGER` as a bigint, the line past which a double stops holding every whole number. */

@@ -75,7 +75,7 @@ function bareParser(source: string): { parser: PrecedenceParser; builder: Byteco
 	const parser = new PrecedenceParser(registry, 50, "en");
 	parser.load(lex(source), false);
 	// The check emits its call by name; any index resolves it for a parse-only run.
-	const builder = new BytecodeBuilder(new Map([["checkComparison", 0]]));
+	const builder = new BytecodeBuilder(new Map([["checkComparison", 0], ["checkLink", 1], ["checkBoth", 2]]));
 	parser.setBuilder(builder);
 	return { parser, builder };
 }
@@ -246,7 +246,8 @@ describe("checkParselet reads each side to the comparison sign", () => {
 		["255 as hex == 255 as hex", "read to the end"],
 		["255 == 255 as hex", "read to the end"],
 		["255 as hex < 256 as binary", "read to the end"],
-		["255 as hex == 255 == 255", "left == 255"],
+		// A chain is read whole now (FoundBug_chainedCheck.spec.ts); it used to leave "== 255" for the tick.
+		["255 as hex == 255 == 255", "read to the end"],
 		["255 as hex", "refused CHECK_EXPECTED_COMPARISON"],
 		["255", "refused CHECK_EXPECTED_COMPARISON"],
 		["255 as constructor == 255", "read to the end"],

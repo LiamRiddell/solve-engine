@@ -19,6 +19,7 @@ import { DEFAULT_FORMATTING_SETTINGS, type FormattingSettings } from "@solve-js/
 import { decimalCompare } from "@solve-js/decimal";
 import { convertRate } from "@solve-js/uom/UomConverter";
 import { valuesEqual, valuesOrdered, hasExactSide, type Order } from "@solve-js/vm/Comparisons";
+import { kindOfOperand } from "./NotFunctions";
 
 /** The relative gap two values may differ by and still be equal: a conversion's rounding. */
 const EQUAL_TOLERANCE = 1e-12;
@@ -120,6 +121,9 @@ function toldApart(left: Value, right: Value, lv: number, rv: number, l: string,
 function percent(fraction: number): string {
 	return `${(fraction * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 }
+
+/** The longest a piece of text is quoted at in a check's message. */
+const MOST_QUOTED = 60;
 
 /** A side's own magnitude, as written, or 0 when it is not finite. */
 function finiteMagnitude(v: Value): number {
@@ -246,21 +250,129 @@ export function identityCheck(left: Value, right: Value, op: string, tolerance?:
 }
 
 /**
+ * What kind of value a side of a check is, in the reader's words: "a number",
+ * "text", "a true or false answer", "a colour".
+ *
+ * @param value - Either side of a check.
+ * @returns A short noun phrase, never an internal type name.
+ */
+export function kindOfSide(value: Value): string {
+	switch (value.type) {
+		case ValueType.Boolean: return "a true or false answer";
+		case ValueType.Colour: return "a colour";
+		case ValueType.IpCidr: return "an IP address";
+		default: return kindOfOperand(value);
+	}
+}
+
+/**
+ * A piece of text as a check's message quotes it, in double quotes, so a
+ * trailing space or the text `0xFF` cannot read as the number or the shorter
+ * text beside it. Cut short past {@link MOST_QUOTED} characters.
+ *
+ * @param text - The text itself.
+ */
+export function quotedText(text: string): string {
+	const cut = [...text];
+	return `"${cut.length > MOST_QUOTED ? `${cut.slice(0, MOST_QUOTED).join("")}...` : text}"`;
+}
+
+/**
+ * Text that `as number` reads: decimal digits with an optional sign, thousands
+ * commas, point and exponent. A base prefix (`"0xFF"`) is not among them, so a
+ * check does not suggest a conversion that would be refused.
+ */
+const NUMBER_AS_TEXT = /^\s*[-+]?\d[\d,]*(?:\.\d+)?(?:e[-+]?\d+)?\s*$/i;
+
+/**
+ * A check with text on either side: equal or not between two pieces of text,
+ * and refused by name between text and anything else.
+ *
+ * Text and a number that read alike are two kinds of thing, and the check used
+ * to fail them as unequal with both sides shown alike: `check 255 == "255"`
+ * said "255 is not equal to 255", and `check (255 in hex) == "0xFF"` "0xFF is
+ * not equal to 0xFF". It now says which side is text, and how to read the text
+ * as a number, the way a colour or an address beside a number is refused
+ * rather than failed. Text is quoted in every message, so `check "a " == "a"`
+ * no longer reads "a  is not equal to a".
+ *
+ * @param left - The left side.
+ * @param right - The right side; one of the two is text.
+ * @param op - The comparison.
+ * @returns A tick, a CHECK_FAILED naming both texts, or a CHECK_INCOMPARABLE.
+ */
+export function textCheck(left: Value, right: Value, op: string): Value {
+	if (left.type !== ValueType.String || right.type !== ValueType.String) {
+		const [text, other] = left.type === ValueType.String ? [left, right] : [right, left];
+		const textSide = left.type === ValueType.String ? "left" : "right";
+		const written = String(text.value);
+		const numeric = other.type === ValueType.Number || other.type === ValueType.Hex || other.type === ValueType.BigInt;
+		const asNumber = numeric && NUMBER_AS_TEXT.test(written) ? `. To read the text as a number, write ${quotedText(written)} as number` : "";
+		return errorValue(
+			"CHECK_INCOMPARABLE",
+			`check: ${quotedText(written)} on the ${textSide} is text and ${shown(other)} is ${kindOfSide(other)}, so they cannot be compared${asNumber}`,
+		);
+	}
+	if (op !== "==" && op !== "!=") {
+		return errorValue("CHECK_INCOMPARABLE", `check: text can only be compared with == or !=, not ${op}`);
+	}
+	const same = left.value === right.value;
+	if (same === (op === "==")) return stringValue("✓");
+	return errorValue("CHECK_FAILED", `check failed: ${quotedText(String(left.value))} is ${same ? "equal" : "not equal"} to ${quotedText(String(right.value))}`);
+}
+
+/**
+ * `checkLink(left, right, op)`: one link of a chained check, `a < b` in `check
+ * a < b < c`. Hands on its right side when the link holds, so the next link
+ * compares it without working it out again, and its failure otherwise, which
+ * carries itself through the rest of the chain as any failed value does.
+ *
+ * @param args - The two sides and the comparison, as {@link checkComparison} takes them.
+ * @returns The right side, or the error the link answered.
+ */
+export function checkLink(args: Value[]): Value {
+	const result = checkComparison(args.slice(0, 3));
+	if (result.type === ValueType.Error) return result;
+	return args[1] ?? errorValue("CHECK_EXPECTED_COMPARISON", "a check compares two things, as in \"check :spent <= :budget\"");
+}
+
+/** The note a passing approximate check carries, "differs by 0.04%", or undefined for a plain tick. */
+function passNote(value: Value): string | undefined {
+	return /^✓ \(differs by ([^)]*)\)$/.exec(String(value.value))?.[1];
+}
+
+/**
+ * `checkBoth(first, second)`: two checks joined with `and`, one tick when both
+ * pass. A failure on either side carries itself through the call, the first
+ * one written winning, as any failed value does; each side that passed by a
+ * margin keeps its note, `✓ (differs by 0.04% and by 0.01 m)`.
+ *
+ * @param args - The two answers, each a tick or what the check answered.
+ * @returns A tick, or a CHECK_EXPECTED_COMPARISON for anything but two ticks.
+ */
+export function checkBoth(args: Value[]): Value {
+	const [first, second] = args;
+	const passed = (v: Value | undefined): v is Value => v !== undefined && v.type === ValueType.String && CHECK_PASS.test(String(v.value));
+	if (!passed(first) || !passed(second)) {
+		return errorValue("CHECK_EXPECTED_COMPARISON", "a check joins comparisons with \"and\", as in \"check :a > 0 and :b > 0\"");
+	}
+	const notes = [passNote(first), passNote(second)].filter((n): n is string => n !== undefined);
+	if (notes.length === 0) return stringValue("✓");
+	return stringValue(`✓ (differs by ${notes.join(" and by ")})`);
+}
+
+/**
  * `checkComparison(left, right, op, tolerance?)`: "✓" when the comparison
  * holds, a CHECK_FAILED error naming both sides when it does not.
  */
 export function checkComparison(args: Value[]): Value {
 	const [left, right, opValue, tolerance] = args;
 	const op = String(opValue?.value ?? "==");
-
-	if (left.type === ValueType.String || right.type === ValueType.String) {
-		if (op !== "==" && op !== "!=") {
-			return errorValue("CHECK_INCOMPARABLE", `check: text can only be compared with == or !=, not ${op}`);
-		}
-		const same = left.type === right.type && left.value === right.value;
-		if (same === (op === "==")) return stringValue("✓");
-		return errorValue("CHECK_FAILED", `check failed: ${shown(left)} is ${same ? "equal" : "not equal"} to ${shown(right)}`);
+	if (left === undefined || right === undefined) {
+		return errorValue("CHECK_EXPECTED_COMPARISON", `a check compares two things, as in "check :spent <= :budget"`);
 	}
+
+	if (left.type === ValueType.String || right.type === ValueType.String) return textCheck(left, right, op);
 	// Two answers to a yes-or-no question compare as equal or not, as text
 	// does: `check !(1 > 2) == true` said "true and true cannot be compared".
 	// A boolean has no order, so only == and != mean anything between them.
@@ -321,7 +433,14 @@ export function checkComparison(args: Value[]): Value {
 	}
 	// An exact side is compared exactly, unless the check asked for a margin.
 	const order = approximate ? null : exactOrder(left, right);
-	const equal = order === null ? gap <= margin : order === 0;
+	// An infinity has no margin around it: scaled by it, the margin was itself
+	// infinite and made every pair equal, so `check 0 < 1/0` failed with "0 is
+	// not less than ∞" and `check 1/0 == 1/0` with "∞ is not equal to ∞". A side
+	// with no finite value is ordered as the comparison operators order it. An
+	// exact order comes first, since a whole number past 1.8e308 reads as an
+	// infinity here while its digits still tell it from its neighbour.
+	const unbounded = !Number.isFinite(lv) || !Number.isFinite(rv);
+	const equal = order !== null ? order === 0 : unbounded ? lv === rv : gap <= margin;
 	const less = order === null ? lv < rv : order < 0;
 	const more = order === null ? lv > rv : order > 0;
 
