@@ -50,15 +50,17 @@ export function percentageTimesPercentage(l: Value, r: Value): Value | null {
  * (a percentage over a percentage is a plain ratio, a number over a percentage
  * a plain number, and a divisor carrying an uncertainty keeps its own path).
  * A zero divisor is refused as a percentage with no finite value, rather than
- * shown as an infinite percentage.
+ * shown as an infinite percentage. A true or false divisor counts as 1 or 0, as
+ * it does in every other sum (`10% / true` is 10%, where it was a plain 0.10).
  *
  * @param l - The dividend.
  * @param r - The divisor.
  * @returns The percentage, a refusal, or null.
  */
 export function percentageOverNumber(l: Value, r: Value): Value | null {
-	if (l.type !== ValueType.Percentage || r.type !== ValueType.Number || r.uncertainty !== undefined) return null;
-	const divisor = r.value as number;
+	if (l.type !== ValueType.Percentage || r.uncertainty !== undefined) return null;
+	if (r.type !== ValueType.Number && r.type !== ValueType.Boolean) return null;
+	const divisor = r.type === ValueType.Boolean ? (r.value ? 1 : 0) : (r.value as number);
 	if (divisor === 0) return percentageNotFinite();
 	return percentageAnswer(percentQuotient(l.value as number, divisor));
 }

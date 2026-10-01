@@ -14,7 +14,7 @@ import {
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 import { EngineError } from "@solve-js/errors/EngineError";
 import { formatValue } from "@solve-js/format/FormatEngine";
-import { ValueType, numberValue, numberValueUncertain, percentageValue, uomValue } from "@solve-js/vm/Value";
+import { ValueType, boolValue, numberValue, numberValueUncertain, percentageValue, uomValue } from "@solve-js/vm/Value";
 import { percentPower, percentProduct, percentQuotient, percentSum, percentTotal, percentWeightedMean } from "@solve-js/vm/ExactDecimals";
 import { percentageOverNumber, percentageTimesPercentage, percentageToPower } from "@solve-js/vm/PercentArithmetic";
 import { sweepPercentageRefused } from "@solve-js/packages/whatif/WhatIfPluginFunctions";
@@ -356,6 +356,16 @@ describe("percentWeightedMean", () => {
 	});
 });
 
+describe("a true or false divisor under a percentage", () => {
+	test("10% / true is 10%, and 10% / false is refused, through every entry point", () => {
+		const engine = newTrackedEngine();
+		expect(engine.formatValue(engine.evaluateExpression("10% / true"))).toBe("= 10.00%");
+		expect(engine.evaluateExpression("10% / false").errorCode).toBe("PERCENTAGE_NOT_FINITE");
+		expect(single("10% / true")).toBe("10.00%");
+		expect(both(["a = true", "10% / a"])).toEqual(["true", "10.00%"]);
+	});
+});
+
 describe("percentageTimesPercentage, percentageOverNumber and percentageToPower", () => {
 	test("ordinary: each answers a percentage", () => {
 		expect(formatValue(percentageTimesPercentage(percentageValue(0.1), percentageValue(0.2))!)).toBe("= 2.00%");
@@ -369,6 +379,9 @@ describe("percentageTimesPercentage, percentageOverNumber and percentageToPower"
 		expect(percentageOverNumber(percentageValue(0.1), percentageValue(0.2))).toBeNull();
 		expect(percentageOverNumber(numberValue(2), percentageValue(0.1))).toBeNull();
 		expect(percentageOverNumber(percentageValue(0.1), uomValue(2, "m"))).toBeNull();
+		// A true or false divisor counts as 1 or 0, as in every other sum.
+		expect(formatValue(percentageOverNumber(percentageValue(0.1), boolValue(true))!)).toBe("= 10.00%");
+		expect(percentageOverNumber(percentageValue(0.1), boolValue(false))!.errorCode).toBe("PERCENTAGE_NOT_FINITE");
 		expect(percentageOverNumber(percentageValue(0.1), numberValueUncertain(2, 0.1))).toBeNull();
 		expect(percentageToPower(numberValue(2), percentageValue(0.1))).toBeNull();
 		expect(percentageToPower(percentageValue(0.1), percentageValue(0.5))).toBeNull();
