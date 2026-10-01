@@ -29,18 +29,36 @@ Status legend matches the SoulverCore audit: ✅ implemented, ⏸️ deliberatel
 reason given), ❌ **confirmed engine limitation** (root cause + a concrete design sketch for a
 future fix — this is the category the user asked this document to capture for future planning).
 
-Last updated: 2026-09-30.
+Last updated: 2026-10-01.
 
 **The measured state lives in `packages/engine/__tests__/docs/OtherAppsParity.spec.ts`**,
 the executable half of this page, in the shape of the Soulver spec. Every example an
-app documents with a stated result is a row there: <!-- parity:otherApps.supported -->8<!-- /parity -->
-of <!-- parity:otherApps.total -->11<!-- /parity --> produce the documented answer,
-<!-- parity:otherApps.gaps -->2<!-- /parity --> do not, and <!-- parity:otherApps.declined -->1<!-- /parity -->
-is declined with its reason. It fails in both directions, and the figures here are
+app documents with a stated result is a row there: <!-- parity:otherApps.supported -->10<!-- /parity -->
+of <!-- parity:otherApps.total -->16<!-- /parity --> produce the documented answer,
+<!-- parity:otherApps.gaps -->4<!-- /parity --> do not, and <!-- parity:otherApps.declined -->2<!-- /parity -->
+are declined with their reasons. It fails in both directions, and the figures here are
 written by `npm run stats:parity`, not typed (#786). A feature an app documents with
-no stated output stays prose on this page. NumPad's, Notes Calculator's and Calca's
-own sites could not be reached when the corpus was collected, so the spec names them
-as not yet collected rather than guessing their answers.
+no stated output stays prose on this page.
+
+What was collected, and from where: Numi's rows from its GitHub wiki and Numbr's from its
+`DOCS.md` (2026-09-30); Notes Calculator's one row, `f(x) = 2*x + 1` then `f(5)` → `11`,
+as this page quotes it; and the Calca rows (2026-10-01) from two announcement posts by
+Calca's author on his own blog, read from its public source repository
+`praeclarum/praeclarum.github.io` through raw.githubusercontent.com
+(`_posts/2013/2013-07-09-calca-the-text-editor-for-engineers.md` and
+`_posts/2013/2013-10-21-calca-for-windows-you-asked-for-it.md`). Of those,
+`12 tbsp in cups` and a grouped `100,033,234.56` answer as documented, the rainfall note
+(refused at a rate times an area) and a symbolic solve over names of several words are
+gaps, and `33%` is declined, since it stays a percentage. NumPad's, Notes
+Calculator's and Calca's own documentation sites, and web.archive.org, still refuse
+connections, and no mirror of the first two was found (GitHub code search,
+raw.githubusercontent.com and the npm registry were tried; the `nginecode/numpad`
+repository is a different app of the same name). This page quotes many of their forms,
+but without a result (`$40 as a % of $50`, `N% on what is X`, `sum(line 1 : line 4)`,
+`double(double(5))`), so they stay prose here and the spec names those apps as not yet
+collected rather than giving them an answer nobody documented. For `as a % on` and
+`as a % off` this page also records that NumPad's docs leave the formula ambiguous, a
+second reason no answer is assumed.
 
 ---
 
@@ -105,7 +123,7 @@ it overlaps with Numi/SoulverCore (already ✅); the genuinely new items:
 |---|---|---|
 | **`line 1 * 2` / `line 1 : line 4` — reference a line by number, including RANGES for aggregation** (`sum(line 1 : line 4)`) | ✅ **added this iteration** | The most sophisticated version yet of the cross-line-access gap — see item 1 below, now confirmed by FOUR independent apps (Numi's `prev`, Notes Calculator's `line<N>`, Numbr's `sum`-to-header, NumPad's `line<N>` plus RANGE syntax) and shipped as `packages/lines/`'s `sum`/`total`/`average(line X : line Y)`. |
 | Percentage ratio forms: `$40 as a % of $50`, `$60 as a % on $50`, `$40 as a % off $50` | ⏸️ identified, not yet speced | These compute the percentage itself as the result (inverse direction from everything implemented this pass, which takes a percent and solves for an amount). NumPad's own docs don't fully disambiguate `as a % on`/`as a % off`'s exact semantics beyond one example each — worth a closer look before implementing, to avoid guessing at the wrong formula and shipping a silently-wrong result (this codebase's #1 stated priority per every finance/percentage parselet's own doc comments). Not attempted this pass for that reason. |
-| Variables with spaces/apostrophes (`Alice's food = £30`) | ⚠️ design difference, not a gap | Bare one-word names ship (see the Numi table's "Variables" row); a name with a space or an apostrophe does not, since a space is what separates the words the engine reads, and a name that swallowed them would reopen the collision class the phrase-fusion policy exists to avoid. Two apps do this, which is worth remembering if the naming rules are revisited. |
+| Variables with spaces/apostrophes (`Alice's food = £30`) | ⚠️ partly, **measured 2026-10-01** | Names of several plain words ship (#743, `packages/variables/MultiWordNames.ts`): `land area = 0.25 acre` then `land area * 2` gives `= 0.50 acre`, fused only where a line defines the name, and a would-be name holding a word the engine already reads (`take`, a spelling of minus) is refused. NumPad's own example still does not parse: `Alice's food = £30` gives `Expected an operator or the end of the line, but found "food"`, since the possessive `Alice's` is not read as one plain word. No result is documented for it, so it is not a spec row. |
 | `X to Y` as **subtraction** (documented as "alternative subtraction, right-to-left") | ⚠️ semantic collision with existing `to`, not adopted | This engine (and SoulverCore, and Numi via `%` phrasing) already uses `X to Y` for **percentage change** (`800 to 1000` → 25%) and for **unit conversion** (`100cm to m`). Giving `to` a THIRD, mutually-exclusive meaning (plain subtraction) would make `5 to 3` genuinely ambiguous with the percentage-change form already shipped and tested. Confirmed as a real design divergence between apps, not something to copy. |
 | Number bases (`0b101010`, `0o777`, `0xcab1`) | ✅ | Octal was the one gap here — see the Numi table above, already closed this pass. |
 | Compound/derived-unit conversion (`4.6L/100km in miles / gallon`, `26.2 miles / 3 hours 30 minutes in min/km`) | ⏸️ identified, not yet speced | This engine's `Rate` primitive (`vm/Value.ts`) already handles rate ARITHMETIC (`30 fps * 3 minutes`) and simple rate construction, but converting one COMPOUND rate directly to another compound rate's units wasn't specifically checked against these exact examples. Flagged for a future closer look rather than guessed at. |
@@ -126,6 +144,15 @@ switching (`#@fr-FR`), and multiple statements per line via `;`. **Explicit prod
 consolidating the existing separate `Vector2`/`Vector3`/`Vector4` types into a general matrix
 representation so one feature covers both use cases, and treating Calca's own syntax as a floor,
 not a ceiling.
+
+The spec's Calca rows come from its author's announcement posts rather than this reference
+(see the top of this page): `12 tbsp in cups` and a grouped `100,033,234.56` answer as
+documented; the rainfall note (`land area = 0.25 acre`, `avg annual precip = 36.15 inch / year`,
+then their product `in gallon/day`, documented as `671.9012 gallon/day`) is refused at the
+product, "Cannot multiply a rate per year by a quantity in acre", the rate model's limit
+rather than the note's (`10 m/s * 2 m` meets the same refusal); and the symbolic
+`tax percent =>` over an equation in names of several words is a gap whose second line
+answers a confident `= 0.00%`, pinned as a known bug (`foo percent =>` alone does the same).
 
 Two items are already covered, no new work needed: comparison/logical operators match the
 existing Conditionals package; `variable = ?` matches the already-shipped Knowledge package's
@@ -373,7 +400,7 @@ A further three items were identified but deliberately left unspeced rather than
 NumPad's `as a % on`/`as a % off` ratio forms (ambiguous exact semantics from the docs alone) and
 compound-rate-to-rate conversion (needs checking against this engine's existing `Rate` primitive
 before claiming gap or non-gap). Two design differences were confirmed as intentional divergences,
-not gaps: space-containing variable names (bare one-word names have since shipped) and `to` as subtraction (would collide with
+not gaps at the time: space-containing variable names (names of several plain words have since shipped, #743; a possessive such as `Alice's food` still does not parse) and `to` as subtraction (would collide with
 this engine's existing, shipped `to`-as-percentage-change and `to`-as-unit-conversion meanings).
 
 **Calca** (audited separately above, a different product category — full CAS/symbolic-math, not
