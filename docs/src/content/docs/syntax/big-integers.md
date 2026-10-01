@@ -119,21 +119,28 @@ The other limits:
   percentage is a hundred times its number, so one past that point is refused
   by name rather than written as an infinity (see
   [percentages](/syntax/percentages/#a-number-as-a-percentage)).
-- **A unit, or a percentage typed with its sign.** A quantity with a unit reads
-  the nearest double, typed digits included (`9007199254740993 m` is
-  9,007,199,254,740,992.00 m, `9007199254740993.5 m` is 9,007,199,254,740,994.00
-  m, and `as int` of it is 9,007,199,254,740,994). So does a percentage written
-  with `%` after a number that large (`900719925474099350%`); `as percent` of the
-  number is the exact form. Money is the exception: an amount of money keeps its
-  exact decimal at any size, and `floor`, `ceil`, `round`, `trunc` and `int`
-  round it from that decimal and keep the currency, so
+- **A percentage typed with its sign.** A percentage written with `%` after a
+  number that large reads the nearest double (`900719925474099350%`); `as
+  percent` of the number is the exact form.
+- **Some work on a large quantity.** A quantity with a unit (a length, a mass, a
+  number of days) past 2^53 keeps the exact value it was written as, so
+  `9007199254740993.5 m` is 9,007,199,254,740,993.50 m, and `floor`, `ceil`,
+  `round`, `trunc`, `int` and `as int` of it round that value, not the nearest
+  double. Adding or subtracting another amount in the same unit, and multiplying
+  or dividing by a plain number, keep it exact too. Converting it into another
+  unit (`in km`), multiplying two quantities together, and `mod` read the
+  nearest double, since a conversion factor is itself a double. Money goes
+  further: an amount of money keeps its exact decimal at any size, so
   `floor($9007199254740993.5)` is $9,007,199,254,740,993.00, where the nearest
   double would round from $9,007,199,254,740,994.
 
 ```solve
 sqrt(2^106) + 0.5 // 9,007,199,254,740,992
 2^1024 // ∞
-(2^53 + 1) kg // 9,007,199,254,740,992.00 kg
+(2^53 + 1) kg // 9,007,199,254,740,993.00 kg
+ceil((2^60 + 0.5) m) // 1,152,921,504,606,846,977.00 m
+round((2^60 + 0.5) m) // 1,152,921,504,606,846,977.00 m
+(2^60 + 0.5) m + 1 m // 1,152,921,504,606,846,977.50 m
 floor($9007199254740993.5) // $9,007,199,254,740,993.00
 ceil($9007199254740993.5) // $9,007,199,254,740,994.00
 ```

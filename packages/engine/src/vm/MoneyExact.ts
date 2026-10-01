@@ -168,16 +168,41 @@ function moneyRateExactMagnitude(operand: Value, unit: string): DecimalData | nu
  *
  * What a unit written after a number makes (`$0.15`, `$0.15/kWh`, `12.3 kWh`),
  * and what `0.15 USD per kWh` makes of an amount of money. Only money and a
- * price per unit keep the decimal; a length, a mass or a speed stays a double,
- * the boundary vm/ExactDecimals.ts draws for units other than money.
+ * price per unit keep the decimal at every size; a length, a mass or a speed
+ * stays a double until it is past 2^53, where the double holds no fraction and
+ * the exact value it was written as is kept instead ({@link exactPastTheDouble}).
  *
  * @param operand - The amount, a number or an amount of money.
  * @param unit - The unit it is given.
  * @returns The value in that unit.
  */
 export function valueInUnit(operand: Value, unit: string): Value {
-	const exact = moneyExactMagnitude(operand, unit) ?? moneyRateExactMagnitude(operand, unit);
+	const exact = moneyExactMagnitude(operand, unit) ?? moneyRateExactMagnitude(operand, unit) ?? exactPastTheDouble(operand);
 	return exact !== null ? uomValueExact(operand.toNumber(), unit, exact) : uomValue(operand.toNumber(), unit);
+}
+
+/** 2^53: from here on a double holds no fraction, and not every whole number either. */
+const DOUBLE_EXACT_LIMIT = 2 ** 53;
+
+/**
+ * The exact decimal a number keeps when it is given a unit that is not money,
+ * or null when its double already says what it is.
+ *
+ * A length, a mass or a speed is a double, but past 2^53 a double holds no
+ * fraction and skips whole numbers, so `(2^60 + 0.5) m` was 2^60 m before
+ * anything else ran, and `ceil` and `round` of it answered a metre short. A
+ * number that large keeps the exact value it carries (a decimal, or a fraction
+ * that ends in base ten), so the formatter and the rounding functions can read
+ * it. Below 2^53 nothing changes: the double is the quantity, as before.
+ *
+ * @param operand - The number being given a unit.
+ * @returns The exact decimal, or null.
+ */
+export function exactPastTheDouble(operand: Value): DecimalData | null {
+	if (operand.exact === undefined && operand.rational === undefined) return null;
+	if (!(Math.abs(operand.toNumber()) >= DOUBLE_EXACT_LIMIT)) return null;
+	if (operand.exact !== undefined) return operand.exact;
+	return terminatingDecimal(operand.rational!);
 }
 
 /**

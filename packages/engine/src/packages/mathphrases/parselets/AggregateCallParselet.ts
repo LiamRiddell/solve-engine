@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { aggregateRangeRefusal } from "./AggregateRangeArgument";
 
 /**
  * The call a fused `AGGREGATE_CALL` compiles to (see
@@ -23,6 +24,9 @@ export class AggregateCallParselet implements PrefixParselet {
 		const name = String(token.value);
 		const builtin = this.builtins[name];
 		parser.consume("LPAREN");
+		// `mean(1:3)`: a colon here is a clock time, not the range it looks like.
+		const range = aggregateRangeRefusal(parser, name);
+		if (range) throw range;
 		let argCount = 0;
 		if (parser.peek()?.type !== "RPAREN") {
 			parser.parseExpression(BindingPower.Lowest, builder);

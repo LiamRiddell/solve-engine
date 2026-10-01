@@ -225,11 +225,23 @@ the other two name both years.
 
 `what was $500 worth in 1965` runs the other way: it takes $500 of today's money
 and says what the same buying power came to in 1965, when prices were lower.
-`$100 in 1965 dollars` asks the same question in fewer words.
+`$100 in 1965 dollars` asks the same question in fewer words, and `£100 in 1990
+pounds` and `€100 in 2010 euros` ask it of pounds and euros, each through its
+own index (the singular `pound`, `dollar` and `euro` work too).
 
 ```solve
 what was $500 worth in 1965 // $47.56
 $100 in 1965 dollars // $9.51
+£100 in 1990 pounds // £30.53
+```
+
+The amount can be worked out on the line: `what is $100 * 2 from 1990` adjusts
+$200. A sum needs brackets, `what is ($300 + $50) from 2003`, since the phrase
+reads its amount up to the first `+` or `-`.
+
+```solve
+what is $100 * 2 from 1990 // $506.78
+what is ($300 + $50) from 2003 // $629.96
 ```
 
 ### Which index answers each currency
@@ -294,11 +306,13 @@ or lire converted at a rate fixed afterwards: those years are refused with the
 reason. And the series ends with 2025: the ECB discontinued it in February 2026,
 when Eurostat changed how the HICP is compiled, and its replacement is a
 different series, which is not joined on. So a euro line that runs to the
-current year is refused; naming both years, as `inflationAdjust` does, answers.
+current year is refused, `€100 in 2010 euros` included, since it starts from
+today's money; naming both years, as `inflationAdjust` does, answers.
 
 ```solve
 what is €100 from 1990 // Year 1990 is before the euro began in 1999, so there is no amount in euros from then to adjust (the euro-area price index itself starts in 1996)
 what is €100 from 2000 // Year 2026 is outside the bundled euro-area price index's range (1999-2025): the series it is built from ends with 2025, so name a year up to 2025 to adjust to
+€100 in 2010 euros // Year 2026 is outside the bundled euro-area price index's range (1999-2025): the series it is built from ends with 2025, so name a year up to 2025 to adjust to
 ```
 
 ### Years and amounts an index cannot read
@@ -323,12 +337,27 @@ what is ¥100 from 1990 // no price index for JPY is bundled, so there is no rec
 what is 100 from 1990 // a price index measures one currency, and this amount has none: write it with its currency, in US dollars, pounds sterling or euros, such as $100, £100 or €100
 ```
 
+A word straight after the number stands where a currency would, so `what is 100
+apples from 1990` is refused by that word: apples are not money. To adjust a
+price held in a name, write the multiplication out, `what is 100 * apples from
+1990`, which reads the name's value. `pounds` on its own is the weight, as in `5
+kg in pounds`, so an amount of money in pounds is written `£100` or `100 GBP`,
+and the refusal says so.
+
+```solve
+what is 100 apples from 1990 // a price index adjusts money, and apples is not a currency: give an amount in US dollars, pounds sterling or euros, such as $100, £100 or €100
+what is 100 pounds from 1990 // a price index adjusts money, and pounds is a mass: give an amount in US dollars, pounds sterling or euros, such as $100, £100 or €100 (for pounds sterling, write £100 or 100 GBP)
+```
+
 `in 1965 dollars` names the currency it answers in, so it takes an amount in
-dollars only; for pounds or euros, `what was £100 worth in 1965` reads their own
-index.
+dollars only, and `in 1990 pounds` and `in 1990 euros` likewise take pounds and
+euros only: the line asks for one currency, and an amount in another would need
+a conversion and an adjustment at once. `what was £100 worth in 1965` reads any
+currency's own index.
 
 ```solve
 £100 in 1990 dollars // in 1990 dollars asks for US dollars, and this amount is in GBP: ask what it was worth in 1990 instead, which reads the UK price index (ONS CDKO)
+$100 in 1990 pounds // in 1990 pounds asks for pounds sterling, and this amount is in USD: ask what it was worth in 1990 instead, which reads the US consumer price index (BLS CPI-U)
 ```
 
 `value of £100 in 2030 assuming 3% inflation` is a different question: it states

@@ -159,6 +159,8 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	SAVINGS_HOW_LONG: "keyword",
 	SAVINGS_HOW_MUCH: "keyword",
 	IN_YEAR_DOLLARS: "keyword",
+	IN_YEAR_POUNDS: "keyword",
+	IN_YEAR_EUROS: "keyword",
 	INGREDIENT_NAME: "keyword",
 	ASSUMING: "keyword",
 	// Datetime, workdays/weekdays/timestamps (packages/datetime/); Time
