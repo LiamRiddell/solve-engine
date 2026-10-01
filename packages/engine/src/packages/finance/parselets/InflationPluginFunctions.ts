@@ -1,14 +1,13 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
-import { adjustForInflation, CPI_MIN_YEAR, CPI_MAX_YEAR } from "../data/CpiTable";
-import { inflationAmountRefused } from "../data/InflationAmount";
+import { adjustByCurrency, inflationIndexFor, isPriceIndex } from "../data/InflationAmount";
 import { rateAtOrBelowMinusHundred } from "@solve-js/vm/FinanceFormulas";
 
 /**
  * Inflation plugin functions -- registered via IEnginePackage.pluginFunctions
  * (collision-safe allocator), not VMBuiltins.ts's shared builtinFunctions
- * registry, since none of these three need function-call (`name(args)`)
+ * registry, since none of these need function-call (`name(args)`)
  * reachability through FunctionCallParselet -- only the general 3-arg
  * `inflationAdjust(amount, fromYear, toYear)` needs that (see VMBuiltins.ts
  * CALL_BUILTIN index 60). Matches TimezonePluginFunctions.ts's pattern.
@@ -17,6 +16,9 @@ import { rateAtOrBelowMinusHundred } from "@solve-js/vm/FinanceFormulas";
  * backend inside the handler), not baked in at parse time -- same reasoning
  * as this engine's DATE_NOW opcode: a parse-time constant would go stale if
  * the compiled bytecode for a line is ever re-executed on a later date.
+ *
+ * The index is chosen by the amount's currency (#756): see
+ * `data/InflationAmount.ts` and `data/PriceIndices.ts`.
  */
 
 /** The current calendar year, read through the engine's calendar backend. */
@@ -25,42 +27,52 @@ function presentYear(context: LineExecutionContext | undefined): number {
   return calendar.fields(calendar.now()).year;
 }
 
-function yearRangeError(code: string, badYear: number): Value {
-  return errorValue(
-    code,
-    `Year ${badYear} is outside the bundled CPI table's range (${CPI_MIN_YEAR}-${CPI_MAX_YEAR})`,
-  );
+/** Adjust `amount` between two years by its currency's index, keeping its unit. */
+function adjusted(amount: Value, fromYear: number, toYear: number): Value {
+  const result = adjustByCurrency(amount, fromYear, toYear);
+  if ("refused" in result) return result.refused;
+  return amount.type === ValueType.Uom ? uomValue(result.value, amount.unit!) : numberValue(result.value);
 }
 
 /**
- * "what is $X from YEAR" -> X (given as YEAR's dollars) expressed in present-day
- * dollars. Only dollars: see {@link inflationAmountRefused}.
+ * "what is $X from YEAR" -> X (given as YEAR's money) expressed in present-day
+ * money, by the index the amount's currency picks.
  */
 export function inflationFromYearToPresentHandler(args: Value[], context?: LineExecutionContext): Value {
-  const amountValue = args[0];
-  const refused = inflationAmountRefused(amountValue);
-  if (refused) return refused;
-  const fromYear = args[1].toNumber();
-  const toYear = presentYear(context);
-  const result = adjustForInflation(amountValue.toNumber(), fromYear, toYear);
-  if (result === undefined) return yearRangeError("INFLATION_YEAR_OUT_OF_RANGE", fromYear);
-  return amountValue.type === ValueType.Uom ? uomValue(result, amountValue.unit!) : numberValue(result);
+  const chosen = inflationIndexFor(args[0]);
+  if (!isPriceIndex(chosen)) return chosen;
+  return adjusted(args[0], args[1].toNumber(), presentYear(context));
 }
 
 /**
- * "what was $X worth in YEAR" / "$X in YEAR dollars" -> X (given as
- * present-day dollars) expressed in YEAR's dollars. Only dollars: see
- * {@link inflationAmountRefused}.
+ * "what was $X worth in YEAR" -> X (given as present-day money) expressed in
+ * YEAR's money, by the index the amount's currency picks.
  */
 export function inflationToYearFromPresentHandler(args: Value[], context?: LineExecutionContext): Value {
-  const amountValue = args[0];
-  const refused = inflationAmountRefused(amountValue);
-  if (refused) return refused;
-  const fromYear = presentYear(context);
-  const toYear = args[1].toNumber();
-  const result = adjustForInflation(amountValue.toNumber(), fromYear, toYear);
-  if (result === undefined) return yearRangeError("INFLATION_YEAR_OUT_OF_RANGE", toYear);
-  return amountValue.type === ValueType.Uom ? uomValue(result, amountValue.unit!) : numberValue(result);
+  const chosen = inflationIndexFor(args[0]);
+  if (!isPriceIndex(chosen)) return chosen;
+  return adjusted(args[0], presentYear(context), args[1].toNumber());
+}
+
+/**
+ * "$X in YEAR dollars" -> the same question as `what was $X worth in YEAR`,
+ * asked in dollars. The phrase names the currency, so an amount in another
+ * currency an index is bundled for is refused with the form that reads its own
+ * index (`£100 in 1990 dollars` asks for dollars of a pound amount, which is a
+ * conversion and an adjustment at once, and neither is what the line says).
+ */
+export function inflationToYearDollarsHandler(args: Value[], context?: LineExecutionContext): Value {
+  const amount = args[0];
+  const chosen = inflationIndexFor(amount);
+  if (!isPriceIndex(chosen)) return chosen;
+  const year = args[1].toNumber();
+  if (chosen.currency !== "USD") {
+    return errorValue(
+      "INFLATION_EXPECTED_USD",
+      `in ${year} dollars asks for US dollars, and this amount is in ${chosen.currency}: ask what it was worth in ${year} instead, which reads ${chosen.name}`,
+    );
+  }
+  return adjusted(amount, presentYear(context), year);
 }
 
 /**

@@ -9,7 +9,7 @@ import { InflationQueryParselet } from "./parselets/InflationQueryParselet";
 import { InflationFutureValueParselet } from "./parselets/InflationFutureValueParselet";
 import { InYearDollarsParselet } from "./parselets/InYearDollarsParselet";
 import {
-  inflationFromYearToPresentHandler, inflationToYearFromPresentHandler, inflationFutureValueHandler,
+  inflationFromYearToPresentHandler, inflationToYearFromPresentHandler, inflationToYearDollarsHandler, inflationFutureValueHandler,
 } from "./parselets/InflationPluginFunctions";
 import { CashFlowParselet } from "./parselets/CashFlowParselets";
 import { CASH_FLOW_PLUGIN_FUNCTIONS } from "./parselets/CashFlowPluginFunctions";
@@ -76,9 +76,10 @@ const SAVINGS_PAYMENT = 99, SAVINGS_PERIODS = 100;
  *
  * Inflation-adjusted value (extends this package, see
  * `parselets/InflationQueryParselet.ts`/`InflationFutureValueParselet.ts`/
- * `InYearDollarsParselet.ts` and `data/CpiTable.ts` for the bundled,
- * CPI-U table generated from the BLS series (#700) and its doc comment on
- * source and method) was the one topic explicitly deferred from this
+ * `InYearDollarsParselet.ts`, and `data/PriceIndices.ts` for the bundled
+ * indices, one per currency: the CPI-U table generated from the BLS series
+ * (#700), the ONS CDKO and euro-area HICP tables (#756), each with its doc
+ * comment on source and method) was the one topic explicitly deferred from this
  * package's original scope, now implemented.
  *
  * Cash-flow appraisal (`npv of`, `irr of`, `payback of`, see
@@ -204,6 +205,8 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     inflationFromYearToPresent: inflationFromYearToPresentHandler,
     /** Plugin index for `<amount> in <year>`, today's money valued in a past year. */
     inflationToYearFromPresent: inflationToYearFromPresentHandler,
+    /** Plugin index for `<amount> in <year> dollars`, the same question asked in dollars (#756). */
+    inflationToYearDollars: inflationToYearDollarsHandler,
     /** Plugin index for projecting an amount forward at an assumed rate. */
     inflationFutureValue: inflationFutureValueHandler,
     // `npv of`, `irr of`, `payback of`. See parselets/CashFlowPluginFunctions.ts.

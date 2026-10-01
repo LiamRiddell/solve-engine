@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 538 codes, grouped below by the part
+ship. The engine and its built-in packages ship 539 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -692,7 +692,8 @@ In the package as `ERROR_CODE_CATALOGUES.FinanceErrorCodes`.
 | `IRR_UNRESOLVED` | as a value | `irr` of flows whose rates are too close together to tell apart. |
 | `PAYBACK_NO_OUTLAY` | as a value | `payback` of flows whose running total is never below zero, so there is nothing to pay back. |
 | `PAYBACK_NEVER` | as a value | `payback` of flows that never recover the outlay. The message says how far short the total ends. |
-| `INFLATION_EXPECTED_USD` | as a value | An inflation adjustment of an amount that is not in US dollars, which the bundled price index measures. |
+| `INFLATION_EXPECTED_USD` | as a value | `<amount> in <year> dollars` of an amount in another currency that has its own index: the phrase asks for dollars. |
+| `INFLATION_NO_INDEX` | as a value | An inflation adjustment of an amount no bundled price index measures: a currency without one, a quantity that is not money, or a bare number. |
 | `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. |
 | `INFLATION_EXPECTED_INFLATION_WORD` | thrown | `assuming <rate>%` not followed by the word `inflation`. |
 | `SAVINGS_GOAL_SYNTAX` | thrown | `how much per month to reach <target>` followed by neither `in` nor `over` and the time the saving runs for. |

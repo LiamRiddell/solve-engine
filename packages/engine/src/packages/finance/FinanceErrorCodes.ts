@@ -27,8 +27,10 @@ export const FinanceErrorCodes = {
 	PAYBACK_NO_OUTLAY: "PAYBACK_NO_OUTLAY",
 	/** `payback` of flows that never recover the outlay. The message says how far short the total ends. */
 	PAYBACK_NEVER: "PAYBACK_NEVER",
-	/** An inflation adjustment of an amount that is not in US dollars, which the bundled price index measures. */
+	/** `<amount> in <year> dollars` of an amount in another currency that has its own index: the phrase asks for dollars. */
 	INFLATION_EXPECTED_USD: "INFLATION_EXPECTED_USD",
+	/** An inflation adjustment of an amount no bundled price index measures: a currency without one, a quantity that is not money, or a bare number. */
+	INFLATION_NO_INDEX: "INFLATION_NO_INDEX",
 	/** `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. */
 	INFLATION_EXPECTED_FROM_OR_IN: "INFLATION_EXPECTED_FROM_OR_IN",
 	/** `assuming <rate>%` not followed by the word `inflation`. */
