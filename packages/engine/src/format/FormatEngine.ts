@@ -517,11 +517,14 @@ function formatZoneDifference(value: Value, settings: FormattingSettings): strin
  * which keeps through adding spans, scaling one, or adding or taking away a
  * length of time (see binaryOp in vm/VMConversion.ts). A reader can type `ms`
  * (`40ms + 120ms` is 160 ms), and such a quantity carries no mark, so it keeps
- * its milliseconds rather than being rounded onto a clock.
+ * its milliseconds rather than being rounded onto a clock. A span that rounds
+ * to no whole second is written without a sign, whichever side of zero it fell.
  */
-function formatMsDuration(ms: number): string {
-  const sign = ms < 0 ? "-" : "";
+export function formatMsDuration(ms: number): string {
   const totalSeconds = Math.round(Math.abs(ms) / 1000);
+  // The sign is the rounded span's: `now - now` reads the clock twice and can
+  // land a millisecond below zero, which rounds to no time at all, not `-0:00`.
+  const sign = ms < 0 && totalSeconds > 0 ? "-" : "";
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
