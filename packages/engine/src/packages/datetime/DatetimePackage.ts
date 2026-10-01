@@ -30,7 +30,7 @@ import { nthWeekdayNormalizerRule } from "./normalizer/NthWeekdayNormalizerRule"
 import { untilSinceNormalizerRule } from "./normalizer/UntilSinceNormalizerRule";
 import { betweenUnitNormalizerRule } from "./normalizer/BetweenUnitNormalizerRule";
 import { weekdayCountNormalizerRule } from "./normalizer/WeekdayCountNormalizerRule";
-import { dateOffsetNormalizerRule } from "./normalizer/DateOffsetNormalizerRule";
+import { dateOffsetNormalizerRule, compoundDateOffsetNormalizerRule } from "./normalizer/DateOffsetNormalizerRule";
 import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDenominatorNormalizerRule";
 import { DaysInPeriodParselet } from "./parselets/DaysInPeriodParselet";
 import { daysInPeriodNormalizerRule } from "./normalizer/DaysInPeriodNormalizerRule";
@@ -248,6 +248,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     betweenUnitNormalizerRule(),
     weekdayCountNormalizerRule(),
     dateOffsetNormalizerRule(),
+    compoundDateOffsetNormalizerRule(),
     workdayRateDenominatorNormalizerRule(),
     // The two date-literal rules (`dateLiteralNormalizerRule` for the numeric
     // orderings, `monthNameDateNormalizerRule` for "March 9, 2024") are NOT

@@ -1901,6 +1901,27 @@ today - 1 week // Wednesday, March 4, 2026, 12:00:00 PM
 ```
 
 ```
+2026-01-31 + 1 month 1 day // Sunday, March 1, 2026
+2026-01-31 + 1 month + 1 day // Sunday, March 1, 2026
+2024-01-31 + 1 month 1 day // Friday, March 1, 2024
+2026-03-31 - 1 month 1 day // Friday, February 27, 2026
+2024-02-29 + 1 year 1 day // Saturday, March 1, 2025
+1 month 1 day after 2026-01-31 // Sunday, March 1, 2026
+1 month 1 day before 2026-03-31 // Friday, February 27, 2026
+```
+
+```
+2026-01-30 + 1 month 1 day // Sunday, March 1, 2026
+2026-01-30 + P1M1D // Sunday, March 1, 2026
+2026-01-30 + 1 day + 1 month // Saturday, February 28, 2026
+```
+
+```
+1 month 1 day // 31 days
+2026-01-31 + (1 month 1 day) // Tuesday, March 3, 2026
+```
+
+```
 2024-11-02 12:00 in New York + 1 day // Sunday, November 3, 2024, 12:00:00 PM
 2024-11-02 12:00 in New York + 24 hours // Sunday, November 3, 2024, 11:00:00 AM
 2024-10-30 09:00 in New York + 1 week // Wednesday, November 6, 2024, 9:00:00 AM
