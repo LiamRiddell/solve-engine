@@ -73,6 +73,13 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"€X in 2010 euros",
 		"£100 in X pounds",
 		"what is $X * 2 from 1990",
+		// The year is one factor and a plain whole number, and an operator
+		// after it is the line's; a colon form as sum's first argument is a
+		// clock time (batch U).
+		"what is $100 from X",
+		"what is $100 from 1990 + X",
+		"what is $100 in X worth in 2010",
+		"sum(X, 10:15)",
 		"what is X apples from 1990",
 	],
 	// A large quantity keeps its exact value, and the aggregates refuse a range

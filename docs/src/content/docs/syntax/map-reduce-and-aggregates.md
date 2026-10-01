@@ -24,6 +24,19 @@ a bare `0:3`, `(0:3)`, and `max(9:30, 10:15)`, which compares two times of day.
 map(10*x, 0:3) // [0, 10, 20, 30]
 ```
 
+Only the list is read as a range. The expression before it is worked out once
+for each element, so it is never a range itself, and a colon there is a clock
+time: `sum(9:30, 10:15)` is two times of day, the same as `total(9:30, 10:15)`,
+and both are refused by name, since a time of day is a moment rather than an
+amount to add up. A length of time adds up as a quantity.
+
+```solve-doc
+sum(9:30, 10:15) // ERROR: A date or time cannot be added: only numbers and quantities can.
+total(9:30, 10:15) // ERROR: A date or time cannot be added: only numbers and quantities can.
+sum(2 hours, 3 hours) // 5 hours
+sum(x, 1:3) // 6
+```
+
 ## Map
 
 `map(expression, list)` works the expression out once for each element, with

@@ -30,7 +30,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 // link dangling, which is worse than an unused-import warning.
 // eslint-disable-next-line no-unused-vars
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
-import { adjustByCurrency } from "@solve-js/packages/finance/data/InflationAmount";
+import { adjustByCurrency, inflationYear, isYear } from "@solve-js/packages/finance/data/InflationAmount";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure, unitForMessage } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } from "@solve-js/vm/QuantityPowers";
@@ -1413,8 +1413,13 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // packages/finance/parselets/InflationPluginFunctions.ts. The amount's
     // currency picks the index (US dollars, pounds, euros; #650, #756), and
     // any other amount is refused; see adjustByCurrency().
+    // Each year must be a plain whole number (see inflationYear()).
     60: (args) => {
-        const result = adjustByCurrency(args[0], args[1].toNumber(), args[2].toNumber());
+        const fromYear = inflationYear(args[1]);
+        if (!isYear(fromYear)) return fromYear;
+        const toYear = inflationYear(args[2]);
+        if (!isYear(toYear)) return toYear;
+        const result = adjustByCurrency(args[0], fromYear, toYear);
         if ("refused" in result) return result.refused;
         return args[0].type === ValueType.Uom ? uomValue(result.value, args[0].unit!) : numberValue(result.value);
     },
