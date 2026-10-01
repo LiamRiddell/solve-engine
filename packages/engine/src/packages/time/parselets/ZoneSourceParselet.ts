@@ -8,6 +8,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { ZONE_LOOKUP } from "../timezones/CityZones";
 import { checkZoneCount, consumeZoneList, emitNamedZones, zoneDisplayName } from "./shared/ZoneReference";
 import { ZONE_CONVERT_NAMED_FN } from "./TimezonePluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `t London in Tokyo`: the time before the zone, read as that zone's wall
@@ -43,6 +44,6 @@ export class ZoneSourceParselet implements InfixParselet {
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(zoneDisplayName(token.value));
 		emitNamedZones(builder, targets);
-		builder.emitPluginCall(ZONE_CONVERT_NAMED_FN, 3 + targets.length * 2);
+		emitBuiltinPluginCall(builder, ZONE_CONVERT_NAMED_FN, 3 + targets.length * 2);
 	}
 }

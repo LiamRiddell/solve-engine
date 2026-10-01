@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * Consumes the `PAYROLL_CASE` clauses after a take-home form (`in Scotland`,
@@ -16,12 +17,12 @@ function emitWithCase(parser: Parser, builder: BytecodeBuilder, fn: string): voi
 	const clauses: string[] = [];
 	while (parser.peek()?.type === "PAYROLL_CASE") clauses.push(parser.consume().value ?? "");
 	if (clauses.length === 0) {
-		builder.emitPluginCall(fn, 1);
+		emitBuiltinPluginCall(builder, fn, 1);
 		return;
 	}
 	builder.emitOpcode(OpCode.PUSH_STRING);
 	builder.emitString(clauses.join("|"));
-	builder.emitPluginCall(fn, 2);
+	emitBuiltinPluginCall(builder, fn, 2);
 }
 
 /**
@@ -92,6 +93,6 @@ export class PayrollRateParselet implements InfixParselet {
 	parse(_parser: Parser, _left: Token, token: Token, builder: BytecodeBuilder): void {
 		builder.emitOpcode(OpCode.PUSH_NUMBER);
 		builder.emitNumber(Number(token.value));
-		builder.emitPluginCall(this.fn, 2);
+		emitBuiltinPluginCall(builder, this.fn, 2);
 	}
 }

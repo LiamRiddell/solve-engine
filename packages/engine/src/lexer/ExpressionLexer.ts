@@ -7,6 +7,7 @@ import { DEGREE_SIGN, scanGeoAngle } from '@solve-js/lexer/GeoAngleLiteral';
 import { isPipeRow, isSeparatorRowText } from '@solve-js/lexer/TableBlocks';
 import { lakhGroupEnd, rupeeMarked } from '@solve-js/lexer/LakhGrouping';
 import { groupsCurrencyInCall } from '@solve-js/lexer/CurrencyGrouping';
+import { groupsRangeBoundInCall } from '@solve-js/lexer/RangeBoundGrouping';
 
 // Bootstrap all token types at module load
 registerAllTokenTypes();
@@ -1621,12 +1622,15 @@ export class ExpressionLexer {
       // {@link groupingStack}.
       // The one exception is an amount with a currency sign before it,
       // `compoundInterest($1,000, 5%, 3)`, whose comma is the grouping the
-      // reader wrote (#830); see lexer/CurrencyGrouping.ts.
+      // reader wrote (#830); see lexer/CurrencyGrouping.ts. So is a range
+      // bound inside a call, `sum(1,000:2,000)`, whose comma straight against
+      // the range's colon is a grouping too; see lexer/RangeBoundGrouping.ts.
       if (
         input.charCodeAt(pos) === 44 &&
         this.groupingStack.length > 0 &&
         this.groupingStack[this.groupingStack.length - 1] &&
-        !groupsCurrencyInCall(input, start, pos)
+        !groupsCurrencyInCall(input, start, pos) &&
+        !(this.groupingStack[this.groupingStack.length - 1] === BracketKind.Call && groupsRangeBoundInCall(input, start, pos))
       ) {
         break;
       }

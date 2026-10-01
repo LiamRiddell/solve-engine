@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * Compiles a date-shaped run that no configured order can read into the
@@ -35,6 +36,6 @@ export class UnreadableDateParselet implements PrefixParselet {
     builder.emitString(fault.code);
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(fault.message);
-    builder.emitPluginCall("dateLiteralFault", 2);
+    emitBuiltinPluginCall(builder, "dateLiteralFault", 2);
   }
 }

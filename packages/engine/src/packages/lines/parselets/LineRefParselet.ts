@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { DELETED_LINE_REF } from "../normalizer/LineRefNormalizerRule";
 import { DELETED_LINE_NUMBER } from "../LinesPluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `line1` / `line 1` -- an arbitrary line's cached result by 1-based line
@@ -28,6 +29,6 @@ export class LineRefParselet implements PrefixParselet {
     const lineNumber = token.value === DELETED_LINE_REF ? DELETED_LINE_NUMBER : parseInt(token.value, 10);
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(lineNumber);
-    builder.emitPluginCall("lineRef", 1);
+    emitBuiltinPluginCall(builder, "lineRef", 1);
   }
 }

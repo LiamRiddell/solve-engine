@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { WHAT_IF_FN_NAME } from "../WhatIfPluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The most inputs one what-if may override. Each is two arguments to the
@@ -44,7 +45,7 @@ export class WhatIfParselet implements PrefixParselet {
 		builder.emitOpcode(OpCode.PUSH_NUMBER);
 		builder.emitNumber(targetLine);
 		const count = readOverrides(parser, builder, `line ${targetLine} with deposit = 150000`, "A what-if");
-		builder.emitPluginCall(WHAT_IF_FN_NAME, 1 + count * 2);
+		emitBuiltinPluginCall(builder, WHAT_IF_FN_NAME, 1 + count * 2);
 	}
 }
 

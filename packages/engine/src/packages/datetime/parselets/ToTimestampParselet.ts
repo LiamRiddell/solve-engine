@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `<date/time> to timestamp` -> a Unix timestamp in seconds, as a plain
@@ -19,6 +20,6 @@ export class ToTimestampParselet implements InfixParselet {
   readonly bindingPower = BindingPower.Conditional;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-    builder.emitPluginCall("toTimestampFromAny", 1);
+    emitBuiltinPluginCall(builder, "toTimestampFromAny", 1);
   }
 }

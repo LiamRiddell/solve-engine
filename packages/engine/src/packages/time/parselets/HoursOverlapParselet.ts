@@ -7,6 +7,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { consumeZoneList, checkZoneCount, emitNamedZones } from "./shared/ZoneReference";
 import { tryParseOnDate } from "./shared/OnDate";
 import { HOURS_OVERLAP_FN } from "./OverlapPluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The hours an `overlap of` line names, as minutes past midnight at each end,
@@ -82,6 +83,6 @@ export class HoursOverlapParselet implements PrefixParselet {
     builder.emitNumber(hours.end);
     if (!tryParseOnDate(parser, builder)) builder.emitOpcode(OpCode.DATE_NOW);
     emitNamedZones(builder, zones);
-    builder.emitPluginCall(HOURS_OVERLAP_FN, 3 + zones.length * 2);
+    emitBuiltinPluginCall(builder, HOURS_OVERLAP_FN, 3 + zones.length * 2);
   }
 }

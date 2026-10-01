@@ -5,6 +5,7 @@ import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * A nullary keyword that produces a value on its own: `uuid`, `coin`. It parses
@@ -14,7 +15,7 @@ export function nullaryRandomParselet(pluginName: string): PrefixParselet {
 	return {
 		category: "Random",
 		parse(_parser: Parser, _token: Token, builder: BytecodeBuilder): void {
-			builder.emitPluginCall(pluginName, 0);
+			emitBuiltinPluginCall(builder, pluginName, 0);
 		},
 	};
 }
@@ -29,7 +30,7 @@ export function unaryRandomParselet(pluginName: string): PrefixParselet {
 		category: "Random",
 		parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
 			parser.parseExpression(BindingPower.Prefix, builder);
-			builder.emitPluginCall(pluginName, 1);
+			emitBuiltinPluginCall(builder, pluginName, 1);
 		},
 	};
 }
@@ -52,7 +53,7 @@ export const pickCallParselet: PrefixParselet = {
 			}
 		}
 		parser.consume("RPAREN");
-		builder.emitPluginCall("randomPick", argCount);
+		emitBuiltinPluginCall(builder, "randomPick", argCount);
 	},
 };
 

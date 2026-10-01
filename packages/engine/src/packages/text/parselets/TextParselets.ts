@@ -3,6 +3,7 @@ import type { Parser } from "@solve-js/parser/Parser";
 import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `<trigger> X`, a one-operand text phrase that calls a plugin function.
@@ -19,7 +20,7 @@ export function unaryTextParselet(pluginName: string, operandPower: number): Pre
 		category: "Text",
 		parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
 			parser.parseExpression(operandPower, builder);
-			builder.emitPluginCall(pluginName, 1);
+			emitBuiltinPluginCall(builder, pluginName, 1);
 		},
 	};
 }
@@ -36,7 +37,7 @@ export function booleanTextInfixParselet(pluginName: string): InfixParselet {
 		bindingPower: BindingPower.Conditional,
 		parse(parser: Parser, _left: Token, _token: Token, builder: BytecodeBuilder): void {
 			parser.parseExpression(BindingPower.Conditional, builder);
-			builder.emitPluginCall(pluginName, 2);
+			emitBuiltinPluginCall(builder, pluginName, 2);
 		},
 	};
 }
@@ -61,6 +62,6 @@ export const repeatTextParselet: InfixParselet = {
 		if (next?.type === "STAR" && (next.value ?? "").toLowerCase() === "times") {
 			parser.consume();
 		}
-		builder.emitPluginCall("textRepeat", 2);
+		emitBuiltinPluginCall(builder, "textRepeat", 2);
 	},
 };

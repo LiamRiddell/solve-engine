@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** The plugin function the three spellings all land on. */
 export const WEEKDAY_COUNT_FN = "weekdaysBetween";
@@ -43,6 +44,6 @@ export class WeekdayCountParselet implements PrefixParselet {
 
 		builder.emitOpcode(OpCode.PUSH_NUMBER);
 		builder.emitNumber(Number(token.value));
-		builder.emitPluginCall(WEEKDAY_COUNT_FN, 3);
+		emitBuiltinPluginCall(builder, WEEKDAY_COUNT_FN, 3);
 	}
 }

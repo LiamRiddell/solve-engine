@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { GOAL_SEEK_FN_NAME } from "../GoalSeekPluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `solve line M for <var> = <target>`, goal seek over a line reference, with
@@ -90,7 +91,7 @@ export class GoalSeekParselet implements PrefixParselet {
 			parser.parseExpression(BindingPower.Lowest, new BytecodeBuilder(builder.pluginIndexMap));
 			builder.emitOpcode(OpCode.PUSH_NUMBER);
 			builder.emitNumber(-1);
-			builder.emitPluginCall("lineRef", 1);
+			emitBuiltinPluginCall(builder, "lineRef", 1);
 			return;
 		}
 
@@ -119,10 +120,10 @@ export class GoalSeekParselet implements PrefixParselet {
 			}
 			parser.consume();
 			parser.parseExpression(BindingPower.Lowest, builder);
-			builder.emitPluginCall(GOAL_SEEK_FN_NAME, 5);
+			emitBuiltinPluginCall(builder, GOAL_SEEK_FN_NAME, 5);
 			return;
 		}
 
-		builder.emitPluginCall(GOAL_SEEK_FN_NAME, 3);
+		emitBuiltinPluginCall(builder, GOAL_SEEK_FN_NAME, 3);
 	}
 }

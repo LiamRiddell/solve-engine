@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The natural-question forms over a single date field:
@@ -45,6 +46,6 @@ export class DateFieldQueryParselet implements PrefixParselet {
       builder.emitOpcode(OpCode.DATE_NOW); // bare form — "what day is it"
     }
 
-    builder.emitPluginCall(this.functionName, 1);
+    emitBuiltinPluginCall(builder, this.functionName, 1);
   }
 }

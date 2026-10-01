@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * Prefix parselet for the `KNOWLEDGE_QUERY` token, the token IS the
@@ -21,7 +22,7 @@ export function knowledgeQueryParselet(pluginFnName: string): PrefixParselet {
 		parse(_parser: Parser, token: Token, builder: BytecodeBuilder): void {
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(token.value);
-			builder.emitPluginCall(pluginFnName, 1);
+			emitBuiltinPluginCall(builder, pluginFnName, 1);
 		},
 	};
 }
