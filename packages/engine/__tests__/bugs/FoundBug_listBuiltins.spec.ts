@@ -16,7 +16,7 @@ import { EngineError } from "@solve-js/errors/EngineError";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { boolValue, errorValue, matrixValue, numberValue, uomValue, ValueType, type MatrixData, type Value } from "@solve-js/vm/Value";
 import { applyEachCell, listArgumentRefused } from "@solve-js/vm/ListArguments";
-import { EACH_CELL_BUILTINS, TAKES_LIST, builtinFunctions, listBuiltinCall } from "@solve-js/vm/VMBuiltins";
+import { EACH_CELL_BUILTINS, TAKES_LIST, builtinFunctions, callBuiltin, listBuiltinCall } from "@solve-js/vm/VMBuiltins";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { decimalToString } from "@solve-js/decimal";
 import type { ParsedLine } from "@solve-js/types/ParsingResult";
@@ -270,21 +270,40 @@ describe("the parts: listArgumentRefused", () => {
 
 describe("the parts: listBuiltinCall, EACH_CELL_BUILTINS and TAKES_LIST", () => {
 	test("ordinary: a function of one number is worked for each cell, and one of several refuses", () => {
-		const sqrt = listBuiltinCall(0, [matrixValue(1, 2, [4, 9])], builtinFunctions[0])!;
+		const sqrt = listBuiltinCall(0, [matrixValue(1, 2, [4, 9])])!;
 		expect((sqrt.value as MatrixData).data).toEqual([2, 3]);
-		expect(listBuiltinCall(38, [matrixValue(1, 2, [4, 6]), numberValue(2)], builtinFunctions[38])?.errorCode).toBe("LIST_ARGUMENT_UNSUPPORTED");
+		expect(listBuiltinCall(38, [matrixValue(1, 2, [4, 6]), numberValue(2)])?.errorCode).toBe("LIST_ARGUMENT_UNSUPPORTED");
 	});
 
 	test("boundary: no list, a list of one, and a builtin that takes a list are left to the call", () => {
-		expect(listBuiltinCall(0, [numberValue(4)], builtinFunctions[0])).toBeNull();
-		expect(listBuiltinCall(0, [matrixValue(1, 1, [4])], builtinFunctions[0])).toBeNull();
-		expect(listBuiltinCall(64, [matrixValue(2, 2, [1, 2, 3, 4])], builtinFunctions[64])).toBeNull();
-		expect(listBuiltinCall(44, [matrixValue(1, 2, [1, 2])], builtinFunctions[44])).toBeNull();
+		expect(listBuiltinCall(0, [numberValue(4)])).toBeNull();
+		expect(listBuiltinCall(0, [matrixValue(1, 1, [4])])).toBeNull();
+		expect(listBuiltinCall(64, [matrixValue(2, 2, [1, 2, 3, 4])])).toBeNull();
+		expect(listBuiltinCall(44, [matrixValue(1, 2, [1, 2])])).toBeNull();
 	});
 
 	test("hostile: a builtin of one number given a second argument is refused, not worked for each cell", () => {
-		expect(listBuiltinCall(0, [matrixValue(1, 2, [4, 9]), numberValue(1)], builtinFunctions[0])?.errorCode).toBe("LIST_ARGUMENT_UNSUPPORTED");
-		expect(listBuiltinCall(9_999, [matrixValue(1, 2, [4, 9])], () => numberValue(0))?.errorCode).toBe("LIST_ARGUMENT_UNSUPPORTED");
+		expect(listBuiltinCall(0, [matrixValue(1, 2, [4, 9]), numberValue(1)])?.errorCode).toBe("LIST_ARGUMENT_UNSUPPORTED");
+		expect(listBuiltinCall(9_999, [matrixValue(1, 2, [4, 9])])?.errorCode).toBe("LIST_ARGUMENT_UNSUPPORTED");
+	});
+
+	test("callBuiltin: ordinary, an unregistered index, and an entry planted on Object.prototype", () => {
+		expect(callBuiltin(0, [numberValue(9)]).toNumber()).toBe(3);
+		expect(callBuiltin(9_999, [numberValue(9)]).errorCode).toBe("UNKNOWN_BUILTIN_FUNCTION");
+		expect(callBuiltin(-1, [numberValue(9)]).errorCode).toBe("UNKNOWN_BUILTIN_FUNCTION");
+		expect(callBuiltin(Number.NaN, [numberValue(9)]).errorCode).toBe("UNKNOWN_BUILTIN_FUNCTION");
+		const proto = Object.prototype as unknown as Record<number, unknown>;
+		let called = false;
+		proto[9_999] = () => {
+			called = true;
+			return numberValue(1);
+		};
+		try {
+			expect(callBuiltin(9_999, [numberValue(9)]).errorCode).toBe("UNKNOWN_BUILTIN_FUNCTION");
+			expect(called).toBe(false);
+		} finally {
+			delete proto[9_999];
+		}
 	});
 
 	test("the two sets do not overlap, and every function worked for each cell takes one number by name", () => {
