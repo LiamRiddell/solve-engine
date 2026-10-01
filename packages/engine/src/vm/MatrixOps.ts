@@ -695,8 +695,11 @@ function tooLarge(length: number, maxElements: number): Value {
  * unbounded so that a caller with no configured engine (a direct unit test
  * of this helper) behaves as before, every VM call site passes
  * `vm.getMaxCollectionSize()`.
+ *
+ * `call` is the word the reader typed, so a value that is not a collection is
+ * refused in their terms (see {@link notACollection}).
  */
-export function collectionToValues(v: Value, maxElements = Number.POSITIVE_INFINITY): Value[] | Value {
+export function collectionToValues(v: Value, maxElements = Number.POSITIVE_INFINITY, call: CollectionCall = "map"): Value[] | Value {
 	// Pending as well as Error: neither is a collection, and a collection that
 	// has not arrived is not an empty one. See `faultedOperand()` in vm/Value.ts.
 	const faulted = faultedOperand(v);
@@ -720,8 +723,91 @@ export function collectionToValues(v: Value, maxElements = Number.POSITIVE_INFIN
 		for (let i = 0; i < length; i++) out[i] = numberValue(r.min + i);
 		return out;
 	}
+	return notACollection(call, v);
+}
+
+/** The words that walk a collection: the call the reader typed, which a refusal names. */
+export type CollectionCall = "map" | "reduce" | "sum" | "prod";
+
+/**
+ * The form a `REDUCE_INVOKE` was written as, in its third operand. The operand
+ * was a flag, 0 or 1, for whether a starting value was given; `sum` and `prod`
+ * always give one (0 and 1), so each has a value of its own above the flag,
+ * and any value but 0 still means a starting value is on the stack.
+ */
+export const ReduceForm = {
+	/** `reduce(acc + x, [1, 2, 3])`, no starting value. */
+	reduce: 0,
+	/** `reduce(acc + x, [1, 2, 3], 10)`, starting from 10. */
+	reduceFrom: 1,
+	/** `sum(1:3)` and `sum(x^2, 1:3)`, starting from 0. */
+	sum: 2,
+	/** `prod(1:3)` and `prod(x, [2, 3])`, starting from 1. */
+	prod: 3,
+} as const;
+
+/**
+ * The word a `REDUCE_INVOKE` form was written with: `sum` or `prod` for their
+ * own forms, `reduce` for everything else, a value no parselet emits included.
+ *
+ * @param form - The instruction's third operand.
+ */
+export function reduceFormCall(form: number): CollectionCall {
+	if (form === ReduceForm.sum) return "sum";
+	if (form === ReduceForm.prod) return "prod";
+	return "reduce";
+}
+
+/** What each call does with a collection, as the refusal says it. */
+const COLLECTION_VERBS: Readonly<Record<CollectionCall, string>> = {
+	map: "works through the items of",
+	reduce: "folds into one the items of",
+	sum: "adds up the items of",
+	prod: "multiplies together the items of",
+};
+
+/**
+ * A value that is not a collection, named as a reader would name it.
+ *
+ * @param v - The value given where a list or a range belongs.
+ */
+export function describeNonCollection(v: Value): string {
+	switch (v.type) {
+		case ValueType.Number:
+		case ValueType.Hex:
+		case ValueType.BigInt:
+			return "a single number";
+		case ValueType.Uom:
+			return "a single quantity";
+		case ValueType.Percentage:
+			return "a single percentage";
+		case ValueType.String:
+			return "text";
+		case ValueType.Boolean:
+			return "true or false";
+		case ValueType.Datetime:
+			return "a date or time";
+		default:
+			return "a single value";
+	}
+}
+
+/**
+ * The refusal for a `map`, `reduce`, `sum` or `prod` over something that is
+ * not a list or a range. It opened "map/reduce requires a Matrix or Range
+ * collection", which named neither the word the reader typed nor anything they
+ * would call a list; it now says what the call does, the two things it takes,
+ * and what it was given, and a `sum` of one value points at the form that adds
+ * values one by one.
+ *
+ * @param call - The word the reader typed.
+ * @param v - What was given.
+ */
+export function notACollection(call: CollectionCall, v: Value): Value {
+	const verb = Object.prototype.hasOwnProperty.call(COLLECTION_VERBS, call) ? COLLECTION_VERBS[call] : COLLECTION_VERBS.map;
+	const hint = call === "sum" ? `; to add values one by one, list them, as in sum(5, 6)` : "";
 	return errorValue(
 		"MAP_REDUCE_REQUIRES_COLLECTION",
-		`map/reduce requires a Matrix or Range collection (e.g. "[1,2,3]" or "0:3").`,
+		`${call} ${verb} a list or a range, such as [1, 2, 3] or 1:3, and this is ${describeNonCollection(v)}${hint}.`,
 	);
 }

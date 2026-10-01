@@ -46,6 +46,17 @@ another currency, or a bare number that names no currency at all, is refused
 rather than answered: the bands would produce a confident figure about a
 country they say nothing about. What to write instead is on the line below.
 
+A salary is what someone is paid, so it is never below zero. A negative one is
+refused by every form on this page rather than answered, since the bands charge
+nothing below their thresholds and would hand the amount straight back as a
+take-home no one has. A salary of zero is a year unpaid, and its take-home is
+nothing:
+
+```solve
+-£50,000 after tax // a salary is what someone is paid, so it cannot be below zero: write the pay as zero or more, such as £50,000
+£0 after tax // £0.00
+```
+
 ## In Scotland
 
 Income tax in Scotland is set by the Scottish Parliament, so a Scottish

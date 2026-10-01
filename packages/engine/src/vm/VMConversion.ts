@@ -1458,7 +1458,50 @@ export function toPercentage(value: Value): Value {
         );
     }
     const fraction = value.toNumber();
-    return Number.isFinite(fraction) ? percentageValue(fraction) : percentageNotFinite();
+    if (!Number.isFinite(fraction)) return percentageNotFinite();
+    const percentage = percentageValue(fraction);
+    const exact = percentageExact(value);
+    if (exact !== undefined) percentage.exact = exact;
+    return percentage;
+}
+
+/**
+ * The places of a percentage a double must be able to hold before a percentage
+ * goes without its exact decimal: six, four more than a percentage shows by
+ * default, so a host that asks for more places than that still sees exact
+ * digits well before the double's run out.
+ */
+const PERCENTAGE_EXACT_PLACES = 6;
+
+/**
+ * The exact decimal a percentage keeps beside its double, or undefined: the
+ * exact fraction of a plain number (its exact decimal, or its exact whole
+ * number) wherever the double of the percentage cannot hold
+ * {@link PERCENTAGE_EXACT_PLACES} places.
+ *
+ * Past 2^53 a double holds no fraction, so `9007199254740993.5 as percent`
+ * showed the double's digits, 900,719,925,474,099,456.00%, though the number
+ * kept its exact decimal. The percentage now keeps it too, and the formatter
+ * writes the digits from it (see `formatPercentage`), as it does for a plain
+ * number. The sidecar is the fraction the percentage stands for, the same
+ * value its double holds, so an operation that reads it reads the same number.
+ *
+ * The boundary: below that magnitude the double already writes the right
+ * digits, so a percentage there carries nothing new and every operation on it
+ * is unchanged; a quantity (`100 ppm`) and a value with no exact reading (a
+ * fraction such as `1/3`, a `sqrt` result) keep their double, since there are
+ * no exact digits to show.
+ *
+ * @param value - The number being written as a percentage.
+ * @returns The exact fraction, or undefined.
+ */
+export function percentageExact(value: Value): DecimalData | undefined {
+    if (value.type !== ValueType.Number) return undefined;
+    const fraction = value.value as number;
+    if (!Number.isFinite(fraction) || Math.abs(fraction * 100) * Number.EPSILON < 0.5 * 10 ** -PERCENTAGE_EXACT_PLACES) return undefined;
+    if (value.exact !== undefined) return value.exact;
+    const r = value.rational;
+    return r !== undefined && r.d === 1n ? { coef: r.n, scale: 0 } : undefined;
 }
 
 /**

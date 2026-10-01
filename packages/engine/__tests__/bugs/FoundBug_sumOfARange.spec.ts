@@ -64,8 +64,8 @@ describe("the lines that exposed it", () => {
 	});
 
 	test("the boundary: what is not a list, or not a whole-number range, is refused by name", () => {
-		expect(shown("sum(5)")).toContain("requires a Matrix or Range collection");
-		expect(shown('sum("abc")')).toContain("requires a Matrix or Range collection");
+		expect(shown("sum(5)")).toContain("sum adds up the items of a list or a range");
+		expect(shown('sum("abc")')).toContain("and this is text");
 		expect(shown("sum(3:1)")).toContain("cannot be greater than its max");
 		expect(shown("sum(1.5:3)")).toContain("must be whole numbers");
 		expect(shown("sum(1:3 m)")).toContain("must be plain numbers");

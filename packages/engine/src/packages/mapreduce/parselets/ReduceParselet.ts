@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { parseTransform, parseCollectionExpr, emitInvoke } from "../MapReduceShared";
+import { ReduceForm } from "@solve-js/vm/MatrixOps";
 
 /**
  * `reduce(transform, collection[, initial])`, folds `collection` (a
@@ -30,17 +31,17 @@ export class ReduceParselet implements PrefixParselet {
 
     parseCollectionExpr(parser, builder);
 
-    let hasInitial = 0;
+    let form: number = ReduceForm.reduce;
     if (parser.match("COMMA")) {
       // A plain expression, an initial accumulator is just a value, no
       // colon-range handling needed here (only the COLLECTION argument
       // accepts a bare Range).
       parser.parseExpression(BindingPower.Lowest, builder);
-      hasInitial = 1;
+      form = ReduceForm.reduceFrom;
     }
 
     parser.consume("RPAREN");
 
-    emitInvoke(builder, OpCode.REDUCE_INVOKE, transform, ["acc", "x"], hasInitial);
+    emitInvoke(builder, OpCode.REDUCE_INVOKE, transform, ["acc", "x"], form);
   }
 }

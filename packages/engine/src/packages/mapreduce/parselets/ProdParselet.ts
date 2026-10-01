@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { parseCollectionExpr, emitInvoke, callHasOwnComma, parseElementFold } from "../MapReduceShared";
+import { ReduceForm } from "@solve-js/vm/MatrixOps";
 
 /**
  * `prod(elementExpr, collection)`, parse-time sugar for
@@ -22,7 +23,7 @@ export class ProdParselet implements PrefixParselet {
     // `prod(1:4)`, one argument: the collection's own elements multiplied, as
     // `sum(1:3)` adds them (see SumParselet).
     if (!callHasOwnComma(parser)) {
-      parseElementFold(parser, builder, OpCode.MUL, 1);
+      parseElementFold(parser, builder, OpCode.MUL, 1, ReduceForm.prod);
       return;
     }
 
@@ -51,6 +52,6 @@ export class ProdParselet implements PrefixParselet {
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(1);
 
-    emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program: bodyProgram }, ["acc", "x"], 1);
+    emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program: bodyProgram }, ["acc", "x"], ReduceForm.prod);
   }
 }
