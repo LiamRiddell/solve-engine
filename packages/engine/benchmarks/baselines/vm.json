@@ -3,34 +3,34 @@
   "harness": "mitata-1",
   "results": {
     "simple_add": {
-      "meanMs": 0.4615859903381643,
-      "medianMs": 0.4314,
-      "minMs": 0.4176
+      "meanMs": 1.115870175,
+      "medianMs": 0.478123,
+      "minMs": 0.458363
     },
     "variable_access": {
-      "meanMs": 0.6152309352517986,
-      "medianMs": 0.5706,
-      "minMs": 0.5592
+      "meanMs": 2.5930451612903225,
+      "medianMs": 2.276735,
+      "minMs": 0.928395
     },
     "vector_creation": {
-      "meanMs": 1.4610967741935483,
-      "medianMs": 1.3662,
-      "minMs": 1.333
+      "meanMs": 4.128094,
+      "medianMs": 3.826892,
+      "minMs": 3.123547
     },
     "unit_conversion": {
-      "meanMs": 0.9075336538461539,
-      "medianMs": 0.8561,
-      "minMs": 0.8274
+      "meanMs": 3.91703175,
+      "medianMs": 3.509121,
+      "minMs": 2.697963
     },
     "dice_roll": {
-      "meanMs": 1.40724,
-      "medianMs": 1.3173,
-      "minMs": 1.2567
+      "meanMs": 3.5901535238095237,
+      "medianMs": 3.451854,
+      "minMs": 2.90118
     },
     "percentage": {
-      "meanMs": 1.35065223880597,
-      "medianMs": 1.2603,
-      "minMs": 1.2395
+      "meanMs": 2.4131468529411766,
+      "medianMs": 2.322976,
+      "minMs": 0.667991
     }
   }
 }

@@ -1,111 +1,111 @@
 {
-  "timestamp": "2026-08-04T18:04:33.402Z",
+  "timestamp": "2026-10-01T02:46:10.331Z",
   "summary": {
-    "meanDeltaNs": 1525.8263333333332,
-    "meanPercentImprovement": 68.48174077938945,
-    "estimatedAllocCostNs": 1525.8263333333332
+    "meanDeltaNs": 2631.983836666667,
+    "meanPercentImprovement": 76.93598548302727,
+    "estimatedAllocCostNs": 2631.983836666667
   },
   "details": [
     {
       "name": "simple_add",
       "withoutPool": {
-        "meanNs": 2012.944,
-        "p95Ns": 2400,
-        "medianNs": 1600
+        "meanNs": 2778.18,
+        "p95Ns": 3325,
+        "medianNs": 1953
       },
       "withPool": {
-        "meanNs": 431.67,
-        "p95Ns": 500,
+        "meanNs": 480.33834,
+        "p95Ns": 541,
         "medianNs": 400
       },
-      "deltaNs": 1581.274,
-      "speedupRatio": 0.21444709837928924,
-      "percentImprovement": 78.55529016207107
+      "deltaNs": 2297.84166,
+      "speedupRatio": 0.17289676694814593,
+      "percentImprovement": 82.71032330518541
     },
     {
       "name": "variable_access",
       "withoutPool": {
-        "meanNs": 2008.418,
-        "p95Ns": 2000,
-        "medianNs": 1700
+        "meanNs": 3061.28394,
+        "p95Ns": 4156,
+        "medianNs": 2094
       },
       "withPool": {
-        "meanNs": 538.938,
-        "p95Ns": 600,
-        "medianNs": 500
+        "meanNs": 577.46278,
+        "p95Ns": 531,
+        "medianNs": 491
       },
-      "deltaNs": 1469.48,
-      "speedupRatio": 0.2683395587970233,
-      "percentImprovement": 73.16604412029767
+      "deltaNs": 2483.82116,
+      "speedupRatio": 0.18863417811547398,
+      "percentImprovement": 81.13658218845259
     },
     {
       "name": "vector_creation",
       "withoutPool": {
-        "meanNs": 2340.926,
-        "p95Ns": 2400,
-        "medianNs": 2000
+        "meanNs": 3727.09788,
+        "p95Ns": 5348,
+        "medianNs": 2704
       },
       "withPool": {
-        "meanNs": 896.668,
-        "p95Ns": 900,
-        "medianNs": 800
+        "meanNs": 1064.18154,
+        "p95Ns": 1022,
+        "medianNs": 971
       },
-      "deltaNs": 1444.2579999999998,
-      "speedupRatio": 0.38303987396440553,
-      "percentImprovement": 61.69601260355944
+      "deltaNs": 2662.9163399999998,
+      "speedupRatio": 0.2855255145593332,
+      "percentImprovement": 71.44744854406667
     },
     {
       "name": "unit_conversion",
       "withoutPool": {
-        "meanNs": 2263.094,
-        "p95Ns": 2600,
-        "medianNs": 1900
+        "meanNs": 3550.11274,
+        "p95Ns": 4026,
+        "medianNs": 2644
       },
       "withPool": {
-        "meanNs": 699.276,
-        "p95Ns": 800,
-        "medianNs": 700
+        "meanNs": 1024.64852,
+        "p95Ns": 981,
+        "medianNs": 922
       },
-      "deltaNs": 1563.8180000000002,
-      "speedupRatio": 0.3089911422150383,
-      "percentImprovement": 69.10088577849616
+      "deltaNs": 2525.46422,
+      "speedupRatio": 0.2886242198606909,
+      "percentImprovement": 71.1375780139309
     },
     {
       "name": "dice_roll",
       "withoutPool": {
-        "meanNs": 2246.822,
-        "p95Ns": 2300,
-        "medianNs": 2000
+        "meanNs": 3293.2888,
+        "p95Ns": 3956,
+        "medianNs": 2484
       },
       "withPool": {
-        "meanNs": 885.628,
-        "p95Ns": 900,
-        "medianNs": 800
+        "meanNs": 978.93346,
+        "p95Ns": 912,
+        "medianNs": 861
       },
-      "deltaNs": 1361.194,
-      "speedupRatio": 0.3941691865221188,
-      "percentImprovement": 60.58308134778812
+      "deltaNs": 2314.35534,
+      "speedupRatio": 0.29725102153203203,
+      "percentImprovement": 70.2748978467968
     },
     {
       "name": "percentage",
       "withoutPool": {
-        "meanNs": 2559.31,
-        "p95Ns": 2800,
-        "medianNs": 2000
+        "meanNs": 4130.8941,
+        "p95Ns": 4938,
+        "medianNs": 2203
       },
       "withPool": {
-        "meanNs": 824.376,
-        "p95Ns": 900,
-        "medianNs": 800
+        "meanNs": 623.3898,
+        "p95Ns": 892,
+        "medianNs": 511
       },
-      "deltaNs": 1734.934,
-      "speedupRatio": 0.32210869335875686,
-      "percentImprovement": 67.78913066412431
+      "deltaNs": 3507.5043000000005,
+      "speedupRatio": 0.15090917000268778,
+      "percentImprovement": 84.90908299973123
     }
   ],
   "metadata": {
-    "nodeVersion": "v24.16.0",
-    "platform": "win32",
+    "nodeVersion": "v22.23.2",
+    "platform": "linux",
     "poolSize": 4,
     "description": "Measures VM execution phase comparing 'createVM()' (before) vs pooled VM reuse with reset() (after). Eliminates 2 heap allocations per expression: stack[] and variables Map. Note: ExpressionEngine already uses a single persistent VM — this benchmark quantifies the savings for multi-engine or worker-thread scenarios."
   }

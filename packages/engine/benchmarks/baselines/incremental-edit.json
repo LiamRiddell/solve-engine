@@ -1,0 +1,84 @@
+{
+  "suite": "incremental-edit",
+  "harness": "mitata-1",
+  "results": {
+    "second_pass_bare_1k": {
+      "meanMs": 17.38308128571225,
+      "medianMs": 16.87493800000084,
+      "minMs": 12.482079999994312
+    },
+    "second_pass_bare_4k": {
+      "meanMs": 58.05476914285724,
+      "medianMs": 58.266669000004185,
+      "minMs": 56.24935600000026
+    },
+    "second_pass_colon_4k": {
+      "meanMs": 33.76450657142933,
+      "medianMs": 33.97701000000234,
+      "minMs": 31.087477000000945
+    },
+    "keystroke_applyTransaction_1k": {
+      "meanMs": 0.6955087142854436,
+      "medianMs": 0.5443640000012238,
+      "minMs": 0.24812600000586826
+    },
+    "keystroke_editLine_1k": {
+      "meanMs": 0.4883544285722088,
+      "medianMs": 0.486787000001641,
+      "minMs": 0.4335060000012163
+    },
+    "keystroke_applyTransaction_5k": {
+      "meanMs": 0.6712696666665059,
+      "medianMs": 0.6270089999961783,
+      "minMs": 0.3852729999998701
+    },
+    "keystroke_editLine_5k": {
+      "meanMs": 0.38210419047737515,
+      "medianMs": 0.3724830000064685,
+      "minMs": 0.3492790000018431
+    },
+    "keystroke_applyTransaction_20k": {
+      "meanMs": 1.159365095237306,
+      "medianMs": 1.078603000001749,
+      "minMs": 1.045973000000231
+    },
+    "keystroke_editLine_20k": {
+      "meanMs": 1.3270631904756773,
+      "medianMs": 1.076799000002211,
+      "minMs": 1.0449309999967227
+    },
+    "scroll_set_viewport_5k": {
+      "meanMs": 1.519920666667098,
+      "medianMs": 1.253616999994847,
+      "minMs": 0.7434350000039558
+    },
+    "scroll_set_viewport_20k": {
+      "meanMs": 1.8757953809531283,
+      "medianMs": 1.23033199999918,
+      "minMs": 0.8992910000015399
+    },
+    "insert_line_20k": {
+      "meanMs": 13.83058585714302,
+      "medianMs": 12.751337000001513,
+      "minMs": 11.980020000002696
+    },
+    "order_walk_foreach_20k": {
+      "meanMs": 0.3363666666676484,
+      "medianMs": 0.18536100000346778,
+      "minMs": 0.14921599999797763
+    },
+    "order_walk_iterator_20k": {
+      "meanMs": 0.4937035238094506,
+      "medianMs": 0.3686879999950179,
+      "minMs": 0.30705500000476604
+    },
+    "undefined_name_from_timer": {
+      "meanMs": 0.004735441500000889,
+      "medianMs": 0.004735441500000889
+    },
+    "sum_from_timer": {
+      "meanMs": 0.000830191000000923,
+      "medianMs": 0.000830191000000923
+    }
+  }
+}

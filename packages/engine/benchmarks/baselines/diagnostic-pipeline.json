@@ -3,59 +3,59 @@
   "harness": "mitata-1",
   "results": {
     "PROD_single_eval_cold": {
-      "meanMs": 0.367907392996109,
-      "medianMs": 0.3438,
-      "minMs": 0.2939
+      "meanMs": 1.7133867254904203,
+      "medianMs": 1.5642570000076295,
+      "minMs": 1.0915120000076295
     },
     "PROD_single_eval_warm": {
-      "meanMs": 0.004818800862630208,
-      "medianMs": 0.004646142578125,
-      "minMs": 0.0044735107421875
+      "meanMs": 0.0010465850524900597,
+      "medianMs": 0.0010353901367196813,
+      "minMs": 0.0008003493652334436
     },
     "PROD_50_line_doc": {
-      "meanMs": 0.7794752136752137,
-      "medianMs": 0.7422,
-      "minMs": 0.6704
+      "meanMs": 3.001159296295025,
+      "medianMs": 2.670972,
+      "minMs": 1.8788139999961853
     },
     "PROD_variable_chain": {
-      "meanMs": 0.3715588932806324,
-      "medianMs": 0.3518,
-      "minMs": 0.2973
+      "meanMs": 1.7757301020392593,
+      "medianMs": 1.681895,
+      "minMs": 0.9506779999923706
     },
     "PROD_function_plus_literal": {
-      "meanMs": 0.34942426470588234,
-      "medianMs": 0.3265,
-      "minMs": 0.2881
+      "meanMs": 1.1959284931504237,
+      "medianMs": 0.9773989999961853,
+      "minMs": 0.688532
     },
     "PROD_10k_warm": {
-      "meanMs": 0.007835007731119791,
-      "medianMs": 0.0077623046875,
-      "minMs": 0.007488623046875
+      "meanMs": 0.005488710527796931,
+      "medianMs": 0.004096,
+      "minMs": 0.0038159999961853027
     },
     "DIAG_single_eval_cold": {
-      "meanMs": 0.42729414414414413,
-      "medianMs": 0.4082,
-      "minMs": 0.379
+      "meanMs": 1.9881080454539386,
+      "medianMs": 1.8732549999961854,
+      "minMs": 1.178063
     },
     "DIAG_single_eval_warm": {
-      "meanMs": 0.03750452975047985,
-      "medianMs": 0.0329,
-      "minMs": 0.0312
+      "meanMs": 0.09200623224542512,
+      "medianMs": 0.0663699999923706,
+      "minMs": 0.060972
     },
     "DIAG_50_line_doc": {
-      "meanMs": 0.7363439024390244,
-      "medianMs": 0.7082,
-      "minMs": 0.6732
+      "meanMs": 3.144768319999237,
+      "medianMs": 2.979899,
+      "minMs": 1.4739599999961852
     },
     "DIAG_variable_chain": {
-      "meanMs": 0.3538149253731343,
-      "medianMs": 0.3277,
-      "minMs": 0.2973
+      "meanMs": 1.5795814727268567,
+      "medianMs": 1.1856639999961853,
+      "minMs": 0.9257509999923706
     },
     "DIAG_10k_warm": {
-      "meanMs": 0.049360151898734175,
-      "medianMs": 0.0446,
-      "minMs": 0.042
+      "meanMs": 0.10744638919501846,
+      "medianMs": 0.078709,
+      "minMs": 0.0699660000038147
     }
   }
 }

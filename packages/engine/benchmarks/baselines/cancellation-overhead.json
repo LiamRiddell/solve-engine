@@ -3,64 +3,64 @@
   "harness": "mitata-1",
   "results": {
     "addEventListener + removeEventListener": {
-      "meanMs": 0.0003578369140625,
-      "medianMs": 0.0003578369140625
+      "meanMs": 0.000333444091796875,
+      "medianMs": 0.000333444091796875
     },
     "addEventListener only": {
-      "meanMs": 0.0002396728515625,
-      "medianMs": 0.0002396728515625
+      "meanMs": 0.000223881103515625,
+      "medianMs": 0.000223881103515625
     },
     "new AbortController()": {
-      "meanMs": 0.0001467529296875,
-      "medianMs": 0.0001467529296875
+      "meanMs": 0.000126573486328125,
+      "medianMs": 0.000126573486328125
     },
     "full create+link+unlink cycle": {
-      "meanMs": 0.000457373046875,
-      "medianMs": 0.000457373046875
+      "meanMs": 0.000423137939453125,
+      "medianMs": 0.000423137939453125
     },
     "keystroke abort → 50 local aborts": {
-      "meanMs": 0.5491,
-      "medianMs": 0.5491
+      "meanMs": 0.260995,
+      "medianMs": 0.260995
     },
     "executeCached (no signal)": {
-      "meanMs": 0.0005,
-      "medianMs": 0.0005
+      "meanMs": 0.00023,
+      "medianMs": 0.00023
     },
     "executeCached (with signal, raw)": {
-      "meanMs": 0.001633935546875,
-      "medianMs": 0.001633935546875
+      "meanMs": 0.00082104248046875,
+      "medianMs": 0.00082104248046875
     },
     "keystroke wrapper overhead": {
-      "meanMs": 0.0006519775390625,
-      "medianMs": 0.0006519775390625
+      "meanMs": 0.00044307275390625,
+      "medianMs": 0.00044307275390625
     },
     "overhead delta (with - without - wrapper)": {
-      "meanMs": 0.0004819580078124999,
-      "medianMs": 0.0004819580078124999
+      "meanMs": 0.00014796972656249996,
+      "medianMs": 0.00014796972656249996
     },
     "engine.evaluateLine (no signal)": {
-      "meanMs": 0.0043617431640625,
-      "medianMs": 0.0043617431640625
+      "meanMs": 0.00084631982421875,
+      "medianMs": 0.00084631982421875
     },
     "engine.evaluateLine (with signal, raw)": {
-      "meanMs": 0.0059,
-      "medianMs": 0.0059
+      "meanMs": 0.001429005859375,
+      "medianMs": 0.001429005859375
     },
     "50 keystroke cycles (total)": {
-      "meanMs": 0.2815,
-      "medianMs": 0.2815
+      "meanMs": 0.069806,
+      "medianMs": 0.069806
     },
     "per keystroke cycle": {
-      "meanMs": 0.00563,
-      "medianMs": 0.00563
+      "meanMs": 0.0013961200000000003,
+      "medianMs": 0.0013961200000000003
     },
     "addEventListener on aborted signal": {
-      "meanMs": 0.1017762451171875,
-      "medianMs": 0.1017762451171875
+      "meanMs": 0.07066120288085938,
+      "medianMs": 0.07066120288085938
     },
     "signal.aborted property access": {
-      "meanMs": 0.0000029052734375,
-      "medianMs": 0.0000029052734375
+      "meanMs": 0.000002432861328125,
+      "medianMs": 0.000002432861328125
     }
   }
 }
