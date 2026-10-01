@@ -301,7 +301,8 @@ describe("adversarial", () => {
 	test("a zero and a negative salary", () => {
 		expect(show("£0 after tax in Scotland")).toBe("£0.00");
 		expect(show("£0 after tax with plan 2 student loan and 5% pension")).toBe("£0.00");
-		expect(show("-£5,000 after tax with 5% pension")).toBe("-£5,000.00");
+		// A salary below zero is no one's pay, so it is refused by name (FoundBug_negativeSalary).
+		expect(show("-£5,000 after tax with 5% pension")).toContain("a salary is what someone is paid, so it cannot be below zero");
 	});
 
 	test("prototype words and text edges in the clauses are ordinary words", () => {

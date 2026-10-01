@@ -228,6 +228,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	PAYROLL_CONFLICTING_CASE: "£50,000 after tax in Scotland in England",
 	PAYROLL_EXPECTED_PENSION_RATE: "£50,000 after tax with 150% pension",
 	PAYROLL_UNKNOWN_LOAN_PLAN: "£50,000 after tax with student loan",
+	PAYROLL_NEGATIVE_SALARY: "-£50,000 after tax",
 	PERCENTAGE_NOT_FINITE: "1/0 as %",
 	PERCENTAGE_OF_QUANTITY: "$5 as %",
 	PERCENT_CHANGE_EXPECTED_TO: "percent change from 50",

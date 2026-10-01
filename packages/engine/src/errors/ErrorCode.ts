@@ -520,7 +520,7 @@ export const CoreErrorCodes = {
   SYMBOLIC_INVERSE_DIMENSION_LIMIT: "SYMBOLIC_INVERSE_DIMENSION_LIMIT",
   /** A symbolic matrix inverse that meets a zero pivot, which the elimination does not reorder around. */
   SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT: "SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT",
-  /** `map` or `reduce` over something that is not a list or a range. */
+  /** `map`, `reduce`, `sum` or `prod` over something that is not a list or a range (`sum(5)`); the message names the word typed. */
   MAP_REDUCE_REQUIRES_COLLECTION: "MAP_REDUCE_REQUIRES_COLLECTION",
   /** `map` over several lists of different lengths. */
   MAP_COLLECTION_LENGTH_MISMATCH: "MAP_COLLECTION_LENGTH_MISMATCH",

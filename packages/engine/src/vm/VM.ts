@@ -6,7 +6,7 @@ import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-j
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { resolveStoredFormulaIn } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
-import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues } from "@solve-js/vm/MatrixOps";
+import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues, ReduceForm, reduceFormCall } from "@solve-js/vm/MatrixOps";
 import { listFromCells, listCellValue, needsUnitCells, unitListArithmetic, listConverted } from "@solve-js/vm/MatrixUnits";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
@@ -3023,12 +3023,13 @@ function plotInvoke(stack: Value[], op: OpCode, bodyRef: number, exprRef: number
 }
 
 /** `reduce(...)` (REDUCE_INVOKE), moved out of the dispatch loop. */
-function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, hasInitial: number, strings: string[], anonymousBodies: Bytecode["anonymousBodies"], vm: VM, pipeline: DiagnosticPipeline | undefined, expression: string | undefined, context: LineExecutionContext | undefined, symbolicTolerant: boolean | undefined): void {
+function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, form: number, strings: string[], anonymousBodies: Bytecode["anonymousBodies"], vm: VM, pipeline: DiagnosticPipeline | undefined, expression: string | undefined, context: LineExecutionContext | undefined, symbolicTolerant: boolean | undefined): void {
     requireKnownBodyKind(kind, ref, op);
 
     // Pushed in textual order (collection, then optional initial)
-    // pop in reverse.
-    const initialVal = hasInitial ? safePop(stack) : undefined;
+    // pop in reverse. Every form but a bare reduce has a starting value; see
+    // ReduceForm in vm/MatrixOps.ts.
+    const initialVal = form !== ReduceForm.reduce ? safePop(stack) : undefined;
     const collectionVal = safePop(stack);
 
     let paramNames: string[] = [];
@@ -3062,7 +3063,7 @@ function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, has
       program = fn.program;
     }
 
-    const cells = collectionToValues(collectionVal, vm.getMaxCollectionSize());
+    const cells = collectionToValues(collectionVal, vm.getMaxCollectionSize(), reduceFormCall(form));
     if (!Array.isArray(cells)) { stack.push(cells); return; }
     // Same post-charge, and the same note, as MAP_INVOKE above.
     chargeAllocation(cells.length, "collection elements");
@@ -5301,8 +5302,8 @@ export function executeBytecode(
         case OpCode.REDUCE_INVOKE: {
           const kind = operandByte(opcodes, ip++, op, "body kind");
           const ref = operandByte(opcodes, ip++, op, "body reference");
-          const hasInitial = operandByte(opcodes, ip++, op, "initial-value flag");
-          reduceInvoke(stack, op, kind, ref, hasInitial, strings, anonymousBodies, vm, pipeline, expression, context, symbolicTolerant);
+          const form = operandByte(opcodes, ip++, op, "reduce form");
+          reduceInvoke(stack, op, kind, ref, form, strings, anonymousBodies, vm, pipeline, expression, context, symbolicTolerant);
           break;
         }
 
