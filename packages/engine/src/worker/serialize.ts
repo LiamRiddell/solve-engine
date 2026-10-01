@@ -8,7 +8,7 @@
  * byte-for-byte the same DTO.
  */
 
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type ChartData, type IpCidrData } from "@solve-js/vm/Value";
+import { Value, ValueType, isTimecodeUnit, timecodeFps, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type ChartData, type IpCidrData } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { toHexString, formatColour } from "@solve-js/packages/colour/ColourMath";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
@@ -86,7 +86,16 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 	// An error keeps its message where other values keep a unit, and the DTO's
 	// `unit` is units only, so an error's message stays out of it: it crosses
 	// as `text` (#836).
-	if (value.unit !== undefined && value.type !== ValueType.Error) dto.unit = value.unit;
+	if (value.unit !== undefined && value.type !== ValueType.Error) {
+		// A timecode's unit is the internal `timecode@<fps>`: it crosses as its
+		// count of frames and its rate instead (#759).
+		if (isTimecodeUnit(value.unit)) {
+			dto.unit = "frames";
+			dto.timecodeFps = timecodeFps(value.unit);
+		} else {
+			dto.unit = value.unit;
+		}
+	}
 	if (value.unitLabel !== undefined) dto.unitLabel = { name: value.unitLabel.name, per: value.unitLabel.per };
 	// An error keeps its code in `value`, which no other field carries, so a
 	// host on the far side of the boundary could branch only on the message.

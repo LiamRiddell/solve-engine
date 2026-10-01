@@ -1,4 +1,5 @@
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData, type IpCidrData, type UnitLabel } from "@solve-js/vm/Value";
+import { Value, ValueType, isTimecodeUnit, timecodeFps, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData, type IpCidrData, type UnitLabel } from "@solve-js/vm/Value";
+import { timecodeText } from "@solve-js/packages/time/timecode/TimecodeMath";
 import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { formatIpv6 } from "@solve-js/packages/ip/Ipv6Math";
@@ -637,6 +638,9 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   if (label !== undefined && unit !== undefined && moneyUnitOf(unit) === undefined) {
     return formatLabelledUom(value, unit, label, settings, explicitPlaces);
   }
+  // A timecode answers as the timecode it is, never as its frame count under
+  // the internal unit name (#759). See timecodeText().
+  if (isTimecodeUnit(unit)) return `= ${timecodeText(value, timecodeFps(unit))}`;
   // A time over a distance is a pace, and a runner reads a pace on a clock.
   // Not when the line named its own place count, which asked for digits.
   if (unit !== undefined && explicitPlaces === undefined) {

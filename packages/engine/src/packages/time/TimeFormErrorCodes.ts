@@ -35,4 +35,6 @@ export const TimeFormErrorCodes = {
 	TIMECODE_FRAME_OUT_OF_RANGE: "TIMECODE_FRAME_OUT_OF_RANGE",
 	/** `time in Tokyo on 1 March 2027`: the time in a place is the time there now, not on another day. The message points at converting a time on that day instead. */
 	TIME_IN_ZONE_UNDATED: "TIME_IN_ZONE_UNDATED",
+	/** An identifier shaped like an ISO 8601 duration that breaks its grammar, as `P1H` (a time part before the `T`) or `P1D1D`. The message says which rule it breaks. */
+	ISO_DURATION_MALFORMED: "ISO_DURATION_MALFORMED",
 } as const;

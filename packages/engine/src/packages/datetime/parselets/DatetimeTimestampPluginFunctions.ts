@@ -7,6 +7,7 @@ import { weekOf } from "@solve-js/calendar/WeekShape";
 import { dayNumber, isoWeekNumber } from "@solve-js/calendar/Gregorian";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { parseIso8601, unixTimestampToEpochMs, formatIso8601Local } from "../Iso8601";
+import { writeDurationInUnit } from "@solve-js/packages/time/IsoDuration";
 
 /**
  * `CALL_PLUGIN` handlers backing the datetime package's workdays/weekday/
@@ -328,14 +329,25 @@ const LATEST_INSTANT_MS = 8.64e15;
  * `1710000000 as iso8601` answered a day in January 1970. It now reads its
  * argument as `to date` does ({@link toDateFromAnyHandler}): a date as it is, a
  * number through the same seconds-or-milliseconds threshold, text through the
- * ISO 8601 parser. Anything else (a quantity, money, true or false, a list)
- * is refused by name rather than read through its number.
+ * ISO 8601 parser. A length of time is written as an ISO 8601 duration
+ * (`PT1H30M`, #760). Anything else (another quantity, money, true or false, a
+ * list) is refused by name rather than read through its number.
  *
  * @param value - The value to write.
  * @param context - The line's context, for the calendar backend.
  * @returns The ISO 8601 text, or an error Value.
  */
 export function asIso8601(value: Value, context?: LineExecutionContext): Value {
+  // A length of time is written as an ISO 8601 duration, `90 minutes as
+  // iso8601` as PT1H30M (#760). It was refused here, and before that read as
+  // epoch milliseconds. See packages/time/IsoDuration.ts.
+  if (value.type === ValueType.Uom && value.unit !== undefined) {
+    const duration = writeDurationInUnit(value.toNumber(), value.unit);
+    if (duration === null) {
+      return errorValue("AS_ISO8601_DURATION_TOO_LONG", "This length of time is too large to write as an ISO 8601 duration with exact digits.");
+    }
+    if (duration !== undefined) return stringValue(duration);
+  }
   const readable = value.type === ValueType.Datetime || value.type === ValueType.Number || value.type === ValueType.String;
   if (!readable) {
     return errorValue(

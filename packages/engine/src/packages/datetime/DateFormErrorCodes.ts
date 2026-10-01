@@ -13,6 +13,8 @@ export const DateFormErrorCodes = {
 	DATE_OUT_OF_RANGE: "DATE_OUT_OF_RANGE",
 	/** `as iso8601` given something that is not a date, a Unix timestamp or ISO 8601 text. */
 	AS_ISO8601_NEEDS_DATE: "AS_ISO8601_NEEDS_DATE",
+	/** `as iso8601` given a length of time too large for its parts to be written with exact digits, as in `1e300 seconds as iso8601`. */
+	AS_ISO8601_DURATION_TOO_LONG: "AS_ISO8601_DURATION_TOO_LONG",
 	/** Text given as an ISO 8601 date or time that does not read as one. */
 	INVALID_ISO8601_STRING: "INVALID_ISO8601_STRING",
 	/** A weekday given as a number that is not a day of the week. */

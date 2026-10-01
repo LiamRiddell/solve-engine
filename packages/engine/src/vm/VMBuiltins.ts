@@ -33,7 +33,7 @@ import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/Engi
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
 import { inflationAmountRefused } from "@solve-js/packages/finance/data/InflationAmount";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
-import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure } from "@solve-js/uom/UomConverter";
+import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure, unitForMessage } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } from "@solve-js/vm/QuantityPowers";
 import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan, loanTermsRefused, rateAtOrBelowMinusHundred, compoundingRefused } from "@solve-js/vm/FinanceFormulas";
 import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, valueInBase, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
@@ -354,7 +354,7 @@ function extremum(args: Value[], wantLargest: boolean): Value {
             const named = describeMeasureMismatch(bestUnit, otherUnit, "compared");
             return errorValue(
                 "INCOMPATIBLE_UNITS",
-                named ?? `Cannot compare incompatible units: ${bestUnit ?? "?"} and ${otherUnit ?? "?"}`,
+                named ?? `Cannot compare incompatible units: ${unitForMessage(bestUnit ?? "?")} and ${unitForMessage(otherUnit ?? "?")}`,
             );
         }
         // Two decimals are ordered on their exact values, so two that share a
