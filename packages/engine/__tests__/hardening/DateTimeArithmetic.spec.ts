@@ -376,7 +376,8 @@ describe("a datetime on the wrong side of an operator", () => {
 	test("a date minus a date is still a duration, and a date minus a bare number is refused", () => {
 		const difference = evaluate("2023-12-25 - 2023-12-24");
 		expect(difference.type).toBe(ValueType.Uom);
-		expect(difference.unit).toBe("ms");
+		expect(difference.unit).toBe("day");
+		expect(difference.toNumber()).toBe(1);
 		expect(evaluate("12-25-2023 - 100").errorCode).toBe("INVALID_DATETIME_OP");
 		expect(evaluate("12-25-2023 - 100 ms").type).toBe(ValueType.Datetime);
 	});

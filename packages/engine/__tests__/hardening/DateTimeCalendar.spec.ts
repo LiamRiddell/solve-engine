@@ -174,10 +174,11 @@ describe("differences between dates", () => {
 	});
 
 	test("subtracting two dates yields a duration rather than another date", () => {
+		// A count of calendar days, not milliseconds (FoundBug_dateDifferenceInDays).
 		const value = evaluate("2023-12-25 - 2023-12-24");
 		expect(value.type).toBe(ValueType.Uom);
-		expect(value.unit).toBe("ms");
-		expect(value.toNumber()).toBe(localMidnight(2023, 12, 25) - localMidnight(2023, 12, 24));
+		expect(value.unit).toBe("day");
+		expect(value.toNumber()).toBe(1);
 	});
 
 	test("`until` counts forwards and `since` counts backwards, with matching magnitudes", () => {

@@ -48,12 +48,19 @@ export function notPlainNumberKind(v: Value): string | undefined {
  * `TEXT_NOT_A_NUMBER`, where `toNumber()` read it through `parseFloat`: `int("abc")`
  * answered 0 and `int("12abc")` answered 12.
  *
+ * A base prefix is read as `as number` reads it (see
+ * {@link numberFromBaseText}): `int("0xFF")` is 255, every digit of a large
+ * one is kept, and a malformed one (`int("0xZZ")`) is refused with the same
+ * message, saying which digits the base has.
+ *
  * @param text - The text to read.
  * @returns The whole number, or the refusal as an error Value.
  */
 export function intOfText(text: string): Value {
 	const trimmed = text.trim();
 	if (NUMBER_TEXT.test(trimmed)) return numberValue(Math.trunc(Number(trimmed.replace(/,/g, ""))));
+	const based = numberFromBaseText(trimmed, text);
+	if (based !== null) return based;
 	const quoted = text.length > QUOTED_TEXT_LIMIT ? `${text.slice(0, QUOTED_TEXT_LIMIT)}...` : text;
 	return errorValue("TEXT_NOT_A_NUMBER", `"${quoted}" is not a number: int reads text that is a number and nothing else.`);
 }
@@ -63,9 +70,11 @@ export function intOfText(text: string): Value {
  *
  * A number is returned as it is, exact digits and all; a percentage is its
  * fraction (`float(50%)` is 0.5); a big integer or a hex value is its number;
- * text that spells a number whole is that number (`float("2.5")` is 2.5).
- * Everything else is refused with `FLOAT_TAKES_NUMBER`, text that is not a
- * number included, rather than read as 0.
+ * text that spells a number whole is that number (`float("2.5")` is 2.5),
+ * with a base prefix read as `as number` reads it (`float("0xFF")` is 255, and
+ * a malformed one is refused as `as number` refuses it, with
+ * `TEXT_NOT_A_NUMBER`). Everything else is refused with `FLOAT_TAKES_NUMBER`,
+ * text that is not a number included, rather than read as 0.
  *
  * @param v - The argument, already evaluated.
  * @returns The number, or the refusal as an error Value.
@@ -77,6 +86,8 @@ export function floatOf(v: Value): Value {
 		const text = String(v.value);
 		const trimmed = text.trim();
 		if (NUMBER_TEXT.test(trimmed)) return numberValue(Number(trimmed.replace(/,/g, "")));
+		const based = numberFromBaseText(trimmed, text);
+		if (based !== null) return based;
 		const quoted = text.length > QUOTED_TEXT_LIMIT ? `${text.slice(0, QUOTED_TEXT_LIMIT)}...` : text;
 		return errorValue("FLOAT_TAKES_NUMBER", `float takes a number, or text that is a number, and "${quoted}" is not one.`);
 	}
@@ -170,4 +181,40 @@ export function numberFromBaseText(trimmed: string, written: string): Value | nu
 	}
 	const magnitude = BigInt(`${prefix}${significant}`);
 	return exactIntegerValue(negative ? -magnitude : magnitude);
+}
+
+/**
+ * The refusal for a sign written before text: `-"abc"`, `-"5"`, `+"0xFF"`.
+ *
+ * A sign read its text through `toNumber()`, which is `parseFloat`, so
+ * `-"abc"` answered 0 and `-"0xFF" as number` answered 0 too (the minus binds
+ * before `as`, so the line negated the text and then converted the 0). Text
+ * is refused in arithmetic by name (`TEXT_ARITHMETIC`), and a sign is
+ * arithmetic, so it is refused the same way. Text that holds a number is
+ * pointed at the conversion in brackets, `-("0xFF" as number)`, which is the
+ * line the reader meant.
+ *
+ * @param text - The text the sign was written before.
+ * @param sign - Which sign: a minus negates, a plus keeps.
+ * @returns The `TEXT_ARITHMETIC` error Value.
+ */
+export function textSignRefused(text: string, sign: "minus" | "plus"): Value {
+	const trimmed = text.trim();
+	const based = numberFromBaseText(trimmed, text);
+	const holdsNumber = NUMBER_TEXT.test(trimmed) || (based !== null && !based.isError());
+	const quoted = `"${text.length > QUOTED_TEXT_LIMIT ? `${text.slice(0, QUOTED_TEXT_LIMIT)}...` : text}"`;
+	if (sign === "minus") {
+		return errorValue(
+			"TEXT_ARITHMETIC",
+			holdsNumber
+				? `Text cannot be negated: a minus sign works on numbers and quantities, not text. To negate the number ${quoted} holds, convert it first, in brackets: -(${quoted} as number).`
+				: "Text cannot be negated: a minus sign works on numbers and quantities, not text. To negate a number held as text, convert it first with \"as number\", in brackets.",
+		);
+	}
+	return errorValue(
+		"TEXT_ARITHMETIC",
+		holdsNumber
+			? `Text has no sign: a plus sign works on numbers and quantities, not text. To read the number ${quoted} holds, write ${quoted} as number.`
+			: "Text has no sign: a plus sign works on numbers and quantities, not text. To read a number held as text, convert it with \"as number\".",
+	);
 }
