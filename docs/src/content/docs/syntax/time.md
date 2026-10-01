@@ -40,14 +40,21 @@ whole part alone:
 A clock shows hours from 0 to 23 and minutes from 0 to 59, so a colon pair
 outside those (`24:00` for the end of a day, `9:60` as a slip of the finger) is
 no time any clock can show. It is refused by name, in the same words, whether it
-stands on its own line or inside brackets, a function call or a list:
+stands on its own line, in a sum, or inside brackets, a function call or a list.
+A third field after the minutes is seconds, which also run from 0 to 59, so
+`1:23:99` is refused the same way:
 
 ```solve-doc
 24:00 // ERROR: "24:00" is not a valid time
+1 + 24:00 // ERROR: "24:00" is not a valid time
+1:23:99 // ERROR: "1:23:99" is not a valid time
 (24:00) // ERROR: "24:00" is not a valid time
 max(9:60, 10:15) // ERROR: "9:60" is not a valid time
 total(24:00, 0:00) // ERROR: "24:00" is not a valid time
 ```
+
+Earlier versions read the text before such a colon as a
+[label](/syntax/labels/), so `1 + 24:00` answered 0 and `1:23:99` answered 99.
 
 Midnight at the start of the day is `0:00`, and the last minute is `23:59`. The
 one place a colon between two numbers is not a time is the list that `sum`,
