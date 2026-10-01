@@ -68,6 +68,7 @@ import { isSummaryLine } from "@solve-js/packages/lines/SectionReader";
 import { ErrorFactory, EngineError, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
 import type { SourceSpan } from "@solve-js/errors/EngineError";
 import { countLines, splitLines } from "@solve-js/utilities/Strings";
+import { exactLength } from "@solve-js/utilities/ExactArrays";
 import {
 	ResolverRegistry,
 	type AsyncCheckResult,
@@ -735,8 +736,15 @@ export class ExpressionEngine {
      * with {@link registeredPackages} so each `registerPackage` costs O(that
      * package's fields) rather than a fresh O(all packages) pairwise scan, which
      * turned engine construction into O(packages^2). See PackageCompatibility.ts.
+     *
+     * `null` once construction is over. The index holds a map entry for every
+     * parselet, phrase, converter, function and rule name of every package (about
+     * 47KB for the built-in set), and an engine that is never handed another
+     * package never reads it again. {@link compatibilityIndex} rebuilds it from
+     * {@link registeredPackages} the first time a later registration asks, and
+     * that is the same index: both are filled in registration order.
      */
-    private compatIndex = new PackageCompatibilityIndex();
+    private compatIndex: PackageCompatibilityIndex | null = new PackageCompatibilityIndex();
 
     /**
      * The `DocumentModel` this engine is currently evaluating, if any
@@ -2553,6 +2561,10 @@ export class ExpressionEngine {
             }
         }
 
+        // Construction is the one place packages arrive in bulk. The index is
+        // released now rather than kept for a registration that may never come.
+        this.releaseCompatibilityIndex();
+
         // Date literals, numeric (`25/12/2023`) and with the month spelled out
         // (`March 9, 2024`). Registered here rather than through the datetime
         // package descriptor because both rules build their literal through
@@ -3100,6 +3112,25 @@ export class ExpressionEngine {
     //#region Public API, Package registration
 
     /**
+     * The package-compatibility index, rebuilt from {@link registeredPackages}
+     * when construction released it. The rebuild adds the packages in the order
+     * they were registered, which is the order the incremental index saw them
+     * in, so a later registration reports the same conflicts either way.
+     */
+    private compatibilityIndex(): PackageCompatibilityIndex {
+        if (this.compatIndex === null) {
+            this.compatIndex = new PackageCompatibilityIndex();
+            this.compatIndex.rebuild(this.registeredPackages.values());
+        }
+        return this.compatIndex;
+    }
+
+    /** Drop the package-compatibility index until a registration needs it again. See {@link compatIndex}. */
+    private releaseCompatibilityIndex(): void {
+        this.compatIndex = null;
+    }
+
+    /**
      * Register a package with the engine's isolated registries.
      *
      * Handles all IEnginePackage fields:
@@ -3152,7 +3183,7 @@ export class ExpressionEngine {
         // asConverterRegistry) even for "error"-severity conflicts, since a
         // host may have a deliberate reason to accept a collision; the
         // point is making it IMPOSSIBLE to miss, not blocking registration.
-        const compatibilityConflicts = this.compatIndex.check(pkg);
+        const compatibilityConflicts = this.compatibilityIndex().check(pkg);
         for (const conflict of compatibilityConflicts) {
             const log = conflict.severity === "error" ? console.error : console.warn;
             log(`[ExpressionEngine] Package compatibility ${conflict.severity} (${conflict.kind}): ${conflict.detail}`);
@@ -3294,6 +3325,15 @@ export class ExpressionEngine {
             }
         }
 
+        // The lists are only read from here on, so each is kept at its exact
+        // length rather than with the room its pushes reserved. See ExactArrays.ts.
+        contribution.pluginFunctionIndices = exactLength(contribution.pluginFunctionIndices);
+        contribution.pluginFunctionNames = exactLength(contribution.pluginFunctionNames);
+        contribution.resolverNamespaces = exactLength(contribution.resolverNamespaces);
+        contribution.tokenCategories = exactLength(contribution.tokenCategories);
+        contribution.asConverterNames = exactLength(contribution.asConverterNames);
+        contribution.normalizerRuleNames = exactLength(contribution.normalizerRuleNames);
+        contribution.callFusionNames = exactLength(contribution.callFusionNames);
         this.packageContributions.set(pkg.name, contribution);
         // Recorded LAST, only once every sub-registration above actually
         // succeeded. If this ran up front (as it used to), a mid-function
@@ -3303,7 +3343,7 @@ export class ExpressionEngine {
         this.registeredPackages.set(pkg.name, pkg);
         // Mirror the registration into the compatibility index (kept in step so
         // the next package's check stays O(its own fields)).
-        this.compatIndex.add(pkg);
+        this.compatibilityIndex().add(pkg);
 
         // A package can add a parselet, a keyword or a normaliser rule, which
         // changes what a line means or whether it parses at all: a program
@@ -3397,7 +3437,8 @@ export class ExpressionEngine {
         // Rebuild the compatibility index from the survivors. Unregistration is
         // rare (a re-registered duplicate name, or an explicit host call), so an
         // O(remaining) rebuild here is far cheaper than tracking per-key removal.
-        this.compatIndex.rebuild(this.registeredPackages.values());
+        // A released index stays released: the next registration rebuilds it.
+        this.compatIndex?.rebuild(this.registeredPackages.values());
         this.clearCompiledCache();
         return true;
     }

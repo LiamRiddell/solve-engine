@@ -1,5 +1,6 @@
 import { errorValue, type Value } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { appendExact } from "@solve-js/utilities/ExactArrays";
 
 /**
  * A package-registered `as <name>` converter: the value on the left of `as`
@@ -109,12 +110,16 @@ export class AsConverterRegistry {
 		if (prior && prior !== handler && !casePair) {
 			console.warn(`[asConverterRegistry] Converter name "${key}" is already registered, so it is overwritten.`);
 		}
+		// Each list is built at its exact length (a spread would keep about
+		// seventeen slots for one spelling), since every key of every engine
+		// holds one for the engine's whole life.
 		let next = spellings;
 		if (!known && !casePair) {
 			for (const spelling of spellings) this.exact.delete(spelling);
-			next = [];
+			next = [name];
+		} else if (!known) {
+			next = appendExact(spellings, name);
 		}
-		if (!known) next = [...next, name];
 		this.spellings.set(key, next);
 		if (name !== key) this.exact.set(name, handler);
 		this.folded.set(key, next.length > 1 ? ambiguousCaseConverter(key, next) : handler);
