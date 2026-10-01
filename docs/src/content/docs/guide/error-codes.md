@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 541 codes, grouped below by the part
+ship. The engine and its built-in packages ship 542 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
