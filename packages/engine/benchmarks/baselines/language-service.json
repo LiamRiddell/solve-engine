@@ -3,74 +3,104 @@
   "harness": "mitata-1",
   "results": {
     "highlight_simple_arithmetic": {
-      "meanMs": 0.006718677042801556,
-      "medianMs": 0.006,
-      "minMs": 0.0052
+      "meanMs": 0.0021514381019765373,
+      "medianMs": 0.001302,
+      "minMs": 0.000511
     },
     "highlight_mixed_expression": {
-      "meanMs": 0.009358926048045219,
-      "medianMs": 0.0088,
-      "minMs": 0.0078
+      "meanMs": 0.0023546108656480637,
+      "medianMs": 0.001663,
+      "minMs": 0.000891
     },
     "highlight_long_expression": {
-      "meanMs": 0.22533059360730592,
-      "medianMs": 0.2119,
-      "minMs": 0.205
+      "meanMs": 0.018355602198225993,
+      "medianMs": 0.014181,
+      "minMs": 0.012269
     },
     "highlight_inline_solve_in_text": {
-      "meanMs": 0.005888175455729167,
-      "medianMs": 0.0057623046875,
-      "minMs": 0.0055153076171875
+      "meanMs": 0.0028993161793608078,
+      "medianMs": 0.001963,
+      "minMs": 0.001201
     },
     "highlight_unrecognized_prose": {
-      "meanMs": 0.0315943264659271,
-      "medianMs": 0.0312,
-      "minMs": 0.0212
+      "meanMs": 0.003371305981301915,
+      "medianMs": 0.002804,
+      "minMs": 0.002043
+    },
+    "highlight_simple_arithmetic_normalized": {
+      "meanMs": 0.00471108066828135,
+      "medianMs": 0.003075,
+      "minMs": 0.002214
+    },
+    "highlight_mixed_expression_normalized": {
+      "meanMs": 0.006701627974745022,
+      "medianMs": 0.004968,
+      "minMs": 0.004167
+    },
+    "highlight_long_expression_normalized": {
+      "meanMs": 0.09138947497639283,
+      "medianMs": 0.072831,
+      "minMs": 0.068995
+    },
+    "highlight_inline_solve_in_text_normalized": {
+      "meanMs": 0.008393522204806688,
+      "medianMs": 0.00644,
+      "minMs": 0.005378
+    },
+    "highlight_unrecognized_prose_normalized": {
+      "meanMs": 0.00965911884432089,
+      "medianMs": 0.007902,
+      "minMs": 0.007131
+    },
+    "highlight_fusing_line_normalized": {
+      "meanMs": 0.014790144320440301,
+      "medianMs": 0.010326,
+      "minMs": 0.007621
     },
     "highlight_warm_cache_hit": {
-      "meanMs": 0.000007259652091583233,
-      "medianMs": 0.000006640625,
-      "minMs": 0.000006396484375
+      "meanMs": 0.000009839414786029336,
+      "medianMs": 0.000006970947265625,
+      "minMs": 0.00000669482421875
     },
     "completions_cold_first_call": {
-      "meanMs": 0.49466102564102565,
-      "medianMs": 0.4782,
-      "minMs": 0.4203
+      "meanMs": 2.865370612903226,
+      "medianMs": 2.607336,
+      "minMs": 1.655075
     },
     "completions_warm_short_prefix": {
-      "meanMs": 0.004390625,
-      "medianMs": 0.0043206787109375,
-      "minMs": 0.0042377197265625
+      "meanMs": 0.0109758955078125,
+      "medianMs": 0.010549028564453125,
+      "minMs": 0.010362689453125
     },
     "completions_warm_specific_prefix": {
-      "meanMs": 0.0007757245744977679,
-      "medianMs": 0.0007696044921875,
-      "minMs": 0.0007547119140625
+      "meanMs": 0.0009378807431175596,
+      "medianMs": 0.0008937841796875,
+      "minMs": 0.0008800966796875
     },
     "completions_warm_no_match": {
-      "meanMs": 0.0006367103794642857,
-      "medianMs": 0.0006231201171875,
-      "minMs": 0.000604638671875
+      "meanMs": 0.00045161592693718114,
+      "medianMs": 0.00040076513671875,
+      "minMs": 0.000396077880859375
     },
     "completions_warm_500_variables": {
-      "meanMs": 0.05070678917815212,
-      "medianMs": 0.0489,
-      "minMs": 0.0477
+      "meanMs": 0.06677205502063273,
+      "medianMs": 0.05275,
+      "minMs": 0.050556
     },
     "highlight_viewport_50_lines_cold": {
-      "meanMs": 0.3715202290076336,
-      "medianMs": 0.3327,
-      "minMs": 0.2726
+      "meanMs": 0.09151350580270794,
+      "medianMs": 0.063636,
+      "minMs": 0.03335
     },
     "highlight_viewport_100_lines_cold": {
-      "meanMs": 0.60904625,
-      "medianMs": 0.6045,
-      "minMs": 0.5339
+      "meanMs": 0.1310617311977716,
+      "medianMs": 0.116566,
+      "minMs": 0.067392
     },
     "highlight_viewport_200_lines_cold": {
-      "meanMs": 1.2122417721518988,
-      "medianMs": 1.2161,
-      "minMs": 1.0929
+      "meanMs": 0.27411802623906706,
+      "medianMs": 0.235927,
+      "minMs": 0.149296
     }
   }
 }

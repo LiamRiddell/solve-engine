@@ -3,49 +3,59 @@
   "harness": "mitata-1",
   "results": {
     "single_eval_cold": {
-      "meanMs": 0.3855873469387755,
-      "medianMs": 0.3581,
-      "minMs": 0.2953
+      "meanMs": 1.893888,
+      "medianMs": 1.680512,
+      "minMs": 1.020595
+    },
+    "create_engine": {
+      "meanMs": 0.904235224489796,
+      "medianMs": 0.607028,
+      "minMs": 0.521299
     },
     "single_eval_warm": {
-      "meanMs": 0.004680208333333333,
-      "medianMs": 0.004426171875,
-      "minMs": 0.0043757080078125
+      "meanMs": 0.0011141497192382812,
+      "medianMs": 0.00109046826171875,
+      "minMs": 0.00087134521484375
+    },
+    "single_eval_failed_warm": {
+      "meanMs": 0.0033660042317708336,
+      "medianMs": 0.002817558837890625,
+      "minMs": 0.002613294921875
     },
     "50_line_doc": {
-      "meanMs": 0.7529223140495868,
-      "medianMs": 0.7179,
-      "minMs": 0.6507
+      "meanMs": 3.8000834761904763,
+      "medianMs": 3.702051,
+      "minMs": 1.999745
     },
     "200_line_doc": {
-      "meanMs": 1.8261979166666666,
-      "medianMs": 1.7835,
-      "minMs": 1.6548
+      "meanMs": 6.290527727272727,
+      "medianMs": 5.408503,
+      "minMs": 3.969937
     },
     "variable_chain": {
-      "meanMs": 0.3518460674157303,
-      "medianMs": 0.3316,
-      "minMs": 0.2966
+      "meanMs": 2.0203604146341463,
+      "medianMs": 1.833183,
+      "minMs": 0.953493
     },
     "20_inline_solves": {
-      "meanMs": 0.4906193717277487,
-      "medianMs": 0.4679,
-      "minMs": 0.4262
+      "meanMs": 2.970751285714286,
+      "medianMs": 2.592473,
+      "minMs": 1.991473
     },
     "re_eval_dirty": {
-      "meanMs": 0.3548577358490566,
-      "medianMs": 0.3346,
-      "minMs": 0.2989
+      "meanMs": 2.0935895609756097,
+      "medianMs": 1.980446,
+      "minMs": 1.063419
     },
     "mixed_complex": {
-      "meanMs": 0.3882338842975207,
-      "medianMs": 0.3655,
-      "minMs": 0.3156
+      "meanMs": 1.2142517397260275,
+      "medianMs": 0.89199,
+      "minMs": 0.711156
     },
     "function_plus_literal": {
-      "meanMs": 0.3493841328413284,
-      "medianMs": 0.3299,
-      "minMs": 0.2966
+      "meanMs": 1.6165464339622642,
+      "medianMs": 1.353608,
+      "minMs": 0.827933
     }
   }
 }
