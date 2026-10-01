@@ -340,6 +340,15 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"if [X, 2] > 1 then 1 else 2",
 		"[X%, 20%]",
 		"[100, 200] + [X%, 20%]",
+		// An aggregate of percentages, alone and beside a number, and not
+		// before a bracketed list (FoundBug_aggregateOfPercentages,
+		// FoundBug_notBeforeAList).
+		"sum(X%, 20%)",
+		"average of X%, 20%",
+		"max(X%, 20%)",
+		"sum(X%, 100)",
+		"not [X]",
+		"not [X > 0, true]",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,
@@ -585,6 +594,9 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "# S\nX\n5\ntotal of section \"S\"" },
 	{ form: "| item | cost |\n| --- | --- |\n| food | X |\n\ncolumn \"cost\" for \"food\"" },
 	{ form: "X\n5\ntotal above\naverage above" },
+	// A column of percentages, gathered by position, by range and by tag.
+	{ form: "X%\n20%\ntotal above\nmax above\naverage(line 1 : line 2)" },
+	{ form: "X% #r\n20% #r\ntotal of #r" },
 	{ form: "X\ninputs of line 1" },
 	{ form: "x = 1\ny = x * 3\nsolve line 2 for x = X", agree: false },
 	{ form: ":price = £200\nprice * 3\nsolve line 2 for price = £X", agree: false },

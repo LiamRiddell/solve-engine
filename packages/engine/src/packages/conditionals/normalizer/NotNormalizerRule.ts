@@ -17,7 +17,10 @@ const EXPECTS_VALUE: ReadonlySet<string> = new Set([
 
 /**
  * The tokens that can open the condition a `not` negates: a bracket, a
- * boolean, a name, a number, a quoted text, another negation. A currency
+ * boolean, a name, a number, a quoted text, another negation, and a square
+ * bracket, which opens a list: `not [true, false]` negates each answer, as
+ * `not` before a name holding that list does, and `not [1, 2]` is refused by
+ * name, where it was read as an item of a list called `not`. A currency
  * symbol opens one too (see {@link opensCondition}), so `not $5` is refused by
  * name rather than left a parse error. Anything else after the word
  * (an `=`, an operator, the end of the line, a date word such as `now`) leaves
@@ -25,7 +28,7 @@ const EXPECTS_VALUE: ReadonlySet<string> = new Set([
  * `not + 1` still reads it.
  */
 const OPENS_CONDITION: ReadonlySet<string> = new Set([
-	"LPAREN", "TRUE", "FALSE", "IDENT", "NUMBER", "STRING", "BANG", "NOT",
+	"LPAREN", "LBRACKET", "TRUE", "FALSE", "IDENT", "NUMBER", "STRING", "BANG", "NOT",
 ]);
 
 /** A currency symbol (`$`, `£`, `€`), which opens an amount of money. */

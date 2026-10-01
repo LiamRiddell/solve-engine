@@ -125,6 +125,52 @@ its magnitude, which is what a count written beside a column of measurements has
 always done, so `total of 1 km, 500` is `501.00 km`. And `count of` counts, so it
 carries no unit at all.
 
+## A list of percentages
+
+A percentage is a share of something, such as a tax rate or a discount, and a
+set of shares of the same whole adds up to a share as well: a 10% rate and a
+20% rate are 30% between them, and their average is 15%. So every aggregate on
+this page answers a set of percentages with a percentage, whether the values
+are written with commas or brackets, gathered by line, by heading or by tag.
+
+```solve
+sum(10%, 20%) // 30.00%
+total of 10%, 20% // 30.00%
+average of 10%, 20% // 15.00%
+max(10%, 20%) // 20.00%
+median of 10%, 20%, 40% // 20.00%
+stdev of 10%, 20% // 5.00%
+```
+
+```solve-doc
+10% // 10.00%
+20% // 20.00%
+total above // 30.00%
+average above // 15.00%
+```
+
+A percentage beside a plain number or an amount is refused by name, because the
+two have no reading in common: `100 + 10%` is 110, a tenth more than 100, but a
+list has no order that says the percentage is a share of the number, and adding
+the percentage's fraction (0.1) to 100 would be confidently wrong. The refusal
+names the percentage and the fraction it stands for, so the value can be
+rewritten either way.
+
+```solve
+sum(10%, 100) // A percentage (10%) and a number cannot be added together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 10% as the number 0.1; to raise an amount by a percentage, write it as 100 + 10%.
+average of 10%, $5 // A percentage (10%) and an amount in USD cannot be averaged together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 10% as the number 0.1.
+```
+
+The boundary: a variance of percentages would be in percent squared, which is
+not a percentage, so it is refused, and the standard deviation gives the same
+spread as a percentage. `count of` counts percentages like anything else. A
+table column is the exception to gathering them: its summaries refuse a
+percentage cell (see [table columns](/syntax/table-columns/)). A product of
+percentages is still worked out with `*`, so `product of 10%, 20%` is the
+fraction 0.02. These aggregates used to read each percentage as its fraction,
+so `sum(10%, 20%)` was 0.30 and `sum(10%, 100)` was 100.10, and a line range
+or `total above` over percentages was refused.
+
 ## Spread and shape
 
 `average` and `median` find a list's centre; these four say how spread out it

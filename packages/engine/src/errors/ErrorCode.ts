@@ -374,7 +374,7 @@ export const CoreErrorCodes = {
   UNIT_AFTER_UNIT: "UNIT_AFTER_UNIT",
   /** An exponent carrying a unit, as in `2^(3 m)`. The message shows where the unit goes instead. */
   UNIT_IN_EXPONENT: "UNIT_IN_EXPONENT",
-  /** A quantity raised to a power that has no unit, as in `2s^2`, or a unit written with a power the table does not spell. Only a length squared or cubed has one. */
+  /** A quantity raised to a power that has no unit, as in `2s^2`, or a unit written with a power the table does not spell. Only a length squared or cubed has one. A variance of quantities other than lengths, or of percentages, is refused with it too. */
   UNIT_POWER_UNSUPPORTED: "UNIT_POWER_UNSUPPORTED",
   /** A square or cube root of a quantity whose root has no unit, as in `sqrt(4 m)`, or of a negative area. */
   UNIT_ROOT_UNSUPPORTED: "UNIT_ROOT_UNSUPPORTED",
@@ -462,6 +462,8 @@ export const CoreErrorCodes = {
   STATISTIC_NOT_FINITE: "STATISTIC_NOT_FINITE",
   /** A list aggregate (`total of`, `average of`, a line range) meeting something that is not a number or a quantity. The message names what it found. */
   AGGREGATE_NON_NUMERIC: "AGGREGATE_NON_NUMERIC",
+  /** An aggregate (`sum(10%, 100)`, `average of 10%, 5 m`, `max(10%, 0.5)`, `total above` over a column) meeting a percentage beside a value that is not one. Percentages alone answer a percentage (`sum(10%, 20%)` is 30%); the message names the percentage and the kind of the other value, and gives the percentage as the number it stands for. */
+  AGGREGATE_PERCENTAGE_MIXED: "AGGREGATE_PERCENTAGE_MIXED",
   /** A value written as a percentage that is not a proportion, such as a length. */
   PERCENTAGE_OF_QUANTITY: "PERCENTAGE_OF_QUANTITY",
   /** A value written as a percentage that is not a finite number: an infinity a division by zero gave (`1/0 as %`), or a value that is no number at all. */
