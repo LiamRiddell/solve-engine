@@ -76,6 +76,32 @@ export function countedWord(parser: Parser): string | undefined {
 }
 
 /**
+ * Read the amount of an inflation query: one or more terms joined by `+` or
+ * `-` (`$300 + $50`, `$100 * 2 - $20`), each read at
+ * {@link AMOUNT_BINDING_POWER}, and their sum.
+ *
+ * The terms are joined here rather than by reading the amount at the
+ * binding power of a sum, because a sum binds looser than the conversion
+ * `in` (35), which would then swallow the `in` of `what is $X in <year> worth
+ * in <year>`. Joining them by hand keeps that `in` for the query and still
+ * reads the `+` the reader typed, which the query used to stop at and report
+ * as the token it found. Nothing a query is written with follows its amount
+ * with `+` or `-`: the year comes after `from`, `in` or `worth in`, so a sign
+ * there can only belong to the amount.
+ *
+ * @param parser - Positioned on the amount.
+ * @param builder - Receives the amount's bytecode, one value on the stack.
+ */
+export function parseInflationAmount(parser: Parser, builder: BytecodeBuilder): void {
+  parser.parseExpression(AMOUNT_BINDING_POWER, builder);
+  for (let next = parser.peek(); next?.type === "PLUS" || next?.type === "MINUS"; next = parser.peek()) {
+    parser.consume();
+    parser.parseExpression(AMOUNT_BINDING_POWER, builder);
+    builder.emitOpcode(next.type === "PLUS" ? OpCode.ADD : OpCode.SUB);
+  }
+}
+
+/**
  * `what is $X from <year>` -> X (given as that year's dollars) expressed
  * in present-day dollars; `what is $X in <year1> worth in <year2>` -> X
  * adjusted between two arbitrary (non-present) years; `what was $X worth
@@ -103,11 +129,12 @@ export function countedWord(parser: Parser): string | undefined {
  * `AMOUNT_BINDING_POWER` (39) makes the Pratt loop's `bp <= minBp` check
  * block `IN` (35 <= 39) from ever being consumed there, leaving it for
  * this parselet to consume explicitly, while `*` and `/` (40) still are.
- * Trade-off: the amount can't contain a top-level Sum-tier `+`/`-` in this form, parenthesize if
- * needed, e.g. "what is ($300 + $50) from 2003". The "what was ... worth
- * in" branch has no such collision (the next token is the fused
- * WORTH_IN, which has no infix parselet registered at all), but uses the
- * same guarded parse for consistency between both variants of this class.
+ * A top-level `+` or `-` in the amount (`what is $300 + $50 from 2003`) is
+ * joined by {@link parseInflationAmount}, term by term at the same guarded
+ * binding power, so the `in` stays blocked. The "what was ... worth in"
+ * branch has no such collision (the next token is the fused WORTH_IN,
+ * which has no infix parselet registered at all), but reads its amount the
+ * same way for consistency between both variants of this class.
  */
 export class InflationQueryParselet implements PrefixParselet {
   readonly category = "Finance";
@@ -135,7 +162,7 @@ export class InflationQueryParselet implements PrefixParselet {
       builder.emitString(counted);
       builder.emitPluginCall("inflationCountedAmount", 1);
     } else {
-      parser.parseExpression(AMOUNT_BINDING_POWER, builder); // amount
+      parseInflationAmount(parser, builder);
     }
 
     if (this.variant === "what-was") {

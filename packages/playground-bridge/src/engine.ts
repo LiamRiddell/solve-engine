@@ -111,6 +111,13 @@ export interface DebugResult {
 	pipelineStagesByLine: Record<number, PipelineStageResult[]>;
 	/** DAG dependency graph snapshot */
 	dagSnapshot: DagSnapshot;
+	/**
+	 * The names the document defines and the evaluating engine still holds
+	 * (`ExpressionEngine.documentVariableNames`), for the editor's completions.
+	 * Read in the worker, where the evaluating engine lives, since the editor's
+	 * own engine only highlights and never evaluates.
+	 */
+	documentNames: string[];
 	/** VM checkpoints snapshot */
 	checkpoints: CheckpointSnapshot[];
 	/** Batcher metrics for async resolution */
@@ -1164,6 +1171,7 @@ export function runEngineWithStreaming(
 		pipelineStages: lastPipelineStages,
 		pipelineStagesByLine,
 		dagSnapshot,
+		documentNames: engineRef ? [...engineRef.documentVariableNames()] : [],
 		checkpoints,
 		batcherMetrics,
 		pageHeatmap,
@@ -1484,6 +1492,7 @@ export function runEngine(expression: string, options: RunOptions = {}): DebugRe
 			pipelineStages: lastPipelineStages,
 			pipelineStagesByLine,
 			dagSnapshot: dagSnap,
+			documentNames: [...engine.documentVariableNames()],
 			checkpoints: ckpts,
 			batcherMetrics: bm,
 			pageHeatmap: ph,
@@ -1542,6 +1551,7 @@ export function runEngine(expression: string, options: RunOptions = {}): DebugRe
 		pipelineStages: lastPipelineStages,
 		pipelineStagesByLine,
 			dagSnapshot,
+			documentNames: [],
 			checkpoints,
 			batcherMetrics,
 			pageHeatmap,

@@ -7,7 +7,7 @@
 export const MathPhrasesErrorCodes = {
 	/** An aggregate call with nothing inside, as in `mean()`, refused rather than answered 0. */
 	AGGREGATE_CALL_EMPTY: "AGGREGATE_CALL_EMPTY",
-	/** An aggregate call whose only argument is written like a range (`average(1:3)`, `mean(1:3)`, `total(1:3)`), which outside `sum`, `prod`, `map` and `reduce` is a clock time. */
+	/** An aggregate call whose only argument is written like a range (`average(1:3)`, `mean(1:3)`, `median(1:3)`), which outside `sum` (and its synonym `total`), `prod`, `map` and `reduce` is a clock time. */
 	AGGREGATE_CALL_RANGE: "AGGREGATE_CALL_RANGE",
 	/** A function of the reader's own defined under an aggregate's name (`mean`, `median`, `stdev`), which a call would never reach. */
 	AGGREGATE_NAME_RESERVED: "AGGREGATE_NAME_RESERVED",

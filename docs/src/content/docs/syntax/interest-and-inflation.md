@@ -236,12 +236,16 @@ $100 in 1965 dollars // $9.51
 ```
 
 The amount can be worked out on the line: `what is $100 * 2 from 1990` adjusts
-$200. A sum needs brackets, `what is ($300 + $50) from 2003`, since the phrase
-reads its amount up to the first `+` or `-`.
+$200, and `what is $300 + $50 from 2003` adjusts $350, the same as the
+bracketed `($300 + $50)`. Everything between `what is` and `from` (or `in`, or
+`worth in`) is the amount, so a `+` or `-` there joins two amounts, since the
+year can only come after one of those words.
 
 ```solve
 what is $100 * 2 from 1990 // $506.78
+what is $300 + $50 from 2003 // $629.96
 what is ($300 + $50) from 2003 // $629.96
+what is $300 + $50 in 1990 worth in 2010 // $583.93
 ```
 
 ### Which index answers each currency

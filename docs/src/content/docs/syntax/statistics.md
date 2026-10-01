@@ -61,12 +61,14 @@ only as the list of `sum`, `prod`, `map` or `reduce` (see
 between two numbers is a clock time, so `average(1:3)` would be the average of
 1:03 AM. Rather than answer that, or ask for the line reference it was never
 given, the call says what the colon is here and how to write the values. `sum`
-is the one aggregate that reads a range.
+is the one aggregate that reads a range, and `total`, its synonym, reads one
+the same way when the range is its only argument.
 
 ```solve-doc
 average(1:3) // ERROR: In average(...), 1:3 is a clock time, not a range, and a time cannot be averaged: a colon between two numbers is a range only as the list of sum, prod, map or reduce. To average numbers, list them with commas, as in average(1, 2, 3).
 average(1, 2, 3) // 2
 sum(1:3) // 6
+total(1:3) // 6
 ```
 
 ## A list that carries units

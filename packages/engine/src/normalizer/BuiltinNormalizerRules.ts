@@ -136,6 +136,38 @@ export function implicitMultiplyRule(
 //#endregion
 //#region ─── isInsideRangeContext, Bracket/Call-Paren Context Guard ───────────
 
+/** The most tokens {@link isSingleArgumentCall} reads looking for a call's close, so a hostile line costs a bounded scan. */
+const SINGLE_ARGUMENT_SCAN_LIMIT = 10_000;
+
+/**
+ * Whether the bracket at `open` opens a call with one argument: no comma at
+ * its own depth before its matching close. A comma inside a nested bracket or
+ * list belongs to that. A bracket never closed, or one whose close is past
+ * the scan limit, is not one.
+ *
+ * `total(...)` is `sum(...)` only in this one-argument form (`total(1:3)`,
+ * `total([1, 2, 3])`), since `total(1, 2, 3)` is the aggregate over a list
+ * of values and `sum(x^2, 1:3)`'s element form is `sum`'s alone.
+ *
+ * @param tokens - The pass's tokens.
+ * @param open - The index of an `LPAREN`.
+ */
+export function isSingleArgumentCall(tokens: readonly Token[], open: number): boolean {
+  if (tokens[open]?.type !== "LPAREN") return false;
+  let depth = 0;
+  const end = Math.min(tokens.length, open + 1 + SINGLE_ARGUMENT_SCAN_LIMIT);
+  for (let i = open + 1; i < end; i++) {
+    const type = tokens[i].type;
+    if (type === "LPAREN" || type === "LBRACKET") depth++;
+    else if (type === "RBRACKET") depth--;
+    else if (type === "RPAREN") {
+      if (depth === 0) return i > open + 1;
+      depth--;
+    } else if (depth === 0 && type === "COMMA") return false;
+  }
+  return false;
+}
+
 /**
  * Whether token `pos` sits inside a context where a bare `NUMBER:NUMBER`
  * sequence means a Range, not a clock-time/laptime/video-timecode literal:
@@ -184,7 +216,9 @@ export function isInsideRangeContext(tokens: Token[], pos: number): boolean {
       const prev = tokens[i - 1];
       const opensMapReduceCall = !!prev && (
         prev.type === "MAP" || prev.type === "REDUCE" || prev.type === "SUM_FN" || prev.type === "PROD_FN" ||
-        (prev.type === "IDENT" && (prev.value.toLowerCase() === "map" || prev.value.toLowerCase() === "reduce" || prev.value.toLowerCase() === "sum" || prev.value.toLowerCase() === "prod"))
+        (prev.type === "IDENT" && (prev.value.toLowerCase() === "map" || prev.value.toLowerCase() === "reduce" || prev.value.toLowerCase() === "sum" || prev.value.toLowerCase() === "prod")) ||
+        // `total(1:3)` is `sum(1:3)`, in the one-argument form only (see isSingleArgumentCall).
+        (prev.type === "IDENT" && prev.value.toLowerCase() === "total" && isSingleArgumentCall(tokens, i))
       );
       safeStack.push(opensMapReduceCall);
     } else if (t.type === "RBRACKET" || t.type === "RPAREN") {
