@@ -83,10 +83,10 @@ describe("=> general simplify mode (no stored equation)", () => {
     expect(formatSymbolic(v.value as SymbolicNode)).toBe("thisVarIsNeverDefined");
   });
 
-  test("an expression with a free variable simplifies via the bounded rules (1+2+b+3+b => 2b+6)", () => {
+  test("an expression with a free variable simplifies via the bounded rules (1+2+b+3+b => 2*b+6, the b after a * since 2b is two bits)", () => {
     const v = engine().evaluateExpression("1+2+b+3+b =>");
     expect(v.type).toBe(ValueType.Symbolic);
-    expect(formatSymbolic(v.value as SymbolicNode)).toBe("2b+6");
+    expect(formatSymbolic(v.value as SymbolicNode)).toBe("2*b+6");
   });
 
   test("a fully-concrete expression simplifies to a plain number, not a Symbolic wrapper", () => {
@@ -176,10 +176,10 @@ describe("full symbolic pipeline: s*t*v = rhs with symbolic factors", () => {
 });
 
 describe("Phase H.3: map/reduce symbolic integration", () => {
-  test("reduce(acc+x+b,[1,2,3]) => simplifies to 2b+6, the free variable b surviving through the reduce", () => {
+  test("reduce(acc+x+b,[1,2,3]) => simplifies to 2*b+6, the free variable b surviving through the reduce", () => {
     const v = engine().evaluateExpression("reduce(acc+x+b,[1,2,3]) =>");
     expect(v.type).toBe(ValueType.Symbolic);
-    expect(formatSymbolic(v.value as SymbolicNode)).toBe("2b+6");
+    expect(formatSymbolic(v.value as SymbolicNode)).toBe("2*b+6");
   });
 
   test("regression guard: an ordinary (non-=>) reduce with a genuinely undefined variable still hard-throws", () => {

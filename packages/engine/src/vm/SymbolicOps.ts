@@ -447,6 +447,10 @@ export function solveEquationValues(lhsValue: Value, rhsValue: Value, variable: 
 	// km` did; see symbolicQuantityRefused().
 	if (lhsValue.type === ValueType.Uom && lhsValue.unit !== undefined) return quantityRefusal(lhsValue.unit, variable);
 	if (rhsValue.type === ValueType.Uom && rhsValue.unit !== undefined) return quantityRefusal(rhsValue.unit, variable);
+	// A side that is already a refusal (`ans` at the top of a note, a line
+	// reference with nothing to read) says why better than "no exact value".
+	if (lhsValue.type === ValueType.Error) return lhsValue;
+	if (rhsValue.type === ValueType.Error) return rhsValue;
 	const lhs = valueToSymbolic(lhsValue);
 	const rhs = valueToSymbolic(rhsValue);
 	if (lhs === null || rhs === null) {

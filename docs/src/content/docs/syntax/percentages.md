@@ -23,6 +23,20 @@ said. `percent` and `percentage` after a number are the `%`; after `as`,
 0.25 as percent // 25.00%
 ```
 
+A constant is a number like any other, so the word follows `pi`, `e`, `tau`,
+`phi` and `golden ratio` as the sign does, and follows `prev`, the answer on
+the line above. `pi percent` is pi hundredths, about 3.14%.
+
+```solve
+pi percent // 3.14%
+e percent of 200 // 5.44
+200 + pi percent // 206.28
+tau percent // 6.28%
+```
+
+A constant with a unit, such as `gravity`, is a quantity rather than a number,
+and a quantity has no percentage, so the word after it is not read as one.
+
 ## A discount and a markup
 
 `N% off X` takes N% of X away from X, the way a sale price is worked out, and
@@ -285,6 +299,11 @@ one, with an `x` after it. The conversion is read by `CONVERTERS_PACKAGE`, which
   finite number, is refused rather than shown as an infinite percentage, and so
   is a number too large for a hundred times it to be held (`1e308 as %`, and
   `2^2000 as %`, which is too large to hold even before it is a percentage).
+- Adding a percentage multiplies, so an increase can grow past about 1.8e308,
+  the largest number that can be held. The answer is then an infinity, written
+  `∞`, as `2^1024` is: `200 + 1e308%` is `∞`. It is the value the arithmetic
+  reached, not a refusal, and a later line can still compare it (`∞ > 5` is
+  true) or divide by it (`1/∞` is 0).
 - A decimal comma in a percentage (`12,5%`) is read only by an engine whose
   locale writes one, German or French (see [locales](/guide/locales/#the-decimal-comma));
   an English engine refuses it, as it refuses `12,5` alone.

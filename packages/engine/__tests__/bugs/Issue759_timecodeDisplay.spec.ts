@@ -108,7 +108,7 @@ describe("the parts", () => {
 			[360000 * 30, 30, "100:00:00:00 at 30 fps"],
 			[Number.MAX_SAFE_INTEGER, 30, "83399993099:27:13:01 at 30 fps"],
 			[Number.MAX_SAFE_INTEGER + 2, 30, "9007199254740992 frames at 30 fps"],
-			[Infinity, 30, "Infinity frames at 30 fps"],
+			[Infinity, 30, "∞ frames at 30 fps"],
 			[NaN, 30, "NaN frames at 30 fps"],
 		])("%p frames at %p fps", (frames, fps, text) => {
 			expect(timecodeText(frames, fps)).toBe(text);
@@ -253,7 +253,7 @@ describe("adversarial", () => {
 			["a frame field past the limit", "00:00:00:30 at 30 fps", "THROWS Frame number 30 is out of range for 30 fps (must be 0-29)"],
 			["a duration in seconds added", "01:02:03:04 at 30 fps + 2 seconds", "01:02:05:04 at 30 fps"],
 			["half a second at 25 fps, not a whole frame", "01:00:00:00 at 25 fps + 0.5 seconds", "90012.5 frames at 25 fps"],
-			["a quotient by zero", "(01:02:03:04 at 30 fps) / 0", "Infinity frames at 30 fps"],
+			["a quotient by zero", "(01:02:03:04 at 30 fps) / 0", "∞ frames at 30 fps"],
 			["zero frames", "0 frames at 30 fps", "00:00:00:00 at 30 fps"],
 		])("%s", (_name, line, answer) => {
 			expect(show(line)).toBe(answer);

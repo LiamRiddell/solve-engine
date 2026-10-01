@@ -90,10 +90,11 @@ describe("as sci", () => {
 		// The conversion splits the exponential form on "e", and an infinity
 		// or a NaN has no "e" in it, so the exponent half was undefined and
 		// the answer read "NaNeundefined": a string that is not a number, not
-		// an error, and not anything a reader can act on.
+		// an error, and not anything a reader can act on. An infinity is
+		// written as the engine writes it, never as JavaScript's `Infinity`.
 		expect(text("1 / 0 - 1 / 0 as sci")).toBe("NaN");
-		expect(text("1 / 0 as sci")).toBe("Infinity");
-		expect(text("-1 / 0 as sci")).toBe("-Infinity");
+		expect(text("1 / 0 as sci")).toBe("∞");
+		expect(text("-1 / 0 as sci")).toBe("-∞");
 	});
 });
 

@@ -188,6 +188,44 @@ function divideByRoot(descending: readonly Rational[], root: Rational): Rational
  * would exceed {@link FACTOR_MAX_ROOT_CANDIDATES}.
  */
 export function rationalRoots(descending: readonly Rational[]): readonly Rational[] {
+	const search = searchRationalRoots(descending);
+	if (search === "too-many-divisors") {
+		throw ErrorFactory.execution(
+			"SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
+			"This polynomial's coefficients have too many divisors to search for rational roots.",
+			{ limit: FACTOR_MAX_ROOT_CANDIDATES },
+		);
+	}
+	if (search === "too-many-candidates") {
+		throw ErrorFactory.execution(
+			"SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
+			"This polynomial has too many candidate rational roots to test.",
+			{ limit: FACTOR_MAX_ROOT_CANDIDATES },
+		);
+	}
+	return search;
+}
+
+/**
+ * Every rational root of a univariate polynomial, or the reason the search was
+ * not run.
+ *
+ * The same search as {@link rationalRoots}, for a caller that has another way to
+ * answer when the search is out of reach. The solver is one: `x^2 = pi` arrives
+ * with pi as the sixteen-digit fraction `3141592653589793/10^15`, whose divisors
+ * cannot be listed by trial division within the bounds. That is not a reason to
+ * refuse the equation, only a reason to find its roots another way.
+ *
+ * @param descending - Coefficients from the highest power down, as for
+ * {@link rationalRoots}.
+ * @returns The distinct rational roots, or `"too-many-divisors"` when a
+ * coefficient's divisors could not be listed within the bounds, or
+ * `"too-many-candidates"` when the candidate set is over
+ * {@link FACTOR_MAX_ROOT_CANDIDATES}.
+ */
+export function searchRationalRoots(
+	descending: readonly Rational[],
+): readonly Rational[] | "too-many-divisors" | "too-many-candidates" {
 	if (descending.length < 2) return [];
 
 	// A line has one root and it is closed form: `bx + c` is zero at `-c/b`.
@@ -214,20 +252,8 @@ export function rationalRoots(descending: readonly Rational[]): readonly Rationa
 
 	const numeratorDivisors = divisors(trailing);
 	const denominatorDivisors = divisors(leading);
-	if (numeratorDivisors === null || denominatorDivisors === null) {
-		throw ErrorFactory.execution(
-			"SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
-			"This polynomial's coefficients have too many divisors to search for rational roots.",
-			{ limit: FACTOR_MAX_ROOT_CANDIDATES },
-		);
-	}
-	if (numeratorDivisors.length * denominatorDivisors.length > FACTOR_MAX_ROOT_CANDIDATES) {
-		throw ErrorFactory.execution(
-			"SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
-			"This polynomial has too many candidate rational roots to test.",
-			{ limit: FACTOR_MAX_ROOT_CANDIDATES },
-		);
-	}
+	if (numeratorDivisors === null || denominatorDivisors === null) return "too-many-divisors";
+	if (numeratorDivisors.length * denominatorDivisors.length > FACTOR_MAX_ROOT_CANDIDATES) return "too-many-candidates";
 
 	const roots: Rational[] = [];
 	const seen = new Set<string>();

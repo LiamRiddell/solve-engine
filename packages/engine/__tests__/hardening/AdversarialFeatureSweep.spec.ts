@@ -232,6 +232,19 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"-(foo^X) =>",
 		"foo / (1/X) =>",
 		"solve(a*x = X, x)",
+		// An irrational constant in a polynomial, an infinity with a unit, a
+		// constant before the word percent, and an unknown named like a unit
+		// (FoundBug_irrationalConstantRoots, FoundBug_infinityInAResult,
+		// FoundBug_constantPercentWord, FoundBug_unitNamedUnknown).
+		"solve(x^2 = X * pi, x)",
+		"solve(x^3 = e + X, x)",
+		"(X) * 1e308 * 10 km",
+		"$(X) * 1e308 * 10",
+		"(X) km / 0 in m",
+		"pi percent of X",
+		"X + e percent",
+		"(X) * b + b =>",
+		"(X) / m =>",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,
@@ -502,6 +515,10 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "a*x = X\nx =>" },
 	{ form: "a = 4\na*x = X\nx =>" },
 	{ form: "x*π = X\nx =>" },
+	// An equation that reads the line above it, solved below a line between
+	// (FoundBug_lineReadInAnEquation).
+	{ form: "X\nx + ans = 7\n100\nx =>" },
+	{ form: "X\nx * prev = 1\nx =>" },
 	// A named scenario and a date sweep (#744).
 	{ form: "a = 1\nb = a * 2\nscenario s with a = X\nline 2 under s" },
 	{ form: "d = 2026-01-01\n(d - 2026-01-01) in days\nline 2 for d from 2026-01-01 to 2026-06-01 step X months" },
