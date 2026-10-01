@@ -101,9 +101,15 @@ export function nameWordRun(tokens: readonly Token[], pos: number, limit: number
  * several words.
  */
 export function definedNameWords(tokens: readonly Token[]): string[] | null {
-	const run = nameWordRun(tokens, 0, MAX_NAME_WORDS + 1);
+	// The token types first: a run of identifiers and then the `=`. A line of
+	// prose has no `=` after its words, and is turned away before any of them
+	// meets the letter pattern. A word that fails the pattern inside the run
+	// would have ended the run at an identifier, which is no `=` either.
+	let run = 0;
+	while (run <= MAX_NAME_WORDS && tokens[run]?.type === "IDENT") run++;
 	if (run < 2 || run > MAX_NAME_WORDS) return null;
 	if (tokens[run]?.type !== "EQUALS") return null;
+	if (nameWordRun(tokens, 0, run) !== run) return null;
 	const words: string[] = [];
 	for (let i = 0; i < run; i++) words.push(tokens[i].value);
 	return words;

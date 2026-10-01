@@ -3,6 +3,7 @@ import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/Norma
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { expectsValueAt } from "@solve-js/normalizer/ValuePosition";
+import { lowerCased } from "@solve-js/normalizer/RuleIndex";
 
 /**
  * Whether a token is a unit spelling the engine knows, and so can stand as a
@@ -23,7 +24,7 @@ import { expectsValueAt } from "@solve-js/normalizer/ValuePosition";
 export function isDenominatorUnit(token: Token | undefined): boolean {
 	if (token === undefined || token.type !== "UNIT") return false;
 	const spelling = token.value ?? "";
-	if (UNIT_TABLE[spelling.toLowerCase()] !== undefined) return true;
+	if (UNIT_TABLE[lowerCased(spelling)] !== undefined) return true;
 	return spelling.length > 1 && UNIT_TABLE[spelling] !== undefined;
 }
 
@@ -68,7 +69,7 @@ const PER_WORDS = new Set(["per", "a", "an", "each", "every"]);
  */
 function isCountLabel(token: Token | undefined): boolean {
 	if (token === undefined || token.type !== "IDENT") return false;
-	const word = (token.text ?? token.value ?? "").toLowerCase();
+	const word = lowerCased(token.text ?? token.value ?? "");
 	if (PER_WORDS.has(word)) return false;
 	// A word, not a symbol or a single letter: single letters are overwhelmingly
 	// variables (`30 x / week`) and overwhelmingly not count nouns.
@@ -106,12 +107,18 @@ export function bareRateDenominatorNormalizerRule(priority = 75): NormalizerRule
 
 			// `30 bottles / week`: a count noun in front of the denominator.
 			// Retyped as the unit it is acting as, so the rate keeps the label.
-			if (head.type === "NUMBER" && isCountLabel(tokens[pos + 1])) {
-				const label = tokens[pos + 1];
-				const after = tokens[pos + 2];
-				const introduces =
-					after?.type === "SLASH" ||
-					(after?.type === "IDENT" && PER_WORDS.has((after.text ?? after.value ?? "").toLowerCase()));
+			// The token types of the whole shape first, NUMBER IDENT (SLASH or
+			// IDENT) UNIT, so a number followed by anything else (`120 km`,
+			// `12 + 34`) never reaches the word tests and the table lookups.
+			const label = tokens[pos + 1];
+			const after = tokens[pos + 2];
+			if (
+				head.type === "NUMBER" && label?.type === "IDENT" &&
+				(after?.type === "SLASH" || after?.type === "IDENT") &&
+				tokens[pos + 3]?.type === "UNIT" &&
+				isCountLabel(label)
+			) {
+				const introduces = after.type === "SLASH" || PER_WORDS.has(lowerCased(after.text ?? after.value ?? ""));
 				if (introduces && isDenominatorUnit(tokens[pos + 3])) {
 					return {
 						consumed: 2,
@@ -121,12 +128,12 @@ export function bareRateDenominatorNormalizerRule(priority = 75): NormalizerRule
 				}
 			}
 
-			if (!isDenominatorUnit(tokens[pos + 1])) return null;
-
+			// A slash or a word for `per` first: a type test, where the unit
+			// after it needs a table lookup, and most positions are neither.
 			const isSlash = head.type === "SLASH";
-			const word = (head.text ?? head.value ?? "").toLowerCase();
-			const isPerWord = head.type === "IDENT" && PER_WORDS.has(word);
+			const isPerWord = head.type === "IDENT" && PER_WORDS.has(lowerCased(head.text ?? head.value ?? ""));
 			if (!isSlash && !isPerWord) return null;
+			if (!isDenominatorUnit(tokens[pos + 1])) return null;
 			// A unit-named word in a value position before the slash is the
 			// reader's variable, not a quantity (issue #537): with `m` and `s`
 			// defined, `m / s` divides them rather than reading "m per second".

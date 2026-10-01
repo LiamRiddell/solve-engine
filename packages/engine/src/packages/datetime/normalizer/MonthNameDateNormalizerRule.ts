@@ -179,16 +179,27 @@ export function monthNameDateNormalizerRule(
 		// enough to filter nothing. The start types still narrow it.
 		startTokenTypes: ["NUMBER", "IDENT", "UNIT", "CONVERTER_NAME"],
 		match(tokens, pos): NormalizerMatch | null {
-			const calendar = getCalendar();
-			const onAmbiguous = getOnAmbiguous();
 			const first = tokens[pos];
+			const second = tokens[pos + 1];
 
-			// `9 March` and `9 March 2024`.
-			if (first?.type === "NUMBER" && PLAIN_INTEGER.test(first.text ?? "")) {
-				const month = monthOf(tokens[pos + 1], first);
+			// Every ordering puts a number and a month name side by side, so the
+			// token types settle most positions before a word is lower-cased or a
+			// pattern runs: after a number, a month name is an identifier, a unit
+			// or a converter name, and after a word, the day or year is a number.
+			if (first?.type === "NUMBER") {
+				if (second === undefined || !MONTH_TOKEN_TYPES.has(second.type)) return null;
+				// A number that is not a plain integer is no day, and not a month.
+				if (!PLAIN_INTEGER.test(first.text ?? "")) return null;
+
+				// `9 March` and `9 March 2024`.
+				const month = monthOf(second, first);
 				if (month === 0) return null;
 				const day = Number(first.text);
 				if (day < 1 || day > 31) return null;
+				// Read only once the line holds a date: the rule is tried at every
+				// number and word, and nearly none of them is a month.
+				const calendar = getCalendar();
+				const onAmbiguous = getOnAmbiguous();
 
 				const yearToken = tokens[pos + 2];
 				if (
@@ -203,11 +214,12 @@ export function monthNameDateNormalizerRule(
 				return dateOrFault(day, month, currentYear(calendar), tokens.slice(pos, pos + 2), calendar, onAmbiguous);
 			}
 
+			if (second?.type !== "NUMBER") return null;
 			const month = monthOf(first, tokens[pos - 1]);
 			if (month === 0) return null;
-
-			const second = tokens[pos + 1];
-			if (second?.type !== "NUMBER" || !PLAIN_INTEGER.test(second.text ?? "")) return null;
+			if (!PLAIN_INTEGER.test(second.text ?? "")) return null;
+			const calendar = getCalendar();
+			const onAmbiguous = getOnAmbiguous();
 
 			// `February 2020`, a whole month rather than a day in one.
 			if (looksLikeYear(second.text ?? "")) {

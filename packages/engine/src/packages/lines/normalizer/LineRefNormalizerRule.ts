@@ -25,6 +25,19 @@ const AVERAGE_RANGE_CALL_TYPE_ID = tokenTypeId("AVERAGE_RANGE_CALL");
 export const DELETED_LINE_REF = "deleted";
 
 /**
+ * Whether a word could open a line reference: its first character is an `l`
+ * of either case, the one character `/^line/i` admits there. The rule is tried
+ * at every word of a line, and this keeps both of its patterns off the words
+ * that cannot match them.
+ *
+ * @param text - The word's value.
+ */
+export function opensLine(text: string): boolean {
+	const c = text.charCodeAt(0);
+	return c === 108 || c === 76;
+}
+
+/**
  * Fuses `line1` (glued, `ExpressionLexer.tokenizeIdentifier()` already
  * consumes trailing digits into one IDENT token, so "line1" lexes as a
  * SINGLE token, not two) and `line 1` (spaced, two tokens, IDENT "line"
@@ -73,6 +86,9 @@ export function lineRefNormalizerRule(): NormalizerRule {
 			}
 			const token = tokens[pos];
 			if (!token) return null;
+			// Every form below opens with the word `line`, so a word that does
+			// not start with an `l` is turned away before either pattern runs.
+			if (token.type !== "IDENT" || !opensLine(token.value)) return null;
 
 			// Glued form: "line1" is already a single IDENT token by the time
 			// it reaches the normalizer.

@@ -68,6 +68,24 @@ function isMixed(whole: string, numerator: string, denominator: string): boolean
  * @module MixedNumberNormalizerRule
  */
 
+/** The tokens a mixed number's whole part can be followed by: a fraction character, `and`, or a numerator. */
+const MAY_FOLLOW_WHOLE: ReadonlySet<string> = new Set(["IDENT", "AND_CONJ", "NUMBER"]);
+
+/**
+ * The match that replaces a mixed number with the one number it is. A
+ * function of the module rather than a closure the rule built on every call,
+ * at every number and word of every line, before it knew it would match.
+ */
+function numberMatch(head: Token, value: number, consumed: number): NormalizerMatch {
+	return {
+		consumed,
+		replacement: [
+			new LexerToken("NUMBER", NUMBER_ID, String(value), String(value), head.offset, 0, head.line, head.col),
+		],
+		ruleName: "arithmetic:mixed-number",
+	};
+}
+
 /** The rule: see the module comment for the three shapes and what claims each. */
 export function mixedNumberNormalizerRule(priority = 79): NormalizerRule {
 	const RULE = "arithmetic:mixed-number";
@@ -80,14 +98,6 @@ export function mixedNumberNormalizerRule(priority = 79): NormalizerRule {
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const head = tokens[pos];
 			if (head === undefined) return null;
-
-			const number = (value: number, consumed: number): NormalizerMatch => ({
-				consumed,
-				replacement: [
-					new LexerToken("NUMBER", NUMBER_ID, String(value), String(value), head.offset, 0, head.line, head.col),
-				],
-				ruleName: RULE,
-			});
 
 			if (head.type === "IDENT") {
 				// A vulgar fraction standing alone, emitted as the division it
@@ -107,15 +117,20 @@ export function mixedNumberNormalizerRule(priority = 79): NormalizerRule {
 			}
 
 			if (head.type !== "NUMBER") return null;
+			// What follows first: every shape below needs a fraction character,
+			// an `and` or a numerator next, and a number followed by anything
+			// else (`12 + 34`) is turned away before the pattern runs.
+			const next = tokens[pos + 1];
+			if (next === undefined || !MAY_FOLLOW_WHOLE.has(next.type)) return null;
 			const whole = head.value ?? "";
 			if (!WHOLE.test(whole)) return null;
 
 			// `2 ½`, the shorter spelling of the same mixed number.
-			const vulgar = tokens[pos + 1];
-			if (vulgar?.type === "IDENT") {
+			const vulgar = next;
+			if (vulgar.type === "IDENT") {
 				const parts = VULGAR.get(vulgar.value ?? "");
 				if (parts === undefined) return null;
-				return number(Number(whole) + parts[0] / parts[1], 2);
+				return numberMatch(head, Number(whole) + parts[0] / parts[1], 2);
 			}
 
 			// `1 1/2`, and `1 and 1/2 <unit>`.
@@ -139,7 +154,7 @@ export function mixedNumberNormalizerRule(priority = 79): NormalizerRule {
 			if (wordy && tokens[at + 3]?.type !== "UNIT") return null;
 
 			const value = Number(whole) + Number(numerator.value) / Number(denominator.value);
-			return number(value, at + 3 - pos);
+			return numberMatch(head, value, at + 3 - pos);
 		},
 	};
 }
