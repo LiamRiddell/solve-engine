@@ -120,6 +120,57 @@ are added together.
 [1,2,3] + [10,20,30] // [11, 22, 33]
 ```
 
+## Functions of a list
+
+A function of one number, such as a square root, a sine or a logarithm, has an
+answer for each number, so given a list it works one element at a time too and
+gives back a list of the answers, in the same shape. It is how a column of
+areas becomes a column of side lengths, or a list of angles a list of sines,
+without writing `map` for it. The functions worked this way are `sqrt`, `cbrt`,
+`exp`, `expm1`, `ln`, `log`, `log10`, `log2`, `log1p`, `sin`, `cos`, `tan` and
+their inverses and degree forms (`asin`, `sind`, `asind` and the rest), the
+hyperbolic functions (`sinh`, `asinh` and the rest), `sign`, `trunc`, `fact`
+(and `!`), `degtorad`, `radtodeg`, `fround` and `clz32`. The rounding family
+works the same way (see [rounding a list](/syntax/rounding/#rounding-a-list)).
+
+```solve
+sqrt([4, 9]) // [2, 3]
+sqrt([4, 9; 16, 25]) // [2, 3; 4, 5]
+sin([30 deg, 90 deg]) // [0.50, 1]
+[3, 4]! // [6, 24]
+sqrt([4 m2, 9 m2]) // [2.00 m, 3.00 m]
+```
+
+A list holds real numbers, so a number in it whose answer is not one, or that
+the function refuses on its own line, refuses the whole list rather than being
+left out or shown as something else. A list of `true` and `false` has no numbers
+to work on.
+
+```solve-doc
+sqrt([4, -9]) // ERROR: sqrt of -9 in this list has no real answer, and a list holds real numbers. Work that number out on its own line.
+ln([1, 0]) // ERROR: ln(0) has no real value: ln is only defined for positive numbers.
+sqrt([true, 4]) // ERROR: sqrt works on a list only when every cell is a number: this one holds a true or false.
+```
+
+A function that reads each of its inputs as one number, but whose answer for a
+list is not simply one answer per number, refuses a list by name: `gcd`, `lcm`,
+`root`, `atan2`, `isprime`, `nextprime`, `modpow`, `hex`, `bin`, `combination`,
+`permutation` and the parts of a complex number (`re`, `im`, `conj`), and so do
+the phrases that read one number, such as a rate (`[1, 2] per hour`), a split
+or `in hours and minutes`. `map`
+works any of them out for each number, with `x` standing for each one.
+
+```solve-doc
+gcd([4, 6], 2) // ERROR: gcd takes numbers, not a list: a list holds several numbers, and gcd works on one at a time. To work it out for each number, use map, with x standing for each one.
+map(gcd(x, 2), [4, 6]) // [2, 2]
+```
+
+The boundary: every one of these used to read a list as 0, the number a list
+gives where one number is asked of it, and answer for 0: `sqrt([4, 9])` was 0
+and `cos([0, 1])` was 1. `abs` is left as it was, since `abs` of a square
+matrix is its determinant (the `|a|` notation), and the functions that take a
+list as a whole (`sum`, `det`, `dot`, `transpose`) are unchanged.
+
 ## Matrix products
 
 Multiplying two matrices whose shapes line up performs a real matrix product

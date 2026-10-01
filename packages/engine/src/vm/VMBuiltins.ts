@@ -16,7 +16,8 @@ import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
 import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
-import { roundEachCell } from "@solve-js/vm/ListRounding";
+import { roundEachCell, isManyCellList } from "@solve-js/vm/ListRounding";
+import { applyEachCell, listArgumentRefused } from "@solve-js/vm/ListArguments";
 import { apartSymbolic } from "@solve-js/symbolic/PartialFractions";
 import { differentiate } from "@solve-js/symbolic/Derivative";
 import { integrate } from "@solve-js/symbolic/Integral";
@@ -876,6 +877,58 @@ export function builtinArgumentRefused(fnIdx: number, args: readonly Value[]): V
         ?? ipv6ArgumentRefused(fnIdx, args)
         ?? colourArgumentRefused(fnIdx, args)
         ?? textArgumentRefused(fnIdx, args);
+}
+
+/**
+ * The builtins of one number with an answer for each number, worked out for
+ * each cell of a list (`sqrt([4, 9])` is `[2, 3]`): the roots, the
+ * exponentials and logarithms, the trigonometric and hyperbolic functions and
+ * their inverses, `sign`, `trunc`, `fact`, the angle conversions, `fround` and
+ * `clz32`. Each takes exactly one argument.
+ */
+export const EACH_CELL_BUILTINS: ReadonlySet<number> = new Set([
+    0, 2, 3, 4, 5, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30,
+    33, 34, 35, 36, 62, 87, 88, 89, 90, 91, 92, 113,
+]);
+
+/**
+ * The builtins that read a list as it is, and so are never refused one: `abs`
+ * (a matrix's determinant, the `|a|` notation), the rounding family and `int`,
+ * which round a list cell by cell themselves, `min`, `max`, `hypot`, the
+ * aggregates and the statistics, which word their own refusal, `pow` (a
+ * square matrix's power), the matrix functions, the algebra verbs, `float`,
+ * which refuses a list by name, and the two phrase forms that carry a list
+ * through: `to N dp` and a count's unit (`[2, 3] days`). A rate, a split and
+ * `in minutes and seconds` read one number, so they are not here.
+ */
+export const TAKES_LIST: ReadonlySet<number> = new Set([
+    1, 6, 7, 8, 9, 10, 26, 31, 42, 43, 44, 45, 50, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 78, 79,
+    97, 101, 102, 103, 104, 105, 106, 107, 108, 115, 116,
+]);
+
+/**
+ * What a builtin answers when an argument is a list of several numbers, or
+ * null to call it as usual: the builtin worked out for each cell when it is
+ * one of {@link EACH_CELL_BUILTINS}, the refusal by name when it reads its
+ * arguments as single numbers, and null when it takes a list as it is
+ * ({@link TAKES_LIST}) or no argument is a list.
+ *
+ * Without this, every one-number builtin read a list through `toNumber()`,
+ * which is 0 for a matrix, and answered the result for 0: `sqrt([4, 9])` was 0.
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments, in call order.
+ * @param fn - The builtin's implementation, called for each cell.
+ * @param context - The line context, passed through to it.
+ * @returns The answer or refusal, or null.
+ */
+export function listBuiltinCall(fnIdx: number, args: readonly Value[], fn: (args: Value[], context?: LineExecutionContext) => Value, context?: LineExecutionContext): Value | null {
+    if (TAKES_LIST.has(fnIdx) || !args.some(isManyCellList)) return null;
+    const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+    if (EACH_CELL_BUILTINS.has(fnIdx) && args.length === 1) {
+        return applyEachCell(args[0], name, (cell) => fn([cell], context));
+    }
+    return listArgumentRefused(name, args);
 }
 
 /**

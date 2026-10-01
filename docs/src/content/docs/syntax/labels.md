@@ -94,6 +94,12 @@ colon is refused, with what it is instead, when it is:
   is an operand, and a pair that is no real time (`24:00`, a seconds field of
   99) is refused as one. A number that follows a word, as in `Week 12`, is part
   of the name.
+- **A figure in another script's digits.** Numbers are read in the digits 0 to
+  9 only. A figure written in another script's digits (Arabic-Indic `٢٤`,
+  Devanagari `२४`, fullwidth `１２`) is not read as a number, and stood where a
+  number would start, it is not a name either: `٢٤:00` is the time it looks
+  like. It is refused by name, spelled in 0 to 9. After a word it is part of
+  the name, as a number is (`Week ٢: 5`).
 - **A choice written with `?` and `:`.** There is no such operator; the refusal
   spells the line as the `if ... then ... else` the engine reads (see
   [conditionals](/syntax/conditionals/)).
@@ -119,6 +125,26 @@ label, `24`, and answered 0, and `Total: 1000:1002` answered 1,002. A pair like
 (a range is read only as the list of `sum`, `prod`, `map` or `reduce`), so it is
 refused in the same words as on a line of its own; `Total: sum(1000:1002)` adds
 the range up.
+
+A figure in another script's digits used to be read as a label, since the
+engine reads such a figure as a word: `٢٤:00` answered the `00` after the
+colon, 0, and `Total: ٢٤:00` did the same. The line is now refused by name,
+with the figure written in the digits the engine reads, so retyping it gives
+the answer:
+
+```solve-doc
+٢٤:00 // ERROR: "٢٤" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 24
+Total: ٢٤:00 // ERROR: "٢٤" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 24
+Start: ٩:٣٠ // ERROR: "٩" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 9
+Week ٢: 5 // 5
+```
+
+The boundary: only a figure that stands before a colon, where a label would
+otherwise swallow it, is refused this way. The same figure elsewhere on a line
+is a word the engine does not know, and is refused as one (`٢٤ + 1` names `٢٤`
+as an undefined name), so no line answers a number for digits the engine
+cannot read. Reading those digits as numbers is a larger change to how a line
+is read, and is not made here.
 
 When the expression after a label cannot be worked out, the line says what is
 wrong with the expression, in the words that expression gets on a line of its

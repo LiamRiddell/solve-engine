@@ -176,12 +176,12 @@ describe("adversarial: security", () => {
 		expectHonestLine("Total: ٢٤:00");
 	});
 
-	// Open, found here and not this change's: digits from another script
-	// (Arabic-Indic ٢٤ for 24) lex as a word, so the text before
-	// the colon is a label and the line answers the 00 after it, on its own
-	// line as after a label. Reported with this batch; the fix turns this red.
-	test.failing("found bug: other-script digits before a colon are read as a label, so ٢٤:00 answers 0", () => {
-		expect(outcome("٢٤:00")).not.toBe("0");
+	// Found here and fixed since: digits from another script (Arabic-Indic
+	// ٢٤ for 24) lex as a word, so the text before the colon was a label and
+	// the line answered the 00 after it. The figure is now refused by name;
+	// see FoundBug_otherScriptDigitsLabel.spec.ts.
+	test("other-script digits before a colon are refused by name, so ٢٤:00 is never 0", () => {
+		expect(outcome("٢٤:00")).toBe('OTHER_SCRIPT_DIGITS: "٢٤" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 24');
 	});
 });
 
