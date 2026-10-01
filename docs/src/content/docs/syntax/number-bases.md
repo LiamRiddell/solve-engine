@@ -73,6 +73,18 @@ hex(255) + 1 // 256
 ~hex(255) // -256
 ```
 
+For the same reason, two numbers compare on their values whatever base each is
+shown in. A conversion written on one side of a comparison belongs to that
+side, so a line can put both sides into a base and still ask whether they are
+equal, and a [check](/syntax/checks/) reads it the same way:
+
+```solve
+255 in hex == 0xff in hex // true
+255 in binary == 0xff in octal // true
+255 in hex == 256 in hex // false
+check 255 in hex == 255 // ✓
+```
+
 A negative keeps its sign outside the literal, and a fraction is truncated,
 since there is no useful way to write a fractional hex digit.
 

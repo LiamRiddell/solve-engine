@@ -25,11 +25,17 @@ const OPERATORS: Readonly<Record<string, string>> = {
  * check can name both of them when it fails: "check failed: $2,010.00 is more
  * than $1,950.00", where a bare comparison could only say false. The work is
  * the `checkComparison` plugin function (see CheckFunctions.ts).
+ *
+ * Each side is read at `Comparison`, the comparisons' own level, so it runs to
+ * the comparison and takes in any conversion written on it: `check 255 in hex
+ * == 255` compares the hex value with 255. Read at `Conditional`, the left side
+ * stopped before the `as` a conversion is read as, and the line was refused as
+ * having no comparison at all.
  */
 export const checkParselet: PrefixParselet = {
 	category: "Conditionals",
 	parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
-		parser.parseExpression(BindingPower.Conditional, builder);
+		parser.parseExpression(BindingPower.Comparison, builder);
 		const comparison = parser.peek();
 		const op = comparison === undefined ? undefined : OPERATORS[comparison.type];
 		if (op === undefined) {
@@ -39,7 +45,7 @@ export const checkParselet: PrefixParselet = {
 			);
 		}
 		parser.consume();
-		parser.parseExpression(BindingPower.Conditional, builder);
+		parser.parseExpression(BindingPower.Comparison, builder);
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(op);
 		let argCount = 3;

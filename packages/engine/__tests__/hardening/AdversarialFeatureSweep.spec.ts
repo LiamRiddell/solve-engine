@@ -215,6 +215,16 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"check #ff0000 == rgb(X, 0, 0)",
 		"check 192.168.1.1 < X",
 	],
+	// A conversion on each side of a comparison, each bound to its own side,
+	// and a check whose sides carry one (FoundBug_checkWithBaseConversion).
+	conversionsBesideComparisons: [
+		"check X in hex == X",
+		"check X in hex == X in hex",
+		"check X as binary < X in octal",
+		"X in hex == X in hex",
+		"X == X to hex",
+		"check X to hex != X + 1",
+	],
 };
 
 describe("every form stays honest over the numeric edges", () => {
@@ -298,6 +308,7 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "lab = 192.168.1.0/24\nX in lab" },
 	{ form: "lab = X\n192.168.1.7 in lab" },
 	{ form: "big = (2^100 + X) in hex\nbig + 1" },
+	{ form: "A = X\nB = X\nA in hex == B in hex\ncheck A in hex == B in binary" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {
