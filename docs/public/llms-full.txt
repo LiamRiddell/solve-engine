@@ -1075,6 +1075,13 @@ check true == false // check failed: true is not equal to false
 ```
 
 ```
+check 255 in hex == 255 // ✓
+check 255 in binary == 0xff in octal // ✓
+check 1 km in m == 1000 m // ✓
+check 256 in hex == 255 // check failed: 0x100 is not equal to 255
+```
+
+```
 check #ff0000 == rgb(255, 0, 0) // ✓
 check #ff0000 != #00ff00 // ✓
 check 192.168.1.0/24 != 192.168.1.0/25 // ✓
@@ -1113,6 +1120,13 @@ check 1 km == 1000 m // ✓
 :b = 4
 check :a^2 + :b^2 == 25 // ✓
 check :a^2 + :b^2 == 26 // ERROR: check failed: 25 is not equal to 26
+```
+
+```
+(one document)
+A = 255
+B = 0xff
+check A in hex == B in hex // ✓
 ```
 
 ```
@@ -1310,6 +1324,17 @@ not 5 // "not" works on true or false, and 5 is a number: compare it first, as i
 
 ```
 if 5 > 3 then 100 else 200 // 100
+```
+
+```
+255 in hex == 0xff in hex // true
+5 km in m == 5000 m // true
+0xff in hex != 255 in binary // false
+```
+
+```
+5 > 3 as number // true
+(5 > 3) as number // 1
 ```
 
 ```
@@ -3046,6 +3071,13 @@ int(0xFF) // 255
 hex(255) + 1 // 256
 (255 as binary) + 1 // 256
 ~hex(255) // -256
+```
+
+```
+255 in hex == 0xff in hex // true
+255 in binary == 0xff in octal // true
+255 in hex == 256 in hex // false
+check 255 in hex == 255 // ✓
 ```
 
 ```
