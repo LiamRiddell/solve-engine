@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitRange, tokensBack } from "@solve-js/packages/mapreduce/MapReduceShared";
 
 /**
  * Matrix indexing/slicing, `a[i]` (column-major single index, matching
@@ -115,22 +116,24 @@ export class MatrixIndexParselet implements InfixParselet {
    * for the WHOLE bracket via {@link hasTopLevelColon}), immediately
    * collapses whatever this argument pushed into a single Range value
    * `RANGE_NEW` directly for an explicit `min:max` pair already on the
-   * stack, or `DUP` + `RANGE_NEW` for a lone point (becoming `Range(v,
+   * stack (`RANGE_NEW_WRITTEN` when a side is more than a plain number, see
+   * `emitRange`), or `DUP` + `RANGE_NEW` for a lone point (becoming `Range(v,
    * v)`, a single-cell selection along that dimension). When `isSlice` is
    * false, no wrapping happens at all, the argument's raw value is left
    * exactly as `MAT_INDEX1`/`MAT_INDEX2` already expect.
    */
   private parseIndexArg(parser: Parser, builder: BytecodeBuilder, isSlice: boolean): void {
+    const first = parser.peek();
     parser.parseExpression(0, builder);
-    let isRange = false;
     if (parser.match("COLON")) {
+      const minSide = tokensBack(parser, first, 2);
+      const secondFirst = parser.peek();
       parser.parseExpression(0, builder);
-      isRange = true;
+      if (isSlice) emitRange(builder, minSide, tokensBack(parser, secondFirst, 1));
+      return;
     }
     if (isSlice) {
-      if (!isRange) {
-        builder.emitOpcode(OpCode.DUP);
-      }
+      builder.emitOpcode(OpCode.DUP);
       builder.emitOpcode(OpCode.RANGE_NEW);
     }
   }

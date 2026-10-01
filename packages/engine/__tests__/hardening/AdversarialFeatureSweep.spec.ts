@@ -89,6 +89,8 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	// they would read as a clock time.
 	largeQuantities: ["ceil((X) m)", "round((X) m) + 1 m", "(X) kg * 2", "trunc((X) days)"],
 	aggregateRanges: ["average(X:3)", "mean(1:X)", "total(X:3)", "median(X)"],
+	// A range's bounds named as written in its refusal (FoundBug_rangeBoundsAsWritten).
+	writtenRangeBounds: ["total(1 + X:00)", "sum(2*X:1)", "map(10*x, X:2*1)", "[1,2,3;4,5,6][X+1:1, 1]"],
 	// A derived unit's prefix read in its own case after `as` and `in` (#824).
 	derivedPrefixes: ["X W as mW", "X W as MW", "X W as mw", "X V in MV", "X J as pJ"],
 	// The qualified cups, the typographic point, imperial mpg and a stated
@@ -211,6 +213,9 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	// choice written with "?" and ":", a comparison, a calculation with no word
 	// (FoundBug_labelBeforeAColon).
 	colonLabels: ["1 + X:00", "X:23:99", "true ? X : 30", "X > 0 ? 1 : 2", "X > 0: 1", "Week X: 75", "(X+1): 5", "Rent: X"],
+	// A label whose name ends on a number, before a figure that would make a
+	// clock time with it (FoundBug_labelColonBeforeAClockTime).
+	labelNumberColons: ["Item X: 45", "Item 2: X", "Weeks 1-X: 40", "Day 1: X:30", "X 2: 45"],
 	multiWordNames: ["hourly rate = X", "take home = X", "tax on = X"],
 	// An unknown given a unit or a percentage under the arrow, a possessive
 	// name with either apostrophe, an operator word ending a name, and an

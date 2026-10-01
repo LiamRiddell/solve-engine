@@ -48,6 +48,7 @@ import type { WeekShape } from "@solve-js/calendar/WeekShape";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
 import { fieldsShownIn, noonOnDay, shownZone, zoneAnswerJoinedText } from "@solve-js/vm/ZoneAnswers";
+import { descendingRangeMessage } from "@solve-js/vm/RangeBounds";
 import { addZonedCalendarDays, addZonedCalendarMonths } from "@solve-js/calendar/ZonedSteps";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { LineTrace } from "@solve-js/explain/Explanation";
@@ -2861,8 +2862,15 @@ function matrixIndex2(stack: Value[]): void {
     stack.push(listCellValue(m, cell));
 }
 
-/** A range literal, `0:3` (RANGE_NEW), moved out of the dispatch loop. */
-function rangeLiteral(stack: Value[]): void {
+/**
+ * A range literal, `0:3` (RANGE_NEW, or RANGE_NEW_WRITTEN with each side's
+ * source text), moved out of the dispatch loop.
+ *
+ * @param stack - The VM stack, holding the two bounds.
+ * @param minWritten - The first side as the reader wrote it, or "".
+ * @param maxWritten - The second side as the reader wrote it, or "".
+ */
+function rangeLiteral(stack: Value[], minWritten = "", maxWritten = ""): void {
     const maxVal = safePop(stack), minVal = safePop(stack);
     const rangeFault = faultedOperand(minVal, maxVal);
     if (rangeFault) { stack.push(rangeFault); return; }
@@ -2877,10 +2885,7 @@ function rangeLiteral(stack: Value[]): void {
       return;
     }
     if (min > max) {
-      stack.push(errorValue(
-        "DESCENDING_RANGE",
-        `A range's min (${min}) cannot be greater than its max (${max}). Did you mean "${max}:${min}"?`,
-      ));
+      stack.push(errorValue("DESCENDING_RANGE", descendingRangeMessage(min, max, minWritten, maxWritten)));
       return;
     }
     stack.push(rangeValue(min, max));
@@ -5373,6 +5378,13 @@ export function executeBytecode(
 
         case OpCode.RANGE_NEW: {
           rangeLiteral(stack);
+          break;
+        }
+
+        case OpCode.RANGE_NEW_WRITTEN: {
+          const minWritten = poolString(opcodes, ip++, strings, op, "range start as written");
+          const maxWritten = poolString(opcodes, ip++, strings, op, "range end as written");
+          rangeLiteral(stack, minWritten, maxWritten);
           break;
         }
 

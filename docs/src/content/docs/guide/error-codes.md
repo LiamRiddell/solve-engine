@@ -357,7 +357,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | --- | --- | --- |
 | `INVALID_RANGE_BOUND` | as a value | A range (`0:3`) whose bounds are not plain numbers. |
 | `NON_INTEGER_RANGE_BOUND` | as a value | A range whose bounds are not whole numbers (`0.5:3`). |
-| `DESCENDING_RANGE` | as a value | A range whose first bound is above its second (`5:1`). The message suggests the other order. |
+| `DESCENDING_RANGE` | as a value | A range whose first bound is above its second (`5:1`). The message names each bound as written, with the number it came to, and suggests the other order. |
 | `COLLECTION_TOO_LARGE` | as a value | A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. |
 | `MATRIX_CELL_NON_NUMERIC` | as a value | A list cell that is not a number or a quantity: a list inside a list, text, a date. |
 | `MATRIX_CELL_UNITS_DIFFER` | as a value | A list whose cells are quantities of different measures (`[1 km, 2 kg]`), or money in two currencies with no rate between them: a list holds one unit. |

@@ -54,6 +54,17 @@ total(24:00, 0:00) // ERROR: "24:00" is not a valid time
 Earlier versions read the text before such a colon as a
 [label](/syntax/labels/), so `1 + 24:00` answered 0 and `1:23:99` answered 99.
 
+A time's colon touches its minutes. After a name, a colon with a space after it
+belongs to a [label](/syntax/labels/) instead, so `Room 4: 12` is the label
+`Room 4` and the figure 12, and `Day 1: 9:30` is the label `Day 1` and the time
+9:30. A spaced pair with no name before it is still a time:
+
+```solve-doc
+Room 4: 12 // 12
+Day 1: 9:30 // Wednesday, March 11, 2026, 9:30:00 AM
+9: 30 // Wednesday, March 11, 2026, 9:30:00 AM
+```
+
 Midnight at the start of the day is `0:00`, and the last minute is `23:59`. The
 one place a colon between two numbers is not a time is the list that `sum`,
 `prod`, `map` or `reduce` works through, where `sum(24:30)` is the range of whole
