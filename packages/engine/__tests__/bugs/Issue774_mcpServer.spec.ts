@@ -391,7 +391,27 @@ describe("#774 MCP, live data under --network on", () => {
 });
 
 describe("#774 engine.clear() with a fetch still in flight", () => {
-	const timers = () => process.getActiveResourcesInfo().filter((kind) => kind === "Timeout").length;
+	/**
+	 * Run `body` with every timer it starts recorded, and return those still
+	 * pending with a hold on the event loop. Counting the process's timers
+	 * instead let one left by another suite in the same serial run move the
+	 * count by one while this test ran, which failed it on CI with nothing wrong.
+	 */
+	async function timersHeldAfter(body: () => Promise<void>): Promise<NodeJS.Timeout[]> {
+		const started: NodeJS.Timeout[] = [];
+		const realSetTimeout = globalThis.setTimeout;
+		globalThis.setTimeout = ((handler: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+			const t = realSetTimeout(handler, ms, ...args);
+			started.push(t);
+			return t;
+		}) as typeof setTimeout;
+		try {
+			await body();
+		} finally {
+			globalThis.setTimeout = realSetTimeout;
+		}
+		return started.filter((t) => !(t as unknown as { _destroyed?: boolean })._destroyed && t.hasRef());
+	}
 
 	/** An engine with the probe, its batcher hook wired. */
 	function probeEngine(pkg: IEnginePackage): ExpressionEngine {
@@ -401,15 +421,15 @@ describe("#774 engine.clear() with a fetch still in flight", () => {
 	}
 
 	test("a fetch that times out after clear() leaves no collection timer behind", async () => {
-		await later(20);
-		const before = timers();
-		const engine = probeEngine(probePackage(never, { timeoutMs: 40 }));
-		expect(engine.evaluateExpression("lookup abcde").isPending()).toBe(true);
-		engine.clear();
-		// Past the fetch's own timeout: before the fix its settling armed a
-		// ten-minute timer on a query the cleared cache no longer held.
-		await later(120);
-		expect(timers()).toBeLessThanOrEqual(before);
+		const held = await timersHeldAfter(async () => {
+			const engine = probeEngine(probePackage(never, { timeoutMs: 40 }));
+			expect(engine.evaluateExpression("lookup abcde").isPending()).toBe(true);
+			engine.clear();
+			// Past the fetch's own timeout: before the fix its settling armed a
+			// ten-minute timer on a query the cleared cache no longer held.
+			await later(120);
+		});
+		expect(held).toHaveLength(0);
 	});
 
 	test("a fetch that fails after clear() is not retried", async () => {
@@ -427,15 +447,27 @@ describe("#774 engine.clear() with a fetch still in flight", () => {
 	});
 
 	test("a fetch that answers after clear() does not reach the next document, and holds no timer", async () => {
-		await later(20);
-		const before = timers();
 		const engine = probeEngine(probePackage(slowLength(30)));
-		engine.evaluateExpression("lookup abcde");
+		const held = await timersHeldAfter(async () => {
+			engine.evaluateExpression("lookup abcde");
+			engine.clear();
+			expect(engine.formatValue(engine.evaluateExpression("2 + 2"))).toBe("= 4");
+			await later(100);
+		});
+		expect(held).toHaveLength(0);
 		engine.clear();
-		expect(engine.formatValue(engine.evaluateExpression("2 + 2"))).toBe("= 4");
-		await later(100);
-		expect(timers()).toBeLessThanOrEqual(before);
+	});
+
+	test("the recorder sees a held timer: an engine nobody clears keeps its query's collection timer", async () => {
+		const engine = probeEngine(probePackage(slowLength(5)));
+		const held = await timersHeldAfter(async () => {
+			engine.evaluateExpression("lookup abcde");
+			await engine.settle();
+		});
+		expect(held.length).toBeGreaterThan(0);
 		engine.clear();
+		await later(20);
+		expect(held.filter((t) => !(t as unknown as { _destroyed?: boolean })._destroyed && t.hasRef())).toHaveLength(0);
 	});
 
 	test("clear() on an engine that never fetched, and twice in a row", () => {
