@@ -916,19 +916,35 @@ export const TAKES_LIST: ReadonlySet<number> = new Set([
  * Without this, every one-number builtin read a list through `toNumber()`,
  * which is 0 for a matrix, and answered the result for 0: `sqrt([4, 9])` was 0.
  *
- * @param fnIdx - The builtin's index.
+ * @param fnIdx - The builtin's index; each cell goes through {@link callBuiltin}.
  * @param args - Its arguments, in call order.
- * @param fn - The builtin's implementation, called for each cell.
  * @param context - The line context, passed through to it.
  * @returns The answer or refusal, or null.
  */
-export function listBuiltinCall(fnIdx: number, args: readonly Value[], fn: (args: Value[], context?: LineExecutionContext) => Value, context?: LineExecutionContext): Value | null {
+export function listBuiltinCall(fnIdx: number, args: readonly Value[], context?: LineExecutionContext): Value | null {
     if (TAKES_LIST.has(fnIdx) || !args.some(isManyCellList)) return null;
     const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
     if (EACH_CELL_BUILTINS.has(fnIdx) && args.length === 1) {
-        return applyEachCell(args[0], name, (cell) => fn([cell], context));
+        return applyEachCell(args[0], name, (cell) => callBuiltin(fnIdx, [cell], context));
     }
     return listArgumentRefused(name, args);
+}
+
+/**
+ * Call the builtin at `fnIdx`, or answer UNKNOWN_BUILTIN_FUNCTION when the
+ * registry holds none there. The entry is read as the registry's own property
+ * and called only once it is known to be a function, so an index never reaches
+ * one inherited from `Object.prototype` (CodeQL's unvalidated dynamic call).
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments, in call order.
+ * @param context - The line context, passed through to it.
+ * @returns What the builtin answers, or the refusal.
+ */
+export function callBuiltin(fnIdx: number, args: Value[], context?: LineExecutionContext): Value {
+    const entry = Object.prototype.hasOwnProperty.call(builtinFunctions, fnIdx) ? builtinFunctions[fnIdx] : undefined;
+    if (typeof entry !== "function") return errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${fnIdx} is not registered`);
+    return entry(args, context);
 }
 
 /**

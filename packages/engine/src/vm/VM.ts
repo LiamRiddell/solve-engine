@@ -1033,7 +1033,7 @@ function rateOver(args: Value[], rateIndex: number, context: LineExecutionContex
     if (args[0].type === ValueType.Symbolic && !SYMBOLIC_NATIVE_BUILTINS.has(rateIndex)) return symbolicBuiltin(rateIndex, args);
     const fn = builtinAt(rateIndex);
     if (fn === undefined) return errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${rateIndex} is not registered`);
-    return listBuiltinCall(rateIndex, args, fn, context) ?? fn(args, context);
+    return listBuiltinCall(rateIndex, args, context) ?? fn(args, context);
 }
 
 /**
@@ -4697,7 +4697,7 @@ export function executeBytecode(
             // A list is worked out for each number, or refused by name, where
             // the builtin reads one number; see listBuiltinCall() in
             // vm/VMBuiltins.ts.
-            const listed = listBuiltinCall(fnIdx, ordered, fn, context);
+            const listed = listBuiltinCall(fnIdx, ordered, context);
             if (listed) {
               stack.push(listed);
               if (observeCall !== undefined) observeCall({ kind: "builtin", index: fnIdx, name: "", args: ordered, result: listed });
