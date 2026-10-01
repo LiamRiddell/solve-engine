@@ -45,6 +45,7 @@ import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation,
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
+import { fieldsShownIn, noonOnDay, shownZone, zoneAnswerJoinedText } from "@solve-js/vm/ZoneAnswers";
 import { addZonedCalendarDays, addZonedCalendarMonths } from "@solve-js/calendar/ZonedSteps";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { LineTrace } from "@solve-js/explain/Explanation";
@@ -1726,7 +1727,11 @@ function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Valu
             `A date or time moves by a length of time, such as 5 days, 2 weeks or 3 hours, not by ${what}.`,
         );
     }
-    return datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm, date.zone), date.grain, date.zone);
+    const moved = datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm, date.zone), date.grain, date.zone, date.timeAnchor);
+    // A time of day keeps how finely it is written, so a time in a zone moved
+    // by an hour still reads to the minute (#757).
+    if (date.timePrecision !== undefined) moved.timePrecision = date.timePrecision;
+    return moved;
 }
 
 /** The base types a percentage change reads a size from, and so checks for zero and sign. */
@@ -1939,6 +1944,10 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
             );
     }
     const epochMs = left.toNumber();
+    // A time already shown in a zone (`3pm London in Tokyo`, #757) names its
+    // instant, so another zone shows that moment on its own clock, still as a
+    // time of day and still counted from the day the reader named.
+    if (left.grain === "time" && typeof left.zone === "string") return zoneTimeRezoned(left, zoneRef, vm.context.calendar);
     if (left.grain !== "date" && left.grain !== "datetime") {
         return datetimeValue(epochMs, "instant", zoneRef);
     }
@@ -1955,6 +1964,28 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
     }
     const reanchored = zonedWallClockToUtcMs(f.year, f.month0, f.day, f.hour, f.minute, zoneRef, calendar);
     return datetimeValue(reanchored + f.second * 1000 + f.millisecond, "instant", zoneRef);
+}
+
+/**
+ * A time in a zone shown in another one: the same instant, the same
+ * precision, and the anchor moved to noon on the same day as the new zone
+ * counts it, so the day shift stays against the day the reader named.
+ *
+ * @param time - A time of day that names a zone.
+ * @param zoneRef - The zone to show it in.
+ * @param calendar - The backend that resolves a named zone.
+ * @returns The time in the new zone.
+ */
+function zoneTimeRezoned(time: Value, zoneRef: string, calendar: CalendarBackend): Value {
+    const zone = time.zone as string;
+    let anchor: number | undefined;
+    if (time.timeAnchor !== undefined) {
+        const day = fieldsShownIn(time.timeAnchor, zone, calendar);
+        anchor = noonOnDay(day.year, day.month0, day.day, zoneRef, calendar);
+    }
+    const moved = datetimeValue(time.toNumber(), "time", shownZone(zoneRef), anchor);
+    if (time.timePrecision !== undefined) moved.timePrecision = time.timePrecision;
+    return moved;
 }
 
 /** `a % b` for two doubles, the MOD opcode's arithmetic. */
@@ -3694,6 +3725,10 @@ export function executeBytecode(
             const ratAdd = exactRationalOp(l, r, "add");
             if (ratAdd) { stack.push(ratAdd); break; }
           }
+          // Text joined to a time-zone answer reads the answer's English text, as
+          // it did when the answer was text (#757): `"at " + (3pm London in Tokyo)`.
+          const zoneJoin = l.type === ValueType.String || r.type === ValueType.String ? zoneAnswerJoinedText(l, r) : null;
+          if (zoneJoin !== null) { stack.push(stringValue(zoneJoin)); break; }
           const pctAdd = combinePercentage(l, r, 1);
           const ratePeriodAdd = pctAdd === null ? unifyRatePeriods(l, r) : null;
           if (pctAdd !== null) {

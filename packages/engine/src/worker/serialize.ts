@@ -106,6 +106,11 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 	// dropped them would answer a different question from the synchronous one.
 	if (value.grain !== undefined) dto.grain = value.grain;
 	if (value.zone !== undefined) dto.zone = value.zone;
+	// A time in a zone and a zone difference cross with what they need to be
+	// shown again (#757), as fresh plain copies.
+	if (value.timeAnchor !== undefined) dto.timeAnchor = value.timeAnchor;
+	if (value.timePrecision !== undefined) dto.timePrecision = value.timePrecision;
+	if (value.zoneDifference !== undefined) dto.zoneDifference = { from: value.zoneDifference.from, to: value.zoneDifference.to };
 	// A weekday or month name crosses with which one it is, as a fresh plain copy.
 	if (value.calendarName !== undefined) dto.calendarName = { kind: value.calendarName.kind, index: value.calendarName.index };
 	// Provenance and the frozen mark cross as plain copies, for the same reason:

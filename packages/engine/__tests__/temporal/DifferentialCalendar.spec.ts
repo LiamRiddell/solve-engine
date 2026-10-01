@@ -266,8 +266,9 @@ describe("what a zone of its own changes", () => {
 			expect(engine.evaluateExpression("working days between 01/01/2024 and 31/01/2024").toNumber()).toBe(23);
 			expect(engine.evaluateExpression("weekday on 10/03/2024").value).toBe("Sunday");
 			expect(engine.evaluateExpression("2nd Tuesday of March 2026 as weekday").value).toBe("Tuesday");
-			expect(engine.evaluateExpression("3pm Tokyo in Delhi").value).toBe("11:30 AM");
-			expect(engine.evaluateExpression("time difference between Tokyo and Delhi").value).toBe("Tokyo is 3 hours 30 minutes ahead of Delhi");
+			// The zone answers are values (#757), shown as the text they were.
+			expect(render(engine.evaluateExpression("3pm Tokyo in Delhi"), calendar)).toBe("Datetime = 11:30 AM @" + engine.evaluateExpression("3pm Tokyo in Delhi").toNumber());
+			expect(render(engine.evaluateExpression("time difference between Tokyo and Delhi"), calendar)).toBe("Uom = Tokyo is 3 hours 30 minutes ahead of Delhi");
 		}
 	});
 });

@@ -18,6 +18,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { ValueType } from "@solve-js/vm/Value";
+import { formatValue } from "@solve-js/format/FormatEngine";
 
 function evaluate(source: string) {
 	const engine = newTrackedEngine();
@@ -25,7 +26,14 @@ function evaluate(source: string) {
 	return value;
 }
 
-const str = (source: string) => evaluate(source).value as string;
+/**
+ * The answer as an English reader sees it: a time in a zone and a zone
+ * difference are values (#757), shown as the text they used to be.
+ */
+const str = (source: string): string => {
+	const value = evaluate(source);
+	return value.type === ValueType.String ? value.value as string : formatValue(value).replace(/^= /, "");
+};
 
 describe("offsets that are not a whole number of hours", () => {
 	test("India's half-hour offset", () => {
@@ -150,8 +158,9 @@ describe("the current time somewhere else", () => {
 	// about two readings of the same instant agreeing with each other.
 	test("`time in <city>` is a wall-clock reading", () => {
 		const value = evaluate("time in Tokyo");
-		expect(value.type).toBe(ValueType.String);
-		expect(value.value as string).toMatch(/^\d{1,2}:\d{2} (AM|PM)$/);
+		expect(value.type).toBe(ValueType.Datetime);
+		expect(value.grain).toBe("time");
+		expect(str("time in Tokyo")).toMatch(/^\d{1,2}:\d{2} (AM|PM)$/);
 	});
 
 	test("`date in <city>` is a calendar date", () => {

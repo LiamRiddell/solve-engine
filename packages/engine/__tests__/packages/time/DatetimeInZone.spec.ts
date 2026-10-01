@@ -153,14 +153,15 @@ describe("what the same opcode still does", () => {
 		expect(value.value).not.toBe("DATETIME_NOT_CONVERTIBLE");
 	});
 
-	test("the time package's own String zone form is untouched", () => {
+	test("the time package's own zone form is answered by the time package", () => {
 		// `6pm Sydney in Chicago` is answered by the time package before the
-		// conversion opcode ever sees it, and comes back as a String. The exact
-		// clock reading moves with the daylight-saving offsets of two zones on
-		// today's date, so what is pinned is that this is still a String of that
-		// shape rather than anything the Datetime branch produced.
+		// conversion opcode ever sees it, as a time of day in Chicago (#757),
+		// not the full date the conversion opcode gives. The exact clock reading
+		// moves with the daylight-saving offsets of two zones on today's date, so
+		// what is pinned is the shape.
 		const value = evaluate("6pm Sydney in Chicago");
-		expect(value.type).toBe(ValueType.String);
-		expect(value.value as string).toMatch(/^\d{1,2}:\d{2} (AM|PM)$/);
+		expect(value.type).toBe(ValueType.Datetime);
+		expect(value.grain).toBe("time");
+		expect(formatValue(value)).toMatch(/^= \d{1,2}:\d{2} (AM|PM)( \([+-]1 day\))?$/);
 	});
 });

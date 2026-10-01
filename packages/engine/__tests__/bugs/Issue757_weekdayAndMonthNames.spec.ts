@@ -58,8 +58,8 @@ describe("the boundary", () => {
 		expect(shown('"on " + (2026-03-10 as weekday)', under("de"))).toBe("= on Tuesday");
 	});
 
-	test("a time in another zone and a time difference stay English text", () => {
-		expect(shown("10:00 London in Tokyo on 2026-03-10", under("de"))).toBe("= 7:00 PM");
+	test("a time in another zone is a value of its own, shown in the reader's language (see Issue757_zoneAnswersAsValues)", () => {
+		expect(shown("10:00 London in Tokyo on 2026-03-10", under("de"))).toBe("= 19:00");
 	});
 
 	test("an English tag and a tag without data write the engine's names", () => {

@@ -127,19 +127,11 @@ export function wallClockInstants(
 
 /**
  * A length of time in whole minutes, written the way the timezone forms write
- * one: `3 hours`, `1 hour 30 minutes`, `45 minutes`.
- *
- * @param totalMinutes - A non-negative whole number of minutes.
- * @returns The written length.
+ * one (`3 hours`, `1 hour 30 minutes`). It lives beside the zone answers'
+ * other English text in `vm/ZoneAnswers.ts`, which the formatter and the VM
+ * read too, and is re-exported here for the time package's own forms.
  */
-export function describeMinutes(totalMinutes: number): string {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  const parts: string[] = [];
-  if (hours > 0) parts.push(`${hours} hour${hours === 1 ? "" : "s"}`);
-  if (minutes > 0 || hours === 0) parts.push(`${minutes} minute${minutes === 1 ? "" : "s"}`);
-  return parts.join(" ");
-}
+export { describeMinutes } from "@solve-js/vm/ZoneAnswers";
 
 /**
  * The signed day shift a zone's date has against another's at one instant,
