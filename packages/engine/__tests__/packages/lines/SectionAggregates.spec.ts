@@ -213,9 +213,11 @@ describe("every refusal is a named error, never a number", () => {
     );
   });
 
+  // A section of percentages totals to a percentage, as `sum(10%, 20%)` does,
+  // so a percentage beside money is refused as a mix (FoundBug_aggregateOfPercentages).
   test("a percentage is refused rather than added to money", () => {
     expect(answer(["# Travel", "$450", "20%", "# Summary", 'total of section "Travel"'])).toBe(
-      'ERROR AGGREGATE_NON_NUMERIC: Line 3, under "Travel", is not a plain number or quantity, so it cannot be added.',
+      "ERROR AGGREGATE_PERCENTAGE_MIXED: A percentage (20%) and an amount in USD cannot be added together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 20% as the number 0.2; to raise an amount by a percentage, write it as 100 + 10%.",
     );
   });
 

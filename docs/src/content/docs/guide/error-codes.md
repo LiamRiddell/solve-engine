@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 560 codes, grouped below by the part
+ship. The engine and its built-in packages ship 561 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -290,7 +290,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `UNKNOWN_UNIT` | as a value | A conversion or a unit named something that is not a unit (`5 km in mies`). The message offers the nearest spellings where there are any. |
 | `UNIT_AFTER_UNIT` | as a value | A quantity followed by a second unit, as in `5 kg m`: two units side by side are not a unit. The message suggests `in` for a conversion. |
 | `UNIT_IN_EXPONENT` | as a value | An exponent carrying a unit, as in `2^(3 m)`. The message shows where the unit goes instead. |
-| `UNIT_POWER_UNSUPPORTED` | either | A quantity raised to a power that has no unit, as in `2s^2`, or a unit written with a power the table does not spell. Only a length squared or cubed has one. |
+| `UNIT_POWER_UNSUPPORTED` | either | A quantity raised to a power that has no unit, as in `2s^2`, or a unit written with a power the table does not spell. Only a length squared or cubed has one. A variance of quantities other than lengths, or of percentages, is refused with it too. |
 | `UNIT_ROOT_UNSUPPORTED` | as a value | A square or cube root of a quantity whose root has no unit, as in `sqrt(4 m)`, or of a negative area. |
 | `UNIT_PRODUCT_UNSUPPORTED` | as a value | Two quantities multiplied into something that is not a unit, as in `$5 * $3`. Lengths multiply into an area or a volume. |
 | `UNIT_QUOTIENT_UNSUPPORTED` | as a value | Two quantities divided into something that is not a unit: nothing cancels and the result would be a rate of a rate. |
@@ -338,6 +338,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `WEIGHTED_AVERAGE_ZERO_WEIGHT` | as a value | A weighted average whose weights add up to zero. |
 | `STATISTIC_NOT_FINITE` | as a value | A standard deviation or variance of a list holding an infinity. |
 | `AGGREGATE_NON_NUMERIC` | as a value | A list aggregate (`total of`, `average of`, a line range) meeting something that is not a number or a quantity. The message names what it found. |
+| `AGGREGATE_PERCENTAGE_MIXED` | as a value | An aggregate (`sum(10%, 100)`, `average of 10%, 5 m`, `max(10%, 0.5)`, `total above` over a column) meeting a percentage beside a value that is not one. Percentages alone answer a percentage (`sum(10%, 20%)` is 30%); the message names the percentage and the kind of the other value, and gives the percentage as the number it stands for. |
 | `PERCENTAGE_OF_QUANTITY` | as a value | A value written as a percentage that is not a proportion, such as a length. |
 | `PERCENTAGE_NOT_FINITE` | as a value | A value written as a percentage that is not a finite number: an infinity a division by zero gave (`1/0 as %`), or a value that is no number at all. |
 | `PERCENTAGE_OVERFLOW` | as a value | A value written as a percentage that is too large for its percentage, a hundred times it, to be held, as in `1e308 as %`, or that is itself past the largest number that can be held, as in `2^2000 as %`. |

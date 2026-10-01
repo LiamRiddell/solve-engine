@@ -1,5 +1,5 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
-import { unifyQuantities } from "@solve-js/vm/VMConversion";
+import { unifyQuantities, percentageAnswer, isAggregateFigure } from "@solve-js/vm/VMConversion";
 import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
 import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
 import { numberOfBase } from "@solve-js/vm/ExactIntegers";
@@ -101,7 +101,7 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
       // tagged line still counts; only sum and average need a number to add.
       // A number written in a base is added as the number it is.
       const figure = numberOfBase(v!);
-      if (figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
+      if (!isAggregateFigure(figure)) {
         return errorValue("TAG_NON_NUMERIC", `Line ${n}, tagged #${tag}, is not a plain number or unit value.`);
       }
       values.push(figure);
@@ -132,6 +132,8 @@ function combineTagged(values: Value[], isAverage: boolean): Value {
   if (unified instanceof Value) return unified;
   const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
   const result = isAverage ? sum / values.length : sum;
+  // Tagged percentages total to a percentage, as `sum(10%, 20%)` does.
+  if (unified.percent) return percentageAnswer(result, unified.sources);
   if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
   const combined = withSources(uomValue(result, unified.unit), unified.sources);
   // A total of clock-time spans is still a span; see the same rule in

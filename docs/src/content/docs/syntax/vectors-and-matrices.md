@@ -157,6 +157,7 @@ Lists of answers combine element by element with `and`, `or` and `not`, and
 ```solve
 ([1, 2, 3] > 1) and ([1, 2, 3] < 3) // [false, true, false]
 not ([1, 2] > 1) // [true, false]
+not [true, false] // [false, true]
 sum([12, 18, 25] > 15) // 2
 ```
 
