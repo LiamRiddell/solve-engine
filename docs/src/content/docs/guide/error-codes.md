@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 532 codes, grouped below by the part
+ship. The engine and its built-in packages ship 533 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -371,7 +371,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `MATRIX_POWER_UNSUPPORTED` | as a value | A matrix used as an exponent, or `^` between a matrix and something with no matrix reading. |
 | `SYMBOLIC_INVERSE_DIMENSION_LIMIT` | as a value | A symbolic matrix inverse larger than the size the symbolic elimination handles. |
 | `SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT` | as a value | A symbolic matrix inverse that meets a zero pivot, which the elimination does not reorder around. |
-| `MAP_REDUCE_REQUIRES_COLLECTION` | as a value | `map` or `reduce` over something that is not a list or a range. |
+| `MAP_REDUCE_REQUIRES_COLLECTION` | as a value | `map`, `reduce`, `sum` or `prod` over something that is not a list or a range (`sum(5)`); the message names the word typed. |
 | `MAP_COLLECTION_LENGTH_MISMATCH` | as a value | `map` over several lists of different lengths. |
 | `REDUCE_EMPTY_COLLECTION` | as a value | `reduce` over an empty list with no starting value. |
 
@@ -865,6 +865,7 @@ In the package as `ERROR_CODE_CATALOGUES.PayrollErrorCodes`.
 | `PAYROLL_UNKNOWN_LOAN_PLAN` | either | `with student loan` with no plan, or a plan that does not exist (`with plan 3 student loan`). |
 | `PAYROLL_CONFLICTING_CASE` | either | Two places, two pensions, a plan named twice, or two undergraduate plans on one take-home line. |
 | `PAYROLL_EXPECTED_PENSION_RATE` | either | `with 150% pension`: a pension contribution that is not a percentage between 0 and 100. |
+| `PAYROLL_NEGATIVE_SALARY` | as a value | `-£50,000 after tax` or `hourly for -£50,000`: a salary below zero, which no one is paid. |
 
 ## Percentage
 

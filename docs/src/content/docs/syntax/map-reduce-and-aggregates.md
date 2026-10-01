@@ -75,7 +75,16 @@ prod(1:5) // 120
 ```
 
 A single argument has to be a list: a range, a bracketed list, or a name holding
-one. `sum(5)` is refused, because there is nothing to add it to; a run of plain
-values is written with commas, `sum(1, 2, 3)`. A range counts up in whole
+one. `sum(5)` is refused, because there is nothing to add it to, and the refusal
+says so in the words of the call typed; a run of plain values is written with
+commas, `sum(1, 2, 3)`. `prod`, `map` and `reduce` refuse a single value the
+same way, each naming what it does with a list. A range counts up in whole
 numbers, so `sum(3:1)` and `sum(1.5:3)` are refused by name rather than read
 another way.
+
+```solve
+sum(5) // sum adds up the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number; to add values one by one, list them, as in sum(5, 6).
+prod(5) // prod multiplies together the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number.
+map(x * 2, 5) // map works through the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number.
+sum(1, 2, 3) // 6
+```

@@ -143,8 +143,9 @@ export function callHasOwnComma(parser: Parser): boolean {
  * @param builder - The builder the call is emitted into.
  * @param combine - `ADD` for `sum`, `MUL` for `prod`.
  * @param seed - The identity the fold starts from: 0 for `sum`, 1 for `prod`.
+ * @param form - `ReduceForm.sum` or `ReduceForm.prod`, so a refusal names the word typed.
  */
-export function parseElementFold(parser: Parser, builder: BytecodeBuilder, combine: OpCode.ADD | OpCode.MUL, seed: number): void {
+export function parseElementFold(parser: Parser, builder: BytecodeBuilder, combine: OpCode.ADD | OpCode.MUL, seed: number, form: number): void {
   const body = new BytecodeBuilder(builder.pluginIndexMap);
   body.emitOpcode(OpCode.LOAD_VAR);
   body.emitString("acc");
@@ -156,13 +157,13 @@ export function parseElementFold(parser: Parser, builder: BytecodeBuilder, combi
   parser.consume("RPAREN");
   builder.emitOpcode(OpCode.PUSH_NUMBER);
   builder.emitNumber(seed);
-  emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program }, ["acc", "x"], 1);
+  emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program }, ["acc", "x"], form);
 }
 
 /**
  * Emits a resolved transform + its `MAP_INVOKE`/`REDUCE_INVOKE` opcode
  * `kind`/`ref` are common to both opcodes; `thirdOperand` is
- * `collectionCount` for `MAP_INVOKE` or `hasInitial` (0|1) for
+ * `collectionCount` for `MAP_INVOKE` or the `ReduceForm` for
  * `REDUCE_INVOKE`. Registers an inline (kind 0) body into `builder`'s own
  * `anonymousBodies` side-table only NOW, after every collection argument
  * has already been parsed, so `paramNames` (fixed `["acc","x"]` for

@@ -990,7 +990,7 @@ function formatRange(min: number, max: number, locale: ILocale): string {
   return `${locale.display.resultPrefix}${min}:${max}`;
 }
 
-function formatPercentage(value: number, locale: ILocale, settings: FormattingSettings): string {
+function formatPercentage(value: number, locale: ILocale, settings: FormattingSettings, exact?: DecimalData): string {
   // ValueType.Percentage stores a fraction (0.25 for 25%). See Value.ts's
   // documented contract and the sole producer, VM.ts's TO_PERCENTAGE opcode
   // (`right/left - 1`, e.g. 0.25 for "800 to 1000"). Multiply by 100 before
@@ -1004,13 +1004,39 @@ function formatPercentage(value: number, locale: ILocale, settings: FormattingSe
   // locale's grouping and decimal mark (`1234567%` was 1234567.00%, and 25%
   // under de-DE was 25.00%), as formatUom's figures do.
   const tooSmall = tooSmallToPrintText(percent, dp, loc);
+  // Past the magnitude where the double holds the places shown, the digits come
+  // from the exact fraction the percentage keeps (see VMConversion's
+  // percentageExact), a hundred times over: `9007199254740993.5 as percent` is
+  // 900,719,925,474,099,350.00%, where the double wrote ...456.00%. A
+  // percentage keeps its places even when whole, so the digits are written to
+  // them rather than in the whole-number form a plain number takes.
+  const exactPercent = exact === undefined ? undefined : percentOfFraction(exact);
+  const exactText = exactPercent !== undefined && exactDigitsWhereDoubleCannot(percent, { exact: exactPercent }, dp) !== undefined ? decimalToFixed(exactPercent, dp) : undefined;
+  const plain = exactText ?? percent.toFixed(dp);
   // Less the zeros that only pad the places, when the host asked for that (#750).
-  const fixed = settings.floatResult.trimTrailingZeros === true ? trimFractionZeros(percent.toFixed(dp), 0) : percent.toFixed(dp);
+  const fixed = settings.floatResult.trimTrailingZeros === true ? trimFractionZeros(plain, 0) : plain;
   let formatted = tooSmall ?? localiseFixedDecimal(fixed, loc, settings.floatResult.enableSeperator);
   // A proportion that is zero at these places is written without a sign, as a
   // zero is (#585): never -0.00%.
   if (tooSmall === undefined && Number(fixed) === 0) formatted = formatted.replace("-", "");
   return `= ${formatted}${locale.display.percentageSuffix}`;
+}
+
+/**
+ * An exact fraction as the exact percentage it is, a hundred times over: 0.125
+ * is 12.5, and 9007199254740993.5 is 900719925474099350. Moving the point two
+ * places is exact, so no digit is rounded on the way.
+ *
+ * @param fraction - The exact decimal a percentage stands for (0.25 for 25%).
+ * @returns The same value in percent.
+ */
+export function percentOfFraction(fraction: DecimalData): DecimalData {
+  if (fraction.scale >= 2) return { coef: fraction.coef, scale: fraction.scale - 2 };
+  // A scale below two: the point moves past the digits, so a zero is appended
+  // for each place it moves beyond them.
+  let coef = fraction.coef;
+  for (let scale = fraction.scale; scale < 2; scale++) coef *= 10n;
+  return { coef, scale: 0 };
 }
 
 function formatUnit(value: number, unit: string | undefined): string {
@@ -1135,7 +1161,7 @@ export function formatValue(value: Value, settings?: FormattingOverrides): strin
     case ValueType.Symbolic:
       return formatSymbolic(value.value as SymbolicNode);
     case ValueType.Percentage:
-      return formatPercentage(value.value as number, locale, us);
+      return formatPercentage(value.value as number, locale, us, value.exact);
     case ValueType.Unit:
       return formatUnit(value.value as number, value.unit);
     case ValueType.Error:

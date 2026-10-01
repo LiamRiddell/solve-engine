@@ -75,6 +75,20 @@ from exact arithmetic on it:
 2^60 + 0.5 // 1,152,921,504,606,846,976.50
 ```
 
+Converting such a number keeps the exact reading too. `as int` drops the
+fraction the way `int` and `trunc` do, towards zero, so a negative number loses
+its fraction upwards; and `as percent`, which writes a number as a share of a
+hundred, moves the point of the exact decimal two places:
+
+```solve
+9007199254740993.5 as int // 9,007,199,254,740,993
+-9007199254740993.5 as int // -9,007,199,254,740,993
+floor(9007199254740993.5) // 9,007,199,254,740,993
+(2^53 + 1) as int // 9,007,199,254,740,993
+9007199254740993.5 as percent // 900,719,925,474,099,350.00%
+(2^53 + 1) as percent // 900,719,925,474,099,300.00%
+```
+
 The other limits:
 
 - **A result with no exact reading.** A square root, a power with a fractional
@@ -82,11 +96,13 @@ The other limits:
   is arithmetic on it.
 - **Past the largest double.** A double has no finite value beyond about
   1.8 × 10^308, and the answer there is infinity, as it always was.
-- **A unit or a percentage.** A quantity with a unit, and a percentage of a
-  number, read the nearest double, typed digits included (`9007199254740993 m`
-  is 9,007,199,254,740,992.00 m, and `9007199254740993.5 m` is
-  9,007,199,254,740,994.00 m). Money is the exception: an amount of money keeps
-  its exact decimal at any size.
+- **A unit, or a percentage typed with its sign.** A quantity with a unit reads
+  the nearest double, typed digits included (`9007199254740993 m` is
+  9,007,199,254,740,992.00 m, `9007199254740993.5 m` is 9,007,199,254,740,994.00
+  m, and `as int` of it is 9,007,199,254,740,994). So does a percentage written
+  with `%` after a number that large (`900719925474099350%`); `as percent` of the
+  number is the exact form. Money is the exception: an amount of money keeps its
+  exact decimal at any size.
 
 ```solve
 sqrt(2^106) + 0.5 // 9,007,199,254,740,992
