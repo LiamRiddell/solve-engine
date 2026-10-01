@@ -1449,6 +1449,15 @@ golden ratio // 1.62
 ```
 
 ```
+2tau // 12.57
+3 golden ratio // 4.85
+(1 + 1)tau // 12.57
+solve(x^2 = tau, x) // [-2.51, 2.51]
+solve(x^2 = 2tau, x) // [-3.54, 3.54]
+der(tau*x^2, x) // 12.5663706144x
+```
+
+```
 avogadro // 602,214,076,000,000,000,000,000
 ```
 
@@ -2082,6 +2091,18 @@ sqrt(2) * sqrt(2) == 2 // false
 ```
 
 ```
+[1e-6, 1] // [1e-6, 1]
+[0.001, 0.5] // [0.001, 0.50]
+0.004 ± 0.001 // 0.004 ± 0.001
+```
+
+```
+1e-320 / 2 // 5e-321
+1e-320 / 1e10 // 0
+1e-320 km / 1e10 // 0.00 km
+```
+
+```
 1 Hz in MHz as scientific // 1e-6
 1500000 as scientific // 1.5e+6
 0.25 as sci // 2.5e-1
@@ -2274,6 +2295,13 @@ factor(x^2+1) // x^2+1
 ```
 
 ```
+factor(x^2 - pi) // x^2-3.1415926536
+factor(x^2 - e) // x^2-2.7182818285
+factor(x^2 + pi*x) // x*(x+3.1415926536)
+factor((x - pi)^2) // (x-3.1415926536)^2
+```
+
+```
 factor(x^2-y^2) // (x-y)*(x+y)
 factor(x^3-8y^3) // (x-2y)*(x^2+2x*y+4y^2)
 factor(x^2+2x*y+y^2) // (x+y)^2
@@ -2282,6 +2310,12 @@ factor(a*x+a*y+b*x+b*y) // (a+b)*(x+y)
 
 ```
 factor(x^2+3x*y+y^2) // x^2+3x*y+y^2
+```
+
+```
+(one document)
+factor(x^3 - pi) // ERROR: This polynomial cannot be factored: a number in it is too long as a fraction (as pi and e are) to try every fraction that could be a root. solve finds its roots as decimals.
+solve(x^3 = pi, x) // [-0.7322959438-1.2683737808i, -0.7322959438+1.2683737808i, 1.46]
 ```
 
 ## fractions
@@ -5781,6 +5815,11 @@ https://liamriddell.github.io/solve-engine/syntax/uncertainty/
 (12.3 +/- 0.5) * 4 // 49.2 ± 2.0
 (10 +/- 1) + (20 +/- 2) // 30 ± 2.24
 (100 +/- 5) + 10% // 110 ± 5.5
+```
+
+```
+0.004 +/- 0.001 // 0.004 ± 0.001
+2e-6 +/- 1e-7 // 2e-6 ± 1e-7
 ```
 
 ```
