@@ -7,6 +7,7 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { SWEEP_FN_NAME } from "../WhatIfPluginFunctions";
 import { SWEEP_STEP_TOKEN } from "../normalizer/WhatIfNormalizerRules";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `line N for <name> from <start> to <end> step <step>`, a sweep.
@@ -68,6 +69,6 @@ export class SweepParselet implements PrefixParselet {
 		parser.consume();
 		parser.parseExpression(BindingPower.Conditional, builder);
 
-		builder.emitPluginCall(SWEEP_FN_NAME, 5);
+		emitBuiltinPluginCall(builder, SWEEP_FN_NAME, 5);
 	}
 }

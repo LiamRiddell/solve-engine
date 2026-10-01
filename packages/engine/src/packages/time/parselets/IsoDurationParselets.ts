@@ -5,6 +5,7 @@ import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, errorValue } from "@solve-js/vm/Value";
 import { TimeFormErrorCodes } from "../TimeFormErrorCodes";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** The plugin function a refused ISO 8601 duration compiles to. */
 export const ISO_DURATION_FAULT_FN = "isoDurationFault";
@@ -47,7 +48,7 @@ export class UnreadableIsoDurationParselet implements PrefixParselet {
 		builder.emitString(fault.code);
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(fault.message);
-		builder.emitPluginCall(ISO_DURATION_FAULT_FN, 2);
+		emitBuiltinPluginCall(builder, ISO_DURATION_FAULT_FN, 2);
 	}
 }
 

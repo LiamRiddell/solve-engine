@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** The three units a years/months/days breakdown is written in. */
 const YMD_UNITS = new Set(["year", "years", "month", "months", "day", "days"]);
@@ -45,7 +46,7 @@ export class AgeParselet implements PrefixParselet {
 
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(mode);
-		builder.emitPluginCall("ageBetween", 3);
+		emitBuiltinPluginCall(builder, "ageBetween", 3);
 	}
 
 	/** Whether a token is the given bare word (case-insensitively). */

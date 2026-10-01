@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import type { EngineError } from "@solve-js/errors/EngineError";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** The comparison each token stands for, as the check function reads it. */
 const OPERATORS: Readonly<Record<string, string>> = {
@@ -97,7 +98,7 @@ function parseRun(parser: Parser, builder: BytecodeBuilder): void {
 		builder.emitString(op);
 		const next = comparisonOf(parser.peek());
 		if (next === undefined) break;
-		builder.emitPluginCall("checkLink", 3);
+		emitBuiltinPluginCall(builder, "checkLink", 3);
 		op = next;
 	}
 	let argCount = 3;
@@ -106,7 +107,7 @@ function parseRun(parser: Parser, builder: BytecodeBuilder): void {
 		parser.parseExpression(BindingPower.Conditional, builder);
 		argCount = 4;
 	}
-	builder.emitPluginCall("checkComparison", argCount);
+	emitBuiltinPluginCall(builder, "checkComparison", argCount);
 }
 
 /**
@@ -139,7 +140,7 @@ export const checkParselet: PrefixParselet = {
 		while (JOINS.has(parser.peek()?.type ?? "")) {
 			parser.consume();
 			parseRun(parser, builder);
-			builder.emitPluginCall("checkBoth", 2);
+			emitBuiltinPluginCall(builder, "checkBoth", 2);
 		}
 		const refusal = refusalAfterCheck(parser.peek());
 		if (refusal !== null) throw refusal;

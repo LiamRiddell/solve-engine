@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** The 5 SoulverCore-documented weather query kinds, encoded as the first
  * segment of the query string this package's single async resolver caches
@@ -58,7 +59,7 @@ export function weatherQueryParselet(kind: WeatherQueryKind, pluginFnName: strin
 			const city = consumeCityName(parser, token.value);
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(`${kind}:${city}`);
-			builder.emitPluginCall(pluginFnName, 1);
+			emitBuiltinPluginCall(builder, pluginFnName, 1);
 		},
 	};
 }

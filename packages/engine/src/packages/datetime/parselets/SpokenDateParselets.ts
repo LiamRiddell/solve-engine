@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 import { periodOf, WEEKDAY_TOKEN_DAY } from "@solve-js/packages/datetime/normalizer/SpokenDateRules";
 
 /** The plugin function that finds a period's first or last day. See `SpokenDateFunctions.ts`. */
@@ -20,7 +21,7 @@ function emitPeriodEdge(builder: BytecodeBuilder, kind: string, offset: number, 
 	builder.emitNumber(offset);
 	builder.emitOpcode(OpCode.PUSH_STRING);
 	builder.emitString(edge);
-	builder.emitPluginCall(PERIOD_EDGE_FN, 4);
+	emitBuiltinPluginCall(builder, PERIOD_EDGE_FN, 4);
 }
 
 /**
@@ -77,6 +78,6 @@ export class ThisWeekdayParselet implements PrefixParselet {
 		builder.emitOpcode(OpCode.DATE_NOW);
 		builder.emitOpcode(OpCode.PUSH_NUMBER);
 		builder.emitNumber(day);
-		builder.emitPluginCall(THIS_WEEKDAY_FN, 2);
+		emitBuiltinPluginCall(builder, THIS_WEEKDAY_FN, 2);
 	}
 }

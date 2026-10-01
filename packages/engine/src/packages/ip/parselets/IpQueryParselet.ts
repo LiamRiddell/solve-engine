@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The `<question> of|in <subnet>` forms: `hosts in <cidr>`, `netmask of <cidr>`,
@@ -31,10 +32,10 @@ export class IpQueryParselet implements PrefixParselet {
 			parser.consume(); // the prefix number
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(`|${after.value}`);
-			builder.emitPluginCall("ipLiteral", 1);
+			emitBuiltinPluginCall(builder, "ipLiteral", 1);
 		} else {
 			parser.parseExpression(BindingPower.Prefix, builder);
 		}
-		builder.emitPluginCall(this.pluginFn, 1);
+		emitBuiltinPluginCall(builder, this.pluginFn, 1);
 	}
 }

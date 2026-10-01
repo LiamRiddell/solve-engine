@@ -7,6 +7,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { tryConsumeZoneReference } from "./shared/ZoneReference";
 import { tryParseOnDate } from "./shared/OnDate";
 import { TIME_DIFFERENCE_FN } from "./TimezonePluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `time difference between <city1> and <city2>` -> a directional,
@@ -61,6 +62,6 @@ export class TimeDifferenceParselet implements PrefixParselet {
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(zone2.displayName);
     const dated = tryParseOnDate(parser, builder);
-    builder.emitPluginCall(TIME_DIFFERENCE_FN, dated ? 5 : 4);
+    emitBuiltinPluginCall(builder, TIME_DIFFERENCE_FN, dated ? 5 : 4);
   }
 }

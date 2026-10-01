@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** A whole number written without a decimal point or an exponent, the shape a dial fraction is spelled in. */
 function wholeNumberValue(token: Token | undefined): number | null {
@@ -46,6 +47,6 @@ export class GasMarkParselet implements PrefixParselet {
 			builder.emitNumber(denominator);
 			builder.emitOpcode(OpCode.DIV);
 		}
-		builder.emitPluginCall("gasMarkToCelsius", 1);
+		emitBuiltinPluginCall(builder, "gasMarkToCelsius", 1);
 	}
 }

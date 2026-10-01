@@ -5,6 +5,7 @@ import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { HEALTH_CALL_FUNCTIONS } from "../HealthFunctionNames";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The parenthesised call form of a health function: `bmi(70, 1.75)`,
@@ -34,6 +35,6 @@ export class HealthCallParselet implements PrefixParselet {
 		}
 		parser.consume("RPAREN");
 
-		builder.emitPluginCall(pluginName, argCount);
+		emitBuiltinPluginCall(builder, pluginName, argCount);
 	}
 }

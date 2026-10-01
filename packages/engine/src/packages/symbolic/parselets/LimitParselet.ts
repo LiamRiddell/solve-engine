@@ -6,6 +6,7 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { SYMBOLIC_LIMIT_FN } from "@solve-js/packages/symbolic/LimitPluginFunction";
 import { readVariableName, emitVariableName, parseBoundExpression, emitBoundExpression } from "@solve-js/packages/symbolic/parselets/VariableArgument";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `limit(expr, variable, point)`, the value `expr` settles towards as
@@ -40,6 +41,6 @@ export class LimitParselet implements PrefixParselet {
 		parser.parseExpression(BindingPower.Lowest, builder);
 		parser.consume("RPAREN");
 
-		builder.emitPluginCall(SYMBOLIC_LIMIT_FN, 3);
+		emitBuiltinPluginCall(builder, SYMBOLIC_LIMIT_FN, 3);
 	}
 }

@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** The currencies `in <year> <currency>` names, by ISO code. */
 export type InYearCurrency = "USD" | "GBP" | "EUR";
@@ -37,6 +38,6 @@ export class InYearMoneyParselet implements InfixParselet {
     builder.emitNumber(year);
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(this.currency);
-    builder.emitPluginCall("inflationToYearInCurrency", 3);
+    emitBuiltinPluginCall(builder, "inflationToYearInCurrency", 3);
   }
 }

@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * A `#hex` colour literal (`#f00`, `#ff0000`, `#ff0000aa`). The core lexer has
@@ -17,6 +18,6 @@ export class HexColourParselet implements PrefixParselet {
 	parse(_parser: Parser, token: Token, builder: BytecodeBuilder): void {
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(token.value);
-		builder.emitPluginCall("colour", 1);
+		emitBuiltinPluginCall(builder, "colour", 1);
 	}
 }

@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `<value> from <encoding>`, the decoding half of the text encodings (issue
@@ -28,6 +29,6 @@ export class FromEncodingParselet implements InfixParselet {
 		const name = (token.value ?? "").replace(/^from\s+/i, "").toLowerCase();
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(name);
-		builder.emitPluginCall("fromEncoding", 2);
+		emitBuiltinPluginCall(builder, "fromEncoding", 2);
 	}
 }

@@ -282,6 +282,13 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"solve(x = (X) * gravity, x)",
 		"$(X) * 1e-3",
 		"(X) * 1e-3 USD",
+		// A range bound with its thousands grouped in a call, and a synchronous
+		// plugin call in a map (FoundBug_groupedRangeBoundInACall,
+		// FoundBug_synchronousPluginCalls).
+		"sum(1,000:X)",
+		"sum(X:1,002)",
+		"map(erf(x), [X])",
+		"map(x + erf(X), 0:2)",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,

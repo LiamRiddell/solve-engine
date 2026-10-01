@@ -3,6 +3,7 @@ import type { Parser } from "@solve-js/parser/Parser";
 import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `"MMXXIV" from roman`, the reverse of `as roman`: the quoted Roman numeral on
@@ -18,6 +19,6 @@ export class FromRomanParselet implements InfixParselet {
 	readonly bindingPower = BindingPower.Conditional;
 
 	parse(_parser: Parser, _left: Token, _token: Token, builder: BytecodeBuilder): void {
-		builder.emitPluginCall("romanFromString", 1);
+		emitBuiltinPluginCall(builder, "romanFromString", 1);
 	}
 }

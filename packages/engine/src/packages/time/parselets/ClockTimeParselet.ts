@@ -7,6 +7,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { tryConsumeZoneReference, consumeZoneList, checkZoneCount, emitNamedZones } from "./shared/ZoneReference";
 import { nextIsOnClause, tryParseOnDate } from "./shared/OnDate";
 import { ZONE_CONVERT_FN, ZONE_CONVERT_AT_FN, CLOCK_TIME_ON_DATE_FN } from "./TimezonePluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `9:00am` / `16:00` / `4pm`, a clock-time-of-day literal, anchored to
@@ -77,14 +78,14 @@ export class ClockTimeParselet implements PrefixParselet {
 
       if (leadingDate) {
         emitNamedZones(builder, targets);
-        builder.emitPluginCall(ZONE_CONVERT_AT_FN, 4 + targets.length * 2);
+        emitBuiltinPluginCall(builder, ZONE_CONVERT_AT_FN, 4 + targets.length * 2);
         return;
       }
 
       if (!nextIsOnClause(parser) && targets.length === 1) {
         builder.emitOpcode(OpCode.PUSH_STRING);
         builder.emitString(targets[0].zoneRef);
-        builder.emitPluginCall(ZONE_CONVERT_FN, 3);
+        emitBuiltinPluginCall(builder, ZONE_CONVERT_FN, 3);
         return;
       }
 
@@ -92,7 +93,7 @@ export class ClockTimeParselet implements PrefixParselet {
       builder.emitString(sourceZoneRef.displayName);
       if (!tryParseOnDate(parser, builder)) builder.emitOpcode(OpCode.DATE_NOW);
       emitNamedZones(builder, targets);
-      builder.emitPluginCall(ZONE_CONVERT_AT_FN, 4 + targets.length * 2);
+      emitBuiltinPluginCall(builder, ZONE_CONVERT_AT_FN, 4 + targets.length * 2);
       return;
     }
 
@@ -103,7 +104,7 @@ export class ClockTimeParselet implements PrefixParselet {
     // as `2026-09-23T15:00` (#692). The date is any expression that gives
     // one, as in the zone forms above.
     if (tryParseOnDate(parser, builder)) {
-      builder.emitPluginCall(CLOCK_TIME_ON_DATE_FN, 2);
+      emitBuiltinPluginCall(builder, CLOCK_TIME_ON_DATE_FN, 2);
       return;
     }
 

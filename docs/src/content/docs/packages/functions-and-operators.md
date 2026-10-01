@@ -453,6 +453,18 @@ function body (`f(m) = m * gravity`), a map or reduce transform and a plot take
 the call. This is how the constants package attaches `gravity`'s unit. The
 option's type is `PluginCallOptions`, exported from `solve-engine/parser`.
 
+Every built-in package whose handler answers at once emits its calls this way:
+the text functions (`f(s) = upper(s)`), the hashes (`sha256`), colours, image
+and screen sizes, IP addresses, statistics, dates and time zones, payroll and
+the rest. Two kinds keep the mark on purpose. A lookup that waits for the
+network (weather, stocks, crypto, the knowledge lookups, an exchange rate on a
+past date) cannot answer in a function body, which is worked out at once. A
+call that reads other lines of the note (`prev`, `line 1`, the totals of a
+section, a tag or a table column, goal seek, what-if) does not wait, but a held
+expression is run away from the line that wrote it, where there is no document
+to read, so it is refused there too. Leave the option off for either kind in
+your own package.
+
 The contract is yours to keep: a handler marked `synchronous` must return a
 `Value`, never a promise. One that breaks it is caught as the line runs: on a
 line of its own the answer waits for the promise as any lookup's does, and

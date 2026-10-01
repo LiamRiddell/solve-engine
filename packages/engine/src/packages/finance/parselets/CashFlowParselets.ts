@@ -4,6 +4,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The cash-flow appraisal forms: `npv of <flows> at <rate>`, `irr of <flows>`
@@ -57,6 +58,6 @@ export class CashFlowParselet implements PrefixParselet {
 			argCount++;
 		}
 
-		builder.emitPluginCall(this.pluginName, argCount);
+		emitBuiltinPluginCall(builder, this.pluginName, argCount);
 	}
 }
