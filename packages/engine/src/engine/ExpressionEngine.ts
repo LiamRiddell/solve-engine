@@ -3020,6 +3020,50 @@ export class ExpressionEngine {
         return this.accumulatorNames.has(name);
     }
 
+    /**
+     * The names the document's lines define that this engine still holds: its
+     * variables, names of several words among them (`hourly rate`), and its
+     * functions (`f(x) = x * 2` gives `f`).
+     *
+     * The same after whichever pass ran: `parseDocument`, `evaluateLines`,
+     * `evaluateDocument`, a live editor's incremental pass, or `evaluateLine`
+     * on a numbered line. A name only read (`x * 2` where nothing defines `x`)
+     * is not among them, nor one set outside a document
+     * (`evaluateExpression(":x = 5")`), nor one whose defining line was edited
+     * away or deleted. {@link clear} and the next document pass empty it.
+     *
+     * The language service's default `variableNameSource` reads this.
+     *
+     * @returns Each name once, in the order first defined. A fresh iterator on
+     * every call over the engine's own table rather than a copy, so asking on
+     * every keystroke allocates no list.
+     */
+    *documentVariableNames(): IterableIterator<string> {
+        for (const name of this.documentNames) {
+            // A name a line wrote that no longer holds a value or a function
+            // (a restore took it back) is not offered: the VM is asked, so the
+            // answer is what a reader of the name would find.
+            if (this.holdsDocumentName(name)) yield name;
+        }
+    }
+
+    /**
+     * Whether `name` is one of {@link documentVariableNames}, answered without
+     * walking them: the language service asks it of every line holding a lone
+     * word.
+     *
+     * @param name - The name as written, case and spaces included.
+     * @returns True when a document line defines it and the engine still holds it.
+     */
+    isDocumentVariableName(name: string): boolean {
+        return this.documentNames.has(name) && this.holdsDocumentName(name);
+    }
+
+    /** Whether the VM still binds `name` as a value or a function. */
+    private holdsDocumentName(name: string): boolean {
+        return this.vm.getVar(name) !== undefined || this.vm.hasUserFunction(name);
+    }
+
     /** The names of every user-defined unit in scope, for detecting a removal. */
     /**
      * The names of the units the document in progress defines, for the evaluator to tell whether a pass removed one.
@@ -3961,6 +4005,7 @@ export class ExpressionEngine {
             if (stillDefined.has(name)) continue;
             forgotten.push(name);
             this.vm.deleteVar(name);
+            this.documentNames.delete(name);
             // A name can be a function as easily as a variable, and a function
             // whose defining line was edited away stayed callable until now.
             if (this.vm.hasUserFunction(name)) this.vm.deleteUserFunction(name);
@@ -8403,6 +8448,9 @@ export class ExpressionEngine {
             // checkpoint does not have to widen its format to carry them, and a
             // restore cannot silently drop the edges a tagged line had.
             this.registerLineWithTags(e.line, e.expression, e.reads, e.writeVar ? [e.writeVar] : []);
+            // The line's name was the document's on the engine that evaluated
+            // it, so the restored engine offers it as one too.
+            if (e.line >= 1 && e.writeVar) this.documentNames.add(e.writeVar);
         }
         for (const { expression, program } of snapshot.bytecodeCache) {
             const restored = restoreBytecode(program, link);

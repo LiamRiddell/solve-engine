@@ -36,6 +36,61 @@ A package author's side of this is on [highlighting and
 completions](/packages/highlighting-and-completions/), including what
 `normalizeForHighlighting` costs.
 
+### The document's own names
+
+A note defines names as it goes: `rent = 1200` makes `rent` a variable, `hourly
+rate = $50` a name of two words, and `f(x) = x * 2` a function called `f`. The
+language service offers those names as completions, and it uses them for one
+highlighting decision: a line holding a single bare word is coloured only when
+that word is a name the document defines, since otherwise any word of prose
+would look like code.
+
+By default the service asks its engine, through `engine.documentVariableNames()`,
+which lists the names the document's lines define and the engine still holds.
+It is the same list whichever way the host ran the note: `parseDocument`,
+`evaluateLines`, `evaluateDocument`, or a live incremental evaluator. So after
+the engine has run `rent = 1200` and `rate = 5`, typing `re` offers `rent` and a
+line holding only `rent` is highlighted.
+
+| what the host did | `re` offers |
+| --- | --- |
+| `parseDocument("rent = 1200\nrate = 5\nre")` | `rent` |
+| `evaluateDocument(engine, "rent = 1200\nrate = 5\nre")` | `rent` |
+| `evaluateExpression("rent = 1200")` | nothing |
+
+What is not offered, and why:
+
+- a name a line only reads (`rent * missing` does not make `missing` a name),
+  including the half-typed word on the line being edited;
+- a name set outside a document, with `evaluateExpression`, since that belongs
+  to the host and not to the note;
+- a name whose defining line was edited away or deleted, once the evaluator has
+  run the edit;
+- anything at all after `engine.clear()`, or from the previous note once the
+  next document pass starts.
+
+A host that highlights with a separate engine, one that never runs the note,
+passes `variableNameSource` so the service reads the evaluating engine's names
+instead:
+
+```ts
+import { createEngine } from "solve-engine";
+import { LanguageService } from "solve-engine/language";
+
+const evaluatingEngine = createEngine(); // runs the note
+const highlightEngine = createEngine(); // only colours lines
+
+const service = new LanguageService(highlightEngine, {
+  variableNameSource: () => evaluatingEngine.documentVariableNames(),
+});
+```
+
+The function is called on every completion and on every line holding a lone
+word, so it should hand back names it already holds rather than build a list
+each time. `documentVariableNames()` reads the engine's own table without
+copying it, and the default lone-word check asks the engine about the one word,
+`engine.isDocumentVariableName(word)`, rather than walking every name.
+
 ## Highlighting
 
 Every token carries a category such as number, unit, function or operator. Map

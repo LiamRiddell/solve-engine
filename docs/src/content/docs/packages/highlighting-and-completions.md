@@ -90,6 +90,14 @@ the units it defines (`1 sprint = 2 weeks` makes `spr` offer `sprint`). An edito
 integration calls those two methods and never needs to know which package a
 colour or a suggestion came from.
 
+The document's own names come from the engine, `engine.documentVariableNames()`,
+which every document pass fills alike (`parseDocument`, `evaluateLines`,
+`evaluateDocument`, a live evaluator), so a package has nothing to add for them:
+a name a line defines with your syntax is offered once the engine has run that
+line. A host that highlights through a separate engine passes
+`variableNameSource`; [editor integration](/guide/editor-integration/#the-documents-own-names)
+covers that, and what is deliberately left out.
+
 ## One engine's categories
 
 The categories belong to the engine the package is registered on. An editor
