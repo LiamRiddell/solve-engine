@@ -84,6 +84,20 @@ large) and the `zone` when one is written, then the `prefix` and the `text`
 the answer shows. An IPv6 address has no `number` reading, so `number` is `0`
 and no `nonFinite` tag is set.
 
+A video timecode crosses as its frame count: `number` is the count, `unit` is
+`frames`, and `timecodeFps` holds the frame rate, so a host can rebuild the
+timecode without reading the engine's own spelling of its unit, which is
+internal and never part of the shape.
+
+```ts
+import { createEngine } from "solve-engine";
+import { serializeValue } from "solve-engine/worker";
+
+const engine = createEngine();
+serializeValue(engine.evaluateExpression("01:02:03:04 at 30 fps"), engine.getFormattingSettings());
+// { type: 6, text: "= 01:02:03:04 at 30 fps", number: 111694, unit: "frames", timecodeFps: 30 }
+```
+
 `serializeParsingResult(result, settings?)` does the same for a whole document,
 and `serializeParsedLine` for one line. Each line keeps its text, position and
 `error` message, and a line that failed keeps its `errorCode` and `errorSpan`

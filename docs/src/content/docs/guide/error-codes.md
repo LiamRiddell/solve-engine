@@ -630,6 +630,7 @@ In the package as `ERROR_CODE_CATALOGUES.DateFormErrorCodes`.
 | `DATE_FIELD_EXPECTED_DATE` | as a value | A question asked of a date (`day of the week on`, `week number of`) given something that is not a date. |
 | `DATE_OUT_OF_RANGE` | as a value | A timestamp outside the dates the engine can hold, about 273,000 years either side of 1970. |
 | `AS_ISO8601_NEEDS_DATE` | as a value | `as iso8601` given something that is not a date, a Unix timestamp or ISO 8601 text. |
+| `AS_ISO8601_DURATION_TOO_LONG` | as a value | `as iso8601` given a length of time too large for its parts to be written with exact digits, as in `1e300 seconds as iso8601`. |
 | `INVALID_ISO8601_STRING` | as a value | Text given as an ISO 8601 date or time that does not read as one. |
 | `INVALID_WEEKDAY` | as a value | A weekday given as a number that is not a day of the week. |
 | `MISSING_WEEKDAY` | thrown | `next` or `last` with no day of the week after it. |
@@ -1068,6 +1069,7 @@ In the package as `ERROR_CODE_CATALOGUES.TimeFormErrorCodes`.
 | `TIMECODE_EXPECTED_FPS` | thrown | A video timecode or frame count without its frame rate, as in `at 30 fps`. |
 | `TIMECODE_EXPECTED_FRAMES` | thrown | A timecode followed by `in` and something other than `frames`. |
 | `TIMECODE_FRAME_OUT_OF_RANGE` | thrown | A timecode whose frame number is not below the frame rate. |
+| `ISO_DURATION_MALFORMED` | either | An identifier shaped like an ISO 8601 duration that breaks its grammar, as `P1H` (a time part before the `T`) or `P1D1D`. The message says which rule it breaks. |
 
 ### TimezoneErrorCodes
 

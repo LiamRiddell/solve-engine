@@ -418,6 +418,9 @@ export function accelerationSize(unit: string): number | undefined {
  * @returns The spelling to show.
  */
 export function unitForMessage(unit: string): string {
+  // A timecode's unit carries its rate (`timecode@30`), an internal spelling (#759).
+  const timecode = /^timecode@(.+)$/.exec(unit);
+  if (timecode !== null) return `timecode at ${timecode[1]} fps`;
   return unit.split("/").map((part) => (part === "mps2" ? "m/s²" : part)).join("/");
 }
 

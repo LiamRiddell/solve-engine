@@ -2,6 +2,5 @@
 	"$comment": "Names scripts/check-keyword-docs.mjs does not require a syntax page to mention, each with the reason. An entry fails as stale once a page mentions its name or the engine stops reading it, so remove it then.",
 	"current timestamp": "documented on syntax/timestamps.md, which the open dates batch (#832) adds; remove when it merges",
 	"to date": "documented on syntax/timestamps.md, which the open dates batch (#832) adds; remove when it merges",
-	"to timestamp": "documented on syntax/timestamps.md, which the open dates batch (#832) adds; remove when it merges",
-	"iso8601": "documented on syntax/timestamps.md (as iso8601), which the open dates batch (#832) adds; remove when it merges"
+	"to timestamp": "documented on syntax/timestamps.md, which the open dates batch (#832) adds; remove when it merges"
 }

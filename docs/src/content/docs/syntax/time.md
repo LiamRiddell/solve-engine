@@ -111,6 +111,79 @@ $15/hr // $15.00/hr
 
 `m` is still metres outside a compact duration, as above.
 
+### ISO 8601 durations
+
+Software writes a length of time in a fixed form set by the ISO 8601 standard,
+and that is what an API response, a log line or a calendar file hands you: a
+`P` (for period), the date parts, then a `T` (for time) and the time parts, each
+a number and a letter. `PT1H30M` is one hour and thirty minutes, `P1D` is one
+day. The letters are `Y` years, `M` months, `W` weeks and `D` days before the
+`T`, and `H` hours, `M` minutes and `S` seconds after it, which is why the `T`
+is there: `M` is months on one side of it and minutes on the other. Pasted into
+a line, it reads as the length it writes, the same quantity the compact spelling
+above builds.
+
+```solve
+PT1H30M // 90 minutes
+P1D // 1 day
+P2W // 2 weeks
+PT0.5S // 0.50 seconds
+PT1H30M in minutes // 90 minutes
+```
+
+The last part written may carry a fraction, with a point or a comma as the
+standard allows (`PT0,5H` is half an hour). Several parts are added up and held
+in the smallest unit written, as `1h30m` is, and the parts must run from the
+largest to the smallest, each once.
+
+Added to or taken from a date, the parts are applied one at a time, largest
+first, which is what the standard means and what calendar software does. A
+month moves the month on the calendar (January 31 plus a month is February 28,
+the last day the month has) and a day then moves the day, so the answer is the
+date a person counting on a calendar would reach.
+
+```solve
+2026-01-31 + P1M1D // Sunday, March 1, 2026
+2026-01-01 + P1Y2M10DT2H30M // Thursday, March 11, 2027, 2:30:00 AM
+2026-03-31 - P1M // Saturday, February 28, 2026
+```
+
+`as iso8601` writes a length of time back in the same form, so a result can be
+pasted into a form or a file that expects one. The parts follow the unit the
+value is held in, so the text reads back in as the same length: years as years,
+months as months, days and weeks as days, and anything shorter as hours,
+minutes and seconds (26 hours stays `PT26H`, since a calendar day is not always
+24 hours long).
+
+```solve
+90 minutes as iso8601 // PT1H30M
+1.5 days as iso8601 // P1DT12H
+14 months as iso8601 // P14M
+26 hours as iso8601 // PT26H
+```
+
+A spelling that is shaped like a duration but breaks the rules is refused by
+name rather than read as a name nobody defined. `P1H` puts a time part before
+the `T`; `P1D1D` repeats a part.
+
+```solve-doc
+P1H // ERROR: P1H is not an ISO 8601 duration: H is a time part, and time parts come after a T, as in PT1H.
+P1D1D // ERROR: P1D1D is not an ISO 8601 duration: 1D is out of place: the parts run from the largest to the smallest, each once.
+```
+
+The boundary: only the upper-case letters the standard uses are read, and only
+when the whole name matches, so `pt1h30m` stays a name, and so do `P`, `PT` and
+`P1`, which spell no part. A variable you named with a duration's spelling, such
+as `P1D`, is read as the duration instead. Years and months keep the lengths the
+unit table gives them when the duration is not added straight to a date: `P1M in
+days` is 30 days, as `1 month in days` is, and a duration held in a variable is
+one length at those sizes, so add it to the date directly to move by calendar
+months.
+
+```solve
+P1M in days // 30 days
+```
+
 ## Intervals
 
 ```solve
@@ -140,19 +213,51 @@ Video is a run of still frames, shown at a frame rate such as 30 frames per
 second (`30 fps`). A timecode names one frame by where it falls: hours,
 minutes, seconds and then the frame within that second, so `01:02:03:04` at
 30 fps is the fifth frame of the second at one hour, two minutes and three
-seconds (frames count from zero). Editing software and edit lists work in
-frame counts, which is why a timecode is converted to one.
+seconds (frames count from zero). A timecode answers in the notation it was
+written in, with its rate, so the answer can be read back in as the same
+timecode.
 
 ```solve
 30 fps // 30.00 frames/s
-01:02:03:04 at 30 fps in frames // 111,694.00 frames
-111694 frames at 30 fps // 01:02:03:04
+01:02:03:04 at 30 fps // 01:02:03:04 at 30 fps
+01:02:03:04 @ 25 fps // 01:02:03:04 at 25 fps
 ```
 
-A timecode on its own is shown as its frame count labelled with its rate, not yet
-in the notation it was written in. The count is plain timecode: the drop-frame
-form broadcast video uses at 29.97 fps is not implemented.
+Adding a number moves a timecode on by that many frames, and the seconds and
+minutes carry as a clock's do. A length of time is added at the timecode's own
+rate, and the difference between two timecodes is the number of frames between
+them.
 
 ```solve
-01:02:03:04 at 30 fps // 111,694.00 timecode@30
+01:02:03:04 at 30 fps + 10 // 01:02:03:14 at 30 fps
+00:00:00:29 at 30 fps + 1 frames // 00:00:01:00 at 30 fps
+01:02:03:04 at 30 fps + 2 seconds // 01:02:05:04 at 30 fps
+01:02:03:04 at 30 fps - 01:02:03:00 at 30 fps // 4.00 frames
 ```
+
+Editing software and edit lists work in frame counts, so a timecode converts to
+one with `in frames`, and a frame count at a rate is the timecode it reaches. It
+also converts to a length of time: its frames over its rate.
+
+```solve
+01:02:03:04 at 30 fps in frames // 111,694.00 frames
+111694 frames at 30 fps // 01:02:03:04 at 30 fps
+00:00:01:15 at 30 fps in seconds // 1.50 seconds
+01:02:03:04 at 30 fps as timespan // 1 hour 2 minutes 3.133 seconds
+```
+
+A timecode moved back past zero is shown with a minus sign, and a count that is
+not a whole number of frames (half a second at 25 fps is twelve and a half
+frames) is shown as the count, since no frame field could hold it.
+
+```solve
+00:00:00:00 at 30 fps - 10 // -00:00:00:10 at 30 fps
+00:00:00:00 at 25 fps + 0.5 seconds // 12.5 frames at 25 fps
+```
+
+The boundary: two timecodes at different rates are not combined, since a frame
+at one rate is not a frame at the other, and a timecode is multiplied or divided
+only by a plain number. The count is plain timecode: the drop-frame form
+broadcast video uses at 29.97 fps is not implemented, so at that rate the fields
+count thirty frames a second and the length in seconds is the real time those
+frames take.

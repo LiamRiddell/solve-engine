@@ -81,9 +81,16 @@ export interface SerializedWorkerValue {
 	/**
 	 * Unit annotation for unit-of-measurement and non-decimal-base values, when
 	 * present. Never set for an {@link ValueType.Error}: its message is in
-	 * {@link text}, and its code in {@link errorCode}.
+	 * {@link text}, and its code in {@link errorCode}. A timecode crosses as
+	 * `frames`, its count, with the rate in {@link timecodeFps}.
 	 */
 	unit?: string;
+	/**
+	 * Set only for a video timecode (`01:02:03:04 at 30 fps`): its frame rate.
+	 * {@link number} is then the frame count and {@link unit} is `frames`, so a
+	 * host never sees the engine's internal unit name for a timecode (#759).
+	 */
+	timecodeFps?: number;
 	/**
 	 * The name a quantity is shown under when the reader wrote a word for its
 	 * unit that is not the unit's own (`Meile`, `sprints`), and how many of

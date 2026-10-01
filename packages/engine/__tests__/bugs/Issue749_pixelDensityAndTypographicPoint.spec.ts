@@ -88,7 +88,7 @@ describe("the density is refused by name when it is not one", () => {
 describe("at keeps its other meanings", () => {
 	test.each([
 		["30 hours at $30/hour", "$900.00"],
-		["01:02:03:04 at 30 fps", "111,694.00 timecode@30"],
+		["01:02:03:04 at 30 fps", "01:02:03:04 at 30 fps"],
 		["1.5rem at 20px base", "30.00 px"],
 		["250 miles at 60 mph", "4.17 h"],
 		["$1,000 after 3 years at 7%", "$1,225.04"],

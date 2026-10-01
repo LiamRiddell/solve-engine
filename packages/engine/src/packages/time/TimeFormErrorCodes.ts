@@ -33,4 +33,6 @@ export const TimeFormErrorCodes = {
 	TIMECODE_EXPECTED_FRAMES: "TIMECODE_EXPECTED_FRAMES",
 	/** A timecode whose frame number is not below the frame rate. */
 	TIMECODE_FRAME_OUT_OF_RANGE: "TIMECODE_FRAME_OUT_OF_RANGE",
+	/** An identifier shaped like an ISO 8601 duration that breaks its grammar, as `P1H` (a time part before the `T`) or `P1D1D`. The message says which rule it breaks. */
+	ISO_DURATION_MALFORMED: "ISO_DURATION_MALFORMED",
 } as const;
