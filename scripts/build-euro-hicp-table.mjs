@@ -196,6 +196,25 @@ export function parseEcbCsv(text) {
 }
 
 /**
+ * The CSV a fetch is recorded as: the three columns the parser reads, written
+ * from the checked observations rather than from the bytes the network sent,
+ * so a saved file holds only what the parser accepted (a series key, a month
+ * and an index to {@link DECIMALS} places, each row) and reads back to the
+ * same observations.
+ *
+ * @param observations - Checked monthly observations, from the parser.
+ * @returns The CSV text, with a trailing newline.
+ */
+export function toEcbCsv(observations) {
+	const lines = [REQUIRED_COLUMNS.join(",")];
+	for (const o of checkObservations(observations)) {
+		if (typeof o.value !== "number" || !Number.isFinite(o.value) || o.value <= 0) throw refuse("CPI_BAD_INDEX", `${monthKey(o.year, o.month)} has no positive index to record`);
+		lines.push(`${SERIES_KEY},${monthKey(o.year, o.month)},${o.value.toFixed(DECIMALS)}`);
+	}
+	return `${lines.join("\n")}\n`;
+}
+
+/**
  * The annual averages, one per year from 1996 to the last in the data.
  *
  * @param observations - Checked monthly observations, from the parser.
@@ -370,14 +389,14 @@ export async function build(args) {
 	let averages;
 	let meta;
 	if (option(args, "from-ecb")) {
-		const text = await fetchEcb();
-		averages = annualAverages(parseEcbCsv(text));
+		const observations = parseEcbCsv(await fetchEcb());
+		averages = annualAverages(observations);
 		meta = { source: "the ECB data API (data-api.ecb.europa.eu)", retrieved: typeof given === "string" ? given : new Date().toISOString().slice(0, 10) };
 		const saveCsv = option(args, "save-csv");
 		if (typeof saveCsv === "string") {
 			const file = path.resolve(saveCsv);
 			const recorded = { source: `${meta.source}, recorded in ${path.relative(REPO, file).split(path.sep).join("/")}`, retrieved: meta.retrieved };
-			fs.writeFileSync(file, text.replace(/\r\n/g, "\n"));
+			fs.writeFileSync(file, toEcbCsv(observations));
 			fs.writeFileSync(sourceFileFor(file), `${JSON.stringify(recorded, null, "\t")}\n`);
 		}
 	} else {
