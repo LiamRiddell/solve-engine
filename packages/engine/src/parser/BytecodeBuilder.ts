@@ -167,6 +167,15 @@ export interface PluginCallOptions {
 	 * does return a promise breaks this contract.
 	 */
 	readonly synchronous?: boolean;
+	/**
+	 * The handler reads other lines of the document (a line reference, `prev`,
+	 * a total above, a tag or a table column). Such a call still marks the
+	 * program, and a function body that makes one is refused for that reason
+	 * by name (`FUNCTION_BODY_READS_LINES`), rather than as a call that waits:
+	 * a body is run away from the line that wrote it, with no lines to read.
+	 * Ignored alongside `synchronous`, which a call that reads lines never is.
+	 */
+	readonly readsDocument?: boolean;
 }
 
 /**
@@ -186,6 +195,8 @@ export class BytecodeBuilder {
 	/** Value (or {@link NEGATIVE_ZERO_KEY}) to its slot in `numbers`, so a repeated literal is emitted once. */
 	private numberIndex = new Map<number | string, number>();
 	private _hasAsync = false;
+	/** Whether a plugin call emitted since the last reset reads other lines; see PluginCallOptions.readsDocument. */
+	private _readsDocument = false;
 	private userFunctionBodies: UserFunctionDef[] = [];
 	private anonymousBodies: AnonymousBodyDef[] = [];
 	/** Where each plugin call's index bytes start; see BytecodeProgram.pluginCalls. */
@@ -264,6 +275,16 @@ export class BytecodeBuilder {
 		// emitOpcode marked the program; a synchronous call puts the mark back
 		// as it was, so an earlier asynchronous call on the line still counts.
 		if (options?.synchronous === true) this._hasAsync = wasAsync;
+		else if (options?.readsDocument === true) this._readsDocument = true;
+	}
+
+	/**
+	 * Whether a call emitted into this builder since its last reset reads other
+	 * lines of the document ({@link PluginCallOptions.readsDocument}), so a held
+	 * expression can say why it is refused.
+	 */
+	get readsDocument(): boolean {
+		return this._readsDocument;
 	}
 
 	/** Emit an {@link OpCode} instruction. */
@@ -493,6 +514,7 @@ export class BytecodeBuilder {
 			this.stringIndex.clear();
 		}
 		this._hasAsync = false;
+		this._readsDocument = false;
 		if (this.userFunctionBodies.length > 0) this.userFunctionBodies.length = 0;
 		if (this.anonymousBodies.length > 0) this.anonymousBodies.length = 0;
 		if (this.pluginCallNames.length > 0) {

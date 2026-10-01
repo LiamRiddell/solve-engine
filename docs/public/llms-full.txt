@@ -2148,6 +2148,13 @@ sqrt(2) * sqrt(2) == 2 // false
 ```
 
 ```
+map(x px at 300 dpi, 1:2) // [0.00333 in, 0.00667 in]
+map(x px at 300 dpi, 1:4) // [0.00333 in, 0.00667 in, 0.01 in, 0.0133 in]
+[0.001, 0.123] // [0.001, 0.123]
+[0.5, 0.25] // [0.50, 0.25]
+```
+
+```
 1e-320 / 2 // 5e-321
 1e-320 / 1e10 // 0
 1e-320 km / 1e10 // 0.00 km
@@ -3024,6 +3031,13 @@ Groceries: 45 // 45
 ```
 
 ```
+Total: total(1000:1002) // 3,003
+Total: total(1,000:1,002) // 3,003
+Cost: total(10:12) // 33
+Squares: sum(x^2, 1:3) // 14
+```
+
+```
 Week 12: 75 // 75
 Item 2: 45 // 45
 Weeks 1-2: 40 // 40
@@ -3225,6 +3239,11 @@ max(1,000, 2) // 2
 ```
 
 ```
+sum(1,1:3) // 3
+sum(1,12:30) // 19
+```
+
+```
 map(10*x, [1,2,3]) // [10, 20, 30]
 map(x^2, [4, 5, 6]) // [16, 25, 36]
 ```
@@ -3275,6 +3294,13 @@ sum(x, 1:3) // 6
 prod(9:30, 10:15) // ERROR: A date or time cannot be multiplied: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.
 sum(x, [9:30, 10:15]) // ERROR: A date or time cannot be a cell of a list: each cell holds one number.
 sum(x, [1 hour, 30 min]) // 1.50 hours
+```
+
+```
+(one document)
+sum(1,0000:1) // ERROR: "1,0000" is not a number: a grouping comma needs exactly three digits after it. To give two values, put a space after the comma: 1, 0000.
+sum(12,3456:1) // ERROR: "12,3456" is not a number: a grouping comma needs exactly three digits after it. To give two values, put a space after the comma: 12, 3456.
+sum(1, 0000:1) // 2
 ```
 
 ```
@@ -6711,6 +6737,23 @@ printed(p) = p at 300 dpi in mm
 printed(4000px) // 338.67 mm
 ```
 
+```
+(one document)
+discount(x) = 15% of x
+discount(200) // 30
+day(d) = weekday of d
+day(2026-12-25) // Friday
+far(d) = d in km
+far(5000 m) // 5.00 km
+```
+
+```
+(one document)
+bump(x, v) = x + v
+10
+bump(2, prev) // 12
+```
+
 ## vectors-and-matrices
 
 https://liamriddell.github.io/solve-engine/syntax/vectors-and-matrices/
@@ -6835,6 +6878,9 @@ what day is it on 2026-12-25 // Friday
 what day is it on 25 december // Friday
 day of the week on 1 January 2000 // Saturday
 weekday on 2026-12-25 // Friday
+weekday of 2026-12-25 // Friday
+day of the week of 1 January 2000 // Saturday
+day of week of 2026-12-25 // Friday
 ```
 
 ```
@@ -6867,6 +6913,13 @@ what week will it be in 2 weeks // 13
 2026-12-25 as weekday // Friday
 2026-12-25 as month // December
 2026-12-25 as week // 52
+```
+
+```
+(one document)
+day(d) = weekday of d
+day(2026-10-01) // Thursday
+day(2026-12-25) // Friday
 ```
 
 ## what-if

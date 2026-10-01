@@ -94,6 +94,34 @@ export const SYNCHRONOUS_PLUGIN_FUNCTIONS: ReadonlySet<string> = new Set([
 	"aspectRatio", "atPixelDensity", "atRootFontSize", "resizeDimensions",
 ]);
 
+/**
+ * The built-in plugin functions that read other lines of the document: the
+ * line references, `prev` and the totals above or over a section, the table
+ * columns and lookups, the tag aggregates, goal seek, what-if and scenarios.
+ * Their calls carry `readsDocument`, so a function body that makes one is
+ * refused as reading lines (`FUNCTION_BODY_READS_LINES`), not as waiting for
+ * data: `f(x) = x + prev` waits for nothing.
+ */
+export const DOCUMENT_READING_PLUGIN_FUNCTIONS: ReadonlySet<string> = new Set([
+	// lines
+	"prev", "lineRef", "sumRange", "averageRange", "totalAbove", "averageAbove", "countAbove", "minAbove",
+	"maxAbove", "medianAbove", "columnTotal", "sectionSum", "sectionAverage", "sectionCount",
+	// goal seek
+	"goalseek",
+	// tables
+	"TABLE_COLUMN_SUM", "TABLE_COLUMN_AVERAGE", "TABLE_COLUMN_MIN", "TABLE_COLUMN_MAX", "TABLE_COLUMN_COUNT",
+	"TABLE_COLUMN_MEDIAN", "TABLE_COLUMN_STDEV", "TABLE_COLUMN_SAMPLE_STDEV", "TABLE_COLUMN_VARIANCE",
+	"TABLE_COLUMN_SAMPLE_VARIANCE", "TABLE_COLUMN_SPREAD", "TABLE_COLUMN_MODE", "TABLE_ROW_LOOKUP",
+	"TABLE_BAND_LOOKUP", "TABLE_THROUGH_BANDS",
+	// tags
+	"sum", "average", "count", "tagBreakdown",
+	// what-if
+	"whatif", "sweep", "scenariodeclare", "scenarioread",
+]);
+
+/** The options of a call that reads other lines of the document. */
+const READS_DOCUMENT: PluginCallOptions = Object.freeze({ readsDocument: true });
+
 /** The options of a call that answers at once. */
 const SYNCHRONOUS: PluginCallOptions = Object.freeze({ synchronous: true });
 
@@ -103,13 +131,15 @@ const MAY_WAIT: PluginCallOptions = Object.freeze({});
 /**
  * The options a built-in call site passes to `emitPluginCall` for the plugin
  * function it names: synchronous when the name is on
- * {@link SYNCHRONOUS_PLUGIN_FUNCTIONS}, otherwise none.
+ * {@link SYNCHRONOUS_PLUGIN_FUNCTIONS}, reading the document when it is on
+ * {@link DOCUMENT_READING_PLUGIN_FUNCTIONS}, otherwise none.
  *
  * @param name - The plugin function's registered name.
- * @returns `{ synchronous: true }`, or `{}`.
+ * @returns `{ synchronous: true }`, `{ readsDocument: true }`, or `{}`.
  */
 export function pluginCallOptions(name: string): PluginCallOptions {
-	return SYNCHRONOUS_PLUGIN_FUNCTIONS.has(name) ? SYNCHRONOUS : MAY_WAIT;
+	if (SYNCHRONOUS_PLUGIN_FUNCTIONS.has(name)) return SYNCHRONOUS;
+	return DOCUMENT_READING_PLUGIN_FUNCTIONS.has(name) ? READS_DOCUMENT : MAY_WAIT;
 }
 
 /**

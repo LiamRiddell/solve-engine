@@ -65,6 +65,8 @@ export const CoreErrorCodes = {
   USER_FUNCTION_NO_PARAMS: "USER_FUNCTION_NO_PARAMS",
   /** A function definition whose body reaches live data (weather, stocks, a currency rate). Refused when it is defined, since a function body must be synchronous. */
   FUNCTION_BODY_MUST_BE_SYNCHRONOUS: "FUNCTION_BODY_MUST_BE_SYNCHRONOUS",
+  /** A function definition whose body reads other lines (`f(x) = x + prev`, `x + line 1`, a total above, a tag or a table column). Refused when it is defined, since a body runs wherever it is called, with no document lines to read; the value is passed in as an argument instead. */
+  FUNCTION_BODY_READS_LINES: "FUNCTION_BODY_READS_LINES",
   /** One line defining more functions than a compiled program can index. A safety limit, of the same kind as `TOO_MANY_NUMERIC_CONSTANTS`. */
   TOO_MANY_FUNCTION_DEFINITIONS: "TOO_MANY_FUNCTION_DEFINITIONS",
   /** One line with more `map` or `reduce` bodies than a compiled program can index. A safety limit, of the same kind as `TOO_MANY_FUNCTION_DEFINITIONS`. */
@@ -496,6 +498,8 @@ export const CoreErrorCodes = {
   NON_INTEGER_RANGE_BOUND: "NON_INTEGER_RANGE_BOUND",
   /** A range whose first bound is above its second (`5:1`). The message names each bound as written, with the number it came to, and suggests the other order. */
   DESCENDING_RANGE: "DESCENDING_RANGE",
+  /** A number in a call written like a grouped range bound whose group is not three digits (`sum(1,0000:1)`, `sum(1,00:1)`): refused by the lexer, since it is neither one bound nor plainly two arguments. The message says a space after the comma gives two. */
+  RANGE_BOUND_GROUP_MALFORMED: "RANGE_BOUND_GROUP_MALFORMED",
   /** A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. */
   COLLECTION_TOO_LARGE: "COLLECTION_TOO_LARGE",
   /** A list cell that is not a number or a quantity: a list inside a list, text, a date. */
