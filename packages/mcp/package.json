@@ -27,9 +27,7 @@
     "typecheck": "node ../../node_modules/typescript7/bin/tsc --noEmit --skipLibCheck -p tsconfig.json"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.31.0",
-    "solve-engine": "^2.41.0",
-    "zod": "4.6.5"
+    "solve-engine": "^2.41.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.1",

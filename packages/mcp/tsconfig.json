@@ -3,7 +3,7 @@
 	// The engine is read from its source, not its build, so this runs before
 	// `npm run build`, as the engine's and the command's checks do. The build
 	// uses tsconfig.build.json, which has none of these paths, and keeps the
-	// engine and the SDK external.
+	// engine external.
 	"compilerOptions": {
 		"target": "ES2022",
 		"module": "ESNext",

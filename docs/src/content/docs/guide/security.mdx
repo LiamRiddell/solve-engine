@@ -129,8 +129,9 @@ cached value another call left; and its engines are built without
 `solve-global-variables`, whose `global :name` is the one form that reaches a
 store shared across engines. An input the engine refuses as a whole, such as a
 document past its line limit, costs that call a coded refusal and leaves the
-next call unaffected. The server depends on the official MCP SDK, which is why
-it is a package of its own: the engine's single runtime dependency, below, is
+next call unaffected. The server depends on the engine and nothing else: it
+answers the protocol's messages itself rather than through an SDK, so it adds
+no tree of its own, and the engine's single runtime dependency, below, is
 unchanged.
 
 That is also why it runs unchanged in Node, in a browser and in a worker: there

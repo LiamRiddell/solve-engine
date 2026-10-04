@@ -3,9 +3,9 @@
  * input and output, the way an AI tool does.
  *
  * The server's spec (`__tests__/bugs/Issue774_mcpServer.spec.ts`) drives the
- * tools in-process and through the SDK's in-memory transport, so it cannot see
+ * tools in-process and through the protocol handler directly, so it cannot see
  * what only goes wrong once the server is bundled and started by Node: the
- * shebang, the engine and SDK imports resolving, the newline-delimited framing
+ * shebang, the engine import resolving, the newline-delimited framing
  * on the real streams, a stray line on standard output corrupting the
  * protocol, and the process ending when the client closes its end. This is
  * that half, after `build` in `npm run verify`. Nothing here reaches the
@@ -44,11 +44,12 @@ if (!fs.existsSync(bin)) {
 	process.exit(1);
 }
 
-check("the bundle starts with its shebang and imports the engine and the SDK rather than carrying them", () => {
+check("the bundle starts with its shebang and imports the engine, and nothing else, rather than carrying it", () => {
 	const text = fs.readFileSync(bin, "utf8");
 	if (!text.startsWith("#!/usr/bin/env node\n")) throw new Error("no shebang on the first line");
 	if (!/from "solve-engine"/.test(text)) throw new Error('no import from "solve-engine"');
-	if (!/from "@modelcontextprotocol\/sdk\//.test(text)) throw new Error("no import from the SDK");
+	const others = [...text.matchAll(/(?:from|import)\s*\(?\s*"([^"]+)"/g)].map((m) => m[1]).filter((name) => !/^solve-engine(\/|$)/.test(name));
+	if (others.length > 0) throw new Error(`imports beyond the engine: ${[...new Set(others)].join(", ")}`);
 	if (text.length > 100_000) throw new Error(`${text.length} characters: a dependency was bundled in`);
 });
 

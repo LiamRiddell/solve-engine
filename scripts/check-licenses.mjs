@@ -8,8 +8,8 @@
  * consumer's legal review is the wrong place to discover it.
  *
  * Walks the `dependencies` of every package meant to ship (the engine, the
- * `solve` command in packages/cli and the MCP server in packages/mcp, whose
- * SDK brings a tree of its own) transitively through the installed tree,
+ * `solve` command in packages/cli and the MCP server in packages/mcp, each of
+ * which depends on the engine alone) transitively through the installed tree,
  * hoisted or nested, reading each package's own manifest the way Node
  * resolves it. Development dependencies are out of scope: they never ship.
  *

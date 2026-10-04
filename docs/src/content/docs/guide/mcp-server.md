@@ -19,10 +19,14 @@ of a shell.
 ## Getting the server
 
 The server lives in this repository as the workspace package `packages/mcp`
-(`solve-engine-mcp`), kept apart from the engine because it depends on the
-official MCP SDK, which the engine's one-dependency promise has no room for
-(see [security](/guide/security/#the-mcp-server)). From a checkout, install
-and build:
+(`solve-engine-mcp`). It depends on the engine and nothing else: the protocol
+is JSON-RPC 2.0 (a request is a JSON object with an `id`, a method name and its
+parameters, and the answer carries the same `id`), sent one message per line,
+and a server that only offers tools needs few enough of its methods that the
+package answers them itself rather than taking an SDK. It is kept apart from
+the engine because the engine has no command to start (see
+[security](/guide/security/#the-mcp-server)). From a checkout, install and
+build:
 
 ```sh
 npm ci
@@ -151,12 +155,21 @@ rather than when the fetch gives up.
 Standard output carries the protocol and nothing else: anything the engine or a
 package logs is sent to standard error, since a stray line on standard output
 would reach the client as a malformed message. The process exits when the
-client closes its end.
+client closes its end, once the calls already made have been answered.
+
+Only the executable knows it runs under Node. The protocol (`createSolveServer`
+in `packages/mcp/src/server.ts`) takes one message's text and returns the
+reply's, and the framing (`serveLines` in `packages/mcp/src/transport.ts`)
+turns bytes into lines with the web's `TextDecoder`, so a host that is not Node
+(Deno, Bun, a browser worker talking over a `MessagePort`) hands them its own
+streams. A message longer than 8 MiB is refused with a JSON-RPC error and
+dropped as it arrives, rather than held in memory.
 
 ## The boundary
 
-The server offers tools only: no prompts, no resources, and no transport but
-standard input and output, which is what a client that starts the server as a
+The server offers tools only: no prompts, no resources, no batched requests (a
+JSON array of messages, which the protocol dropped in its 2025-06-18 version),
+and no transport but standard input and output, which is what a client that starts the server as a
 child process uses. It does not read files; a document reaches it as the text
 of a call. The JSON Schema description of the engine's syntax that a
 `solve-engine/tool` subpath might one day carry is set aside, and the tools'

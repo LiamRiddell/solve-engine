@@ -20,7 +20,7 @@ import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { numberValue, type Value } from "@solve-js/vm/Value";
 import { DOCUMENT_EDGES, NUMERIC_EDGES, PROTOTYPE_WORDS, RESOURCE_PROBES, TEXT_EDGES } from "@tools/adversarial";
 import { DEFAULT_WAIT_MS, EXIT, MAX_WAIT_MS, parseArguments, parseNow, parseSeed } from "../../../cli/src/arguments";
-import { classifyInput, decodeDocument, readAtMost, readDocumentFile, tooLarge, MAX_INPUT_BYTES } from "../../../cli/src/input";
+import { classifyInput, concatBytes, decodeDocument, readBounded, readDocumentFile, tooLarge, MAX_INPUT_BYTES } from "../../../cli/src/input";
 import {
 	CHECK_LINE,
 	checkSummary,
@@ -449,33 +449,76 @@ describe("#774 the parts: readDocumentFile and decodeDocument", () => {
 		expect(decodeDocument(new Uint8Array(), "x")).toEqual({ ok: true, text: "" });
 	});
 
-	test("readAtMost stops at the file's end or at its bound, whichever comes first", () => {
-		const read = (content: string | Uint8Array, most: number): number[] => {
-			const fd = openSync(file("bounded.md", content), "r");
-			try {
-				return [...readAtMost(fd, most)];
-			} finally {
-				closeSync(fd);
-			}
-		};
-		expect(read("abc", 10)).toEqual([97, 98, 99]);
-		expect(read("abc", 2)).toEqual([97, 98]);
-		expect(read("abc", 0)).toEqual([]);
-		expect(read("", 5)).toEqual([]);
-		// Past one 64 KiB read, so the chunks are joined in order.
-		const big = new Uint8Array(200_000).map((_, i) => i % 251);
-		expect(Buffer.from(read(big, 300_000)).equals(Buffer.from(big))).toBe(true);
-		expect(read(big, 70_000).length).toBe(70_000);
-	});
-
-	test("a file at exactly the limit is read, and one byte over is refused", () => {
-		expect(readDocumentFile(file("exact.md", "x".repeat(100)), 100)).toEqual({ ok: true, text: "x".repeat(100) });
-		expect(readDocumentFile(file("over.md", "x".repeat(101)), 100)).toMatchObject({ ok: false, message: expect.stringContaining("is larger than") });
-	});
-
 	test("a directory or a missing path is named, never thrown", () => {
 		expect(readDocumentFile(dir)).toMatchObject({ ok: false });
 		expect(readDocumentFile(join(dir, "nope.md"))).toEqual({ ok: false, message: `"${join(dir, "nope.md")}" cannot be read.` });
+	});
+
+	test("the file is read through the descriptor it was checked on: a directory and a device are refused by kind", () => {
+		expect(readDocumentFile(dir)).toEqual({ ok: false, message: `"${dir}" is a directory. Give a document inside it.` });
+		if (process.platform !== "win32") {
+			expect(readDocumentFile("/dev/null")).toMatchObject({ ok: false, message: expect.stringContaining("is not a regular file") });
+		}
+	});
+
+	test("a file exactly at the limit is read, one byte past it is refused", () => {
+		expect(readDocumentFile(file("at-limit.md", "x".repeat(64)), 64)).toEqual({ ok: true, text: "x".repeat(64) });
+		expect(readDocumentFile(file("past-limit.md", "x".repeat(65)), 64)).toMatchObject({ ok: false, message: expect.stringContaining("is larger than") });
+		expect(readDocumentFile(file("zero-limit.md", "x"), 0)).toMatchObject({ ok: false });
+	});
+
+	test("readBounded reads to the end or to the bound, whichever comes first", () => {
+		const path = file("bounded.md", "abcdefghij".repeat(10_000));
+		const fd = openSync(path, "r");
+		try {
+			expect(readBounded(fd, 5).length).toBe(5);
+			// The descriptor's position moved on, so the next read continues.
+			expect(Buffer.from(readBounded(fd, 5)).toString()).toBe("fghij");
+			expect(readBounded(fd, 1_000_000).length).toBe(100_000 - 10);
+			expect(readBounded(fd, 10).length).toBe(0);
+		} finally {
+			closeSync(fd);
+		}
+		const empty = openSync(file("bounded-empty.md", ""), "r");
+		try {
+			expect(readBounded(empty, 10).length).toBe(0);
+			expect(readBounded(empty, 0).length).toBe(0);
+		} finally {
+			closeSync(empty);
+		}
+	});
+
+	test("readBounded returns a plain Uint8Array, not a Node Buffer", () => {
+		const fd = openSync(file("bounded-type.md", "abc"), "r");
+		try {
+			const bytes = readBounded(fd, 10);
+			expect(Object.getPrototypeOf(bytes)).toBe(Uint8Array.prototype);
+			expect(new TextDecoder().decode(bytes)).toBe("abc");
+		} finally {
+			closeSync(fd);
+		}
+	});
+
+	test("concatBytes joins chunks in order, and keeps only the first total bytes", () => {
+		const a = new Uint8Array([1, 2, 3]);
+		const b = new Uint8Array([4, 5]);
+		expect([...concatBytes([a, b])]).toEqual([1, 2, 3, 4, 5]);
+		expect([...concatBytes([a, b], 4)]).toEqual([1, 2, 3, 4]);
+		expect([...concatBytes([a, b], 3)]).toEqual([1, 2, 3]);
+		expect(Object.getPrototypeOf(concatBytes([a]))).toBe(Uint8Array.prototype);
+		// A new array: changing it leaves the chunks alone.
+		const joined = concatBytes([a]);
+		joined[0] = 9;
+		expect(a[0]).toBe(1);
+	});
+
+	test("concatBytes at its edges: no chunks, empty chunks, a total of zero, a negative or overlong total", () => {
+		expect(concatBytes([]).length).toBe(0);
+		expect(concatBytes([new Uint8Array(0), new Uint8Array(0)]).length).toBe(0);
+		expect(concatBytes([new Uint8Array([1])], 0).length).toBe(0);
+		expect(concatBytes([new Uint8Array([1])], -5).length).toBe(0);
+		// A total past what arrived keeps what arrived, never zero padding.
+		expect([...concatBytes([new Uint8Array([1, 2])], 10)]).toEqual([1, 2]);
 	});
 });
 

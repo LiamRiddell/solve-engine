@@ -1,6 +1,4 @@
 import { afterAll, describe, expect, test } from "@jest/globals";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { dateCalendarInZone } from "@solve-js/calendar/DateCalendar";
 import { ENGINE_VERSION } from "@solve-js/constants/version";
@@ -17,7 +15,8 @@ import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { numberValue, type Value } from "@solve-js/vm/Value";
 import { DOCUMENT_EDGES, NUMERIC_EDGES, PROTOTYPE_WORDS, RESOURCE_PROBES, TEXT_EDGES } from "@tools/adversarial";
 import { HELP, parseServerArguments } from "../../../mcp/src/options";
-import { createSolveServer, toCallResult } from "../../../mcp/src/server";
+import { createSolveServer, PROTOCOL_VERSIONS, RpcErrorCodes, toCallResult } from "../../../mcp/src/server";
+import { createLineReader, MAX_MESSAGE_CHARS, serveLines } from "../../../mcp/src/transport";
 import {
 	checkDocumentTool,
 	DEFAULT_SETTINGS,
@@ -41,9 +40,10 @@ import {
  * for the exit code, and an input the engine refuses as a whole comes back as
  * a coded refusal (`isError`) that costs that call and nothing more.
  *
- * The tools are driven here as plain functions and through the official SDK's
- * client over an in-memory transport; `scripts/smoke-mcp.mjs` makes the same
- * calls over standard input and output against the built server.
+ * The tools are driven here as plain functions and as JSON-RPC messages
+ * through the server's own protocol handler, which needs no SDK and no
+ * runtime API; `scripts/smoke-mcp.mjs` makes the same calls over standard
+ * input and output against the built server.
  */
 
 const later = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -123,19 +123,27 @@ function body(outcome: ToolOutcome): Record<string, any> {
 	return outcome.body;
 }
 
-/** A connected SDK client for a server over an in-memory transport. */
+/** A client that speaks JSON-RPC to the server's handler, as a transport would deliver it. */
 async function connect(kit: ServerKit, s: ServerSettings = settings()) {
 	const server = createSolveServer(kit, s);
-	const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-	const client = new Client({ name: "spec", version: "0" });
-	await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
+	let nextId = 0;
+	// eslint-disable-next-line typescript/no-explicit-any -- the shape is asserted field by field
+	const request = async (method: string, params?: Record<string, unknown>): Promise<Record<string, any>> => {
+		const id = ++nextId;
+		const reply = await server.handle(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+		if (reply === undefined) throw new Error(`no answer to ${method}`);
+		const message = JSON.parse(reply);
+		expect(message.id).toBe(id);
+		if (message.error) throw new Error(`${message.error.code} ${message.error.message}`);
+		return message.result;
+	};
+	await request("initialize", { protocolVersion: PROTOCOL_VERSIONS[0], capabilities: {}, clientInfo: { name: "spec", version: "0" } });
+	expect(await server.handle(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }))).toBeUndefined();
 	return {
-		client,
-		call: async (name: string, args: Record<string, unknown>) => client.callTool({ name, arguments: args }),
-		close: async () => {
-			await client.close();
-			await server.close();
-		},
+		server,
+		client: { listTools: () => request("tools/list") },
+		call: async (name: string, args: Record<string, unknown>) => request("tools/call", { name, arguments: args }),
+		close: async () => undefined,
 	};
 }
 
@@ -306,7 +314,7 @@ describe("#774 MCP, over the protocol", () => {
 		const { kit } = recordingKit();
 		const { client, close } = await connect(kit);
 		const { tools } = await client.listTools();
-		expect(tools.map((t) => t.name)).toEqual(["evaluate_expression", "evaluate_document", "check_document"]);
+		expect(tools.map((t: { name: string }) => t.name)).toEqual(["evaluate_expression", "evaluate_document", "check_document"]);
 		expect(tools[0].inputSchema.required).toEqual(["expression"]);
 		expect(tools[1].inputSchema.required).toEqual(["document"]);
 		expect(tools[0].annotations).toMatchObject({ readOnlyHint: true, openWorldHint: false });
@@ -521,5 +529,239 @@ describe("#774 MCP, adversarial", () => {
 		expect(await evaluateExpressionTool({ expression: "   " }, settings(), kit)).toEqual({ ok: false, error: { code: "INPUT_INVALID", message: "The expression is empty." } });
 		expect(built).toEqual([]);
 		expect(body(await evaluateDocumentTool({ document: "" }, settings(), kit))).toEqual({ lines: [], failed: 0, ok: true });
+	});
+});
+
+/** The words a hostile client could send where the server looks a name up. */
+const PROTOCOL_WORDS = [...PROTOTYPE_WORDS, "hasOwnProperty", "valueOf"];
+
+/** The parsed answer to one raw message, or `undefined` when none came back. */
+async function raw(server: ReturnType<typeof createSolveServer>, text: string) {
+	const reply = await server.handle(text);
+	return reply === undefined ? undefined : JSON.parse(reply);
+}
+
+describe("#774 MCP, the parts: the protocol handler", () => {
+	test("initialize answers with the client's protocol version when it is one the server speaks, and its newest otherwise", async () => {
+		const server = createSolveServer(recordingKit().kit, settings());
+		for (const version of PROTOCOL_VERSIONS) {
+			const m = await raw(server, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: version } }));
+			expect(m.result).toEqual({ protocolVersion: version, capabilities: { tools: { listChanged: false } }, serverInfo: { name: "solve", version: "9.9.9" } });
+		}
+		for (const asked of ["1999-01-01", 5, undefined, "constructor"]) {
+			const m = await raw(server, JSON.stringify({ jsonrpc: "2.0", id: "a", method: "initialize", params: { protocolVersion: asked } }));
+			expect(m.result.protocolVersion).toBe(PROTOCOL_VERSIONS[0]);
+		}
+	});
+
+	test("ping answers with an empty object, under the request's own id, string or number", async () => {
+		const server = createSolveServer(recordingKit().kit, settings());
+		expect(await raw(server, '{"jsonrpc":"2.0","id":7,"method":"ping"}')).toEqual({ jsonrpc: "2.0", id: 7, result: {} });
+		expect(await raw(server, '{"jsonrpc":"2.0","id":"x-1","method":"ping"}')).toEqual({ jsonrpc: "2.0", id: "x-1", result: {} });
+		expect(await raw(server, '{"jsonrpc":"2.0","id":0,"method":"ping"}')).toEqual({ jsonrpc: "2.0", id: 0, result: {} });
+	});
+
+	test("notifications and the client's own answers get nothing back", async () => {
+		const server = createSolveServer(recordingKit().kit, settings());
+		for (const text of [
+			'{"jsonrpc":"2.0","method":"notifications/initialized"}',
+			'{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}',
+			'{"jsonrpc":"2.0","method":"no/such/notification"}',
+			'{"jsonrpc":"2.0","id":3,"result":{}}',
+		]) {
+			expect(await server.handle(text)).toBeUndefined();
+		}
+	});
+
+	test("an unknown method and an unknown tool are JSON-RPC errors, with the name quoted and capped", async () => {
+		const server = createSolveServer(recordingKit().kit, settings());
+		const method = await raw(server, '{"jsonrpc":"2.0","id":1,"method":"resources/list"}');
+		expect(method.error).toEqual({ code: RpcErrorCodes.METHOD_NOT_FOUND, message: 'This server does not offer "resources/list".' });
+		const tool = await raw(server, JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "x".repeat(10_000) } }));
+		expect(tool.error.code).toBe(RpcErrorCodes.INVALID_PARAMS);
+		expect(tool.error.message.length).toBeLessThan(300);
+		const unnamed = await raw(server, '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{}}');
+		expect(unnamed.error).toEqual({ code: RpcErrorCodes.INVALID_PARAMS, message: "tools/call needs the name of a tool." });
+	});
+
+	test("text that is not a JSON-RPC request is refused under id null, or under its id when it has one", async () => {
+		const server = createSolveServer(recordingKit().kit, settings());
+		expect((await raw(server, "not json")).error.code).toBe(RpcErrorCodes.PARSE_ERROR);
+		expect((await raw(server, "{")).error.code).toBe(RpcErrorCodes.PARSE_ERROR);
+		for (const text of ["[]", '[{"jsonrpc":"2.0","id":1,"method":"ping"}]', "5", '"ping"', "null"]) {
+			const m = await raw(server, text);
+			expect(m).toEqual({ jsonrpc: "2.0", id: null, error: { code: RpcErrorCodes.INVALID_REQUEST, message: "The message must be one JSON-RPC object." } });
+		}
+		expect((await raw(server, '{"id":1,"method":"ping"}')).error.code).toBe(RpcErrorCodes.INVALID_REQUEST);
+		expect((await raw(server, '{"jsonrpc":"1.0","id":1,"method":"ping"}')).id).toBe(1);
+		expect((await raw(server, '{"jsonrpc":"2.0","id":1,"method":5}')).error.code).toBe(RpcErrorCodes.INVALID_REQUEST);
+		expect((await raw(server, '{"jsonrpc":"2.0","id":1,"method":"ping","params":[1]}')).error.code).toBe(RpcErrorCodes.INVALID_REQUEST);
+		expect((await raw(server, '{"jsonrpc":"2.0","id":{"a":1},"method":"ping"}')).error.code).toBe(RpcErrorCodes.INVALID_REQUEST);
+		expect((await raw(server, '{"jsonrpc":"2.0","id":null,"method":"ping"}')).error.code).toBe(RpcErrorCodes.INVALID_REQUEST);
+		expect((await raw(server, '{"jsonrpc":"2.0"}')).error.code).toBe(RpcErrorCodes.INVALID_REQUEST);
+	});
+
+	test("arguments that are not an object, or absent, are a coded refusal rather than a protocol error", async () => {
+		const server = createSolveServer(recordingKit().kit, settings());
+		for (const args of [5, "1 + 1", [1], null]) {
+			const r = await server.callTool("evaluate_expression", args);
+			expect(r).toMatchObject({ isError: true, structuredContent: { error: { code: "INPUT_INVALID" } } });
+		}
+		expect(await server.callTool("evaluate_expression", undefined)).toMatchObject({ isError: true, structuredContent: { error: { message: "expression must be text." } } });
+		expect(await server.callTool("no_such_tool", {})).toBeUndefined();
+	});
+
+	test("each pin is checked against its schema: tz text, now and seed a finite number or short text, strict a boolean", async () => {
+		const server = createSolveServer(recordingKit().kit, settings());
+		const refused = async (name: string, args: Record<string, unknown>) => (await server.callTool(name, args))?.structuredContent;
+		expect(await refused("evaluate_expression", { expression: "1", tz: 5 })).toMatchObject({ error: { code: "INPUT_INVALID" } });
+		expect(await refused("evaluate_expression", { expression: "1", tz: "x".repeat(201) })).toMatchObject({ error: { code: "INPUT_INVALID" } });
+		expect(await refused("evaluate_expression", { expression: "1", now: true })).toMatchObject({ error: { code: "INPUT_INVALID" } });
+		expect(await refused("evaluate_expression", { expression: "1", seed: { a: 1 } })).toMatchObject({ error: { code: "INPUT_INVALID" } });
+		expect(await refused("evaluate_document", { document: "1", strict: "yes" })).toMatchObject({ error: { message: "strict must be true or false." } });
+		expect(await refused("evaluate_expression", { expression: "1", tz: "UTC", now: "2026-01-01T09:00:00Z", seed: 4 })).toMatchObject({ ok: true });
+		// An argument the tool does not read is ignored, as a schema without additionalProperties allows.
+		expect(await refused("evaluate_expression", { expression: "1", colour: "red" })).toMatchObject({ ok: true });
+	});
+
+	test("tools/list gives each tool a JSON Schema object with its required argument and the shared pins", () => {
+		const { tools } = createSolveServer(recordingKit().kit, settings({ network: true })).listTools() as { tools: Record<string, any>[] };
+		for (const tool of tools) {
+			expect(tool.inputSchema.type).toBe("object");
+			expect(Object.keys(tool.inputSchema.properties)).toEqual(expect.arrayContaining(["tz", "now", "seed"]));
+			expect(tool.annotations).toEqual({ readOnlyHint: true, idempotentHint: false, openWorldHint: true });
+		}
+		expect(tools[2].inputSchema.required).toEqual(["document"]);
+	});
+});
+
+describe("#774 MCP, the parts: the line framing", () => {
+	const collect = (maxChars?: number) => {
+		const lines: string[] = [];
+		let overflows = 0;
+		const reader = createLineReader((line) => lines.push(line), () => overflows++, maxChars);
+		return { reader, lines, overflows: () => overflows };
+	};
+
+	test("splits on newlines, drops a trailing carriage return and skips blank lines", () => {
+		const { reader, lines } = collect();
+		reader.push("a\nb\r\n\n   \r\nc");
+		expect(lines).toEqual(["a", "b"]);
+		reader.end();
+		expect(lines).toEqual(["a", "b", "c"]);
+	});
+
+	test("joins a line, and a character, split across chunks", () => {
+		const { reader, lines } = collect();
+		const bytes = new TextEncoder().encode('{"t":"£ 😀"}\n');
+		for (const byte of bytes) reader.push(new Uint8Array([byte]));
+		expect(lines).toEqual(['{"t":"£ 😀"}']);
+	});
+
+	test("a line past the limit is dropped and reported once, and the next line reads normally", () => {
+		const { reader, lines, overflows } = collect(10);
+		reader.push("x".repeat(6));
+		reader.push("x".repeat(6));
+		reader.push("x".repeat(100));
+		reader.push("\nok\n");
+		expect(overflows()).toBe(1);
+		expect(lines).toEqual(["ok"]);
+		reader.push("y".repeat(11) + "\nfine\n");
+		expect(overflows()).toBe(2);
+		expect(lines).toEqual(["ok", "fine"]);
+		const exact = collect(10);
+		exact.reader.push("z".repeat(10) + "\n");
+		expect(exact.lines).toEqual(["z".repeat(10)]);
+	});
+
+	test("the limit is large enough for the server's largest input written as escapes", () => {
+		expect(MAX_MESSAGE_CHARS).toBeGreaterThan(DEFAULT_SETTINGS.maxInputChars * 6);
+	});
+
+	test("serveLines answers each request on its own line and stays quiet for notifications", async () => {
+		const out: string[] = [];
+		const lines = serveLines(createSolveServer(recordingKit().kit, settings()), (line) => out.push(line));
+		lines.push('{"jsonrpc":"2.0","id":1,"method":"ping"}\n{"jsonrpc":"2.0","method":"notifications/initialized"}\n');
+		lines.push(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "evaluate_expression", arguments: { expression: "2 + 2" } } }));
+		lines.end();
+		await lines.settled();
+		expect(out.every((line) => line.endsWith("\n") && !line.slice(0, -1).includes("\n"))).toBe(true);
+		const byId = new Map(out.map((line) => JSON.parse(line)).map((m) => [m.id, m]));
+		expect(out).toHaveLength(2);
+		expect(byId.get(1).result).toEqual({});
+		expect(byId.get(2).result.structuredContent).toMatchObject({ display: "= 4", ok: true });
+	});
+
+	test("serveLines answers an overlong line with an error under id null and keeps serving", async () => {
+		const out: string[] = [];
+		const lines = serveLines(createSolveServer(recordingKit().kit, settings()), (line) => out.push(line));
+		lines.push("x".repeat(MAX_MESSAGE_CHARS + 1));
+		lines.push('\n{"jsonrpc":"2.0","id":1,"method":"ping"}\n');
+		await lines.settled();
+		expect(JSON.parse(out[0])).toMatchObject({ id: null, error: { code: RpcErrorCodes.INVALID_REQUEST } });
+		expect(JSON.parse(out[1])).toEqual({ jsonrpc: "2.0", id: 1, result: {} });
+	});
+});
+
+describe("#774 MCP, portable", () => {
+	test("only bin.ts touches a Node API; the protocol and the framing use web standards", () => {
+		const fs = require("node:fs") as typeof import("node:fs");
+		const path = require("node:path") as typeof import("node:path");
+		const dir = path.join(__dirname, "..", "..", "..", "mcp", "src");
+		const files = fs.readdirSync(dir).filter((name) => name.endsWith(".ts") && name !== "bin.ts");
+		expect(files).toEqual(expect.arrayContaining(["server.ts", "transport.ts", "tools.ts", "options.ts"]));
+		for (const name of files) {
+			const code = fs.readFileSync(path.join(dir, name), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+			expect([name, /from\s+["']node:|require\(|\bprocess\.|\bBuffer\b|__dirname/.test(code)]).toEqual([name, false]);
+		}
+	});
+
+	test("the server's package depends on the engine and nothing else", () => {
+		const fs = require("node:fs") as typeof import("node:fs");
+		const path = require("node:path") as typeof import("node:path");
+		const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "..", "mcp", "package.json"), "utf8"));
+		expect(Object.keys(pkg.dependencies)).toEqual(["solve-engine"]);
+	});
+});
+
+describe("#774 MCP, adversarial: the protocol", () => {
+	test("prototype words as methods, tool names, ids and argument keys leave Object.prototype alone and are refused by name", async () => {
+		const server = createSolveServer(recordingKit().kit, settings());
+		const before = Object.getOwnPropertyNames(Object.prototype).sort();
+		for (const word of PROTOCOL_WORDS) {
+			expect((await raw(server, JSON.stringify({ jsonrpc: "2.0", id: 1, method: word }))).error.code).toBe(RpcErrorCodes.METHOD_NOT_FOUND);
+			expect((await raw(server, JSON.stringify({ jsonrpc: "2.0", id: word, method: "tools/call", params: { name: word } }))).error.code).toBe(RpcErrorCodes.INVALID_PARAMS);
+		}
+		// Arguments whose only keys are inherited names: the expression is missing, not read off the prototype.
+		const inherited = await raw(server, '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"evaluate_expression","arguments":{"__proto__":{"expression":"6 * 7"}}}}');
+		expect(inherited.result).toMatchObject({ isError: true, structuredContent: { error: { code: "INPUT_INVALID" } } });
+		const protoParams = await raw(server, '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"__proto__":{"name":"evaluate_expression"}}}');
+		expect(protoParams.error.code).toBe(RpcErrorCodes.INVALID_PARAMS);
+		expect(await server.handle('{"__proto__":{"jsonrpc":"2.0","id":4,"method":"ping"}}')).toContain('"code":-32600');
+		expect(Object.getOwnPropertyNames(Object.prototype).sort()).toEqual(before);
+	});
+
+	test("markup, escapes and direction overrides in method names come back as quoted text", async () => {
+		const server = createSolveServer(recordingKit().kit, settings());
+		const m = await raw(server, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "<script>‮\u001b[2J" }));
+		expect(m.error.message).toBe(`This server does not offer ${JSON.stringify("<script>‮\u001b[2J")}.`);
+	});
+
+	test("a thousand requests at once are each answered once, under their own id", async () => {
+		const out: string[] = [];
+		const lines = serveLines(createSolveServer(recordingKit().kit, settings()), (line) => out.push(line));
+		let text = "";
+		for (let id = 0; id < 1000; id++) text += JSON.stringify({ jsonrpc: "2.0", id, method: id % 2 ? "ping" : "tools/list" }) + "\n";
+		lines.push(text);
+		await lines.settled();
+		const ids = out.map((line) => JSON.parse(line).id).sort((a, b) => a - b);
+		expect(ids).toEqual(Array.from({ length: 1000 }, (_, i) => i));
+	});
+
+	test("numeric edges as ids are echoed back as JSON writes them", async () => {
+		const server = createSolveServer(recordingKit().kit, settings());
+		for (const id of [-0, -1, 2 ** 53, Number.MAX_VALUE, Number.MIN_VALUE, 1.5]) {
+			expect((await raw(server, JSON.stringify({ jsonrpc: "2.0", id, method: "ping" }))).id).toBe(JSON.parse(JSON.stringify(id)));
+		}
 	});
 });

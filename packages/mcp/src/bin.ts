@@ -6,14 +6,18 @@
  * engine or a package logs with `console.log` is sent to standard error; one
  * stray line on standard output would be read by the client as a malformed
  * message. The process exits when the client closes its end.
+ *
+ * This is the only file in the server that knows it runs under Node: the
+ * protocol (server.ts) and the framing (transport.ts) take text and bytes, so
+ * another host hands them its own streams instead.
  */
 
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { dateCalendarInZone, ENGINE_VERSION, ExpressionEngine } from "solve-engine";
 import { evaluateDocument } from "solve-engine/engine";
 import { BUILTIN_PACKAGES } from "solve-engine/packages";
 import { HELP, parseServerArguments } from "./options";
 import { createSolveServer } from "./server";
+import { serveLines } from "./transport";
 import { SERVER_VERSION } from "./version";
 
 console.log = (...args: unknown[]) => console.error(...args);
@@ -47,12 +51,18 @@ async function main(): Promise<void> {
 		},
 		parsed.settings,
 	);
-	const transport = new StdioServerTransport();
-	// The client closing standard input is the end of the session. A fetch
-	// still in flight holds a socket of its own, so the exit is explicit.
-	process.stdin.once("end", () => process.exit(0));
-	transport.onclose = () => process.exit(0);
-	await server.connect(transport);
+	const lines = serveLines(server, (line) => void process.stdout.write(line));
+	process.stdin.on("data", (chunk: Uint8Array | string) => lines.push(chunk));
+	// The client closing standard input is the end of the session: the calls
+	// already made are answered, then the process exits. A fetch still in
+	// flight holds a socket of its own, so the exit is explicit.
+	process.stdin.once("end", () => {
+		lines.end();
+		void lines
+			.settled()
+			.then(() => new Promise<void>((resolve) => process.stdout.write("", () => resolve())))
+			.then(() => process.exit(0));
+	});
 }
 
 main().catch((error) => {

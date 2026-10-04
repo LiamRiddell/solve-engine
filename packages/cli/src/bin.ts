@@ -12,21 +12,22 @@ import { createEngine, dateCalendarInZone, ENGINE_VERSION } from "solve-engine";
 import { evaluateDocument } from "solve-engine/engine";
 import { run, type CliIO } from "./run";
 import { EXIT } from "./arguments";
+import { concatBytes } from "./input";
 import { CLI_VERSION } from "./version";
 
 /** Reads standard input to its end, or until more than `limit` bytes have arrived. */
 function readStdin(limit: number): Promise<Uint8Array> {
 	return new Promise((resolve, reject) => {
-		const chunks: Buffer[] = [];
+		const chunks: Uint8Array[] = [];
 		let size = 0;
 		const stdin = process.stdin;
 		const finish = () => {
 			stdin.off("data", onData);
 			stdin.pause();
-			resolve(Buffer.concat(chunks));
+			resolve(concatBytes(chunks, size));
 		};
-		const onData = (chunk: Buffer | string) => {
-			const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+		const onData = (chunk: Uint8Array | string) => {
+			const bytes = typeof chunk === "string" ? new TextEncoder().encode(chunk) : chunk;
 			chunks.push(bytes);
 			size += bytes.length;
 			if (size > limit) finish();
