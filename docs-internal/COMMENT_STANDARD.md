@@ -59,10 +59,10 @@ npm run lint:docs       # rule 1, over the public surface
 
 Both run in continuous integration.
 
-`lint:docs` covers everything outside `src/packages`. The language packages
-inside it are internals a consumer does not import directly, and 55 gaps remain
-there. Holding them to the gate today would mean a red check with no route to
-green, and a permanently red check is one people learn to ignore.
+`lint:docs` covers every export under `packages/engine/src`, the language
+packages in `src/packages` included. They were exempt while they carried a
+backlog of undocumented exports; that backlog is cleared, and a language package
+is the surface a third-party author copies from, so the exemption is gone.
 
 Rules 2, 3, 4, 7 and 8 are judgement. No check will tell you whether a summary
 explains why something exists.
