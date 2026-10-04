@@ -19,7 +19,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 | | before | now |
 | --- | --- | --- |
-| codes a host can look up | 30 of 251, in a few package catalogues | 491, in 52 catalogues, and 2 run-time patterns |
+| codes a host can look up | 30 of 251, in a few package catalogues | 506, in 52 catalogues, and 2 run-time patterns |
 | `INCOMPATIBLE_UNITS` | in no exported list | `ERROR_CODE_CATALOGUES.CoreErrorCodes.INCOMPATIBLE_UNITS` |
 | a reference a person can read | none | [Error codes](/guide/error-codes/), each code with when it arises and whether it arrives thrown, as a value, or either |
 | a code raised that no catalogue lists | nothing noticed | `npm run lint:error-codes` fails, in `verify:ci` and the CI docs job |
