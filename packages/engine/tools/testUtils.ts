@@ -142,11 +142,30 @@ interface MitataStats {
  * a `require`, which is exactly what cannot load this package. Built once and
  * cached, since resolving it per case would dominate the short ones.
  */
+/** How many times this process has built the mitata loader. */
+let loadCount = 0;
+
+/**
+ * A mark no earlier loader's source carried: the process id, a count and a
+ * random tail, so two test files, or two runs of one, never compile the same
+ * text.
+ */
+export function uniqueLoadMark(): string {
+  loadCount += 1;
+  return `${process.pid}-${loadCount}-${Math.random().toString(36).slice(2)}`;
+}
+
 let mitataMeasure: ((fn: () => void, opts: object) => Promise<MitataStats>) | null = null;
 
 async function loadMeasure(): Promise<(fn: () => void, opts: object) => Promise<MitataStats>> {
   if (mitataMeasure) return mitataMeasure;
-  const importESM = new Function("specifier", "return import(specifier)") as (
+  // The source carries a mark unique to this load. V8 caches the compiled code
+  // of a `Function` by its source, and the cached copy keeps the dynamic-import
+  // callback of the test file that first compiled it; with the same source in
+  // every file, a later benchmark file reused a torn-down file's callback, and
+  // its import failed inside jest-runtime with "Cannot read properties of
+  // undefined (reading 'identifier')", on the merge base and the head alike.
+  const importESM = new Function("specifier", `return import(specifier); // mitata load ${uniqueLoadMark()}`) as (
     specifier: string,
   ) => Promise<{ measure: (fn: () => void, opts: object) => Promise<MitataStats> }>;
   mitataMeasure = (await importESM("mitata")).measure;
