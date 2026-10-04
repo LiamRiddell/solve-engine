@@ -10,7 +10,7 @@ import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS, resolveFormattingSetti
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { isIso4217 } from "@solve-js/uom/Iso4217";
 import { isCryptoCurrency, moneyDisplayPlaces, trimFractionZeros, type MoneyPlaces } from "@solve-js/uom/CurrencyMinorUnits";
-import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
+import { matAt } from "@solve-js/vm/MatrixOps";
 import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 import { decodeFixedOffsetMinutes, isFixedOffset, isNamedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
@@ -804,23 +804,84 @@ function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): st
 }
 
 /**
+ * The element ceiling a settings object asks for, or undefined for none: a
+ * number of at least 1, rounded down. Anything else (absent, zero, negative,
+ * `NaN`, infinite, not a number at all) is no ceiling, since the setting is
+ * opt-in and an unusable one must not hide a result.
+ */
+export function matrixElementCeiling(settings: FormattingSettings): number | undefined {
+  const group = settings.matrixResult;
+  if (typeof group !== "object" || group === null) return undefined;
+  const max = group.maxElements;
+  if (typeof max !== "number" || !Number.isFinite(max) || max < 1) return undefined;
+  return Math.floor(max);
+}
+
+/**
+ * How much of `m` is written under a ceiling of `max` elements.
+ *
+ * - `whole`: all of it, the matrix is within the ceiling (or there is none).
+ * - `elements`: a list (one row or one column) past the ceiling: its first
+ *   `shown` elements, and `leftOut` more.
+ * - `rows`: a matrix past the ceiling: its first `shown` whole rows, and
+ *   `leftOut` rows more.
+ * - `shape`: a matrix one of whose rows is already past the ceiling, so not
+ *   one row fits and only its shape is written.
+ */
+export type MatrixPreview =
+  | { kind: "whole" }
+  | { kind: "elements" | "rows"; shown: number; leftOut: number }
+  | { kind: "shape" };
+
+/** What {@link formatMatrix} and {@link formatMatrixAligned} write of `m` under `max`; see {@link MatrixPreview}. */
+export function matrixPreview(m: MatrixData, max: number | undefined): MatrixPreview {
+  const cells = m.rows * m.cols;
+  if (max === undefined || cells <= max) return { kind: "whole" };
+  if (m.rows === 1 || m.cols === 1) return { kind: "elements", shown: max, leftOut: cells - max };
+  const rows = Math.floor(max / m.cols);
+  if (rows === 0) return { kind: "shape" };
+  return { kind: "rows", shown: rows, leftOut: m.rows - rows };
+}
+
+/**
+ * How many more there are, as the short form writes it: `and 99,997 more`, or
+ * `and 3 more rows`. The count is grouped the English way whatever the number
+ * locale, as the trace's short form writes it, so the two read alike.
+ */
+function leftOutText(preview: { kind: "elements" | "rows"; leftOut: number }): string {
+  const count = autoFormatIntegerOrFloat(preview.leftOut, 0, true, "en-US");
+  return preview.kind === "rows" ? `and ${count} more ${preview.leftOut === 1 ? "row" : "rows"}` : `and ${count} more`;
+}
+
+/**
  * Renders a Matrix matching its own literal syntax: a single row (1xN,
  * including plain vectors) as `[a, b, c]`, a single column (Nx1) as
  * `[a; b; c]`, and a general shape as `[r0c0, r0c1; r1c0, r1c1]`, row-major
- * textual output read back out of the column-major storage
- * (`columnMajorToRowMajor()`), matching how `[1,2;3,4]` is written.
+ * textual output read back out of the column-major storage, matching how
+ * `[1,2;3,4]` is written.
+ *
+ * Under `matrixResult.maxElements` a larger one is written short (see
+ * {@link matrixPreview}): `[0, 10, 20, and 99,997 more]`, `[1, 2; 3, 4; and 8
+ * more rows]`, or `[2x5000 matrix]`. Only what is shown is formatted.
  */
 function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettings): string {
-  const rowMajor = columnMajorToRowMajor(m);
+  const preview = matrixPreview(m, matrixElementCeiling(settings));
+  if (preview.kind === "shape") return `${locale.display.resultPrefix}[${m.rows}x${m.cols} matrix]`;
+  const shownRows = preview.kind === "rows" ? preview.shown : preview.kind === "elements" && m.cols === 1 ? preview.shown : m.rows;
+  const shownCols = preview.kind === "elements" && m.rows === 1 ? preview.shown : m.cols;
   const rows: string[] = [];
-  for (let r = 0; r < m.rows; r++) {
+  for (let r = 0; r < shownRows; r++) {
     const cells: string[] = [];
-    for (let c = 0; c < m.cols; c++) {
-      cells.push(formatMatrixEntry(rowMajor[r * m.cols + c], settings));
+    for (let c = 0; c < shownCols; c++) {
+      cells.push(formatMatrixEntry(matAt(m, r, c), settings));
     }
     rows.push(cells.join(", "));
   }
-  return `${locale.display.resultPrefix}[${rows.join("; ")}]`;
+  if (preview.kind === "whole") return `${locale.display.resultPrefix}[${rows.join("; ")}]`;
+  // A row list continues with a comma, a column or a matrix with a semicolon,
+  // the separator the next element would have had.
+  const joiner = preview.kind === "elements" && m.rows === 1 ? ", " : "; ";
+  return `${locale.display.resultPrefix}[${rows.join("; ")}${joiner}${leftOutText(preview)}]`;
 }
 
 /**
@@ -837,27 +898,37 @@ function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettin
  * This is deliberately separate from {@link formatValue}, whose single-line
  * matrix form stays the stable, assertable text the API and the worker DTO use.
  * A 1xN row vector is one line; an Nx1 column vector is N lines.
+ *
+ * Under `matrixResult.maxElements` a larger one shows what fits (see
+ * {@link matrixPreview}) and ends with a line saying how much was left out,
+ * `and 99,997 more` or `and 8 more rows`; a matrix none of whose rows fits
+ * is written as its shape, `[2x5000 matrix]`.
  */
 export function formatMatrixAligned(m: MatrixData, settings?: FormattingOverrides): string {
   const us = resolveFormattingSettings(settings);
-  const rowMajor = columnMajorToRowMajor(m);
+  const preview = matrixPreview(m, matrixElementCeiling(us));
+  if (preview.kind === "shape") return `[${m.rows}x${m.cols} matrix]`;
+  const shownRows = preview.kind === "rows" ? preview.shown : preview.kind === "elements" && m.cols === 1 ? preview.shown : m.rows;
+  const shownCols = preview.kind === "elements" && m.rows === 1 ? preview.shown : m.cols;
   const cells: string[][] = [];
-  for (let r = 0; r < m.rows; r++) {
+  for (let r = 0; r < shownRows; r++) {
     const row: string[] = [];
-    for (let c = 0; c < m.cols; c++) {
-      row.push(formatMatrixEntry(rowMajor[r * m.cols + c], us));
+    for (let c = 0; c < shownCols; c++) {
+      row.push(formatMatrixEntry(matAt(m, r, c), us));
     }
     cells.push(row);
   }
   const colWidth: number[] = [];
-  for (let c = 0; c < m.cols; c++) {
+  for (let c = 0; c < shownCols; c++) {
     let width = 0;
-    for (let r = 0; r < m.rows; r++) width = Math.max(width, cells[r][c].length);
+    for (let r = 0; r < shownRows; r++) width = Math.max(width, cells[r][c].length);
     colWidth.push(width);
   }
-  return cells
+  const grid = cells
     .map((row) => `[ ${row.map((cell, c) => cell.padStart(colWidth[c])).join("  ")} ]`)
     .join("\n");
+  // Past the ceiling, one more line says how much was left out.
+  return preview.kind === "whole" ? grid : `${grid}\n${leftOutText(preview)}`;
 }
 
 function formatRange(min: number, max: number, locale: ILocale): string {

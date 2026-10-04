@@ -25,7 +25,10 @@ export function checkLineNormalizerRule(priority = 92): NormalizerRule {
 	return {
 		name: "conditionals:check",
 		priority,
-		shape: [{ types: ["IDENT"] }],
+		// The word itself, so the rule is tried only where a `check` stands and
+		// not at every word of prose (#767). Compared case-insensitively, as
+		// match() compares it.
+		shape: [{ types: ["IDENT"], values: ["check"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			if (pos !== 0) return null;
 			const word = tokens[0];

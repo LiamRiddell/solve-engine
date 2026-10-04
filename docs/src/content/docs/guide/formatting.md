@@ -69,9 +69,10 @@ still formats. `mergeFormattingSettings(base, overrides)` is the same merge, for
 a host that keeps its own settings and layers a user's choices over them.
 
 The groups are `floatResult`, `numberResult`, `hexResult`,
-`unitOfMeasurementResult`, `percentageResult`, `dateResult` and `wordsResult`.
-`dateResult` chooses how a date is written out: `"long"`, the spelled-out
-default (`"= Friday, March 15, 2024"`), or one of the numeric forms `"iso"`
+`unitOfMeasurementResult`, `percentageResult`, `matrixResult` (see
+[long lists](#long-lists-and-matrices) below), `wordsResult` and `dateResult`.
+The last chooses how a date is written out: `"long"`, the spelled-out default
+(`"= Friday, March 15, 2024"`), or one of the numeric forms `"iso"`
 (`"= 2024-03-15"`), `"dmy"` (`"= 15/03/2024"`) and `"mdy"` (`"= 03/15/2024"`);
 [Displaying dates](/syntax/displaying-dates/) covers it from the reader's side.
 `wordsResult` is covered under [the locale tag](#the-locale-tag) below. Every
@@ -233,6 +234,44 @@ language pack instead, English for a code with none, so a date does not change
 with the machine the engine runs on. A tag `Intl` cannot read at all makes
 formatting a number throw `Intl`'s `RangeError`, so a mistyped setting is seen. See
 [locales](/guide/locales/#writing-results) for the full table.
+
+## Long lists and matrices
+
+A list or a matrix is written out element by element, so the text grows with
+it, and so does the time spent writing it. `map(10*x, 0:99999)` is a list of a
+hundred thousand numbers: evaluating it takes a small fraction of a second, and
+writing all of it out is 888,791 characters that nobody reads in a result
+column.
+
+`matrixResult.maxElements` is a ceiling on how many elements are written. Past
+it, a list shows its first elements and counts the rest, and a matrix (a grid of
+rows and columns) shows the whole rows that fit and counts the rows left out. A
+matrix whose single row is already wider than the ceiling shows only its shape,
+rows by columns. The elements left out are never formatted, so the cost is
+bounded along with the text:
+
+```ts
+const list = engine.evaluateExpression("map(10*x, 0:99999)");
+const grid = engine.evaluateExpression("[1, 2, 3; 4, 5, 6; 7, 8, 9]");
+
+formatValue(list, { matrixResult: { maxElements: 5 } }); // "= [0, 10, 20, 30, 40, and 99,995 more]"
+formatValue(grid, { matrixResult: { maxElements: 7 } }); // "= [1, 2, 3; 4, 5, 6; and 1 more row]"
+formatValue(grid, { matrixResult: { maxElements: 2 } }); // "= [3x3 matrix]"
+formatMatrixAligned(list.value, { matrixResult: { maxElements: 5 } });
+// "[ 0  10  20  30  40 ]\nand 99,995 more"
+```
+
+A host that displays results sets it; the docs notepad and the playground use
+1,000. The ceiling is opt-in, and absent by default, because `formatValue`'s
+full text is also the stable, assertable form the API and the worker carry: a
+host that reads a list back out of its text needs all of it. A value that is
+not a whole number of at least 1 (zero, a negative, `NaN`, a string) sets no
+ceiling, and a fraction is rounded down. A line's [trace](/guide/tracing-lines/)
+shortens a list the same way, at ten elements.
+
+The boundary: this bounds the time spent writing a result, not what the value
+costs to hold. A hundred-thousand-element list is still a hundred thousand
+numbers in memory while its document is open.
 
 ## Formatting yourself
 
