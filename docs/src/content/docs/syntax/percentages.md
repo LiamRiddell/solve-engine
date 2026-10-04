@@ -60,12 +60,16 @@ decrease 80 by 25% // 60
 $80 - 25% // $60.00
 ```
 
-The past tense reads the same way, and `reduce` is `decrease`:
+The past tense reads the same way, and `reduce` is `decrease`. The value can
+come first, followed by the change, in either tense:
 
 ```solve
 50 increased by 20% // 60
 50 decreased by 20% // 40
 reduce 50 by 20% // 40
+100 increase by 10% // 110
+100 decrease by 10% // 90
+100 reduced by 20% // 80
 ```
 
 `reduce` is also [map-reduce](/syntax/map-reduce-and-aggregates/)'s call, so it
@@ -170,7 +174,11 @@ gives 6, and the price before a 20% markup or a 20% discount.
 5% of what is 6 // 120
 120 is 20% on what // 100
 120 is 20% off what // 150
+20% off what is $80 // $100.00
 ```
+
+The last asks the same question with the rate first: the price that a 20%
+discount brings down to $80.
 
 ## Percent, permille and parts per million
 
@@ -190,6 +198,20 @@ percentage, and is refused:
 
 ```solve
 5 km as % // A length is not a proportion, so it has no percentage: only a number, a ratio or a parts-per quantity (ppm, permille) can be written as one.
+```
+
+## A percentage as a multiplier
+
+A multiplier is the number a value is multiplied by to apply a change: a 20%
+rise multiplies by 1.2, the factor a spreadsheet formula or a price list uses.
+`as multiplier` turns a percentage into that factor, and shows a plain number as
+one, with an `x` after it. The conversion is read by `CONVERTERS_PACKAGE`, which
+`createEngine()` registers.
+
+```solve
+20% as multiplier // 1.2x
+150% as multiplier // 2.5x
+0.5 as multiplier // 0.5x
 ```
 
 ## What it does not cover

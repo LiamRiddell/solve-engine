@@ -146,3 +146,25 @@ operations under a different notation.
 length("hello") // 5
 upper("hi there") // HI THERE
 ```
+
+The counts also go by the one-word names spreadsheets and editors use,
+`wordcount`, `charcount` and `linecount`, and the case changes by `titlecase`
+and `slugify`:
+
+```solve
+wordcount("the quick brown fox") // 4
+charcount("hello") // 5
+linecount("one line") // 1
+titlecase("hello world") // Hello World
+slugify("Hello World") // hello-world
+```
+
+The boundary for counting lines: a quoted string cannot hold a line break, since
+the engine reads one line at a time and has no escape for a new line. So `\n`
+inside quotes is two characters, a backslash and an `n`, and a quoted string
+always has one line.
+
+```solve
+lines in "a\nb" // 1
+length of "a\nb" // 4
+```

@@ -1,0 +1,4 @@
+{
+	"$comment": "Names scripts/check-keyword-docs.mjs does not require a syntax page to mention, each with the reason. An entry fails as stale once a page mentions its name or the engine stops reading it, so remove it then.",
+	"mul": "an alias of * that #829 proposes to retire or confine, since it takes the name mul away from a variable; documenting it now would advertise a spelling that may go"
+}

@@ -3,7 +3,7 @@ title: "Vectors & matrices"
 description: Literals, element-wise arithmetic, matrix products, indexing and linear algebra.
 ---
 
-> **Package:** `MATRIX_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+> **Packages:** `MATRIX_PACKAGE`, and `VECTOR_PACKAGE` for the `vec2` to `vec4` constructors. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
 
 A vector is a list of numbers in a row; a matrix is a grid of them. Comma
 separates columns, semicolon separates rows.
@@ -11,6 +11,17 @@ separates columns, semicolon separates rows.
 ```solve
 [1,2,3] // [1, 2, 3]
 [1,2;3,4] // [1, 2; 3, 4]
+```
+
+`vec2`, `vec3` and `vec4` build a vector of two, three or four numbers, the
+names graphics and game code give a point on a plane, a point in space, and a
+point with a fourth value such as a colour's opacity. Each is the same vector
+the brackets write, named by its length.
+
+```solve
+vec2(1, 2) // [1, 2]
+vec3(1, 2, 3) // [1, 2, 3]
+vec4(1, 2, 3, 4) // [1, 2, 3, 4]
 ```
 
 A matrix's compact value is written on one line, `columns, ...; next row, ...`,
@@ -69,6 +80,12 @@ A numeric vector can be drawn as a sparkline with `[...] as sparkline`; see
 
 ## Element-wise arithmetic
 
+Element-wise means one element at a time: an operation between a vector and a
+number is applied to every element, and one between two vectors of the same
+length pairs them up position by position, first with first and second with
+second. It is how a whole column of prices is scaled or two lists of readings
+are added together.
+
 ```solve
 [1,2,3] * 10 // [10, 20, 30]
 [1,2,3] + [10,20,30] // [11, 22, 33]
@@ -94,8 +111,16 @@ Indices are zero-based.
 
 ## Linear algebra
 
+Linear algebra is the arithmetic of whole matrices, used to solve several
+equations at once or to move and rotate points. The **transpose** swaps a
+matrix's rows and columns, written `^T` or `transpose(...)`. The
+**determinant**, `det`, is a single number that says whether the matrix can be
+undone: it cannot when the determinant is zero. The **inverse**, `^-1` or
+`inv(...)`, is the matrix that undoes it.
+
 ```solve
 [1,2;3,4]^T // [1, 3; 2, 4]
+transpose([1,2;3,4]) // [1, 3; 2, 4]
 det([1,2;3,4]) // -2
 [1,2;3,4]^-1 // [-2.00, 1.00; 1.50, -0.50]
 ```

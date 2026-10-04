@@ -64,6 +64,22 @@ as a city, and keeps its own label.
 3pm GMT+9 on 23 September 2026 in London and UTC-5 // London 7:00 AM, UTC-5 1:00 AM
 ```
 
+A place whose name is more than one word is written with its spaces, as it is
+said, whether it is a city (`Los Angeles`, `Las Vegas`, `Mexico City`, `Kuala
+Lumpur`, `New Delhi`, `Cape Town`, `Rio de Janeiro`, `Sao Paulo`) or a country
+(`South Africa`, `United Kingdom`).
+
+```solve
+3pm London on 23 September 2026 in Los Angeles, Mexico City and Kuala Lumpur // Los Angeles 7:00 AM, Mexico City 8:00 AM, Kuala Lumpur 10:00 PM
+3pm London on 23 September 2026 in Las Vegas // 7:00 AM
+3pm London on 23 September 2026 in New Delhi // 7:30 PM
+3pm London on 23 September 2026 in Cape Town // 4:00 PM
+3pm London on 23 September 2026 in Rio de Janeiro // 11:00 AM
+3pm London on 23 September 2026 in Sao Paulo // 11:00 AM
+3pm London on 23 September 2026 in South Africa // 4:00 PM
+3pm Los Angeles on 23 September 2026 in United Kingdom // 11:00 PM
+```
+
 ## Why the date matters
 
 The clocks do not change everywhere on the same day. New York moves its clocks
@@ -308,6 +324,18 @@ document computed in one zone can pin it: see
   India, Ireland and Israel) the most common is taken, which for `IST` is India.
 - **`UTC` and `GMT`**, and in the time conversions above an offset from them,
   `GMT+9` or `UTC-5:30`, which is fixed and never changes for daylight saving.
+
+A place whose name is more than one word is read whole, with a space between
+the words and in any case, so `time in buenos aires` is Buenos Aires. The
+database's names of that kind, beyond those above, are Addis Ababa, Bahia
+Banderas, Blanc Sablon, Boa Vista, Broken Hill, Buenos Aires, Cambridge Bay,
+Campo Grande, Cape Verde, Ciudad Juarez, Coral Harbour, Costa Rica, Dawson
+Creek, El Aaiun, El Salvador, Fort Nelson, Glace Bay, Goose Bay, Grand Turk,
+Isle of Man, La Paz, Lord Howe, Lower Princes, Pago Pago, Phnom Penh, Port
+Moresby, Port of Spain, Porto Novo, Porto Velho, Punta Arenas, Rankin Inlet, Rio
+Branco, Rio Gallegos, San Marino, Santo Domingo, Sao Tome, South Georgia, St
+Barthelemy, St Helena, St Johns, St Kitts, St Lucia, St Thomas, St Vincent,
+Swift Current and Ust Nera.
 
 ```solve
 time difference between Kathmandu and Kolkata // Kathmandu is 15 minutes ahead of Kolkata

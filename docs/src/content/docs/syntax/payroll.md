@@ -16,10 +16,19 @@ take home on £30,000 // £25,119.60
 £120,000 after tax // £76,157.40
 ```
 
-`per month after tax` gives the monthly take-home rather than the annual:
+The word `salary` may sit before `after tax`, as it is often said, with the same
+answer:
+
+```solve
+£50,000 salary after tax // £39,519.60
+```
+
+`per month after tax` gives the monthly take-home rather than the annual, and
+`monthly after tax` is the same question in one word:
 
 ```solve
 £60,000 salary per month after tax // £3,779.78
+£50,000 monthly after tax // £3,293.30
 ```
 
 The salary has to be in pounds, because these bands are British. A salary in

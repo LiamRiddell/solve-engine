@@ -80,6 +80,14 @@ multiplies out.
 The last line is a marathon at four and a half minutes a kilometre, three hours
 nine minutes and fifty-four seconds.
 
+`as laptime` writes any length of time the way a stopwatch does, hours, minutes
+and seconds with colons, and `as lap` is the shorter spelling:
+
+```solve
+10 km at 4:30/km as lap // 00:45:00
+90 minutes as lap // 01:30:00
+```
+
 The minute unit may be written too, as it is in a converted pace, and `per`
 reads as the slash does:
 

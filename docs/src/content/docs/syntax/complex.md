@@ -5,7 +5,11 @@ description: Exact complex arithmetic, and the roots that need it.
 
 > **Package:** `SYMBOLIC_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
 
-Writing a number flush against `i` makes it imaginary.
+A complex number has two parts: a real part, an ordinary number, and an
+imaginary part, a multiple of `i`, the number whose square is -1. They are what
+the square root of a negative number turns out to be, and they appear in
+electronics, signal processing and the roots of equations. Writing a number
+flush against `i` makes it imaginary.
 
 ```solve
 3i // 3i
@@ -53,6 +57,11 @@ The first is exact. The second keeps its surd, because the square root of two is
 irrational and rounding it would be the one thing this engine will not do.
 
 ## Taking a complex number apart
+
+Each part of a complex number can be read on its own. `re` gives the real part
+and `im` the imaginary part (as a plain number, without the `i`). `conj` gives
+the conjugate, the same number with its imaginary part negated, which is what
+multiplies with the original to give a real answer.
 
 ```solve
 re(2+3i) // 2

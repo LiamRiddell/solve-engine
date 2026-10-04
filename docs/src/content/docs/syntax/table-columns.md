@@ -23,7 +23,8 @@ read as data instead:
 | `mode of column "cost" above` | the most frequent cell |
 
 `total of column` and `mean of column` are accepted as synonyms of `sum` and
-`average`. The address is optional: with only the nearest table to read from,
+`average`, `minimum of column` and `maximum of column` of `min` and `max`, and
+`stdev of column` of `standard deviation of column`. The address is optional: with only the nearest table to read from,
 `sum of column "cost"`, `sum of column "cost" above`, and
 `sum of column "cost" in table above` all mean the same thing.
 
@@ -71,6 +72,28 @@ standard deviation of column "score" above  // 2
 variance of column "score" above            // 4
 spread of column "score" above              // 7
 mode of column "score" above                // 4
+```
+
+The sample forms, which divide by one less than the count for readings that are
+a draw from a larger set, read a column the same way, as do the other spellings:
+
+```solve-doc
+| reading | score |
+| ------- | ----- |
+| a       |     2 |
+| b       |     4 |
+| c       |     4 |
+| d       |     4 |
+| e       |     5 |
+| f       |     5 |
+| g       |     7 |
+| h       |     9 |
+
+sample standard deviation of column "score" above  // 2.14
+sample variance of column "score" above            // 4.57
+stdev of column "score" above                      // 2
+minimum of column "score" above                    // 2
+maximum of column "score" above                    // 9
 ```
 
 The column name is matched case-insensitively.

@@ -44,7 +44,7 @@ date the engine reads, including a relative one:
 ```
 
 The connector is only read this way when a span is in front of it, which is what
-keeps `$1,000 after 3 years at 7%` an investment. `to` is deliberately not
+keeps `$1,000 after 3 years at 7%` an [investment](/syntax/investments/). `to` is deliberately not
 claimed for an offset, because between two dates it already means something:
 the span from the first to the second, in days, which `in weeks` converts. A
 later date first gives a negative span, as subtracting them does. Between two

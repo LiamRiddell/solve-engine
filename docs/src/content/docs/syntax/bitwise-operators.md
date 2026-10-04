@@ -34,6 +34,26 @@ not three.
 2^10 // 1,024
 ```
 
+## Functions on the 32-bit form
+
+Programs written in C or JavaScript often keep a whole number in 32 bits, and
+three functions give the answers such a program would. `clz32(n)` counts the
+leading zero bits of `n` written in 32 bits, so 1 has 31 and 0 has all 32; 32
+minus the count is how many bits the number needs. `imul(a, b)` multiplies the
+way 32-bit integers do, wrapping round when the product does not fit, which is
+what a hash function written in those languages computes. `fround(x)` rounds a
+number to the nearest single-precision float, the 32-bit format graphics cards
+and many file formats store, so it shows what a value becomes once stored that
+way.
+
+```solve
+clz32(1) // 31
+clz32(0) // 32
+imul(3, 4) // 12
+imul(2147483647, 2) // -2
+fround(5.5) // 5.50
+```
+
 ## Precedence
 
 These operators follow the precedence order that C, JavaScript, Python and

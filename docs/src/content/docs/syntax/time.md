@@ -83,6 +83,14 @@ It is an ordinary quantity once read, so it converts like one.
 1h30m in minutes // 90 minutes
 ```
 
+`as timespan` writes a length of time back out in words, largest unit first,
+which reads better than a large count of one unit:
+
+```solve
+5415 seconds as timespan // 1 hour 30 minutes 15 seconds
+2h30m as timespan // 2 hours 30 minutes
+```
+
 The parts run from the larger unit to the smaller, which is what a duration
 written this way means. That is also what makes it safe to read `m` as minutes
 here: on its own, `m` is metres.

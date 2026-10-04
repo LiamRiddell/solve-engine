@@ -68,15 +68,16 @@ and a variable called `ago` still works.
 
 ## This week, next month, last year
 
-`next week`, `this month` and `last year` name a whole week, month or year, and
-each stands for its first day: `next month` is the first of next month, and
-`next week` is next Monday. A week runs Monday to Sunday unless the host starts
+`next week`, `this month`, `last week` and `last year` name a whole week, month
+or year, and each stands for its first day: `next month` is the first of next
+month, and `next week` is next Monday. A week runs Monday to Sunday unless the host starts
 it on another day, or the engine's locale names a region whose week does (see
 [working days](/syntax/working-days/#which-days-are-the-weekend)).
 
 ```solve
 next week // Monday, March 16, 2026
 this week // Monday, March 9, 2026
+last week // Monday, March 2, 2026
 next month // Wednesday, April 1, 2026
 next year // Friday, January 1, 2027
 last year // Wednesday, January 1, 2025
