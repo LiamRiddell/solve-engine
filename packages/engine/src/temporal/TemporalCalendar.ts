@@ -16,9 +16,8 @@
  * design constraint rather than a hope: `Temporal` and `Date` differ in what
  * they do with an out-of-range instant (`RangeError` against `NaN`), a
  * fractional millisecond (a throw against truncation), a day past the end of
- * a month (a clamp or a throw against a roll into the next month) and a year
- * from 0 to 99 (read literally against read as the 1900s), and every one of
- * those is reproduced here the way `Date` does it, because the engine's
+ * a month (a clamp or a throw against a roll into the next month), and every
+ * one of those is reproduced here the way `Date` does it, because the engine's
  * results are measured against `Date` and a host switching backends must see
  * no result move. The differential suite under `__tests__/temporal/` is what
  * holds that line.
@@ -42,7 +41,7 @@
 import type { CalendarBackend, CalendarFields, ZonedFields } from "@solve-js/calendar/CalendarBackend";
 import { daysInMonth } from "@solve-js/calendar/Gregorian";
 import { civilDayNumber, civilFromDayNumber } from "./CivilDays";
-import { dateInZone, timeInZone } from "@solve-js/calendar/IntlZone";
+import { dateInZone, longDateOptions, mayPrecedeYearOne, timeInZone } from "@solve-js/calendar/IntlZone";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { CoreErrorCodes } from "@solve-js/errors/ErrorCode";
 
@@ -347,9 +346,9 @@ export class TemporalCalendar implements CalendarBackend {
 		// `toLocaleDateString()` on an invalid date, rather than the throw
 		// `Intl` would raise.
 		if (Number.isNaN(t)) return "Invalid Date";
-		return new Intl.DateTimeFormat(locale, {
-			timeZone: this.timeZone, weekday: "long", year: "numeric", month: "long", day: "numeric",
-		}).format(t);
+		// The era only before year 1, where the year alone reads as AD (#823).
+		const beforeYearOne = mayPrecedeYearOne(t) && this.fields(t).year < 1;
+		return new Intl.DateTimeFormat(locale, { timeZone: this.timeZone, ...longDateOptions(beforeYearOne) }).format(t);
 	}
 
 	formatTimeOfDay(epochMs: number, locale: string): string {
@@ -410,14 +409,12 @@ export class TemporalCalendar implements CalendarBackend {
 	/**
 	 * The instant a set of local wall-clock fields names, with the fields
 	 * normalised the way `Date`'s constructor and setters normalise them
-	 * (month 12 is next January, day 0 the last of the month before, a year
-	 * from 0 to 99 the 1900s) before the zone is consulted.
+	 * (month 12 is next January, day 0 the last of the month before) before
+	 * the zone is consulted. The year is taken as written, as the backend
+	 * contract states: 50 is 50 AD, not 1950 (#823).
 	 */
 	private wallClock(year: number, month0: number, day: number, hour: number, minute: number, second: number, millisecond: number): number {
-		// The constructor's two-digit-year window, applied to the year as
-		// written and before any overflow, as `Date` applies it.
-		const windowed = year >= 0 && year <= 99 ? 1900 + Math.trunc(year) : year;
-		return this.resolve(normaliseWallClock(windowed, month0, day, hour, minute, second, millisecond));
+		return this.resolve(normaliseWallClock(year, month0, day, hour, minute, second, millisecond));
 	}
 
 	/**

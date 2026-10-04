@@ -222,6 +222,36 @@ function formatBoolean(value: boolean): string {
 }
 
 /**
+ * A year as ISO 8601 writes it (#823): four digits from year 0 to 9999
+ * (`0975`, not `975`, which no ISO reader takes as a year), and outside them
+ * a sign and six digits, the expanded form `Date` and `Temporal` both write
+ * and read. The year counts astronomically, so 1 BC is `0000` and 975 BC is
+ * `-000974`, which is the numbering ISO 8601 itself uses.
+ *
+ * @param year - The astronomical year, as a backend's fields give it.
+ * @returns The year's ISO spelling.
+ */
+export function isoYear(year: number): string {
+  if (!Number.isInteger(year)) return String(year);
+  if (year >= 0 && year <= 9999) return String(year).padStart(4, "0");
+  return `${year < 0 ? "-" : "+"}${String(Math.abs(year)).padStart(6, "0")}`;
+}
+
+/**
+ * A year as the day-first and month-first forms write it (#823): as it always
+ * was from year 1, and before it with `BC` after the year, counted as a reader counts, so the
+ * astronomical year -974 is `975 BC`. Without the era a date before year 1
+ * read as one in the common era.
+ *
+ * @param year - The astronomical year, as a backend's fields give it.
+ * @returns The year for a `dmy` or `mdy` date.
+ */
+export function slashYear(year: number): string {
+  if (!Number.isInteger(year) || year >= 1) return String(year);
+  return `${1 - year} BC`;
+}
+
+/**
  * Renders a Datetime value locale-aware, the previous implementation
  * called `d.toLocaleString()` with no arguments, which always uses the JS
  * runtime's own default locale and never actually consulted `locale.code`
@@ -276,13 +306,12 @@ function formatDatetime(value: number, locale: ILocale, settings: FormattingSett
   // The numeric forms, built from the local calendar fields so they read the
   // same regardless of the JS runtime's own default locale.
   const p2 = (n: number) => String(n).padStart(2, "0");
-  const year = d.year;
   const month = p2(d.month0 + 1);
   const day = p2(d.day);
   let datePart: string;
-  if (format === "iso") datePart = `${year}-${month}-${day}`;
-  else if (format === "dmy") datePart = `${day}/${month}/${year}`;
-  else datePart = `${month}/${day}/${year}`; // mdy
+  if (format === "iso") datePart = `${isoYear(d.year)}-${month}-${day}`;
+  else if (format === "dmy") datePart = `${day}/${month}/${slashYear(d.year)}`;
+  else datePart = `${month}/${day}/${slashYear(d.year)}`; // mdy
 
   if (isMidnight) return `= ${datePart}`;
   const time = `${p2(d.hour)}:${p2(d.minute)}:${p2(d.second)}`;
