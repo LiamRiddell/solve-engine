@@ -266,7 +266,7 @@ Measured against **meter**.
 | decimeter | `decimetre`, `decimeters`, `decimetres`, `dm` | 0.1 |
 | inch | `inches`, `in` | 0.0254 |
 | centimeter | `centimetre`, `centimeters`, `centimetres`, `cm` | 0.01 |
-| pica | `picas` | 0.0042333 |
+| pica | `picas` | 0.00423333 |
 | millimeter | `millimetre`, `millimeters`, `millimetres`, `mm` | 0.001 |
 | typographic point | `typographic points` | 0.000352778 |
 | mil | `mils` | 0.0000254 |

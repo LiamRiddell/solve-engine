@@ -3,7 +3,8 @@ import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
-import { autoFormatIntegerOrFloat, tooSmallToPrintText } from "@solve-js/utilities/Number";
+import { autoFormatIntegerOrFloat, compactParts, tooSmallToPrintText } from "@solve-js/utilities/Number";
+import { localCalendarName, localCurrencyPlacement, withLocalUnitName } from "./LocaleWords";
 import { getMeasure } from "@solve-js/uom/UomConverter";
 import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS, resolveFormattingSettings, type FormattingOverrides } from "./FormattingSettings";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
@@ -40,14 +41,55 @@ function formatNumber(value: number, locale: ILocale, settings: FormattingSettin
     });
     return `${locale.display.resultPrefix}${formatted}`;
   }
+  const compact = compactText(value, settings);
+  if (compact !== undefined) return `${locale.display.resultPrefix}${compact}`;
   const dp = settings.floatResult.decimalPlaces;
   // A value below the decimal budget is shown to three significant digits
   // rather than as a zero it cannot be told apart from. Only when the budget is
   // the default one: an explicit `to N dp` above asked for those places and is
   // given them, zeros included.
   const tooSmall = tooSmallToPrintText(value, dp, loc || "en-US");
-  const formatted = tooSmall ?? autoFormatIntegerOrFloat(value, dp, sep, loc);
+  const formatted = tooSmall ?? autoFormatIntegerOrFloat(value, dp, sep, loc, settings.floatResult.trimTrailingZeros === true);
   return `${locale.display.resultPrefix}${formatted}`;
+}
+
+/**
+ * A number in the compact form `as compact` writes (`1.5M`, `-2.3k`), in the
+ * locale's digits and decimal mark, when `floatResult.compactFrom` asks for it
+ * and the number reaches it (#750). Undefined otherwise: the setting is off,
+ * the number is below the threshold or below a thousand, it has reached a
+ * thousand trillion, or it is not finite. A threshold that is not a finite
+ * number is off rather than thrown on, since it is a host's setting and not a
+ * reader's line.
+ *
+ * A number past the largest suffix keeps its ordinary form, as one below the
+ * smallest does: there is no suffix left to shorten it with, and `as compact`'s
+ * exponent form there (`1e+308`) would turn an exact `2^64` into
+ * `1.84e+19` on a line that never asked for a rounding.
+ *
+ * @param value - The number, or a quantity's number.
+ * @param settings - The settings in force.
+ * @returns The compact text without a unit, or undefined for the ordinary form.
+ */
+export function compactText(value: number, settings: FormattingSettings): string | undefined {
+  const from = settings.floatResult.compactFrom;
+  if (typeof from !== "number" || !Number.isFinite(from) || !Number.isFinite(value)) return undefined;
+  const magnitude = Math.abs(value);
+  if (magnitude < Math.max(from, 1000)) return undefined;
+  const parts = compactParts(value);
+  if (parts === undefined || parts.suffix === "") return undefined;
+  const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
+  return `${parts.sign}${localiseFixedDecimal(parts.figure, loc, false)}${parts.suffix}`;
+}
+
+/**
+ * The locale an answer's words are written in, or undefined for the engine's
+ * own: `wordsResult.spelling` set to `"engine"` keeps them (#754, #755, #757).
+ * Whether the locale has words of its own is the caller's lookup to make.
+ */
+function wordsLocale(settings: FormattingSettings): string | undefined {
+  if (settings.wordsResult?.spelling === "engine") return undefined;
+  return settings.numberResult.decimalSeparatorLocale || "en-US";
 }
 
 /**
@@ -217,6 +259,18 @@ function dateNamesLocale(tag: string, pack: ILocale): string {
 
 function formatString(value: string): string {
   return `= ${value}`;
+}
+
+/**
+ * A weekday or month name answered from a date, in the reader's language
+ * where the locale has its own (`= Dienstag` under `de`, #757), and the
+ * engine's English text otherwise.
+ */
+function formatCalendarName(value: Value, settings: FormattingSettings): string {
+  const name = value.calendarName;
+  const words = wordsLocale(settings);
+  const local = name === undefined || words === undefined ? undefined : localCalendarName(name.kind, name.index, words);
+  return formatString(local ?? (value.value as string));
 }
 
 function formatBoolean(value: boolean): string {
@@ -555,7 +609,8 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
       : settings.unitOfMeasurementResult.currencyPlaces === "setting"
         ? { min: dp, max: dp }
         : moneyDisplayPlaces(money.code, dp, money.per !== undefined);
-    return `= ${formatMoney(value, money, places, exact, explicitPlaces !== undefined, loc, useGrouping)}`;
+    const compact = explicitPlaces === undefined ? compactText(value, settings) : undefined;
+    return `= ${formatMoney(value, money, places, exact, explicitPlaces !== undefined, loc, useGrouping, wordsLocale(settings), compact)}`;
   }
 
   // For TimeSpan values (days, weeks, hours, etc.), format as integer if the value is a whole number
@@ -567,30 +622,49 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   // countable. Not for an explicit `to N dp`, which asked for those places.
   // Money has its own rule, in formatMoney.
   const tooSmall = explicitPlaces === undefined ? tooSmallToPrintText(value, dp, loc) : undefined;
+  const compact = explicitPlaces === undefined ? compactText(value, settings) : undefined;
 
   let formatted: string;
-  if (tooSmall !== undefined) {
+  // The places the text shows, for the grammatical form of a localised unit
+  // name; undefined when the text is not a plain decimal.
+  let shownPlaces: number | undefined;
+  if (compact !== undefined) {
+    formatted = compact;
+  } else if (tooSmall !== undefined) {
     formatted = tooSmall;
   } else if (isTimeSpan && value === Math.floor(value)) {
     // For whole number TimeSpan values, format as integer
     formatted = localiseFixedDecimal(value.toString(), loc, useGrouping);
+    shownPlaces = 0;
   } else {
-    // For other values, use the configured decimal places
-    formatted = localiseFixedDecimal(value.toFixed(dp), loc, useGrouping);
+    // For other values, use the configured decimal places, less the zeros
+    // that only pad them when the host asked for that (#750). An explicit
+    // `to N dp` keeps every place it asked for.
+    const fixed = value.toFixed(dp);
+    const shown = explicitPlaces === undefined && settings.floatResult.trimTrailingZeros === true ? trimFractionZeros(fixed, 0) : fixed;
+    formatted = localiseFixedDecimal(shown, loc, useGrouping);
+    const point = shown.indexOf(".");
+    shownPlaces = /e/i.test(shown) ? undefined : point < 0 ? 0 : shown.length - point - 1;
   }
 
-  // The unit is written as the symbol the value carries. There used to be a
-  // `unitOfMeasurementResult.unitNames` setting here whose two branches were
-  // the same expression, so it never changed anything, and it was removed
-  // rather than implemented: the engine has no unit-name data to render from.
-  // The generated unit table maps a spelling to [measure, ratio] only, and
-  // names cannot be recovered from it, because units that differ by an OFFSET
-  // share a ratio, so "20 C" would come back as "20 kelvins". A real
-  // implementation needs a hand-authored name per unit plus pluralization and
-  // per-locale spelling (metre against meter), which is a feature rather than
-  // the repair of a dead ternary. The one exception is the time words, which
-  // the value already carries as words and which come in pairs: see
-  // timeWordForCount.
+  // A unit's long name in the reader's language where Intl has one (#754):
+  // `3,11 Meilen` under `de`. A symbol (`km`) is written as it is, and an
+  // English locale keeps the engine's own names.
+  const words = unit === undefined ? undefined : wordsLocale(settings);
+  if (unit !== undefined && words !== undefined) {
+    // The count as shown, so `1.00` takes the form a count with places takes.
+    const count = shownPlaces === undefined ? value : Number(value.toFixed(shownPlaces));
+    const local = withLocalUnitName(formatted, unit, count, shownPlaces, words);
+    if (local !== undefined) return `= ${local}`;
+  }
+
+  // Otherwise the unit is written as the spelling the value carries. Names
+  // cannot be recovered from the generated unit table, which maps a spelling
+  // to [measure, ratio] only (units that differ by an OFFSET share a ratio, so
+  // "20 C" would come back as "20 kelvins"), which is why a localised name
+  // above starts from the long spelling the value already carries and a
+  // symbol is never turned into a name. The time words come in pairs and
+  // agree with their count in English: see timeWordForCount.
   const shownUnit = unit !== undefined && isTimeSpan ? timeWordForCount(unit, value) : unit;
   return `= ${formatted} ${shownUnit || ""}`.trim();
 }
@@ -679,13 +753,25 @@ export function moneyUnitOf(unit: string): MoneyUnit | undefined {
  *
  * A prefix symbol goes after the sign, as money is written: -$5.00, not
  * $-5.00 (#554). A suffix symbol follows the amount either way.
+ *
+ * Under a locale that is not English the symbol takes the place that locale
+ * gives it (#755): after the amount with a space under `de` (`5,00 €`), before
+ * it under `ja`. The symbol itself, the places and the sign rule stay the
+ * engine's, so `$` stays `$` for every dollar and the amount rounds as it
+ * always did. The space is a plain one, where `Intl` writes a no-break space,
+ * so the answer reads back in as typed text.
+ *
+ * @param words - The locale the symbol is placed for, or undefined for the engine's own placement.
+ * @param compact - The amount already written compactly (`3.3M`), or undefined for the ordinary form.
  */
-function formatMoney(value: number, money: MoneyUnit, places: MoneyPlaces, exact: DecimalData | undefined, placesAsked: boolean, loc: string, useGrouping: boolean): string {
-  const tooSmall = placesAsked || (exact !== undefined && money.per === undefined)
+function formatMoney(value: number, money: MoneyUnit, places: MoneyPlaces, exact: DecimalData | undefined, placesAsked: boolean, loc: string, useGrouping: boolean, words?: string, compact?: string): string {
+  const tooSmall = compact !== undefined || placesAsked || (exact !== undefined && money.per === undefined)
     ? undefined
     : tooSmallToPrintText(value, places.max, loc);
   let text: string;
-  if (tooSmall !== undefined) {
+  if (compact !== undefined) {
+    text = compact;
+  } else if (tooSmall !== undefined) {
     text = tooSmall;
   } else {
     const fixed = exact !== undefined ? decimalToFixed(exact, places.max) : value.toFixed(places.max);
@@ -696,9 +782,11 @@ function formatMoney(value: number, money: MoneyUnit, places: MoneyPlaces, exact
   // a plain object and a lookup must never find an inherited name.
   const display = Object.prototype.hasOwnProperty.call(CURRENCY_DISPLAY, money.code) ? CURRENCY_DISPLAY[money.code] : undefined;
   if (display === undefined) return `${text} ${money.code}${per}`;
-  const sep = display.spaced ? " " : "";
+  const placed = words === undefined ? undefined : localCurrencyPlacement(money.code, words);
+  const position = placed?.position ?? display.position;
+  const sep = (placed?.spaced ?? display.spaced) ? " " : "";
   const negative = text.startsWith("-");
-  const amount = display.position === "prefix"
+  const amount = position === "prefix"
     ? `${negative ? "-" : ""}${display.symbol}${sep}${negative ? text.slice(1) : text}`
     : `${text}${sep}${display.symbol}`;
   return `${amount}${per}`;
@@ -710,8 +798,9 @@ function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): st
   const dp = settings.floatResult.decimalPlaces;
   const sep = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale;
-  // A zero entry is written without a sign, as a zero result is (#585).
-  return autoFormatIntegerOrFloat(entry === 0 ? 0 : entry, dp, sep, loc);
+  // A zero entry is written without a sign, as a zero result is (#585), and an
+  // entry drops its padding zeros when a plain number does (#750).
+  return autoFormatIntegerOrFloat(entry === 0 ? 0 : entry, dp, sep, loc, settings.floatResult.trimTrailingZeros === true);
 }
 
 /**
@@ -789,7 +878,8 @@ function formatPercentage(value: number, locale: ILocale, settings: FormattingSe
   // locale's grouping and decimal mark (`1234567%` was 1234567.00%, and 25%
   // under de-DE was 25.00%), as formatUom's figures do.
   const tooSmall = tooSmallToPrintText(percent, dp, loc);
-  const fixed = percent.toFixed(dp);
+  // Less the zeros that only pad the places, when the host asked for that (#750).
+  const fixed = settings.floatResult.trimTrailingZeros === true ? trimFractionZeros(percent.toFixed(dp), 0) : percent.toFixed(dp);
   let formatted = tooSmall ?? localiseFixedDecimal(fixed, loc, settings.floatResult.enableSeperator);
   // A proportion that is zero at these places is written without a sign, as a
   // zero is (#585): never -0.00%.
@@ -876,6 +966,9 @@ export function formatValue(value: Value, settings?: FormattingOverrides): strin
       // An exact integer past the safe range shows its own digits. Within the
       // range the double is already exact and renders as it always has.
       if (value.rational !== undefined && value.rational.d === 1n && !Number.isSafeInteger(value.value as number)) {
+        // Compact is a display rounding, so an exact integer takes it as a double does.
+        const compact = value.decimalPlaces === undefined ? compactText(value.value as number, us) : undefined;
+        if (compact !== undefined) return `${locale.display.resultPrefix}${compact}`;
         return formatExactInteger(value.rational.n, locale, us, value.decimalPlaces);
       }
       return formatNumber(value.value as number, locale, us, value.decimalPlaces, value.exact);
@@ -884,6 +977,7 @@ export function formatValue(value: Value, settings?: FormattingOverrides): strin
     case ValueType.BigInt:
       return formatBigInt(value.value as bigint);
     case ValueType.String:
+      if (value.calendarName !== undefined) return formatCalendarName(value, us);
       return formatString(value.value as string);
     case ValueType.Boolean:
       return formatBoolean(value.value as boolean);

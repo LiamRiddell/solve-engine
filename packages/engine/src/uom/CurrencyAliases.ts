@@ -220,10 +220,10 @@ export const CURRENCY_DISPLAY: Record<string, CurrencyDisplayInfo> = {
   SGD: { symbol: "$", position: "prefix", spaced: false },
   MXN: { symbol: "$", position: "prefix", spaced: false },
   GBP: { symbol: "£", position: "prefix", spaced: false },
-  // English-language convention (€100.00), many EU locales instead suffix
-  // with a space ("100,00 €"); this engine's default locale is "en", so
-  // the English convention was chosen. A locale-aware override would be a
-  // reasonable future extension, not attempted here.
+  // English-language convention (€100.00), the engine's own. Many EU locales
+  // instead suffix with a space ("100,00 €"), and the formatter places the
+  // symbol by the number locale where it is not English (#755): this entry is
+  // the placement for English and for a host that keeps the engine's spelling.
   EUR: { symbol: "€", position: "prefix", spaced: false },
   JPY: { symbol: "¥", position: "prefix", spaced: false },
   CNY: { symbol: "¥", position: "prefix", spaced: false },

@@ -219,7 +219,7 @@ describe("adversarial: realistic breakage", () => {
 
 	test("a de-DE engine's settings write German text in the DTO", () => {
 		const de = newTrackedEngine({ locale: "de-DE" });
-		expect(serializeValue(de.evaluateExpression("€1.250"), de.getFormattingSettings()).text).toBe("= €1.250,00");
+		expect(serializeValue(de.evaluateExpression("€1.250"), de.getFormattingSettings()).text).toBe("= 1.250,00 €");
 	});
 
 	test("a value from the line above serialises as the line's own", () => {

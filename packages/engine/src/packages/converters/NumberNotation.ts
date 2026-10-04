@@ -17,19 +17,9 @@
 import { Value, ValueType, stringValue, errorValue } from "@solve-js/vm/Value";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { moneyUnitOf } from "@solve-js/format/FormatEngine";
+import { compactParts } from "@solve-js/utilities/Number";
 
-/** The compact suffixes, largest first, each with the power of ten it stands for. */
-const COMPACT_TIERS: ReadonlyArray<readonly [number, string]> = [
-	[1e12, "T"],
-	[1e9, "B"],
-	[1e6, "M"],
-	[1e3, "k"],
-];
-
-/** A number's shortest spelling to at most `figures` significant figures, trailing zeros trimmed. */
-function significant(n: number, figures: number): string {
-	return String(Number(n.toPrecision(figures)));
-}
+export { compactParts, type CompactParts } from "@solve-js/utilities/Number";
 
 /**
  * `n` in engineering notation: a mantissa from 1 up to 1000 and an exponent
@@ -49,23 +39,11 @@ export function engineeringString(n: number): string {
 	return `${mantissa}e${exponent < 0 ? "-" : "+"}${Math.abs(exponent)}`;
 }
 
-/** `n` written compactly with a suffix, to three significant figures. */
+/** `n` written compactly with a suffix, to three significant figures. See {@link compactParts}. */
 export function compactString(n: number): string {
-	if (!Number.isFinite(n)) return String(n);
-	const sign = n < 0 ? "-" : "";
-	const magnitude = Math.abs(n);
-	for (let i = 0; i < COMPACT_TIERS.length; i++) {
-		const [size, suffix] = COMPACT_TIERS[i];
-		if (magnitude < size) continue;
-		const scaled = Number((magnitude / size).toPrecision(3));
-		// 999,950 rounds to 1,000k, which is 1M written worse.
-		if (scaled >= 1000 && i > 0) {
-			const [largerSize, largerSuffix] = COMPACT_TIERS[i - 1];
-			return `${sign}${significant(magnitude / largerSize, 3)}${largerSuffix}`;
-		}
-		return `${sign}${significant(scaled, 3)}${suffix}`;
-	}
-	return `${sign}${significant(magnitude, 3)}`;
+	const parts = compactParts(n);
+	if (parts === undefined) return String(n);
+	return `${parts.sign}${parts.figure}${parts.suffix}`;
 }
 
 /**

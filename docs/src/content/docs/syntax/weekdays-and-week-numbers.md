@@ -85,6 +85,13 @@ another form, which reads well after a date worked out on the same line.
 2026-12-25 as week // 52
 ```
 
+The day and month names are shown in the reader's language when the app
+showing the notes is set to one: `2026-12-25 as weekday` shows `Freitag` to a
+reader whose app is set to German. The answer is still the English name
+underneath, so a check such as `(2026-12-25 as weekday) == "Friday"` holds in
+every language. How an app chooses the language is covered in
+[formatting results](/guide/formatting/#the-words-beside-the-number).
+
 ## The boundary
 
 - The week number is always the ISO one. The other conventions (weeks starting

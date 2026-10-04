@@ -21,12 +21,13 @@
 function removeThousandsSeparators(
 	value: number,
 	locale: string,
-	decimalPlaces: number
+	decimalPlaces: number,
+	minimumFractionDigits: number = decimalPlaces
 ) {
 	return value.toLocaleString(locale, {
 		useGrouping: false,
 		maximumFractionDigits: decimalPlaces,
-		minimumFractionDigits: decimalPlaces,
+		minimumFractionDigits,
 	});
 }
 
@@ -94,19 +95,23 @@ export function tooSmallToPrintText(
  * Format `number` for display, branching on whether it's a whole number:
  * integers are always rendered with zero decimal places (never padded to
  * `decimalPlaces`), while non-integers are rendered with up to
- * `decimalPlaces` fractional digits. `includeThousandSeparators` controls
- * whether groups are separated (e.g. `"1,234"`) per `numberLocale`.
+ * `decimalPlaces` fractional digits, padded with zeros to that many unless
+ * `trimTrailingZeros` is set. `includeThousandSeparators` controls whether
+ * groups are separated (e.g. `"1,234"`) per `numberLocale`.
  *
  * @param number - The value to format.
  * @param decimalPlaces - Max fractional digits for non-integer values (default 2).
  * @param includeThousandSeparators - Whether to group digits (default false).
  * @param numberLocale - `Intl`/`toLocaleString` locale to format with (default "en-US").
+ * @param trimTrailingZeros - Whether a fraction drops the zeros that only pad it
+ *   out to `decimalPlaces`, so 1.5 is `1.5` rather than `1.50` (default false).
  */
 export function autoFormatIntegerOrFloat(
 	number: number,
 	decimalPlaces: number = 2,
 	includeThousandSeparators: boolean = false,
-	numberLocale: string = "en-US"
+	numberLocale: string = "en-US",
+	trimTrailingZeros: boolean = false
 ) {
 	if (Number.isInteger(number)) {
 		if (includeThousandSeparators) {
@@ -120,16 +125,86 @@ export function autoFormatIntegerOrFloat(
 		return removeThousandsSeparators(Math.trunc(number), numberLocale, 0);
 	}
 
-	// Decimal
+	const minimumFractionDigits = trimTrailingZeros ? 0 : decimalPlaces;
 	if (includeThousandSeparators) {
-		// We can return the format early as we don't need to strip thousands
 		return number.toLocaleString(numberLocale, {
 			maximumFractionDigits: decimalPlaces,
-			minimumFractionDigits: decimalPlaces,
+			minimumFractionDigits,
 		});
 	}
 
-	// number.toFixed(decimalPlaces)
+	return removeThousandsSeparators(number, numberLocale, decimalPlaces, minimumFractionDigits);
+}
 
-	return removeThousandsSeparators(number, numberLocale, decimalPlaces);
+/** The compact suffixes, largest first, each with the power of ten it stands for. */
+const COMPACT_TIERS: ReadonlyArray<readonly [number, string]> = [
+	[1e12, "T"],
+	[1e9, "B"],
+	[1e6, "M"],
+	[1e3, "k"],
+];
+
+/** A number's shortest spelling to at most `figures` significant figures, trailing zeros trimmed. */
+function significant(n: number, figures: number): string {
+	return String(Number(n.toPrecision(figures)));
+}
+
+/**
+ * A number's compact form in pieces: its sign, its figure and the suffix after
+ * it, so a formatter can write the figure in a locale's digits and marks.
+ */
+export interface CompactParts {
+	/** `"-"` for a negative number, `""` otherwise. */
+	readonly sign: string;
+	/**
+	 * The figure in ASCII: a plain decimal (`"1.5"`, `"999"`) when a suffix
+	 * carries the scale, or exponent form (`"1e+308"`) past the largest suffix,
+	 * where there is no suffix.
+	 */
+	readonly figure: string;
+	/** `"k"`, `"M"`, `"B"`, `"T"`, or `""` below a thousand and past the largest suffix. */
+	readonly suffix: string;
+}
+
+/**
+ * Where the suffixes stop: a figure of a thousand trillion or more is written
+ * in exponent form instead, since `1000T` is past the tier and `1e+296T` mixes
+ * two ways of writing a scale.
+ */
+const COMPACT_LIMIT = 1e15;
+
+/**
+ * `n` in compact pieces, to three significant figures, or undefined for a value
+ * that is not finite.
+ *
+ * Past the largest suffix the figure is in exponent form with no suffix
+ * (`1e+308`), because a figure divided by a trillion can itself need an
+ * exponent, and `1e+296T` wrote the scale twice in two notations.
+ *
+ * @param n - The number.
+ * @returns The pieces, or undefined for an infinity or NaN.
+ */
+export function compactParts(n: number): CompactParts | undefined {
+	if (!Number.isFinite(n)) return undefined;
+	const sign = n < 0 ? "-" : "";
+	const magnitude = Math.abs(n);
+	// Rounded first, so 999.95 trillion, which is a thousand trillion to three
+	// figures, takes the exponent form rather than `1000T`.
+	if (Number(magnitude.toPrecision(3)) >= COMPACT_LIMIT) {
+		// Written straight from the double, not re-read from three figures: the
+		// largest double rounds up to 1.80e+308, which reads back as Infinity.
+		return { sign, figure: magnitude.toExponential(2).replace(/\.?0+e/, "e"), suffix: "" };
+	}
+	for (let i = 0; i < COMPACT_TIERS.length; i++) {
+		const [size, suffix] = COMPACT_TIERS[i];
+		if (magnitude < size) continue;
+		const scaled = Number((magnitude / size).toPrecision(3));
+		// 999,950 rounds to 1,000k, which is 1M written worse.
+		if (scaled >= 1000 && i > 0) {
+			const [largerSize, largerSuffix] = COMPACT_TIERS[i - 1];
+			return { sign, figure: significant(magnitude / largerSize, 3), suffix: largerSuffix };
+		}
+		return { sign, figure: significant(scaled, 3), suffix };
+	}
+	return { sign, figure: significant(magnitude, 3), suffix: "" };
 }
