@@ -8,9 +8,11 @@ import { lineRefNormalizerRule, rangeCallNormalizerRule } from "./normalizer/Lin
 import { sectionAggregateNormalizerRule } from "./normalizer/SectionAggregateNormalizerRule";
 import { inputsOfNormalizerRule } from "./normalizer/InputsOfNormalizerRule";
 import { InputsOfParselet } from "./parselets/InputsOfParselet";
+import { ColumnTotalParselet } from "./parselets/ColumnTotalParselet";
+import { columnTotalNormalizerRule } from "./normalizer/ColumnTotalNormalizerRule";
 import {
   prevHandler, lineRefHandler, sumRangeHandler, averageRangeHandler,
-  totalAboveHandler, averageAboveHandler,
+  totalAboveHandler, averageAboveHandler, columnTotalHandler,
   countAboveHandler, minAboveHandler, maxAboveHandler, medianAboveHandler,
   sectionSumHandler, sectionAverageHandler, sectionCountHandler,
 } from "./LinesPluginFunctions";
@@ -78,7 +80,7 @@ export const LINES_PACKAGE: IEnginePackage = {
   },
   // `inputs of line N` fuses only before a line reference, below the line-ref
   // rule so the LINE_REF it looks for already exists. See InputsOfNormalizerRule.ts.
-  normalizerRules: [lineRefNormalizerRule(), rangeCallNormalizerRule(), sectionAggregateNormalizerRule(), inputsOfNormalizerRule()],
+  normalizerRules: [lineRefNormalizerRule(), rangeCallNormalizerRule(), sectionAggregateNormalizerRule(), inputsOfNormalizerRule(), columnTotalNormalizerRule()],
   prefixParselets: {
     PREV: new PrevParselet(),
     LINE_REF: new LineRefParselet(),
@@ -95,6 +97,8 @@ export const LINES_PACKAGE: IEnginePackage = {
     SECTION_AVERAGE: new SectionAggregateParselet("sectionAverage"),
     SECTION_COUNT: new SectionAggregateParselet("sectionCount"),
     INPUTS_OF: new InputsOfParselet(),
+    // A line that is only `sum` or `total` (#742); see ColumnTotalNormalizerRule.ts.
+    COLUMN_TOTAL: new ColumnTotalParselet(),
   },
   pluginFunctions: {
     prev: prevHandler,
@@ -102,6 +106,7 @@ export const LINES_PACKAGE: IEnginePackage = {
     sumRange: sumRangeHandler,
     averageRange: averageRangeHandler,
     totalAbove: totalAboveHandler,
+    columnTotal: columnTotalHandler,
     averageAbove: averageAboveHandler,
     countAbove: countAboveHandler,
     minAbove: minAboveHandler,
@@ -113,5 +118,5 @@ export const LINES_PACKAGE: IEnginePackage = {
     // `inputs of line N` has no entry of its own: it reaches its handler
     // through lineRef. See TRACE_INPUTS in LinesPluginFunctions.ts for why.
   },
-  tokenCategories: { INPUTS_OF: "keyword", COUNT_ABOVE: "keyword", MIN_ABOVE: "keyword", MAX_ABOVE: "keyword", MEDIAN_ABOVE: "keyword" },
+  tokenCategories: { INPUTS_OF: "keyword", COLUMN_TOTAL: "keyword", COUNT_ABOVE: "keyword", MIN_ABOVE: "keyword", MAX_ABOVE: "keyword", MEDIAN_ABOVE: "keyword" },
 };

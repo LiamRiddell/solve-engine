@@ -421,6 +421,8 @@ export class ThreeTierEvaluator {
 			if (unitsBefore.some((name) => !unitsAfter.has(name))) {
 				this.engine.invalidateForRemovedUserUnits();
 			}
+			// A name of several words the same way (#743).
+			this.engine.settleMultiWordNames();
 
 			return { lines, resultMap, tierCounts };
 		} finally {
@@ -775,6 +777,9 @@ export class ThreeTierEvaluator {
 				// because this runs before the next pass begins and that
 				// comparison would see the unit already gone.
 				const deletedLineId = this.doc.getLineAt(lineNum)?.lineId ?? -1;
+				// Its names of several words go with it (#743).
+				this.engine.undefineMultiWordNamesFrom(deletedLineId);
+				this.engine.settleMultiWordNames();
 				if (this.engine.undefineUserUnitsFrom(deletedLineId)) {
 					this.engine.invalidateForRemovedUserUnits();
 				}
@@ -1496,6 +1501,8 @@ export class ThreeTierEvaluator {
 		state.writes = [];
 		this.registerWithTags(lineNumber, [], []);
 		this.engine.undefineUserUnitsFrom(state.lineId);
+		this.engine.undefineMultiWordNamesFrom(state.lineId);
+		this.engine.settleMultiWordNames();
 		this.engine.undefineEquationsFrom(state.lineId);
 		// And its checkpoint, for the same reason Tier 1 drops one for a line
 		// that wrote nothing: a heading defines nothing.
@@ -1582,6 +1589,8 @@ export class ThreeTierEvaluator {
 		// the pass compares the units in scope before and after itself, so
 		// dropping and re-adding the same one invalidates nothing.
 		this.engine.undefineUserUnitsFrom(state.lineId);
+		// A name of several words the same way (#743); the pass settles it.
+		this.engine.undefineMultiWordNamesFrom(state.lineId);
 		// A stored equation the same way: `a * x = 10` stores it again as it
 		// runs, and a line edited into anything else no longer has one (#569).
 		this.engine.undefineEquationsFrom(state.lineId);
@@ -1744,6 +1753,10 @@ export class ThreeTierEvaluator {
 				}
 			}
 		}
+
+		// A name of several words this line let go of and did not define again
+		// is gone now, before any line below compiles against it (#743).
+		this.engine.settleMultiWordNames();
 
 		const reads = [...allReads];
 		const writes = [...allWrites];

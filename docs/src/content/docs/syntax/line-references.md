@@ -17,6 +17,7 @@ updates when that line changes.
 | `sum(line 1 : line 4)` | the total of a span of lines |
 | `average(line 1 : line 4)` | the mean of a span |
 | `total above` | the total of every line above (also `sum above`) |
+| `sum`, `total` | on a line of their own, the same as `total above` |
 | `average above` | the same, averaged (also `avg above` and `mean above`) |
 | `count above` | how many figures are above |
 | `min above`, `max above` | the least and the greatest figure above |
@@ -76,10 +77,31 @@ median above   // 20
 A column that carries units answers in the unit written at its top, as a total
 does, and a column mixing measures is refused rather than compared.
 
-Some calculators read a bare `sum` or `total` line as the column above. Here the
-word on its own is a name like any other, so a note that never defines it gets
-an error that says to write `total above`, rather than a total nobody asked for
-appearing under a line of prose.
+A line that is only `sum` or `total` is the same total, the way other
+calculators read the word under a column. It totals the block above it as
+`total above` does, and it can follow a label:
+
+```solve-doc
+Rent $1200 // $1,200.00
+Food $300 // $300.00
+Subtotal: sum // $1,500.00
+Car $250 // $250.00
+total // $1,750.00
+```
+
+The second total passes over the subtotal, since a subtotal is a summary of
+figures already counted. A note that defines a variable called `total` or `sum`
+gets that variable instead, as it always did:
+
+```solve-doc
+total = 100 // 100
+total // 100
+```
+
+The boundary: only the whole line is the total. Inside an expression the word is
+a name like any other, so `sum * 2` in a note that never defines `sum` is an
+error that says to write `total above`, rather than a total nobody asked for.
+On its own, outside a note, a lone `sum` has no block to read and says so.
 
 A blank line or a heading acts as a boundary, so `total above` sums the current
 block rather than the whole document:
