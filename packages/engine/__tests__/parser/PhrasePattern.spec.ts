@@ -134,10 +134,10 @@ describe("definePhrasePattern — alternative dispatch and captures", () => {
   });
 
   test("throws when a later keyword slot doesn't match (e.g. 'between X to Y')", () => {
-    expect(() => run("between 2 to 3")).toThrow(/Expected one of \[AND_CONJ\]/i);
+    expect(() => run("between 2 to 3")).toThrow(/^Expected "and", but found "to"$/);
   });
 
   test("throws when a keyword slot hits end of input instead of a token", () => {
-    expect(() => run("between 2")).toThrow(/end of input/i);
+    expect(() => run("between 2")).toThrow(/^The line ends where "and" was expected$/);
   });
 });

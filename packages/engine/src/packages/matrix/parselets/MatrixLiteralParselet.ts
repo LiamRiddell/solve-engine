@@ -36,7 +36,7 @@ export class MatrixLiteralParselet implements PrefixParselet {
     if (parser.peek()?.type === "RBRACKET") {
       throw ErrorFactory.parsing(
         "EMPTY_MATRIX_LITERAL",
-        "A matrix literal cannot be empty — `[]` has no valid shape.",
+        "A matrix literal cannot be empty: `[]` has no valid shape.",
         {},
       );
     }

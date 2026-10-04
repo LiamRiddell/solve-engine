@@ -149,6 +149,11 @@ functions, the user's own functions, every unit spelling, and the variables
 defined so far. A target unit that is not a unit at all, as in `5 km in mies`,
 comes back as an `UNKNOWN_UNIT` error value with the same sentence.
 
+A parse failure names what the reader typed and what the engine expected there,
+and sets `suggestion` where there is an obvious next step: `(5 km) -> miles`
+throws `Expected a value after "-", but found ">"`, with the suggestion `"->" is
+not a conversion here; to convert, write "in miles"`.
+
 ## Evaluating a document
 
 For more than one line, `evaluateLines` takes an array of lines and returns one
@@ -190,6 +195,51 @@ Referring to a line by position, such as `line1`, is different: that needs a
 real document model rather than a plain array of lines, and without one the
 engine returns a clear error saying so rather than a wrong number. Prefer named
 variables for cross-line arithmetic.
+
+## When a line fails
+
+A document never throws for a line that fails: every line is still in `lines`,
+and the failure is reported on it. The two kinds of failure a single expression
+has (the one it throws and the one it returns as a value) arrive in two places,
+so a host can tell them apart:
+
+- A line the engine could not read or run (`3 + * 4`, an undefined name) has its
+  message in `error`, its code in `errorCode`, and where in the line the fault is
+  in `errorSpan`, with `result` null. These are the code and the position the
+  same text throws with through `evaluateExpression`.
+- A line that ran and could not answer (`5 kg to m`) keeps its error value in
+  `result`, with `error`, `errorCode` and `errorSpan` null. The code is on the
+  value, as `result.errorCode`.
+
+An inline solve reports the same way on its own entry in `inlineSolves`, so one
+failing solve does not hide its neighbours. The span is in the line's own terms:
+character offsets into the line's text, starting at 0, with the document's line
+number and the one-based column, which is what an editor needs to underline the
+fault. A failure the engine raises without a position (an undefined name has
+none) has a `null` span rather than an invented one.
+
+```ts
+const doc = engine.parseDocument("3 + * 4\n5 kg to m\ntotal is s`2 +` and s`5 kg + 3 m`");
+
+doc.lines[0].errorCode;              // "NO_PREFIX_PARSELET"
+doc.lines[0].errorSpan;              // { start: 4, end: 5, line: 1, col: 5 }
+doc.lines[1].error;                  // null
+doc.lines[1].result?.errorCode;      // "INCOMPATIBLE_UNITS"
+doc.lines[2].inlineSolves[0].errorCode; // "UNEXPECTED_END_OF_INPUT"
+doc.lines[2].inlineSolves[0].errorSpan; // { start: 14, end: 14, line: 3, col: 15 }
+doc.lines[2].inlineSolves[1].result?.errorCode; // "INCOMPATIBLE_UNITS"
+```
+
+`errors` is the flat list, one `Line N: message` entry for every failure of
+either kind, in line order: four for the document above. `parseDocument` and
+`evaluateDocument` fill every one of these fields the same way, so a host can
+move from one to the other without reading failures differently. The live
+evaluator's per-line result (`EvalLineResult`) carries `errorCode` and
+`errorSpan` beside its `error` too.
+
+Every code is listed, with when it arises, on [error codes](/guide/error-codes/).
+A host that branches on codes can check one it meets with
+`isCataloguedErrorCode` from `solve-engine/packages`.
 
 ## Cleaning up
 

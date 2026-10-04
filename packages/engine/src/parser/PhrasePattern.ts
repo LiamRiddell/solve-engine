@@ -3,6 +3,20 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { describeTokenType, quoteToken, tokenSpan } from "@solve-js/parser/ParseMessages";
+
+/**
+ * The keywords that may come next, in the reader's words and joined as a
+ * sentence lists them: `"between", "from" or "("`.
+ *
+ * @param choices - The token types each alternative (or the one slot) accepts.
+ * @returns The list, never a token type name.
+ */
+function alternativesWords(choices: readonly (readonly string[])[]): string {
+  const words = [...new Set(choices.flat().map(describeTokenType))];
+  if (words.length <= 1) return words[0] ?? "something else";
+  return `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}`;
+}
 
 /**
  * A single slot in a phrase-grammar alternative.
@@ -113,11 +127,16 @@ export function definePhrasePattern(opts: {
         const expected = opts.alternatives
           .map((alt) => (alt.slots[0] as { kind: "keyword"; tokenTypes: string[] }).tokenTypes.join("|"))
           .join(", ");
-        throw ErrorFactory.parsing(
-          "NO_MATCHING_PHRASE_ALTERNATIVE",
-          `Expected one of [${expected}] but got "${next?.type ?? "end of input"}" ("${next?.value ?? ""}")`,
-          { category: opts.category, expected, actualType: next?.type, actualValue: next?.value }
-        );
+        // The message names what could come next in the reader's words, and
+        // what was typed instead; the token types stay in the context (#768).
+        const words = alternativesWords(opts.alternatives.map((alt) => (alt.slots[0] as { kind: "keyword"; tokenTypes: string[] }).tokenTypes));
+        throw ErrorFactory.parsing({
+          code: "NO_MATCHING_PHRASE_ALTERNATIVE",
+          message: next === undefined ? `The line ends where ${words} was expected` : `Expected ${words}, but found ${quoteToken(next)}`,
+          suggestion: `Continue with ${words}`,
+          context: { category: opts.category, expected, actualType: next?.type, actualValue: next?.value },
+          span: next === undefined ? undefined : tokenSpan(next),
+        });
       }
 
       const captures: PhraseCapture[] = [];
@@ -125,11 +144,14 @@ export function definePhrasePattern(opts: {
         if (slot.kind === "keyword") {
           const token = parser.peek();
           if (!token || !slot.tokenTypes.includes(token.type)) {
-            throw ErrorFactory.parsing(
-              "PHRASE_KEYWORD_MISMATCH",
-              `Expected one of [${slot.tokenTypes.join("|")}] but got "${token?.type ?? "end of input"}" ("${token?.value ?? ""}")`,
-              { category: opts.category, expected: slot.tokenTypes, actualType: token?.type, actualValue: token?.value }
-            );
+            const words = alternativesWords([slot.tokenTypes]);
+            throw ErrorFactory.parsing({
+              code: "PHRASE_KEYWORD_MISMATCH",
+              message: token === undefined ? `The line ends where ${words} was expected` : `Expected ${words}, but found ${quoteToken(token)}`,
+              suggestion: `Write ${words} here`,
+              context: { category: opts.category, expected: slot.tokenTypes, actualType: token?.type, actualValue: token?.value },
+              span: token === undefined ? undefined : tokenSpan(token),
+            });
           }
           parser.consume();
           captures.push({ type: token.type, value: token.value });

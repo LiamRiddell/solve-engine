@@ -75,7 +75,11 @@ export interface SerializedWorkerValue {
 	 * separately because a non-finite number cannot cross `JSON`; see {@link number}.
 	 */
 	nonFinite?: "Infinity" | "-Infinity" | "NaN";
-	/** Unit annotation for unit-of-measurement and non-decimal-base values, when present. */
+	/**
+	 * Unit annotation for unit-of-measurement and non-decimal-base values, when
+	 * present. Never set for an {@link ValueType.Error}: its message is in
+	 * {@link text}, and its code in {@link errorCode}.
+	 */
 	unit?: string;
 	/**
 	 * The error's code (`INCOMPATIBLE_UNITS`, `UNDEFINED_FUNCTION`), present only for

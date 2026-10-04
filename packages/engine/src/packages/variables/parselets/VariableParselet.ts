@@ -1,4 +1,5 @@
 import { PrefixParselet } from "@solve-js/parser/Parselet";
+import { tokenSpan, variableNameWording } from "@solve-js/parser/ParseMessages";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
@@ -30,11 +31,12 @@ export class VariableParselet implements PrefixParselet {
     // a keyword. See MathPhrasesPackage.ts for the established pattern.
     const nameToken = parser.consume();
     if (nameToken.type !== "IDENT" && nameToken.type !== "UNIT") {
-      throw ErrorFactory.parsing(
-        'EXPECTED_IDENTIFIER',
-        `Expected identifier or unit after colon, got ${nameToken.type}`,
-        { tokenType: nameToken.type }
-      );
+      throw ErrorFactory.parsing({
+        code: 'EXPECTED_IDENTIFIER',
+        ...variableNameWording(nameToken, ":", ":total = 5"),
+        context: { tokenType: nameToken.type },
+        span: tokenSpan(nameToken),
+      });
     }
     const varName = nameToken.value;
 

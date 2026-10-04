@@ -55,6 +55,10 @@ export {
 	BUILTIN_PACKAGES,
 } from "./builtins";
 
+// Every error code the engine and the built-in packages answer with, by
+// catalogue, and the check a host runs against it (#769).
+export { ERROR_CODE_CATALOGUES, isCataloguedErrorCode } from "./ErrorCodeCatalogue";
+
 export type { IVector2 } from "./vector/IVector2";
 export type { IVector3 } from "./vector/IVector3";
 export type { IVector4 } from "./vector/IVector4";

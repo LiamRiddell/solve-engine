@@ -111,7 +111,7 @@ describe("what the new phrases must not claim", () => {
 		// sqrt's family), so the colon form has always been rejected. Recorded
 		// so "we claimed this word" stays distinguishable from "already taken".
 		const engine = newTrackedEngine();
-		expect(() => engine.evaluateExpression(":gcd = 4")).toThrow(/after colon/i);
-		expect(() => engine.evaluateExpression(":root = 9")).toThrow(/after colon/i);
+		expect(() => engine.evaluateExpression(":gcd = 4")).toThrow(/is a word the engine already reads, so it cannot name a variable/);
+		expect(() => engine.evaluateExpression(":root = 9")).toThrow(/is a word the engine already reads, so it cannot name a variable/);
 	});
 });

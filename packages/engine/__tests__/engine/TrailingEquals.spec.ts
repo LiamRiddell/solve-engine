@@ -33,7 +33,7 @@ describe("trailing bare '=' tolerance", () => {
 
 	test("regression guard: arbitrary trailing tokens still throw (the bug UNEXPECTED_TRAILING_TOKEN exists to catch)", () => {
 		const engine = newTrackedEngine();
-		expect(() => engine.evaluateExpression("5 3")).toThrow(/unexpected token/i);
+		expect(() => engine.evaluateExpression("5 3")).toThrow(/expected an operator or the end of the line/i);
 	});
 
 	test("regression guard: a double trailing '==' still throws, not silently accepted", () => {
@@ -43,7 +43,7 @@ describe("trailing bare '=' tolerance", () => {
 
 	test("regression guard: real content after the trailing '=' still throws", () => {
 		const engine = newTrackedEngine();
-		expect(() => engine.evaluateExpression("355/113= 5")).toThrow(/unexpected token/i);
+		expect(() => engine.evaluateExpression("355/113= 5")).toThrow(/expected an operator or the end of the line/i);
 	});
 
 	test("regression guard: a user-defined function definition's own '=' is unaffected (not treated as a trailing marker)", () => {

@@ -136,10 +136,6 @@ export const RULES = [
  * reworded.
  */
 export const PENDING = [
-	{ file: "packages/engine/src/engine/ExpressionEngine.ts", includes: "stored as an equation", owner: "#836" },
-	{ file: "packages/engine/src/packages/matrix/parselets/MatrixLiteralParselet.ts", includes: "cannot be empty", owner: "#836" },
-	{ file: "packages/engine/src/vm/MatrixOps.ts", includes: "inner dimensions must match", owner: "#836" },
-	{ file: "packages/engine/src/vm/LineReads.ts", includes: "Cross-line references require a real document", owner: "#836" },
 	{ file: "packages/engine/src/packages/uom/parselets/CookingPluginFunctions.ts", includes: "is not a recognized", owner: "#736" },
 ];
 

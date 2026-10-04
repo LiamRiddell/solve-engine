@@ -14,7 +14,7 @@
  * per day stepped.
  */
 
-import { DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
+import { DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /** A day of the week by name, as the configuration spells it. */
@@ -85,7 +85,7 @@ function dayNumber(name: unknown, setting: string): number {
 	const day = typeof name === "string" ? WEEKDAY_NUMBERS.get(name.toLowerCase()) : undefined;
 	if (day === undefined) {
 		throw ErrorFactory.config(
-			DatetimeErrorCodes.DATE_WEEKDAY_INVALID,
+			DatetimeZoneErrorCodes.DATE_WEEKDAY_INVALID,
 			`${setting} takes days of the week by name, such as "friday", and ${JSON.stringify(name) ?? String(name)} is not one.`,
 			{ setting, value: typeof name === "string" ? name : String(name) },
 		);
@@ -114,7 +114,7 @@ export function resolveWeekShape(
 ): WeekShape {
 	if (weekend !== undefined && !Array.isArray(weekend)) {
 		throw ErrorFactory.config(
-			DatetimeErrorCodes.DATE_WEEKDAY_INVALID,
+			DatetimeZoneErrorCodes.DATE_WEEKDAY_INVALID,
 			`date.weekend takes a list of days by name, such as ["friday", "saturday"].`,
 			{ setting: "date.weekend", value: String(weekend) },
 		);

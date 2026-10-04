@@ -76,7 +76,7 @@ describe("labeled-line fallback", () => {
 
 	test("regression guard: pure prose with no valid expression anywhere still throws", () => {
 		const engine = newTrackedEngine();
-		expect(() => engine.evaluateExpression("just some prose with no numbers")).toThrow(/unexpected token/i);
+		expect(() => engine.evaluateExpression("just some prose with no numbers")).toThrow(/expected an operator or the end of the line/i);
 	});
 
 	test("regression guard: a colon with nothing meaningful after it still throws", () => {
@@ -86,7 +86,7 @@ describe("labeled-line fallback", () => {
 
 	test("regression guard: a genuinely malformed expression after the label still throws (not silently accepted)", () => {
 		const engine = newTrackedEngine();
-		expect(() => engine.evaluateExpression("bad label: 5 3")).toThrow(/unexpected token/i);
+		expect(() => engine.evaluateExpression("bad label: 5 3")).toThrow(/expected an operator or the end of the line/i);
 	});
 
 	test("regression guard: a user-defined function definition's own '=' is unaffected", () => {

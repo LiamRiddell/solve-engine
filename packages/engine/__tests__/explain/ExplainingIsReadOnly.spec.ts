@@ -119,7 +119,7 @@ describe("what an explanation answers", () => {
 		["z = 2 + 2", "result = 4"],
 		["f(x) = x * 9", "result = f(x) defined"],
 		["1 sprint = 3 weeks", "result = sprint defined"],
-		["w^2 - 4 = 0", `result = w stored as an equation — solve with "w =>"`],
+		["w^2 - 4 = 0", `result = w stored as an equation: solve with "w =>"`],
 		["global :g = 5", "result = 5"],
 		["2 + 3 * 4", "3 times 4 -> = 12; 2 plus 12 -> = 14; result = 14"],
 		["x * 2 + y", "x times 2 -> = 6; 6 plus y -> = 9; result = 9"],

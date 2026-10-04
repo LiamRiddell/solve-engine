@@ -154,13 +154,13 @@ describe("the lint, against fixture sources", () => {
 	});
 
 	test("a pending entry whose message is reworded fails as stale", () => {
-		const result = lint("export const v = 1;\n", "packages/engine/src/vm/LineReads.ts");
+		const result = lint("export const v = 1;\n", "packages/engine/src/packages/uom/parselets/CookingPluginFunctions.ts");
 		expect(result.status).toBe(1);
-		expect(result.out).toContain('PENDING entry for packages/engine/src/vm/LineReads.ts ("Cross-line references require a real document", #836) matches no message any more.');
+		expect(result.out).toContain('PENDING entry for packages/engine/src/packages/uom/parselets/CookingPluginFunctions.ts ("is not a recognized", #736) matches no message any more.');
 	});
 
 	test("a pending entry still matching passes", () => {
-		const result = lint(`export const v = () => errorValue("LINE_REF_NO_DOCUMENT", "Cross-line references require a real document ${EM} e.g. evaluateExpression()'s path");\n`, "packages/engine/src/vm/LineReads.ts");
+		const result = lint(`export const v = (unit: string) => errorValue("COOKING_CONVERSION_UNSUPPORTED_UNIT", \`"\${unit}" is not a recognized mass or volume unit\`);\n`, "packages/engine/src/packages/uom/parselets/CookingPluginFunctions.ts");
 		expect(result.status).toBe(0);
 	});
 
