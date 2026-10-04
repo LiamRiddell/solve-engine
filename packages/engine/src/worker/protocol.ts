@@ -12,7 +12,7 @@
 
 import type { EngineConfigOverride } from "@solve-js/constants/Configuration";
 import type { UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
-import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
+import type { FormattingOverrides } from "@solve-js/format/FormattingSettings";
 import type { SerializedEngineError } from "@solve-js/errors/WorkerError";
 import type { SerializedWorkerValue } from "./dto";
 
@@ -36,8 +36,8 @@ export interface InitMessage {
 	 * a `postMessage` boundary.
 	 */
 	packages?: string[];
-	/** Formatting settings the runtime uses when it renders a DTO's display text. */
-	formatting?: FormattingSettings;
+	/** Formatting the runtime writes a DTO's display text with, merged group by group over the worker engine's own settings (its calendar and its locale's numbers), as `engine.formatValue` merges them. */
+	formatting?: FormattingOverrides;
 	/** A seed for reproducible random draws, as the engine's own `random` option. */
 	random?: { seed: number | string };
 }

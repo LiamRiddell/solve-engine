@@ -5,7 +5,7 @@ import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
 import { autoFormatIntegerOrFloat, tooSmallToPrintText } from "@solve-js/utilities/Number";
 import { getMeasure } from "@solve-js/uom/UomConverter";
-import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSettings";
+import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS, resolveFormattingSettings, type FormattingOverrides } from "./FormattingSettings";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { isIso4217 } from "@solve-js/uom/Iso4217";
 import { isCryptoCurrency, moneyDisplayPlaces, trimFractionZeros, type MoneyPlaces } from "@solve-js/uom/CurrencyMinorUnits";
@@ -749,8 +749,8 @@ function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettin
  * matrix form stays the stable, assertable text the API and the worker DTO use.
  * A 1xN row vector is one line; an Nx1 column vector is N lines.
  */
-export function formatMatrixAligned(m: MatrixData, settings?: FormattingSettings): string {
-  const us = settings || DEFAULT_FORMATTING_SETTINGS;
+export function formatMatrixAligned(m: MatrixData, settings?: FormattingOverrides): string {
+  const us = resolveFormattingSettings(settings);
   const rowMajor = columnMajorToRowMajor(m);
   const cells: string[][] = [];
   for (let r = 0; r < m.rows; r++) {
@@ -850,15 +850,19 @@ function formatSplit(data: SplitData, locale: ILocale, settings: FormattingSetti
  *
  * @param value - The evaluated value to format.
  * @param settings - Locale/precision/separator options; defaults to
- *   {@link DEFAULT_FORMATTING_SETTINGS} when omitted.
+ *   {@link DEFAULT_FORMATTING_SETTINGS} when omitted. A partial object names
+ *   only what it changes and is merged over the defaults group by group
+ *   (`{ calendar }`, `{ numberResult: { decimalSeparatorLocale: "de-DE" } }`);
+ *   a complete one is used as it is. To format with an engine's own calendar
+ *   and locale, `ExpressionEngine.formatValue` is the shorter call.
  * @example
  * ```typescript
  * const value = engine.evaluateExpression("10 USD to GBP");
  * formatValue(value); // "= £7.85" (exact output depends on live exchange rates)
  * ```
  */
-export function formatValue(value: Value, settings?: FormattingSettings): string {
-  const us = settings || DEFAULT_FORMATTING_SETTINGS;
+export function formatValue(value: Value, settings?: FormattingOverrides): string {
+  const us = resolveFormattingSettings(settings);
   const localeCode = us.numberResult.decimalSeparatorLocale || "en";
   const locale = getLocale(localeCode);
 

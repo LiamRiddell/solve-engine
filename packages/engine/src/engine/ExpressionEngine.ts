@@ -28,6 +28,8 @@ import { splitFrozenSuffix, frozenDirectiveFor } from "@solve-js/engine/FrozenSu
 import type { FrozenRecord } from "@solve-js/vm/FrozenValues";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { CalendarOption } from "@solve-js/calendar/resolveCalendar";
+import { formatValue } from "@solve-js/format/FormatEngine";
+import { DEFAULT_FORMATTING_SETTINGS, mergeFormattingSettings, numberLocaleFor, type FormattingOverrides, type FormattingSettings } from "@solve-js/format/FormattingSettings";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, isArenaActive, persistentValue, withoutValueArena, type MatrixData } from "@solve-js/vm/Value";
 import { passWorkRefusal, keptElements, keptElementsRefusal } from "@solve-js/vm/PassWork";
@@ -238,8 +240,9 @@ export interface EngineOptions {
      * execution context, the rules that fuse a date literal, and the parser
      * for the forms that read a literal while parsing (`days in <period>`,
      * the stocks and historical-currency date phrases). Two sites sit outside
-     * the engine and are told separately: `formatValue` takes the backend on
-     * its `FormattingSettings.calendar`, and a worker runtime takes it on
+     * the engine and are told separately: the free `formatValue` takes the
+     * backend on its `FormattingSettings.calendar` (the engine's own
+     * {@link ExpressionEngine.formatValue} applies it), and a worker runtime takes it on
      * `WorkerRuntimeOptions.calendar`, because a backend is an object of
      * functions and does not cross the message boundary. The inline offload
      * worker computes with the `Date` backend.
@@ -653,6 +656,8 @@ export class ExpressionEngine {
      */
     private parsedLabelEnd = 0;
     private localeCode: string;
+    /** The settings {@link getFormattingSettings} starts from, built on first use. */
+    private formattingBase: FormattingSettings | undefined;
     private vm: VM;
     /**
      * Registries this engine owns, rather than shares with every other
@@ -2978,6 +2983,48 @@ export class ExpressionEngine {
      */
     getDateReading(): DateReadingPolicy {
         return this.dateReading;
+    }
+
+    /**
+     * The formatting settings this engine's results are written with: the
+     * defaults, with the engine's own calendar backend (so a date shows the
+     * day it was computed on, in the zone it was computed in) and a number
+     * locale taken from its `locale` option (#721).
+     *
+     * The locale is the engine's tag when `Intl` can read it (`de-DE` writes
+     * `€1.250,00`), and the default `en-US` for the default `en` and for a tag
+     * `Intl` cannot read, which the engine itself reads as English. Overrides
+     * are merged group by group, as `formatValue` merges them.
+     *
+     * @param overrides - Any groups or fields to change; see {@link FormattingOverrides}.
+     * @returns Complete settings, a new object when overrides are given.
+     */
+    getFormattingSettings(overrides?: FormattingOverrides): FormattingSettings {
+        if (this.formattingBase === undefined) {
+            this.formattingBase = mergeFormattingSettings(DEFAULT_FORMATTING_SETTINGS, {
+                calendar: this.context.calendar,
+                numberResult: { decimalSeparatorLocale: numberLocaleFor(this.localeCode) },
+            });
+        }
+        return mergeFormattingSettings(this.formattingBase, overrides);
+    }
+
+    /**
+     * Write a value as display text with this engine's calendar and locale:
+     * `formatValue` with {@link getFormattingSettings} already applied.
+     *
+     * The free `formatValue` has no engine in hand, so a date it writes is read
+     * in the host process's zone unless the host passes the backend itself; on
+     * an engine computing in `Pacific/Kiritimati` that could print `next
+     * friday` as a Thursday. This is the call that cannot get it wrong.
+     *
+     * @param value - A value this engine produced.
+     * @param overrides - Any groups or fields to change for this call, merged
+     *   group by group over the engine's settings (`{ dateResult: { format: "iso" } }`).
+     * @returns The display text, as `formatValue` writes it.
+     */
+    formatValue(value: Value, overrides?: FormattingOverrides): string {
+        return formatValue(value, this.getFormattingSettings(overrides));
     }
 
     /**

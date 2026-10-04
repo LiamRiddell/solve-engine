@@ -265,6 +265,10 @@ export const CoreErrorCodes = {
   /** The `timeZone` given to `createTemporalCalendar()` is not one the `Temporal` implementation knows. Raised at construction, so a misspelt zone is a configuration error the host sees once, not a `RangeError` from inside every date the engine computes. */
   TEMPORAL_TIME_ZONE_UNKNOWN: "TEMPORAL_TIME_ZONE_UNKNOWN",
 
+  // ── Calendar backend clocks (calendar/Clock.ts) ──
+  /** The clock a host gave a calendar backend (`dateCalendarInZone(zone, { now })`, `createTemporalCalendar(Temporal, { now })`) is not a function, answered something that is not a moment `Date` can hold (`NaN`, an infinity, a number past 8.64e15, not a number), or threw. Not a function is refused when the backend is built; a bad reading is refused on the line that read the clock (`today`, `now`), and the rest of the document goes on (#721, #826). */
+  DATE_CLOCK_INVALID: "DATE_CLOCK_INVALID",
+
   // ── Snapshot / restore (engine/EngineSnapshot.ts, engine/ExpressionEngine.ts) ──
   /** `fromJSON()` handed an object that is not a snapshot at all, or whose serialised-shape version does not match this engine's reader. The versioning gate that refuses an incompatible snapshot clearly rather than restoring it wrongly. See `engine/EngineSnapshot.ts`'s `assertRestorable()`. */
   SNAPSHOT_VERSION_MISMATCH: "SNAPSHOT_VERSION_MISMATCH",

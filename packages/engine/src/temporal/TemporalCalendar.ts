@@ -42,6 +42,7 @@ import type { CalendarBackend, CalendarFields, ZonedFields } from "@solve-js/cal
 import { daysInMonth } from "@solve-js/calendar/Gregorian";
 import { civilDayNumber, civilFromDayNumber } from "./CivilDays";
 import { dateInZone, longDateOptions, mayPrecedeYearOne, timeInZone } from "@solve-js/calendar/IntlZone";
+import { checkedClock } from "@solve-js/calendar/Clock";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { CoreErrorCodes } from "@solve-js/errors/ErrorCode";
 
@@ -131,6 +132,12 @@ export interface TemporalCalendarOptions {
 	 * `Temporal.Now.instant()`. A test pins a date with this: a fake-timer
 	 * library replaces `Date.now`, which the `Date` backend reads, but not
 	 * `Temporal.Now`, so this backend needs telling separately.
+	 *
+	 * Checked as the `Date` backend's clock is (`dateCalendarInZone(zone, { now })`):
+	 * a clock that is not a function is refused at construction, and a reading
+	 * that is not a moment in time (`NaN`, an infinity, past the range `Date`
+	 * holds) or a clock that throws is refused on the line that read it, both
+	 * with `DATE_CLOCK_INVALID`.
 	 */
 	now?: () => number;
 }
@@ -222,7 +229,11 @@ export class TemporalCalendar implements CalendarBackend {
 		// The canonical spelling, so a zone given as `asia/tokyo` reads back as
 		// the identifier the implementation itself uses.
 		this.timeZone = probe.timeZoneId;
-		this.clock = options.now ?? (() => temporal.Now.instant().epochMilliseconds);
+		// The host's clock goes through the same check the `Date` backend's does,
+		// so a host moving between backends meets one contract (#826).
+		this.clock = options.now === undefined
+			? () => temporal.Now.instant().epochMilliseconds
+			: checkedClock(options.now, "createTemporalCalendar");
 	}
 
 	now(): number {
