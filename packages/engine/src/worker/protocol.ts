@@ -15,9 +15,35 @@ import type { UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
 import type { FormattingOverrides } from "@solve-js/format/FormattingSettings";
 import type { SerializedEngineError } from "@solve-js/errors/WorkerError";
 import type { SerializedWorkerValue } from "./dto";
+import type { DocumentPosition, LineShift } from "@solve-js/language/DocumentReferences";
 
-/** The core evaluate methods the harness proxies. */
-export type WorkerMethod = "parseDocument" | "evaluateLines" | "evaluateExpression";
+/**
+ * The methods the harness proxies: the evaluate methods, the host calls a
+ * whole-document feature needs (goal seek through `evaluateDocument`, what-if,
+ * explain, trace, settle), and the language service's editor calls.
+ */
+export type WorkerMethod =
+	| "parseDocument"
+	| "evaluateLines"
+	| "evaluateExpression"
+	| "evaluateDocument"
+	| "whatIf"
+	| "explainLine"
+	| "traceLine"
+	| "settle"
+	| "getSemanticTokens"
+	| "getCompletions"
+	| "findReferences"
+	| "getDefinition"
+	| "rename"
+	| "shiftLineReferences";
+
+/**
+ * A what-if's overrides as they cross the boundary: each a finite number, or
+ * text the worker evaluates on its own (`"$120"`, `"5%"`). A `Value` cannot
+ * cross `postMessage` with its type intact, so its text form is sent instead.
+ */
+export type WorkerWhatIfOverrides = Readonly<Record<string, number | string>>;
 
 /** Build the worker engine, sent once before any request. */
 export interface InitMessage {
@@ -58,7 +84,14 @@ export interface RequestMessage {
 export type WorkerRequestArgs =
 	| [input: string, options?: UnifiedParsingOptions]
 	| [lines: string[]]
-	| [expression: string];
+	| [expression: string]
+	| [input: string, overrides: WorkerWhatIfOverrides]
+	| [input: string, lineNumber: number, options: { maxDepth?: number; maxLines?: number }]
+	| [options: { timeoutMs?: number }]
+	| [lineText: string, lineNumber: number]
+	| [text: string, position: DocumentPosition]
+	| [text: string, position: DocumentPosition, newName: string]
+	| [text: string, change: LineShift];
 
 /** Ask the worker to abort the request with this id. */
 export interface CancelMessage {

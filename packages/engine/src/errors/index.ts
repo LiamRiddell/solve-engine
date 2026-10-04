@@ -27,5 +27,6 @@ export {
 	workerCancelledError,
 	workerTerminatedError,
 	workerTransportError,
+	workerArgumentError,
 } from "./WorkerError";
 export type { SerializedEngineError } from "./WorkerError";

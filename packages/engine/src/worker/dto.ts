@@ -245,3 +245,51 @@ export interface SerializedParsingResult {
 	/** The document's check pass and fail count, as `ParsingResult.checks`. */
 	checks?: { passed: number; failed: number };
 }
+
+/**
+ * One step of a derivation, mirroring {@link ExplanationStep} with its value
+ * serialised.
+ */
+export interface SerializedExplanationStep {
+	/** A short account of the operation, as `ExplanationStep.description` ("80 less 20%"). */
+	description: string;
+	/** The value the step arrives at. */
+	value: SerializedWorkerValue;
+}
+
+/**
+ * A derivation of how a line reached its answer, mirroring {@link Explanation}
+ * (what `ExpressionEngine.explainLine` returns) with every value serialised.
+ */
+export interface SerializedExplanation {
+	/** The expression as given. */
+	expression: string;
+	/** The ordered derivation, one entry per operation, in evaluation order. */
+	steps: SerializedExplanationStep[];
+	/** The final value, the same answer `evaluateExpression` gives. */
+	result: SerializedWorkerValue;
+}
+
+/**
+ * Where a line's answer came from, mirroring {@link LineTrace} (what
+ * `ExpressionEngine.traceLine` returns) with every value serialised and each
+ * input traced the same way.
+ */
+export interface SerializedLineTrace {
+	/** The line's 1-based number. */
+	line: number;
+	/** The variable the line defines, or null. */
+	name: string | null;
+	/** The line's answer, or null when it has none. */
+	value: SerializedWorkerValue | null;
+	/** How the line that read this one reached it (`deposit`, `line 2`, `#food`). Empty at the root. */
+	via: string[];
+	/** The lines this one read, each traced the same way. */
+	inputs: SerializedLineTrace[];
+	/** The line is already on the path above it, so it is not followed again. */
+	cycle: boolean;
+	/** The line is below the line that read it. */
+	forward: boolean;
+	/** The depth or size bound stopped the trace here. */
+	truncated: boolean;
+}

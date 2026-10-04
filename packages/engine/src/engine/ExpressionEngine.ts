@@ -664,6 +664,12 @@ export class ExpressionEngine {
      * a resolver that is genuinely down will not be up by the tenth.
      */
     private static readonly MAX_ASYNC_FAILURES = 3;
+
+    /** How long {@link settle} waits when the caller names no `timeoutMs`: the same ten seconds `createQueryResolver` gives one fetch. */
+    private static readonly DEFAULT_SETTLE_TIMEOUT_MS = 10_000;
+
+    /** The longest delay `setTimeout` honours, a signed 32-bit count of milliseconds (about 24.8 days); a longer one fires at once. */
+    private static readonly MAX_TIMER_MS = 2_147_483_647;
     private lineCache = new LineCache();
     /**
      * Names ever used as a running-total target (`total += 5`). A document is
@@ -1968,6 +1974,23 @@ export class ExpressionEngine {
     private batcher: AsyncResolutionBatcher;
 
     /**
+     * The live values this engine has started and not yet seen settle, one
+     * promise per fetch (see {@link resolveAsync}). {@link settle} waits on it,
+     * and {@link clear} empties it.
+     */
+    private readonly inFlight = new Set<Promise<void>>();
+
+    /**
+     * Counts {@link clear} calls. A fetch records the count it started under,
+     * and one that lands under a different count belongs to a document that is
+     * gone, so it is dropped instead of re-running the lines of the next one.
+     */
+    private documentGeneration = 0;
+
+    /** Wakes each {@link settle} still waiting when {@link clear} runs, since what it waited for was discarded. */
+    private readonly settleWaiters = new Set<() => void>();
+
+    /**
      * Names that may no longer be defined, pending the end of the pass.
      *
      * Null rather than an empty set, because a document that never removes a
@@ -2477,6 +2500,95 @@ export class ExpressionEngine {
      */
     getEventStream(): ReadableStream<AsyncResolutionEvent> {
         return this.batcher.getEventStream();
+    }
+
+    /**
+     * Wait until every live value this engine has started fetching has
+     * settled, so the next evaluation of a line that was Pending gives its
+     * settled answer (or the fetch's honest failure).
+     *
+     * A value from live data is Pending the first time its line runs: the
+     * engine starts the fetch and answers "not yet" rather than a stale or zero
+     * figure. This is the call for a caller that wants the answer and has no
+     * editor to repaint, a test or a script: evaluate, `await settle()`, then
+     * evaluate again. It resolves once no fetch the engine started is still in
+     * flight and the re-run of the lines they fed has happened, and at once
+     * when nothing is in flight.
+     *
+     * What it deliberately does not do:
+     *
+     * - It starts nothing. It waits for fetches already started by an
+     *   evaluation; one that has not been evaluated yet is not waited for, and
+     *   neither is a background refresh (`backgroundRefresh.enabled`) or its
+     *   next tick, which never settles by design.
+     * - It never evaluates. A line whose first fetch reveals a second one needs
+     *   another evaluation and another `settle()`; the testing kit's
+     *   `toResolveTo` does that loop within one deadline.
+     * - It does not outlast {@link clear}: clearing discards what was in flight,
+     *   and a waiting `settle()` resolves then.
+     *
+     * @param options.timeoutMs - How long to wait, in milliseconds, before
+     * refusing. A finite number, zero or more; 10,000 by default.
+     * @returns A promise that resolves when nothing is in flight.
+     * @throws EngineError `SETTLE_TIMEOUT` (rejected) when fetches are still in
+     * flight at the deadline, with the count in its context; `SETTLE_TIMEOUT_INVALID`
+     * (rejected) for a `timeoutMs` that is not a finite number of zero or more.
+     */
+    async settle(options: { timeoutMs?: number } = {}): Promise<void> {
+        const timeoutMs = options.timeoutMs ?? ExpressionEngine.DEFAULT_SETTLE_TIMEOUT_MS;
+        if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || timeoutMs < 0) {
+            throw ErrorFactory.validation(
+                "SETTLE_TIMEOUT_INVALID",
+                `settle needs timeoutMs as a finite number of milliseconds, zero or more; it was given ${typeof timeoutMs === "number" ? String(timeoutMs) : typeof timeoutMs}.`,
+                { timeoutMs: typeof timeoutMs === "number" ? timeoutMs : String(timeoutMs) },
+            );
+        }
+        const deadline = Date.now() + timeoutMs;
+        const generation = this.documentGeneration;
+        // A caller awaiting this re-evaluates when it resolves, so a value that
+        // lands meanwhile has someone to receive it (see the batcher's warning).
+        this.batcher.isAwaited ??= () => this.settleWaiters.size > 0;
+        // Each round waits for the fetches in flight when it began, then a turn
+        // of the event loop so the batcher's re-run (a microtask, or a timer
+        // once it has had to yield) has happened before the next look. A
+        // resolver that starts a fresh fetch on every run keeps the set
+        // non-empty, and the deadline is what ends that.
+        while (generation === this.documentGeneration && (this.inFlight.size > 0 || this.batcher.pendingCount > 0)) {
+            const remaining = deadline - Date.now();
+            if (remaining <= 0) {
+                throw ErrorFactory.external(
+                    "SETTLE_TIMEOUT",
+                    `${this.inFlight.size === 1 ? "A live value was" : `${this.inFlight.size} live values were`} still being fetched after ${timeoutMs} ms, so settle stopped waiting. The lines that read ${this.inFlight.size === 1 ? "it stay" : "them stay"} Pending until ${this.inFlight.size === 1 ? "it arrives" : "they arrive"}.`,
+                    { inFlight: this.inFlight.size, timeoutMs },
+                );
+            }
+            await this.nextSettleRound([...this.inFlight], remaining);
+        }
+    }
+
+    /**
+     * One round of {@link settle}: resolves when every promise in `batch` has
+     * settled and the event loop has had a turn, when `ms` pass, or when
+     * {@link clear} runs, whichever is first. The deadline timer is cleared on
+     * the way out; while it runs it keeps a Node process alive, deliberately,
+     * so a script awaiting a fetch that never lands is told so at the deadline
+     * rather than exiting with the promise unanswered.
+     */
+    private nextSettleRound(batch: readonly Promise<void>[], ms: number): Promise<void> {
+        return new Promise<void>((resolve) => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const finish = (): void => {
+                if (timer !== undefined) clearTimeout(timer);
+                this.settleWaiters.delete(finish);
+                resolve();
+            };
+            this.settleWaiters.add(finish);
+            // A timer longer than a signed 32-bit count of milliseconds fires
+            // at once, which would spin this loop; past that the wait is capped,
+            // and the loop simply takes another round.
+            timer = setTimeout(finish, Math.min(ms, ExpressionEngine.MAX_TIMER_MS));
+            void Promise.allSettled(batch).then(() => setTimeout(finish, 0));
+        });
     }
 
     /**
@@ -3812,7 +3924,27 @@ export class ExpressionEngine {
      *    multiple resolutions into a single DAG walk + re-execution pass
      *    and fires typed events to all listeners.
      */
-    private async resolveAsync(pending: Extract<EvalResult, { type: 'pending' }>): Promise<void> {
+    private resolveAsync(pending: Extract<EvalResult, { type: 'pending' }>): Promise<void> {
+        // Tracked so settle() can wait for it, and tagged with the document it
+        // belongs to, so a clear() in the meantime makes the answer stale.
+        const generation = this.documentGeneration;
+        const tracked: Promise<void> = this.awaitResolution(pending, generation).finally(() => {
+            this.inFlight.delete(tracked);
+        });
+        this.inFlight.add(tracked);
+        return tracked;
+    }
+
+    /**
+     * Wait for one live value to settle and hand it to the batcher, the body
+     * of {@link resolveAsync}.
+     *
+     * @param pending - The pending result the preflight or plugin call returned.
+     * @param generation - The {@link documentGeneration} the fetch was started
+     * under. A fetch that lands after {@link clear} belongs to the document
+     * that was cleared, and is dropped rather than re-running the next one.
+     */
+    private async awaitResolution(pending: Extract<EvalResult, { type: 'pending' }>, generation: number): Promise<void> {
         const { queryKey, resolver, packageId, signal } = pending;
         const effectivePackageId = packageId || '_engine';
         const failureKey = `${effectivePackageId}:${queryKey}`;
@@ -3826,6 +3958,10 @@ export class ExpressionEngine {
             // (the query cache, or for a plugin function's own promise the
             // context's plugin-call cache, #660).
             await resolver;
+            if (generation !== this.documentGeneration) {
+                abortLogger.staleDataDiscarded(queryKey, "engine cleared before resolve");
+                return;
+            }
             // A key that succeeds has no history worth keeping: an outage
             // followed by a recovery should not count towards a later one.
             this.asyncFailures.delete(failureKey);
@@ -3841,8 +3977,8 @@ export class ExpressionEngine {
                 isError: false,
             });
         } catch (err) {
-            if (signal.aborted) {
-                abortLogger.staleDataDiscarded(queryKey, "signal aborted after error");
+            if (signal.aborted || generation !== this.documentGeneration) {
+                abortLogger.staleDataDiscarded(queryKey, "signal aborted or engine cleared after error");
                 return;
             }
             const error = err instanceof Error ? err : new Error(String(err));
@@ -6652,6 +6788,19 @@ export class ExpressionEngine {
         return items;
     }
 
+    /**
+     * The call words registered packages declare through
+     * {@link IEnginePackage.callFusions} (`sha256`, `base64`, `slugify`), each
+     * a name that becomes a function call when `(` follows it. Lower-cased, in
+     * registration order. Used by `LanguageService.getCompletions()`, which
+     * offers them as functions.
+     *
+     * @internal Engine plumbing shared with the language service, not host API (#761).
+     */
+    getCallWords(): string[] {
+        return [...this.callFusions.keys()];
+    }
+
     getParseletRegistry(): { prefix: Array<{ tokenType: string; bindingPower: number; category?: string }>; infix: Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }> } {
         return {
             prefix: this.registry.getAllPrefix(),
@@ -7624,6 +7773,12 @@ export class ExpressionEngine {
 		// that grows with the registered package set. See the class doc.
 		this.batcher.clearAll();
 		this.asyncFailures.clear();
+		// What was in flight belonged to this document. A fetch that lands
+		// later sees the count move and is dropped, and a settle() waiting on
+		// it is released, since there is nothing left to wait for.
+		this.documentGeneration++;
+		this.inFlight.clear();
+		for (const wake of [...this.settleWaiters]) wake();
 
 		// Stop every background-refresh timer before the query cache is emptied
 		// below, so no in-flight tick refetches into a cache that is about to be

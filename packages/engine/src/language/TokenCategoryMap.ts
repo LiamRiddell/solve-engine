@@ -46,6 +46,17 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	UNTIL: "keyword",
 	SINCE: "keyword",
 	BETWEEN: "keyword",
+	// Weekday names and `by`, lexed as keywords for the date and percentage
+	// forms (`next friday`, `increase 50 by 10%`); a category is what lets an
+	// editor colour them and completions offer them (#771).
+	SUNDAY: "keyword",
+	MONDAY: "keyword",
+	TUESDAY: "keyword",
+	WEDNESDAY: "keyword",
+	THURSDAY: "keyword",
+	FRIDAY: "keyword",
+	SATURDAY: "keyword",
+	BY: "keyword",
 	// Bill split (finance): the split verb, its two spellings, and the trailing
 	// words the normalizer retypes only inside the full split shape.
 	SPLIT: "keyword",
