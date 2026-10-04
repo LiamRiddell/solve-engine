@@ -17,22 +17,33 @@
 
 import { QueryClient } from "@tanstack/query-core";
 
-// ── Active query client (execution context) ───────────────────────────────
-// Synchronous VM plugin functions (dispatched via CALL_PLUGIN) can't receive
-// the engine's QueryClient through their (args) => Value ABI, so the engine
-// publishes the client here before each execution and package handlers read
-// it back. This module is the package-agnostic home for that hand-off
-// the engine must not import from a specific package (e.g. packages/osrs)
-// to wire it.
+// ── Active query client (deprecated hand-off) ─────────────────────────────
+// A plugin function reads its engine's QueryClient from the line's execution
+// context now (`LineExecutionContext.queryClient`, #710). This one slot for the
+// whole process is kept for handlers written before that: the VM sets it to the
+// running engine's client at every plugin call, so it names the right cache at
+// the moment a handler reads it.
 
 let _activeQueryClient: QueryClient | null = null;
 
-/** Publish the QueryClient for the execution about to run. Set by the engine. */
+/**
+ * Publish a QueryClient in the module-level slot.
+ *
+ * @deprecated The engine hands its client to every plugin function in the
+ * line's execution context (`context.queryClient`), and the VM keeps this slot
+ * in step on its own. Removed in 3.0.
+ */
 export function setActiveQueryClient(qc: QueryClient | null): void {
   _activeQueryClient = qc;
 }
 
-/** Read the QueryClient of the currently executing engine, if any. */
+/**
+ * The QueryClient of the engine whose plugin function is running, if any.
+ *
+ * @deprecated Read `context.queryClient` from the `LineExecutionContext` a
+ * plugin function is handed, which names that line's engine however many
+ * engines share the process. Removed in 3.0.
+ */
 export function getActiveQueryClient(): QueryClient | null {
   return _activeQueryClient;
 }

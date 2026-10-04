@@ -173,6 +173,9 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   114: { name: "log", min: 2, max: 2 },
   // `float(x)`: the number x is, reached only through its own keyword (#828).
   115: { name: "float", min: 1, max: 1 },
+  // The name a quantity is shown under, emitted after an aliased or
+  // document-defined unit and never callable by name (#762).
+  116: { name: "unitLabel", min: 3, max: 3 },
 };
 
 /** "1 argument" / "2 arguments", so the message reads as English either way. */
@@ -189,10 +192,12 @@ function expectation(arity: BuiltinArity): string {
 
 /**
  * The name of every builtin function in the arity table, for the "did you mean"
- * suggestion an undefined function carries (see errors/DidYouMean.ts).
+ * suggestion an undefined function carries (see errors/DidYouMean.ts). The
+ * unit label (116) is left out: it is emitted by the engine and no reader can
+ * call it, so suggesting it would name something that cannot be typed.
  */
 export function builtinFunctionNames(): string[] {
-  return Object.values(BUILTIN_ARITY).map((arity) => arity.name);
+  return Object.entries(BUILTIN_ARITY).filter(([index]) => index !== "116").map(([, arity]) => arity.name);
 }
 
 /**

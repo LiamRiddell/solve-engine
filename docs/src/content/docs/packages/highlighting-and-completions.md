@@ -60,3 +60,20 @@ to colour a line, and `getCompletions` merges your items with the built-in
 keywords and units and the document's own variables. An editor integration calls
 those two methods and never needs to know which package a colour or a suggestion
 came from.
+
+## One engine's categories
+
+The categories belong to the engine the package is registered on. An editor
+asks that engine, `engine.getTokenCategory(type)`, or its language service,
+`languageService.getTokenCategory(type)`, and the answer reads the engine's own
+packages first and the built-in table after. Two engines in one process each
+answer from their own packages, so unregistering a package from one leaves its
+colours in place on another that still holds it.
+
+The boundary: the module-level `getTokenCategory(type)` from
+`solve-engine/language` still exists, deprecated, so existing imports compile.
+It reads the built-in table and nothing any engine registered, since it has no
+engine to ask; a highlighter that painted a package's token through it paints
+it uncoloured until it asks the engine. It is removed in 3.0, with the
+module-level `registerTokenCategory` and `unregisterTokenCategory`, which write
+a table no engine reads.

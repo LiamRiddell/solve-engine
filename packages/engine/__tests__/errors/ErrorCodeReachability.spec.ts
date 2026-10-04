@@ -470,6 +470,8 @@ const PACKAGE_AUTHORING: Readonly<Record<string, string>> = {
 	PACKAGE_NAME_MISSING: "registering a package with no name, or an empty one",
 	PACKAGE_RESOLVER_FUNCTION_MISSING: "a package whose createQueryResolver watches for a plugin function the package does not declare",
 	PLUGIN_CALL_FUSION_UNREACHABLE: "registering a package whose callFusions name a word the engine already reads",
+	PLUGIN_UNIT_ALIAS_UNREACHABLE: "registering a package whose unitAliases name a word the engine already reads",
+	PLUGIN_UNIT_ALIAS_TARGET_UNKNOWN: "registering a package whose unitAliases map a word to no unit the engine reads",
 	PLUGIN_FUNCTION_INDEX_POOL_EXHAUSTED: "registering more plugin functions than a compiled call can index",
 	PLUGIN_FUNCTION_INDEX_TOO_LARGE: "registering more plugin functions than a compiled call can index",
 	PLUGIN_KEYWORD_COLLISION: "registering a package that claims a built-in keyword",

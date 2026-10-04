@@ -1,6 +1,6 @@
 import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
-import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import { builtinTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { Token } from "@solve-js/lexer/Token";
 import { knownUnits } from "@solve-js/lexer/units";
 import { getMeasure } from "@solve-js/uom/UomConverter";
@@ -255,6 +255,18 @@ export class LanguageService {
 	// completes never constructs it.
 	private documentReferences: DocumentReferences | null = null;
 
+	/**
+	 * A token type's highlight category, as this service's engine reads it:
+	 * a category a registered package declared (`IEnginePackage.tokenCategories`),
+	 * then the built-in table. Without an engine, the built-in table alone.
+	 *
+	 * @param tokenType - The token's type, as a token or a highlight span carries it.
+	 * @returns The category, or `undefined` for a type that renders unstyled.
+	 */
+	getTokenCategory(tokenType: string): TokenCategory | undefined {
+		return this.engine !== null ? this.engine.getTokenCategory(tokenType) : builtinTokenCategory(tokenType);
+	}
+
 	constructor(engine?: ExpressionEngine | null, options?: LanguageServiceOptions) {
 		this.engine = engine ?? null;
 		this.variableNameSource = options?.variableNameSource ?? (() => this.defaultVariableNames());
@@ -349,7 +361,7 @@ export class LanguageService {
 				offset: token.offset,
 				col: token.col,
 				length: end - token.offset,
-				category: getTokenCategory(token.type),
+				category: this.getTokenCategory(token.type),
 			});
 		}
 
@@ -531,7 +543,7 @@ export class LanguageService {
 
 		const items: CompletionItem[] = [];
 		for (const [word, tokenType] of Object.entries(this.engine!.getLexer().getKeywords())) {
-			const category = getTokenCategory(tokenType);
+			const category = this.getTokenCategory(tokenType);
 			if (!category) continue;
 			items.push({ label: word, category });
 		}

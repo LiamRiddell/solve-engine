@@ -1,0 +1,23 @@
+---
+"solve-engine": minor
+---
+
+`as` converters, token categories and the query cache a plugin function reads belong to one engine, so two engines in a process no longer see each other's packages
+
+`EngineContext` exists so that two engines in one process cannot see each other's registrations, and three pieces of per-engine state still lived in module scope (#710). A converter one engine's package registered answered `as shout` on every engine, and unregistering the numerals package from one engine took `as roman` away from all of them. Unregistering a package from one engine took its highlight categories from every engine, so an editor asking another engine still holding the package got nothing. And a plugin function read the query cache from one module-level slot, which each engine published before running a line and put back around its scratch and nested runs, eleven sites in all; a re-run that missed one read another engine's cache.
+
+The `as` converters now live in an `AsConverterRegistry` on each engine's context, holding #824's three maps (the folded key, the exact spelling and the spellings per key) together. The categories live in a `TokenCategoryTable` on the context, read through the new `engine.getTokenCategory(type)` and `languageService.getTokenCategory(type)`, and by the engine's own lexer. The query client is on the context too and reaches a plugin function in its `LineExecutionContext` as `context.queryClient`, on the first pass, the batcher's re-run and a what-if's scratch engine alike, so the save-and-restore sites are gone. A normaliser rule, shared by every engine that loads its package, is handed the engine's environment as a third argument to `match`, which is how the rule that reads `99 in roman` asks the right engine.
+
+| line, in one process | before | now |
+| --- | --- | --- |
+| `5 as shout` on an engine without the package, after another registered it | `5!` | Unknown converter "as shout" |
+| `1994 as roman` on Y, after X unregistered the numerals package | Unknown converter "as roman" | `MCMXCIV` |
+| the category of `CHECK` on Q, after P unregistered the conditionals package | `undefined` | `keyword` |
+
+The boundary: the deprecated module-level surface still compiles and runs. `registerAsConverter`, `resolveAsConverter`, `matchAsConverter` and the `asConverterRegistry` maps read and write a registry no engine consults; `getTokenCategory` reads the built-in table and nothing any engine registered, so a highlighter that painted a package's token through it should ask the engine instead; `getActiveQueryClient` still names the right cache, since the VM sets it at every plugin call. All of them leave in 3.0. The plugin-function index table stays shared on purpose: it names a function and registers nothing, the handler behind an index is the engine's own, and `createQueryResolver({ pluginFunctionIndex })` takes an index at module scope that its resolver compares with the bytecode, so an index per engine would stop every live-data package until resolvers match calls by name. The exchange-rate cache stays shared, as `EngineContext` records.
+
+## Verification
+
+`Issue710_perEngineRegistries.spec.ts` holds 31 tests: the issue's run for converters, categories and the query client (a registration on one engine invisible to another, an unregister leaving the other intact, two engines registering different packages under one name each keeping their own, and a plugin function on one engine run while another engine's fetch is in flight reading its own cache), a what-if and a snapshot reading their engine's converters, unit tests of `AsConverterRegistry`, `TokenCategoryTable`, `builtinTokenCategory` and the normaliser environment with ordinary, boundary and hostile arguments, the deprecated shims, and the adversarial cases (prototype words as converter names and token types, fifty engines, re-registration, both document passes, the numeric edges). `ReRunReadsItsOwnCache.spec.ts`, which pinned the slot being put back after a re-run, now pins that it names the engine whose plugin function ran last. The package guides for `as` converters, highlighting and async data sources gain a section each on the per-engine registries, and the phrases guide the environment a rule is handed.
+
+The full suite (`npm run test:full`) passed, 23,820 of 23,824 tests in 709 suites with 4 skipped, as did `npm run test:temporal` in all three zones, `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:error-codes`, `lint:docs`, `lint:cheatsheet`, `lint:sidebar`, `lint:keywords` and `lint:dispatch-size` (`executeBytecode` at 46,484 bytecode bytes). `npm run verify:ci` and the bundled-consumer contract were not run whole for this change; CI runs both.

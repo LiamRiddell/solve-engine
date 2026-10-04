@@ -557,6 +557,7 @@ export default defineConfig({
                 { slug: "packages/authoring-a-package" },
                 { slug: "packages/recognising-phrases" },
                 { slug: "packages/units-and-keywords" },
+                { slug: "packages/unit-aliases" },
                 { slug: "packages/functions-and-operators" },
                 { slug: "packages/as-converters" },
                 { slug: "packages/explaining-steps" },

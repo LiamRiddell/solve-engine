@@ -325,7 +325,9 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 
 	const pluginFunction = (args: Value[], context?: LineExecutionContext): Value => {
 		const query = args[0]?.value as string;
-		const cached = getActiveQueryClient()?.getQueryData(queryKeyFor(query));
+		// The running engine's own cache, from the line's context (#710); the
+		// module-level slot only for a context no engine built.
+		const cached = (context?.queryClient ?? getActiveQueryClient())?.getQueryData(queryKeyFor(query));
 		if (cached !== undefined) return cached as Value;
 		// With live data switched off the engine never ran this resolver's
 		// preflight, so an empty cache is the expected state and the reader is

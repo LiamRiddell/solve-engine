@@ -1,6 +1,5 @@
 import type { QueryClient } from "@tanstack/query-core";
 import type { DependencyGraph } from "@solve-js/vm/DependencyGraph";
-import { getActiveQueryClient, setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { type Value, errorValue } from "@solve-js/vm/Value";
 import { executeBytecode } from "@solve-js/vm/VM";
@@ -169,21 +168,20 @@ export class AsyncResolutionBatcher {
 	checkpointer: VMCheckpointer | null = null;
 
 	/**
-	 * The query cache of the engine that owns this batcher, published for the
-	 * length of a re-run.
+	 * The query cache of the engine that owns this batcher, handed to a re-run
+	 * line in its execution context (`LineExecutionContext.queryClient`).
 	 *
-	 * A package's plugin function reads a resolved value back through
-	 * `getActiveQueryClient()`, which is a single module-level slot the engine
-	 * sets when it runs a line. A re-run here used to leave the slot as it was,
-	 * so it read whichever cache was published last. For an engine whose first
-	 * line fetches, nothing had been published yet (a line that goes pending at
-	 * preflight never runs), and the re-run answered "No cached result". With a
-	 * second engine in the process it read that engine's cache instead, and
-	 * reported the other engine's price as this line's answer.
+	 * A package's plugin function reads a resolved value back from that
+	 * context. It used to read one module-level slot the engine set when it
+	 * ran a line, and a re-run here that left the slot as it was read
+	 * whichever cache was published last: for an engine whose first line
+	 * fetches, none at all, and with a second engine in the process that
+	 * engine's cache, so the other engine's price was reported as this line's
+	 * answer (#710).
 	 *
-	 * Set by the engine at construction. Null leaves the slot untouched, which
-	 * is what a host driving the batcher on its own, with no cache of its own,
-	 * gets.
+	 * Set by the engine at construction. Null falls back to the cache on the
+	 * VM's own context, which is null for a host driving the batcher on its
+	 * own with no cache of its own.
 	 */
 	queryClient: QueryClient | null = null;
 
@@ -724,21 +722,10 @@ export class AsyncResolutionBatcher {
 		allQueryKeys: string[],
 		entryMap?: Map<number, LineCacheEntry | undefined>,
 	): number[] {
-		// The owning engine's cache is published for the re-run and the previous
-		// one put back afterwards, so a plugin function reads this engine's
-		// resolved values and nothing outside the re-run sees the slot move. See
-		// {@link queryClient}.
-		if (this.queryClient === null) return this.reExecuteLines(ordered, allQueryKeys, entryMap);
-		const previous = getActiveQueryClient();
-		setActiveQueryClient(this.queryClient);
-		try {
-			return this.reExecuteLines(ordered, allQueryKeys, entryMap);
-		} finally {
-			setActiveQueryClient(previous);
-		}
+		return this.reExecuteLines(ordered, allQueryKeys, entryMap);
 	}
 
-	/** The body of {@link reExecuteMainThread}, run with the owning engine's query cache published. */
+	/** The body of {@link reExecuteMainThread}: each line re-run with the owning engine's query cache in its context. */
 	private reExecuteLines(
 		ordered: number[],
 		allQueryKeys: string[],
@@ -783,6 +770,10 @@ export class AsyncResolutionBatcher {
 					// under. A field the first-pass context has and this hand-built
 					// one omits is silently absent exactly here.
 					scope: this.vm.context.scope,
+					// The owning engine's cache, which the line's plugin
+					// functions read their resolved values from. See
+					// {@link queryClient}.
+					queryClient: this.queryClient ?? this.vm.context.queryClient ?? undefined,
 				});
 				while (this.vm.getStack().length > stackBefore) {
 					this.vm.pop();

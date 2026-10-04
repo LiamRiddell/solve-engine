@@ -157,10 +157,12 @@ be typed back into it. Outside a call a `;` separates nothing, so
 
 ## The words each pack reads
 
-A language pack is a keyword table as well as a number format, and it
-**replaces** English rather than adding to it. A German engine reads `mal` for
-times and `von` for of, and no longer reads `times` or `of`; a French engine
-reads `fois` and `si ... alors ... sinon`, and no longer reads `if ... then ...
+A language pack is a keyword table as well as a number format: the list of
+words the engine reads as operators, connectives and function names. A German
+or French pack **adds** its own words to the English ones rather than replacing
+them, so every English line reads the same under every pack. A German engine
+reads `mal` for times and `von` for of, and still reads `times` and `of`; a
+French engine reads `fois` and `si ... alors ... sinon` beside `if ... then ...
 else`. The words that come from the engine's packages rather than from the
 keyword table, the unit names (`km`, `lb`), the currency codes, and phrases such
 as `half of` and `20% off`, are read the same in every pack. Symbols are never
@@ -168,7 +170,7 @@ translated: `+`, `^`, `%` and `!` mean the same everywhere.
 
 | Typed | `en` | `de` | `fr` |
 | --- | --- | --- | --- |
-| `3 times 4` | `12` | refused | refused |
+| `3 times 4` | `12` | `12` | `12` |
 | `3 mal 4` | refused | `12` | refused |
 | `3 fois 4` | refused | refused | `12` |
 | `3 plus 4` | `7` | `7` | `7` |
@@ -177,48 +179,68 @@ translated: `+`, `^`, `%` and `!` mean the same everywhere.
 | `2 potenz 3` | refused | `8` | refused |
 | `2 puissance 3` | refused | refused | `8` |
 | `10 mod 3` | `1` | `1` | `1` |
-| `10% of 200` | `20` | refused | refused |
+| `10% of 200` | `20` | `20` | `20` |
 | `10% von 200` | refused | `20` | refused |
 | `half of 10` | `5` | `5` | `5` |
 | `20% off $50` | `$40.00` | `$40.00` | `$40.00` |
-| `5 km to miles` | `3.11 miles` | refused | refused |
-| `5 km in miles` | `3.11 miles` | `3.11 miles` | refused |
+| `5 km to miles` | `3.11 miles` | `3.11 miles` | `3.11 miles` |
+| `5 km in miles` | `3.11 miles` | `3.11 miles` | `3.11 miles` |
 | `konvertieren 5 km in miles` | refused | `3.11 miles` | refused |
+| `5 km en miles` | refused | refused | `3.11 miles` |
+| `convertir 5 km en miles` | refused | refused | `3.11 miles` |
+| `3pm Tokyo in Dubai` | `10:00 AM` | `10:00 AM` | `10:00 AM` |
 | `5 kg + 2 lb` | `5.91 kg` | `5.91 kg` | `5.91 kg` |
-| `true and false` | `false` | refused | refused |
+| `true and false` | `false` | `false` | `false` |
 | `vrai et faux` | refused | refused | `false` |
-| `if 1 > 0 then 1 else 2` | `1` | refused | refused |
+| `if 1 > 0 then 1 else 2` | `1` | `1` | `1` |
 | `si 1 > 0 alors 1 sinon 2` | refused | refused | `1` |
 | `sin(0)` | `0` | `0` | `0` |
-| `sqrt(16)` | `4` | refused | refused |
-| `round(2.567, 2)` | `2.57` | refused | refused |
-| `floor(7/2)` | `3` | refused | refused |
-| `ceil(7/2)` | `4` | refused | refused |
+| `sqrt(16)` | `4` | `4` | `4` |
+| `round(7/2)` | `4` | `4` | `4` |
+| `floor(7/2)` | `3` | `3` | `3` |
+| `ceil(7/2)` | `4` | `4` | `4` |
 | `max(1, 2)` | `2` | `2` | `2` |
-| `wurzel(16)` | refused | refused | refused |
-| `runden(7/2)` | refused | refused | refused |
-| `aufrunden(7/2)` | refused | refused | refused |
-| `abrunden(7/2)` | refused | refused | refused |
+| `wurzel(16)` | refused | `4` | refused |
+| `kubikwurzel(27)` | refused | `3` | refused |
+| `runden(7/2)` | refused | `4` | refused |
+| `aufrunden(7/2)` | refused | `4` | refused |
+| `abrunden(7/2)` | refused | `3` | refused |
+| `racine(16)` | refused | refused | `4` |
+| `arrondi(7/2)` | refused | refused | `4` |
+| `plancher(7/2)` | refused | refused | `3` |
+| `plafond(7/2)` | refused | refused | `4` |
 | `15.03.2024` | `Friday, March 15, 2024` | `Friday, March 15, 2024` | `Friday, March 15, 2024` |
 
 The dates and times words follow the same rule: `today`, `now` and
-`next monday` in English, `heute`, `jetzt` and `naechste montag` in German, and
-`aujourdhui` (without its apostrophe, which a word cannot hold), `maintenant`
-and `prochain lundi` in French. They answer from the clock, so they are not in
-the table.
+`next monday` in every pack, `heute`, `jetzt` and `naechste montag` in German
+too, and `aujourdhui` (without its apostrophe, which a word cannot hold),
+`maintenant` and `prochain lundi` in French. They answer from the clock, so they
+are not in the table.
 
-Three gaps in the German and French packs are worth knowing before choosing
-one:
+The pack's own function names are the German `wurzel` (square root),
+`kubikwurzel` (cube root), `runden`, `aufrunden` and `abrunden` (round to the
+nearest, up and down), `zufall` (a random number), `zeichen` (the sign) and
+`ganzzahl` (the whole-number part), and the French `racine`, `arrondi`,
+`plancher` and `plafond`. Each runs the same function as its English name, so
+`wurzel(16)` and `sqrt(16)` are one call.
 
-- **Functions.** Both keep `sin`, `cos`, `tan`, `log`, `abs`, `min` and `max`,
-  and lose the English `sqrt`, `round`, `floor` and `ceil`. The German names the
-  table lists (`wurzel`, `runden`, `aufrunden`, `abrunden`) are recognised as
-  function names but have no function behind them yet, so they are refused
-  with `Unknown function`.
-- **Converting in French.** The French pack has no word for `in` or `to`, so a
-  French engine cannot convert units or currencies in words.
-- **Words for true, false and if in German.** The German pack has none, so a
-  German engine has no conditional and no truth values.
+Two things are worth knowing before choosing a pack:
+
+- **A pack's words are keywords.** A word a pack reads, in its own language or
+  in English, cannot also be a variable name under that pack, as `times` cannot
+  be one in English. Under `fr` that includes `en`, the conversion word, and
+  `racine`, `arrondi`, `plancher` and `plafond`.
+- **One word where the languages meet.** French `multiplier` is the verb, so
+  `3 multiplier 4` is 12 under `fr`, and the English `as multiplier` converter
+  is not read there. It is the one word a pack spells the same as an English
+  keyword with another meaning; the pack's meaning is kept, since it is the
+  word that pack's reader writes.
+
+The boundary: the packs are a keyword table, not a translation of every phrase.
+A package's multi-word phrases (`half of`, `compound interest on`) and its unit
+names are English in every pack, and a pack adds no word for a phrase a package
+reads. A document can still name its own words for units, see
+[custom units](/syntax/custom-units/).
 
 ## Region tags
 

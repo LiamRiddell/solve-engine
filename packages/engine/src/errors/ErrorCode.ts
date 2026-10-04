@@ -310,6 +310,10 @@ export const CoreErrorCodes = {
   PLUGIN_KEYWORD_COLLISION: "PLUGIN_KEYWORD_COLLISION",
   /** A package's `callFusions` names a word the engine already reads as something other than a plain word (a keyword, a built-in function, a unit), so the call could never fire. Refused at registration. */
   PLUGIN_CALL_FUSION_UNREACHABLE: "PLUGIN_CALL_FUSION_UNREACHABLE",
+  /** A package's `unitAliases` names a word the engine already reads as something other than a plain word (a unit, a keyword, a function), so the alias could never be read. Refused at registration (#762). */
+  PLUGIN_UNIT_ALIAS_UNREACHABLE: "PLUGIN_UNIT_ALIAS_UNREACHABLE",
+  /** A package's `unitAliases` maps a word to something that is not a single unit the engine reads (`mile`, `days`), so the alias would have nothing to mean. Refused at registration (#762). */
+  PLUGIN_UNIT_ALIAS_TARGET_UNKNOWN: "PLUGIN_UNIT_ALIAS_TARGET_UNKNOWN",
   /** A package registered a unit spelling the engine already has. Refused at registration, since a built-in unit cannot be overridden. */
   PLUGIN_UNIT_COLLISION: "PLUGIN_UNIT_COLLISION",
   /** A package's declared `IEnginePackage.engineVersion` semver range doesn't satisfy the running engine's ENGINE_VERSION. See api/EngineVersionCompatibility.ts. */

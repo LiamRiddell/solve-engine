@@ -375,46 +375,118 @@ export const UNCATEGORIZED_TOKEN_TYPES: ReadonlySet<string> = new Set([
 	// evaluation role of its own (it is stripped or folded into an aggregate),
 	// so it is deliberately unstyled rather than categorised.
 	"TAG",
+	// A unit label is minted by the normaliser after the unit it names and
+	// covers no text of its own, so there is nothing of it to paint.
+	"UNIT_LABEL",
 ]);
 
 /**
- * Runtime registry for package-contributed categories (e.g. a plugin's
- * custom token types). Overrides/extends the static table above, never
- * replaces it, so a package can't accidentally break core highlighting.
- * Register/unregister symmetry mirrors this codebase's other pluggable
- * registries (e.g. sharedOpRegistry). See ExpressionEngine.registerPackage
- * / unregisterPackage, which call these on behalf of IEnginePackage.tokenCategories.
+ * One engine's highlight categories: the categories its packages registered
+ * for their own token types (`IEnginePackage.tokenCategories`), over the
+ * static table above, which it extends and never replaces, so a package
+ * cannot break core highlighting.
+ *
+ * Each engine holds one on its `EngineContext` (#710). There used to be a
+ * single table for the whole process, so an editor asking one engine for a
+ * package keyword's category got nothing once another engine had
+ * unregistered the same package.
  */
-const pluginCategories = new Map<string, TokenCategory>();
+export class TokenCategoryTable {
+	/** Package categories by token type. A `Map`, so a type named like an `Object.prototype` property is a key like any other. */
+	private readonly own = new Map<string, TokenCategory>();
+
+	/**
+	 * Map a token type to a highlighting category.
+	 *
+	 * @param tokenType - Token type a package registered.
+	 * @param category - Category deciding how an editor colours it.
+	 */
+	set(tokenType: string, category: TokenCategory): void {
+		this.own.set(tokenType, category);
+	}
+
+	/**
+	 * Remove a token type's package category. The built-in category, if any,
+	 * applies again; an unknown type is ignored.
+	 *
+	 * @param tokenType - Token type to forget.
+	 */
+	delete(tokenType: string): void {
+		this.own.delete(tokenType);
+	}
+
+	/**
+	 * A token type's category: a package's first, then the built-in table's.
+	 *
+	 * @returns The category, or `undefined` when the type has none, the signal
+	 *   to a UI adapter that the token renders unstyled.
+	 */
+	get(tokenType: string): TokenCategory | undefined {
+		return this.own.get(tokenType) ?? builtinTokenCategory(tokenType);
+	}
+}
 
 /**
- * Map a token type to a highlighting category.
+ * A token type's category in the built-in table alone, or `undefined`.
+ * Read as the table's own key, so a name such as `constructor` reaches
+ * nothing.
+ */
+export function builtinTokenCategory(tokenType: string): TokenCategory | undefined {
+	return BUILTIN_CATEGORIES.get(tokenType);
+}
+
+/**
+ * The built-in table as a `Map`, built once, for {@link builtinTokenCategory}.
+ *
+ * Highlighting a line asks for a category per token. A `Map` lookup reads no
+ * global, where `Object.prototype.hasOwnProperty.call` reads `Object` on every
+ * call, which inside a `vm` context (the Jest harness the benchmarks run in)
+ * costs hundreds of nanoseconds a read: a 100-token line highlighted three
+ * times slower than before the per-engine table (#710). A `Map` also holds a
+ * type named like an `Object.prototype` property as an ordinary missing key.
+ */
+const BUILTIN_CATEGORIES: ReadonlyMap<string, TokenCategory> = new Map(Object.entries(TOKEN_CATEGORY_MAP) as [string, TokenCategory][]);
+
+/**
+ * The table the deprecated module-level functions below read and write. No
+ * engine reads it: an engine keeps its own on its context.
+ */
+const moduleCategories = new TokenCategoryTable();
+
+/**
+ * Map a token type to a highlighting category, in the module-level table.
  *
  * @param tokenType - Token type a package registered.
  * @param category - Category deciding how an editor colours it.
+ * @deprecated An engine keeps its own categories now (#710), filled from
+ *   `IEnginePackage.tokenCategories`; this writes a table no engine reads.
+ *   Declare the category on the package instead. Removed in 3.0.
  */
 export function registerTokenCategory(tokenType: string, category: TokenCategory): void {
-	pluginCategories.set(tokenType, category);
+	moduleCategories.set(tokenType, category);
 }
 
 /**
- * Remove a token type's highlighting category.
+ * Remove a token type's category from the module-level table.
  *
  * @param tokenType - Token type to forget. Unknown types are ignored.
+ * @deprecated See {@link registerTokenCategory}. Removed in 3.0.
  */
 export function unregisterTokenCategory(tokenType: string): void {
-	pluginCategories.delete(tokenType);
+	moduleCategories.delete(tokenType);
 }
 
 /**
- * Resolve a token type to its semantic category, checking plugin-contributed
- * categories first (so a plugin could theoretically re-categorize a builtin
- * token type, though in practice plugins only ever add categories for their
- * own new types).
+ * Resolve a token type to its semantic category, from the built-in table and
+ * the module-level table {@link registerTokenCategory} writes.
  *
- * @returns The category, or `undefined` if the token type has no category
+ * @returns The category, or `undefined` if the token type has no category,
  *   the signal to a UI adapter that this token should render unstyled.
+ * @deprecated It sees no engine's packages (#710). Ask the engine that lexed
+ *   the token, `engine.getTokenCategory(type)`, or its language service,
+ *   `languageService.getTokenCategory(type)`, which read that engine's
+ *   packages as well as the built-in table. Removed in 3.0.
  */
 export function getTokenCategory(tokenType: string): TokenCategory | undefined {
-	return pluginCategories.get(tokenType) ?? TOKEN_CATEGORY_MAP[tokenType];
+	return moduleCategories.get(tokenType);
 }

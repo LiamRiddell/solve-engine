@@ -142,8 +142,9 @@ mysteriously later.
 | `prefixParselets` | Parsing rules for tokens that begin an expression, written by hand or built from a phrase's words with `definePhrasePattern` | [Functions and operators](/packages/functions-and-operators/), [Recognising phrases and words](/packages/recognising-phrases/#words-around-their-operands-definephrasepattern) |
 | `infixParselets` | Parsing rules for tokens that combine expressions | [Functions and operators](/packages/functions-and-operators/) |
 | `pluginFunctions` | Functions the virtual machine can call | [Functions and operators](/packages/functions-and-operators/) |
-| `normalizerRules` / `phrases` / `callFusions` | Token-stream rewrites: phrase fusion, `name(` function-call words, and the `shape` a rule declares so it is only tried where it can fire | [Recognising phrases and words](/packages/recognising-phrases/) |
+| `normalizerRules` / `phrases` / `callFusions` | Token-stream rewrites: phrase fusion, `name(` function-call words, the `shape` a rule declares so it is only tried where it can fire, and the engine environment a rule is handed | [Recognising phrases and words](/packages/recognising-phrases/) |
 | `asConverters` | Targets for the `as` conversion form | [Custom as converters](/packages/as-converters/) |
+| `unitAliases` | Words for units the engine already has (`Meile` for the mile), read after a value and as a conversion target, and shown as written | [Words for units](/packages/unit-aliases/) |
 | `asyncResolvers` | External data sources: the fetch (`createQueryResolver` for a question and a fetch), how many run at once, and the record of where each fetched value came from | [Async data source](/guide/async-data-sources/) |
 | `tokenCategories` | Highlighting categories for new tokens | [Highlighting and completions](/packages/highlighting-and-completions/) |
 | `completionItems` | Editor completion candidates | [Highlighting and completions](/packages/highlighting-and-completions/) |

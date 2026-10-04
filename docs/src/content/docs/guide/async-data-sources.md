@@ -165,11 +165,13 @@ the function is handed before starting one:
 
 ```ts
 const pluginFunction = (args: Value[], context?: LineExecutionContext) => {
-  const cached = queryClient.getQueryData(keyFor(args));
+  const queryClient = context?.queryClient;
+  const cached = queryClient?.getQueryData(keyFor(args));
   if (cached !== undefined) return cached as Value;
   if (context?.networkEnabled === false) {
     return errorValue("NETWORK_DISABLED", "Live data is switched off for this engine (network.enabled is false)");
   }
+  if (queryClient === undefined) return errorValue("MYRATES_NO_CACHE", "No engine cache to fetch into");
   return queryClient.fetchQuery({ queryKey: keyFor(args), queryFn: ({ signal }) => fetchIt(args, signal) });
 };
 ```
@@ -177,6 +179,27 @@ const pluginFunction = (args: Value[], context?: LineExecutionContext) => {
 The built-in historical exchange rate does exactly this for `x in GBP on
 2024-01-15`, where the source currency is the value of `x` and preflight cannot
 see it.
+
+## Reading the engine's cache
+
+Each engine keeps what its resolvers fetched in a cache of its own, a TanStack
+Query `QueryClient`. A plugin function reads that cache from the execution
+context it is handed, `context.queryClient`: the engine running the line puts
+its own cache there, on the first pass, on the re-run when a value lands, and in
+a what-if pass, which runs on a scratch engine with its own. So two engines in
+one process each read their own cache, whichever of them ran last.
+
+`preflight` is handed the same cache as its last argument, so the two halves of
+a resolver meet in one place. A resolver built with `createQueryResolver` reads
+the context for you.
+
+The boundary: `getActiveQueryClient()`, the one module-level slot a plugin
+function used to read the cache from, still works and is deprecated. The engine
+used to publish its cache there before each line and put the previous one back
+around every nested run, and a re-run that missed one of those steps read
+another engine's cache. The engine sets it at every plugin call now, so an old
+handler keeps reading the right cache, but new code should read the context.
+The slot is removed in 3.0.
 
 ## Preflight runs before the VM, and stays synchronous
 

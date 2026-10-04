@@ -37,6 +37,26 @@
 //#region ─── Imports ──────────────────────────────────────────────────────────
 
 import type { Token } from "@solve-js/lexer/Token";
+import type { AsConverterMatch } from "@solve-js/vm/AsConverterRegistry";
+
+/**
+ * What a rule may read about the engine that runs it, handed to
+ * {@link NormalizerRule.match} as its third argument.
+ *
+ * A package's rule is one object shared by every engine that loads the
+ * package, so anything it reads that belongs to one engine arrives here rather
+ * than through a module-level registry (#710). Every field is optional: a
+ * normaliser built on its own, with no engine, hands an empty environment, and
+ * a rule reads that as "nothing registered".
+ */
+export interface NormalizerEnvironment {
+	/**
+	 * The engine's `as` converters, as `match` reads them: how a word written
+	 * after `as` would match (`"exact"`, `"folded"`, and the refusals). Read by
+	 * the rule that turns `in <converter>` into `as <converter>`.
+	 */
+	readonly asConverters?: { match(typed: string): AsConverterMatch };
+}
 
 //#endregion
 //#region ─── NormalizerMatch, Rule Match Result ──────────────────────────────
@@ -257,9 +277,12 @@ export interface NormalizerRule {
    *
    * @param tokens - The current token stream (may be partially normalized from prior passes)
    * @param pos    - The current position to attempt matching from
+   * @param environment - What the rule may read about the engine running it;
+   *   see {@link NormalizerEnvironment}. A rule that reads nothing of the
+   *   engine's ignores it.
    * @returns A {@link NormalizerMatch} if the pattern is found, or `null` if no match
    */
-  match(tokens: Token[], pos: number): NormalizerMatch | null;
+  match(tokens: Token[], pos: number, environment?: NormalizerEnvironment): NormalizerMatch | null;
 }
 
 //#endregion

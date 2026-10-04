@@ -2,7 +2,7 @@ import { ExpressionLexer, LineClassification, LexerVocabulary, type ScanLineResu
 import { Token } from "@solve-js/lexer/Token";
 import { EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { LexerState } from "@solve-js/lexer/LexerState";
-import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import { builtinTokenCategory, type TokenCategoryTable } from "@solve-js/language/TokenCategoryMap";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import type { TokenLookup } from "@solve-js/lexer/TokenClassRegistry";
 
@@ -38,6 +38,20 @@ export class Lexer {
    */
   constructor(localeCode = "en", _tokenLookup?: TokenLookup) {
     this.expressionLexer = new ExpressionLexer(localeCode);
+  }
+
+  /** The owning engine's highlight categories, or null for a lexer no engine owns (the built-in table alone). */
+  private categories: TokenCategoryTable | null = null;
+
+  /**
+   * Read highlight categories from `table`, the owning engine's, so a
+   * package's token types are painted as that engine registered them (#710).
+   * The engine calls this once, at construction.
+   *
+   * @param table - The engine's category table.
+   */
+  setTokenCategories(table: TokenCategoryTable): void {
+    this.categories = table;
   }
 
   reset(input: string, state?: LexerState): void {
@@ -267,7 +281,7 @@ export class Lexer {
       // differ for a string literal, whose value is the payload while its
       // text still carries the quote characters the reader typed.
       length: token.text.length,
-      category: getTokenCategory(token.type),
+      category: this.categories !== null ? this.categories.get(token.type) : builtinTokenCategory(token.type),
     }));
   }
 }
