@@ -214,11 +214,21 @@ atan2(1, 1) in degrees // 45.00 degrees
 asind(0.5) // 30.00
 ```
 
+The call on its own is an angle, so converting it to a unit that measures
+something else is refused rather than labelled: an angle is not a length.
+
+```solve
+asin(0.5) in km // an angle cannot be converted to a length
+atan2(1, 1) in kg // an angle cannot be converted to a mass
+```
+
 The boundary: the conversion knows the number is an angle because the line
 starts with the call. A name that holds the answer is an ordinary number, and a
 plain number converted to a unit is given that unit, so `a = asin(0.5)` followed
 by `a in degrees` is 0.52 degrees. Write `asind`, or `radtodeg(a)`, for that
-case.
+case. A longer left side is only read as radians for an angle target, since
+`asin(0.5) * 6371 km` (an arc length on the Earth) is a length and converts to
+miles as one.
 
 ## Hyperbolic functions
 

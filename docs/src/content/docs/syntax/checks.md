@@ -65,9 +65,32 @@ check 5 m ≈ 5.01 m within 1 cm // ✓ (differs by 0.01 m)
 check 1/3 ≈ 0.33 within 1% // check failed: 0.333333 differs from 0.33 by 1.01%, more than 1%
 ```
 
-Without `within`, `≈` allows no margin of its own: `check 1/3 ≈ 0.33` fails,
-because a third is not 0.33. Say how close is close enough whenever the two sides
-are worked out differently.
+Without a `within`, `≈` reads the right-hand side as written to the decimal
+places it has: the check asks whether the left side is that figure to those
+places. Sixty miles an hour is 96.56064 km/h, so it is 96.56 km/h to two places
+and not 96.5 to one. A whole number on the right allows no rounding, so `5.4 ≈ 5`
+fails, and a figure worked out to every digit, such as `pi`, is held to the
+engine's own rounding. Say how close is close enough with `within` whenever the
+margin you mean is wider than the last written place.
+
+```solve
+check 60 mph ≈ 96.56 km/h // ✓ (differs by 0.000398 mph)
+check 60 mph ≈ 96.5 km/h // check failed: 60 mph is not equal to 96.5 km/h
+check 1/3 ≈ 0.333 // ✓ (differs by 0.000333)
+check 5.4 ≈ 5 // check failed: 5.4 is not equal to 5
+```
+
+## Yes or no answers
+
+A comparison answers true or false, and two such answers compare as equal or
+not, as two pieces of text do. They have no order, so `<` between them is
+refused, and `true` is not the number 1.
+
+```solve
+check !(1 > 2) == true // ✓
+check (2 > 1) == (3 > 2) // ✓
+check true == false // check failed: true is not equal to false
+```
 
 ## Checks among the other lines
 

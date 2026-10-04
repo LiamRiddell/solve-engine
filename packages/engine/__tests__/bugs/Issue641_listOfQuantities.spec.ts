@@ -31,7 +31,8 @@ describe("a list whose cells are in two measures is refused", () => {
 		"[1 kg, 3 m]",
 		"[$1, 2 kg]",
 		"[$1, €2]",
-		"[1 km/h, 2 mph]",
+		// Two rates of different measures: a speed and a mass flow.
+		"[1 km/h, 2 kg/s]",
 	])("%s", (line) => {
 		expect(code(line)).toBe("MATRIX_CELL_UNITS_DIFFER");
 	});

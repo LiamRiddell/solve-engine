@@ -699,6 +699,23 @@ describe("goal seek across entry points", () => {
     }
     expectNeedsDocument("solve line 2 for x = 4 between 0 and 10");
   });
+
+  // A rate held as a percentage is solved as one, and a goal seek on a line a
+  // what-if re-runs names the what-if as the reason it cannot answer there,
+  // through both document passes alike (FoundBug_goalSeekLoanRefusals,
+  // FoundBug_goalSeekRefusalNamesWhereItIs).
+  test("a percentage unknown, and a goal seek inside a what-if, across entry points", () => {
+    const rate = [":deposit = 100000", ":rate = 4%", "monthly repayment on deposit over 25 years at rate", "solve line 3 for rate = 600"];
+    expect(incremental(rate)[3]).toBe("5.26%");
+    expect(batch(rate).slice(0, 3)).toEqual(incremental(rate).slice(0, 3));
+    expect(batch(rate)[3].toLowerCase()).toContain("batch pass");
+    expectNeedsDocument("solve line 3 for rate = 600");
+    const whatIf = ["x = 5", "x * 2", "y = solve line 2 for x = 3", "line 3 with x = 4"];
+    const refusal = "ERROR: Goal seek cannot run inside a what-if: the what-if works each line of its scenario out once, and a goal seek re-runs another line many times. Solve the line outside the what-if.";
+    expect(incremental(whatIf)[3]).toBe(refusal);
+    expect(batch(whatIf)[3]).toBe(refusal);
+    expectNeedsDocument("line 3 with x = 4");
+  });
 });
 
 describe("a formula stored before its unknown had a value, across entry points (#732)", () => {

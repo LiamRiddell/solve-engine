@@ -55,6 +55,37 @@ export function termInYears(value: Value): number | Value {
 }
 
 /**
+ * The refusal for loan terms no repayment can be worked out from, in the
+ * reader's words, or undefined when the terms are usable. Shared by the
+ * repayment, the interest and `monthlyPayment`, which used to prefix each
+ * refusal with the internal name of the function (`loanRepayment: principal
+ * must be positive`), a name the reader never typed, and which reached the
+ * page whenever the amount borrowed was an expression that came to zero or
+ * less.
+ *
+ * @param principal - The amount borrowed.
+ * @param years - The term in years.
+ * @param rate - The annual rate as a decimal fraction.
+ * @param periodsPerYear - Repayments a year (0 for the total), when the form has one.
+ * @returns An error Value, or undefined.
+ */
+export function loanTermsRefused(principal: number, years: number, rate: number, periodsPerYear = 0): Value | undefined {
+	if (!(principal > 0)) {
+		return errorValue("INVALID_RANGE", "The amount borrowed must be more than zero to work out a repayment.");
+	}
+	if (!(years > 0)) {
+		return errorValue("INVALID_RANGE", "A loan's term must be longer than zero to work out a repayment.");
+	}
+	if (!(rate >= 0)) {
+		return errorValue("INVALID_RATE", "A loan's interest rate cannot be negative.");
+	}
+	if (!(periodsPerYear >= 0)) {
+		return errorValue("INVALID_RANGE", "The number of repayments a year cannot be negative.");
+	}
+	return undefined;
+}
+
+/**
  * How much one unit grows to at `rate` a year, compounded once a year, over
  * `years`: `(1 + rate)^years`. The factor behind compound growth and, divided
  * into a future sum, behind present value.

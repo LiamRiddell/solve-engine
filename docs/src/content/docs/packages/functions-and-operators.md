@@ -271,6 +271,10 @@ The contract, in the order a handler meets it:
   on live data the scratch engine does not fetch. Call it as many times as you
   need; each call is a fresh pass from the top.
 - `close()` releases the scratch engine. Call it once, in a `finally`.
+- The lines a session runs see `context.inWhatIf` set to `true`. The scenario is
+  a batch pass of its own, so a handler that cannot answer there (one that needs
+  to re-run a line itself, as goal seek does) can read the flag and say the
+  what-if is why, rather than naming the batch pass the reader never asked for.
 
 Each `run` re-runs every line above the target, so bound how many a handler
 makes. The sweep form caps itself at 1,000 values and 100,000 line re-runs, and

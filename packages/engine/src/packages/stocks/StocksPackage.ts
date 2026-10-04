@@ -115,7 +115,7 @@ export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePa
 		lexerVocabulary: {
 			// "stock" is claimed as a bare keyword (unlike Weather's phrase-
 			// fused triggers). Same trade-off `examples/osrs/OsrsLexerVocabulary.ts`
-			// accepts for "ge"/"osrs"/"price": acceptable ONLY because this
+			// accepts for "ge"/"osrs": acceptable ONLY because this
 			// whole package is opt-in (never in BUILTIN_PACKAGES), so the risk
 			// (":stock = 5" would collide if a host both uses that variable
 			// name AND opts into this package) is scoped to hosts who
