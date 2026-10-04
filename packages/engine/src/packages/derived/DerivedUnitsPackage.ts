@@ -23,23 +23,45 @@ function asUnit(target: string): (value: Value) => Value {
 	};
 }
 
+/** The SI prefixes the unit table spells before the derived units, smallest first. */
+const SI_PREFIXES = ["p", "n", "µ", "m", "k", "M", "G", "T", "P"] as const;
+
+/**
+ * The `as` readouts for a unit and each prefixed spelling of it, keyed by the
+ * spelling itself: `W`, `pW`, `nW`, `µW`, `mW`, `kW`, `MW` and so on.
+ *
+ * @param base - The unprefixed symbol.
+ * @param prefixes - The prefixes the unit table spells before it.
+ */
+function prefixedReadouts(base: string, prefixes: readonly string[] = SI_PREFIXES): Record<string, (value: Value) => Value> {
+	const readouts: Record<string, (value: Value) => Value> = { [base]: asUnit(base) };
+	for (const prefix of prefixes) readouts[prefix + base] = asUnit(prefix + base);
+	return readouts;
+}
+
 /**
  * Named derived units on output (issue #191). Multiplying two compatible
  * quantities composes their dimensions in the VM (see `uom/Dimensions.ts`); this
  * package supplies the `as <named unit>` readouts and the `m/s^2` acceleration
  * literal. On by default and removable.
  *
- * The `as` targets are lower-cased converter names, so `as N`, `as kWh` and
- * `as w` all reach the right unit.
+ * The `as` targets are registered under their own spellings. A name is
+ * matched as typed first, so `as mW` is milliwatts and `as MW` megawatts
+ * (issue #824); a spelling that matches none (`as n`, `as KWH`) falls back to
+ * the lower-cased name, which reaches the one unit it can mean, and a
+ * lower-cased name two units share (`as mw`) is refused by name rather than
+ * read as either.
  */
 export const DERIVED_UNITS_PACKAGE: IEnginePackage = {
 	name: "solve-derived-units",
 	normalizerRules: [accelerationNormalizerRule()],
 	asConverters: {
-		n: asUnit("N"), kn: asUnit("kN"),
-		j: asUnit("J"), kj: asUnit("kJ"), mj: asUnit("MJ"), wh: asUnit("Wh"), kwh: asUnit("kWh"),
-		w: asUnit("W"), kw: asUnit("kW"), mw: asUnit("MW"),
-		pa: asUnit("Pa"), kpa: asUnit("kPa"), mpa: asUnit("MPa"),
-		v: asUnit("V"), mv: asUnit("mV"), kv: asUnit("kV"),
+		...prefixedReadouts("N"),
+		...prefixedReadouts("J"),
+		...prefixedReadouts("Wh"),
+		...prefixedReadouts("W"),
+		...prefixedReadouts("Pa"),
+		// The unit table spells only the millivolt and the kilovolt.
+		...prefixedReadouts("V", ["m", "k"]),
 	},
 };

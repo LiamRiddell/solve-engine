@@ -76,6 +76,33 @@ at a voltage is the battery's energy, named in watt-hours.
 3000 mAh * 3.7 V // 11.10 Wh
 ```
 
+A **prefix** in front of a unit scales it by a power of ten: `k` (kilo) is a
+thousand, `m` (milli) a thousandth, `M` (mega) a million, `µ` (micro) a millionth.
+`as` takes any of them before the newton, joule, watt, watt-hour and pascal, and
+the millivolt and kilovolt beside the volt. The case of a prefix letter is part
+of its meaning, so `mW` (a milliwatt) and `MW` (a megawatt) are a billion times
+apart, and `pW` (pico) and `PW` (peta) further still. `as` reads the unit exactly
+as written, just as `in` does:
+
+```solve
+5 W as mW // 5,000.00 mW
+5 W in mW // 5,000.00 mW
+5 MW as mW // 5,000,000,000.00 mW
+1 W as pW // 1,000,000,000,000.00 pW
+```
+
+A spelling in the wrong case is refused rather than read as one of the two it
+could be. `as mw` names no unit, since it could be the milliwatt or the megawatt,
+and `as MV` is not the millivolt, whose prefix is the lower-case `m`. A letter
+that is not a prefix carries no such meaning, so `as n` is still the newton and
+`as KWH` the kilowatt-hour.
+
+```solve-doc
+5 W as mw // ERROR: "as mw" could be "as mW" or "as MW": write the unit with its prefix in its own case (m is milli, M is mega, p is pico, P is peta)
+1 V as MV // ERROR: "as MV" is not a unit: the one spelled alike is "as mV", whose prefix is written in the other case (m is milli, M is mega, p is pico, P is peta)
+10 N as n // 10.00 N
+```
+
 This works only where the combination makes a named quantity, and multiplying
 two unrelated quantities is still reported as a mismatch rather than invented
 into a unit. Lengths are the exception that needs no name: a length times a
