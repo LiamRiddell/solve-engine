@@ -156,6 +156,12 @@ value.toNumber();  // 4
 value.unit;        // undefined
 ```
 
+This page reads a note with `parseDocument`, the batch pass. It is one of four
+entry points, and the others resolve what it cannot (goal seek) or cost less
+per keystroke (a live evaluator): [which entry point](/guide/entry-points/)
+compares them. To store, log or post a result, see
+[results as JSON](/guide/results-as-json/).
+
 ## Clearing state
 
 An engine accumulates variables and cached results. Call `clear()` to reset it

@@ -134,7 +134,7 @@ export interface SerializedValueSidecars {
  * function result, or a cached line are represented; {@link ValueType.Pending}
  * is filtered out upstream (an in-flight async result). A symbolic value, a
  * symbolic matrix cell, a colour, a split, a chart and an IP subnet have no form
- * here: {@link serializeValue} refuses them with
+ * here: {@link snapshotValue} refuses them with
  * {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE}, and
  * `ExpressionEngine.toJSON` catches that refusal and leaves the variable or
  * cached line out of the snapshot (#665).
@@ -310,7 +310,13 @@ function unsupportedValue(type: ValueType, where: string): never {
 }
 
 /**
- * Turn a runtime {@link Value} into its JSON-safe form.
+ * Turn a runtime {@link Value} into its JSON-safe snapshot form, the one
+ * {@link deserializeValue} restores.
+ *
+ * Internal to the snapshot. It is not the worker's public `serializeValue`,
+ * which writes a display-ready shape (`text`, `number`, `unit`) that does not
+ * restore. The two are named apart so that a reader of the source does not
+ * take one for the other (#725).
  *
  * @param value - The value to serialise.
  * @param where - A short human label for the value's origin (`variable "x"`, a
@@ -321,7 +327,7 @@ function unsupportedValue(type: ValueType, where: string): never {
  *   chart or an IP subnet. `ExpressionEngine.toJSON` catches it and leaves the
  *   value out of the snapshot.
  */
-export function serializeValue(value: Value, where: string): SerializedValue {
+export function snapshotValue(value: Value, where: string): SerializedValue {
 	const out = serializeValueBody(value, where);
 	// Plain copies, so the snapshot shares nothing with the live value.
 	if (value.sources !== undefined) out.src = value.sources.map((s) => ({ ...s }));
@@ -329,7 +335,7 @@ export function serializeValue(value: Value, where: string): SerializedValue {
 	return out;
 }
 
-/** The type-specific half of {@link serializeValue}. */
+/** The type-specific half of {@link snapshotValue}. */
 function serializeValueBody(value: Value, where: string): SerializedValue {
 	switch (value.type) {
 		case ValueType.Number: {
@@ -398,7 +404,7 @@ function serializeMatrixCell(cell: MatrixEntry, where: string): SerializedNumber
 	return unsupportedValue(ValueType.Symbolic, `${where} (symbolic matrix cell)`);
 }
 
-/** Reverse {@link serializeValue}. Builds a fresh {@link Value}; never touches the arena, so it is safe to call outside evaluation. */
+/** Reverse {@link snapshotValue}. Builds a fresh {@link Value}; never touches the arena, so it is safe to call outside evaluation. */
 export function deserializeValue(sv: SerializedValue): Value {
 	const value = deserializeValueBody(sv);
 	if (sv.src !== undefined) value.sources = sv.src.map((s) => ({ ...s }));
@@ -465,7 +471,7 @@ function deserializeValueBody(sv: SerializedValue): Value {
 
 /** Turn one frozen answer into its JSON-safe form. */
 export function serializeFrozenRecord(record: FrozenRecord): SerializedFrozenRecord {
-	return { key: record.key, at: record.at, day: record.day, value: serializeValue(record.value, `frozen "${record.key}"`) };
+	return { key: record.key, at: record.at, day: record.day, value: snapshotValue(record.value, `frozen "${record.key}"`) };
 }
 
 /** Reverse {@link serializeFrozenRecord}. */
