@@ -1,0 +1,13 @@
+{
+	// For the build only: tsconfig.json without the paths that read the engine
+	// from source, so nothing can pull the engine into the bundle.
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"resolveJsonModule": true,
+		"esModuleInterop": true,
+		"isolatedModules": true
+	},
+	"include": ["src/**/*.ts"]
+}

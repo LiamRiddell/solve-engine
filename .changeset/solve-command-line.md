@@ -1,0 +1,31 @@
+---
+"solve-engine-cli": minor
+---
+
+The `solve` command evaluates an expression or a whole document from a shell, and `solve check` fails a CI job when one of a document's check lines stops holding
+
+There was no way to run the engine without writing a host around it. A CI job could not fail on a document whose `check` lines fail, and every script had to know that a live lookup keeps Node running: the query cache arms a ten-minute collection timer per fetched answer, so a script on a default engine that made one lookup stayed alive after its last line unless it called `engine.clear()` (#774).
+
+`packages/cli` is the command, a workspace package of its own (`solve-engine-cli`), because the engine reads no files and has one runtime dependency, and a command that reads documents off disk could keep neither promise inside it; the engine package is unchanged. `solve "<expression>"` prints the answer, `solve <file>` and `solve -` (standard input) evaluate a document through `evaluateDocument` and print one row per answered line, and `solve check <file>` reports the check lines with a count. `--json` prints one object carrying each line's status, code and `Value.toJSON`; `--tz` and `--now` pin the zone and the clock through `dateCalendarInZone`, `--seed` passes `random: { seed }`, `--network on|off` sets `config.network.enabled`, `--wait` bounds the wait for live data (10,000 ms unless given), and `--strict` counts an unreadable line as a failure. The exit status is 0 when every line answered or every check passed, 1 when a line failed, a check did not pass or live data did not arrive, and 2 when the command could not run as asked. Every run clears its engine, and the executable then exits explicitly.
+
+| line | before | now |
+| --- | --- | --- |
+| `solve "5 km in miles"` | no command | `3.11 miles`, exit 0 |
+| `solve "5 km + 3 kg"` | no command | `error: length and mass cannot be added`, exit 1 |
+| `solve check groceries.md`, with a passing, a failing and an approximate check | no command | the three check rows, then `3 checks: 2 passed, 1 failed`, exit 1 |
+| `solve check` on a line `check 1 km ==` | no command | `not read: The line ends after "==", where a value was expected`, counted as could not be evaluated, exit 1 |
+| `solve --now 2026-01-01T09:00:00Z --tz Asia/Tokyo today` | no command | `Thursday, January 1, 2026, 6:00:00 PM` |
+| `solve --tz Europe/Atlantis today` | no command | `solve: --tz "Europe/Atlantis" is not a time zone this machine knows. ...`, exit 2 |
+| `solve notes` where `notes` is a directory, or `solve /dev/zero` | no command | a one-line usage error naming it, exit 2 |
+| `solve --wait 150 "<a lookup that never answers>"` | a script on a default engine held Node open | `pending: no answer from live data within 150 ms`, exit 1, within the wait |
+| a line carrying an escape sequence (`ESC[2J`) | no command | printed as `\u{1b}[2J`, so it cannot act on the terminal; kept as data under `--json` |
+
+The boundary: this is the command line half of #774. The MCP server for AI tools, on the same engine with the network off and a fresh engine per call, is a separate package and not in this change. There is no interactive or watch mode in the first cut. The package is marked private and runs from a checkout (`npm ci`, `npm run build`, `npx solve`): publishing a new npm name needs a first manual publish and its own trusted-publisher entry in the publish workflow, which is a maintainer's step. So that this entry reaches the command's own changelog, `.changeset/config.json` now versions private packages (`privatePackages.version`); Changesets 3 otherwise drops a private package's entry without a word. Prose is what the engine cannot read, so a typo that makes a line unreadable is left out like a sentence rather than failing a run (`--strict` or a check covers it); a sentence that begins with "check " is read as a check under `solve check`. `--now` takes an instant with its offset or epoch milliseconds, and refuses a time with no offset rather than guessing its zone. The largest document read is 16 MiB.
+
+The guide gains [the command line](/guide/command-line/) (registered under Set up, its example note a proven `solve-doc` block), installation points to it, and security says why the command is not part of the engine.
+
+## Verification
+
+`Issue774_solveCli.spec.ts` holds 91 tests, driving `run()` in-process against the engine's source with a stub data source for the live cases: the parts (`parseArguments`, `parseNow`, `parseSeed`, `escapeForTerminal`, `quoted`, `classifyInput`, `readDocumentFile` (one descriptor for the size check and the read, so a file swapped between them cannot slip past), `readAtMost`, `decodeDocument`, the report functions, `isKnownZone`, and the command's check-line test compared with the engine's own over a corpus), every exit code, `solve check` on a passing, a failing and an approximate check, and the adversarial cases (a file past 16 MiB refused before it is read, a document past the engine's line limit, a live line that never answers ending within `--wait`, `--tz` with an unknown zone, a directory and a device as the path, prototype words as expressions, lines, options, zones and seeds with `Object.prototype` unchanged, escape sequences and direction overrides, the resource probes, the numeric, text and document edges, CRLF, standard input agreeing with a file, a leap day and a change of clocks under `--now`, and the cache's timers released after a run, with an uncleared engine as the control). `npm run smoke:cli`, now part of `npm run verify`, runs the built command as a real process for 16 checks.
+
+The full suite ran 25,002 tests in 729 suites (24,997 passed, 4 skipped); its one failure, the command-line page still linking the old conditionals anchor for checks, is fixed and passes on a rerun. `npm run typecheck` (now the engine's and the command's), `typecheck:tests` (at its baseline of 94 errors in 30 files, none new), `lint`, `lint:comments` (now over the command's source too), `lint:docs`, `lint:links`, `lint:cheatsheet`, `lint:sidebar` and `lint:ci-parity` passed, as did `npm run build` and `npm run smoke:cli`. The bundled-consumer contract (`npm run test:consumer`) passed its 27 checks against an installed copy, including 1,947 documented examples.

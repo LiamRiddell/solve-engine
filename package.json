@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace=packages/engine",
+    "build": "npm run build --workspace=packages/engine && npm run build --workspace=packages/cli",
     "setup": "npm run build && npm ci --prefix docs && npm ci --prefix playground",
     "new:package": "node scripts/new-package.mjs",
     "test": "node --expose-gc node_modules/jest/bin/jest.js --logHeapUsage",
@@ -18,17 +18,17 @@
     "test:coverage": "node --expose-gc --max-old-space-size=4096 node_modules/jest/bin/jest.js --config jest.coverage.config.cjs --runInBand --forceExit",
     "test:oom": "node --expose-gc --max-old-space-size=4096 node_modules/jest/bin/jest.js --no-coverage --logHeapUsage --testPathPattern=\"BreakageTests\\.|LexerFuzz\\.|LongDocumentRobustness\\.\" --runInBand",
     "test:watch": "jest --watch",
-    "typecheck": "npm run typecheck --workspace=packages/engine",
+    "typecheck": "npm run typecheck --workspace=packages/engine && npm run typecheck --workspace=packages/cli",
     "typecheck:tests": "node scripts/check-type-baseline.mjs",
-    "verify": "npm run typecheck && npm run test:ci && npm run build && npm run smoke && npm run smoke:bundled && npm run smoke:globals",
-    "verify:ci": "npm run lint && npm run lint:comments && npm run lint:messages && npm run lint:docs && npm run lint:actions && npm run lint:action-inputs && npm run lint:licenses && npm run audit:deps && npm run typecheck && npm run typecheck:tests && npm run test:full && npm run test:temporal && npm run lint:stats && npm run build && npm run smoke && npm run smoke:bundled && npm run smoke:globals && npm run lint:package && npm run lint:size && npm run lint:units && npm run lint:keywords && npm run lint:sidebar && npm run lint:links && npm run lint:cheatsheet && npm run lint:error-codes && npm run lint:jest-configs && npm run lint:ci-parity && npm run lint:dispatch-size && npm run test:consumer",
+    "verify": "npm run typecheck && npm run test:ci && npm run build && npm run smoke && npm run smoke:bundled && npm run smoke:globals && npm run smoke:cli",
+    "verify:ci": "npm run lint && npm run lint:comments && npm run lint:messages && npm run lint:docs && npm run lint:actions && npm run lint:action-inputs && npm run lint:licenses && npm run audit:deps && npm run typecheck && npm run typecheck:tests && npm run test:full && npm run test:temporal && npm run lint:stats && npm run build && npm run smoke && npm run smoke:bundled && npm run smoke:globals && npm run smoke:cli && npm run lint:package && npm run lint:size && npm run lint:units && npm run lint:keywords && npm run lint:sidebar && npm run lint:links && npm run lint:cheatsheet && npm run lint:error-codes && npm run lint:jest-configs && npm run lint:ci-parity && npm run lint:dispatch-size && npm run test:consumer",
     "smoke": "node scripts/smoke-package.mjs",
     "smoke:bundled": "node scripts/check-tree-shaking.mjs",
     "test:consumer": "node scripts/consumer-e2e.mjs",
     "test:live": "node node_modules/jest/bin/jest.js --no-coverage packages/engine/__tests__/packages/weather packages/engine/__tests__/packages/currency/FrankfurterHistoricalLive",
     "test:temporal": "node scripts/test-temporal.mjs --tz=Europe/London,America/New_York,Pacific/Auckland",
     "test:temporal:native": "node scripts/test-temporal.mjs --native --tz=Europe/London,America/New_York,Pacific/Auckland",
-    "lint": "oxlint packages/engine/src packages/engine/__tests__ packages/engine/tools packages/playground-bridge/src scripts",
+    "lint": "oxlint packages/engine/src packages/engine/__tests__ packages/engine/tools packages/playground-bridge/src packages/cli/src scripts",
     "lint:comments": "node scripts/check-comment-style.mjs --all",
     "lint:messages": "node scripts/check-message-style.mjs",
     "lint:docs": "node scripts/check-doc-coverage.mjs",
@@ -64,7 +64,8 @@
     "stats:units": "node scripts/generate-unit-reference.mjs",
     "lint:units": "node scripts/generate-unit-reference.mjs --check",
     "lint:keywords": "node scripts/check-keyword-docs.mjs",
-    "smoke:globals": "node scripts/check-no-node-globals.mjs"
+    "smoke:globals": "node scripts/check-no-node-globals.mjs",
+    "smoke:cli": "node scripts/smoke-cli.mjs"
   },
   "size-limit": [
     {

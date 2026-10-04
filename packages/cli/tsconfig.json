@@ -1,0 +1,29 @@
+{
+	// The command's own type check (`npm run typecheck --workspace=packages/cli`).
+	// The engine is read from its source, not its build, so this runs before
+	// `npm run build` as the engine's typecheck does. The build uses
+	// tsconfig.build.json, which has none of these paths, and keeps
+	// `solve-engine` external, so the command imports the installed engine
+	// rather than carrying a copy of it.
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"lib": ["ES2022", "ES2021.WeakRef", "DOM"],
+		"strict": false,
+		"strictNullChecks": true,
+		"noImplicitAny": true,
+		"skipLibCheck": true,
+		"esModuleInterop": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"noEmit": true,
+		"types": ["node"],
+		"paths": {
+			"solve-engine": ["../engine/src/api/index.ts"],
+			"solve-engine/engine": ["../engine/src/engine/index.ts"],
+			"@solve-js/*": ["../engine/src/*"]
+		}
+	},
+	"include": ["src/**/*.ts"]
+}
