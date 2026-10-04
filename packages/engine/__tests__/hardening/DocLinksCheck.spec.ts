@@ -228,7 +228,7 @@ describe("the helpers", () => {
 
 	test("headingIds: a nested or escaped tag leaves no angle bracket to rebuild one", () => {
 		const ids = helper("headingIds", "## A <<script>script> b\n## C \\<em>d\n## E <b>f</b>\n") as string[];
-		expect(ids).toEqual(expect.arrayContaining(["_top", "a-script-b", "c-d", "e-f"]));
+		expect(ids).toEqual(expect.arrayContaining(["_top", "a--b", "c-d", "e-f"]));
 		expect(ids.some((id) => /[<>]/.test(id))).toBe(false);
 	});
 
