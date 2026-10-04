@@ -242,11 +242,11 @@
   },
   "devDependencies": {
     "@jest/globals": "^30.5.2",
-    "@types/node": "^26.6.1",
+    "@types/node": "^26.6.3",
     "convert": "^7.0.0",
     "jest": "^30.5.2",
     "temporal-polyfill": "1.0.5",
-    "ts-jest": "^29.4.12",
+    "ts-jest": "^29.4.14",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
   },
