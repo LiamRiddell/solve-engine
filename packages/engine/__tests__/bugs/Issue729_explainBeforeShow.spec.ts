@@ -22,8 +22,7 @@ const SYNTAX = path.resolve(__dirname, "../../../../docs/src/content/docs/syntax
  * Places that may show before they explain, each with the reason. A `Map`, so
  * a key cannot be found through an inherited property.
  */
-const EXEMPT = new Map([
-]);
+const EXEMPT = new Map<string, string>([]);
 
 interface Offence {
 	readonly page: string;
