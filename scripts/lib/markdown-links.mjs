@@ -234,7 +234,8 @@ export function slugifyHeading(text) {
 /**
  * A heading's text as it renders: code spans keep their content, a link keeps
  * its text, emphasis and inline HTML tags go, and an escaped character is
- * itself.
+ * itself. Any angle bracket left after that goes too, so a nested or escaped
+ * tag (`<<b>b>`, `\<b>`) cannot rebuild one; the id drops them either way.
  *
  * @param {string} source - The heading's markdown, after the `#` marks.
  * @returns {string} The text.
@@ -247,6 +248,7 @@ function headingText(source) {
 		.replace(/`+/g, "")
 		.replace(/(\*\*|__|\*|_)(?=\S)([^*_]*?\S)\1/g, "$2")
 		.replace(/\\(.)/g, "$1")
+		.replace(/[<>]/g, "")
 		.trim();
 }
 
