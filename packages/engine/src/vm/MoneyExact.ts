@@ -29,6 +29,7 @@ import {
 	type DecimalData,
 } from "@solve-js/decimal";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
+import { currencyMinorUnits } from "@solve-js/uom/CurrencyMinorUnits";
 
 /** Exact base-ten `1`, the constant term in a `1 + p%` scaling factor. */
 const ONE_DECIMAL: DecimalData = decimalFromInteger(1);
@@ -261,11 +262,17 @@ export function taxInExact(money: Value, unit: string, rate: number): Value | nu
 }
 
 /**
- * Allocate a bill split into whole-cent shares that add back to the exact
- * total. `split $100 between 3` is $33.34 once and $33.33 twice: 2 × $33.33 +
- * 1 × $33.34 is $100.00 to the cent, not the bare $33.33 each that loses a
- * penny. Largest-remainder allocation on the amount's exact decimal cents, so
- * the reconciliation is exact wherever the amount is (a money literal, or a
+ * Allocate a bill split into shares of the currency's smallest unit that add
+ * back to the exact total. `split $100 between 3` is $33.34 once and $33.33
+ * twice: 2 × $33.33 + 1 × $33.34 is $100.00 to the cent, not the bare $33.33
+ * each that loses a penny. Largest-remainder allocation on the amount's exact
+ * decimal, counted in the currency's minor unit (see uom/CurrencyMinorUnits.ts),
+ * so a yen split has whole-yen shares (`¥100 split 3 ways` is ¥33 each with one
+ * share paying ¥34), a dinar split has shares to the fils, and a bitcoin split
+ * to the satoshi. Every currency used to be counted in hundredths, so a yen
+ * share was a hundredth of a yen nobody can pay (#731).
+ *
+ * The reconciliation is exact wherever the amount is (a money literal, or a
  * percentage-scaled one like `$120 + 18%`). A non-currency amount (a bare
  * number, or a unit such as km) divides evenly into a single share, carrying
  * its unit for display; money with no exact magnitude (a live-rate conversion)
@@ -273,42 +280,46 @@ export function taxInExact(money: Value, unit: string, rate: number): Value | nu
  *
  * `n` is assumed a positive integer, the split builtin validates it first.
  * Shares are ordered base-first: the "each" amount, then, on an uneven split,
- * the slightly larger amount the odd penny falls on.
+ * the slightly larger amount the odd smallest unit falls on.
  */
 export function splitEachExact(amount: Value, n: number): SplitData {
 	const unit = amount.unit;
-	const cents = unit !== undefined && sharedCurrencyExchange.isCurrency(unit)
-		? centsOfMoney(amount, unit)
-		: null;
-	if (cents === null) {
+	const places = unit !== undefined && sharedCurrencyExchange.isCurrency(unit) ? currencyMinorUnits(unit) : null;
+	const units = unit !== undefined && places !== null ? minorUnitsOfMoney(amount, unit, places) : null;
+	if (units === null || places === null) {
 		return { unit, shares: [{ value: amount.toNumber() / n, count: n }] };
 	}
 
 	const divisor = BigInt(n);
-	const baseCents = cents / divisor; // truncates toward zero
-	const remainder = cents - baseCents * divisor; // sign follows `cents`
+	const baseUnits = units / divisor; // truncates toward zero
+	const remainder = units - baseUnits * divisor; // sign follows `units`
 	const extraShares = Number(remainder < 0n ? -remainder : remainder);
-	// A refund (negative total) puts the extra cent on the more-negative share.
-	const step = cents < 0n ? -1n : 1n;
+	// A refund (negative total) puts the extra unit on the more-negative share.
+	const step = units < 0n ? -1n : 1n;
 
-	const base = centShare(baseCents, n - extraShares);
+	const base = minorUnitShare(baseUnits, places, n - extraShares);
 	if (extraShares === 0) return { unit, shares: [base] };
-	return { unit, shares: [base, centShare(baseCents + step, extraShares)] };
+	return { unit, shares: [base, minorUnitShare(baseUnits + step, places, extraShares)] };
 }
 
-/** A currency share built from its whole-cent coefficient. */
-function centShare(cents: bigint, count: number): SplitShare {
-	const exact = makeDecimal(cents, 2);
+/** A currency share built from its coefficient in the currency's smallest unit. */
+function minorUnitShare(units: bigint, places: number, count: number): SplitShare {
+	const exact = makeDecimal(units, places);
 	return { value: decimalToNumber(exact), exact, count };
 }
 
 /**
- * The exact whole-cent coefficient of a money amount, or null when it has no
+ * The exact coefficient of a money amount in its currency's smallest unit (the
+ * cents of `$1.25` are 125, the yen of `¥100` are 100), or null when it has no
  * exact magnitude (a live-rate conversion), so the caller falls back to a float
- * even split. Rounds to two places half-away-from-zero, the till rule the rest
+ * even split. Rounds to `places` half-away-from-zero, the till rule the rest
  * of the money arithmetic uses.
+ *
+ * @param amount - The money being split.
+ * @param unit - Its currency code.
+ * @param places - The currency's minor unit.
  */
-function centsOfMoney(amount: Value, unit: string): bigint | null {
+export function minorUnitsOfMoney(amount: Value, unit: string, places: number): bigint | null {
 	const base = moneyExactMagnitude(amount, unit);
-	return base === null ? null : decimalRound(base, 2).coef;
+	return base === null ? null : decimalRound(base, places).coef;
 }

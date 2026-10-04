@@ -119,7 +119,7 @@ a day is a daily rate, and a speed divided by a fuel use per hour is a distance
 per litre.
 
 ```solve
-$30/hour * 8 hours/day // 240.00 USD/day
+$30/hour * 8 hours/day // $240.00/day
 (100 km/h) / (10 l/h) // 10.00 km/l
 ```
 
@@ -138,7 +138,7 @@ a frequency is its period in seconds.
 10 / (5 s) // 2.00 /s
 1 / (2 m) * 4 m // 2
 1 / (50 Hz) // 0.02 s
-1 / (2/week) // 0.50 week
+1 / (2/week) // 0.50 weeks
 ```
 
 The brackets matter. A fraction written in front of a unit is that much of the
@@ -147,7 +147,7 @@ unit, the way a recipe or a timesheet reads it, so `1/2 hour` is half an hour an
 reciprocal instead.
 
 ```solve
-1/2 hour // 0.50 hour
+1/2 hour // 0.50 hours
 3 / 4 cup // 0.75 cup
 1 / (2 hour) // 0.50 /hour
 ```

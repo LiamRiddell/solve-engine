@@ -178,7 +178,7 @@ describe("a price per unit cancels against that unit", () => {
 	});
 
 	test("a price per a unit spelled with capitals is a rate, not a variable", () => {
-		expect(shown("$0.30/kWh")).toBe("0.30 USD/kWh");
+		expect(shown("$0.30/kWh")).toBe("$0.30/kWh");
 		expect(shown("$2/GB * 5 GB")).toBe("$10.00");
 	});
 
@@ -211,7 +211,7 @@ describe("a number over a quantity is its reciprocal (#570)", () => {
 		["1 / (2 m)", "0.50 /m"],
 		["10 / (5 s)", "2.00 /s"],
 		["1 / $5", "0.20 /USD"],
-		["1 / (2/week)", "0.50 week"],
+		["1 / (2/week)", "0.50 weeks"],
 		["1 / (50 Hz)", "0.02 s"],
 		["1 / (30 mpg)", "0.03 gal/mi"],
 		["1 / ($5/kg)", "0.20 kg/USD"],
@@ -241,11 +241,11 @@ describe("a number over a quantity is its reciprocal (#570)", () => {
 	});
 
 	test("a fraction written in front of a unit is still that much of the unit", () => {
-		expect(shown("1 / 2 hour")).toBe("0.50 hour");
-		expect(shown("1/2 hour")).toBe("0.50 hour");
+		expect(shown("1 / 2 hour")).toBe("0.50 hours");
+		expect(shown("1/2 hour")).toBe("0.50 hours");
 		expect(shown("3 / 4 cup")).toBe("0.75 cup");
 		expect(shown("10 / 2 m")).toBe("5.00 m");
-		expect(shown("-1/2 hour")).toBe("-0.50 hour");
+		expect(shown("-1/2 hour")).toBe("-0.50 hours");
 		expect(shown("2 * 1/2 hour")).toBe("1 hour");
 		expect(shown("1/2 m^2")).toBe("0.50 m²");
 		expect(shown("1 / 2 m in cm")).toBe("50.00 cm");
@@ -253,7 +253,7 @@ describe("a number over a quantity is its reciprocal (#570)", () => {
 
 	test("a quantity or a symbol before the slash is still a division", () => {
 		expect(shown("100 km / 2 h")).toBe("50.00 km/h");
-		expect(shown("$10 / 2 h")).toBe("5.00 USD/h");
+		expect(shown("$10 / 2 h")).toBe("$5.00/h");
 		// Straight after a division or a power the number is that operator's.
 		expect(shown("6 / 3 / 2 h")).toBe("1.00 /h");
 	});
@@ -270,7 +270,7 @@ describe("a rate cancels against what it is per", () => {
 		["100 miles / 30 mpg", "3.33 gal"],
 		["4 GB / 50 Mbps", "640.00 s"],
 		["500 l / 20 lpm", "25.00 min"],
-		["$30/hour * 8 hours/day", "240.00 USD/day"],
+		["$30/hour * 8 hours/day", "$240.00/day"],
 		["60 km/h * 2 h/day", "120.00 km/day"],
 		["(100 km/h) / (10 l/h)", "10.00 km/l"],
 		["(60 km/h) / (2 km)", "30.00 /h"],

@@ -122,7 +122,7 @@ describe("a price per unit comes to the cent the plain product does (#579)", () 
 
 	test("a price per unit keeps its decimal and is still shown as a rate", () => {
 		const price = evaluate("$0.15/kWh");
-		expect(display("$0.15/kWh")).toBe("= 0.15 USD/kWh");
+		expect(display("$0.15/kWh")).toBe("= $0.15/kWh");
 		expect(price.type).toBe(ValueType.Uom);
 		expect(price.exact).toEqual({ coef: 15n, scale: 2 });
 		// A rate that is not a price has nothing to keep.
@@ -130,9 +130,9 @@ describe("a price per unit comes to the cent the plain product does (#579)", () 
 	});
 
 	test("a price per unit on its own rounds a half cent as money does, and keeps a price below a cent", () => {
-		expect(display("$1.005/kg")).toBe("= 1.01 USD/kg");
+		expect(display("$1.005/kg")).toBe("= $1.01/kg");
 		// A tenth of a cent a unit is a real price; on its own it is not payable.
-		expect(display("$0.001/kWh")).toBe("= 0.001 USD/kWh");
+		expect(display("$0.001/kWh")).toBe("= $0.001/kWh");
 		expect(display("$0.001")).toBe("= $0.00");
 	});
 

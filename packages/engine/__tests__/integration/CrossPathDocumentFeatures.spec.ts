@@ -1016,7 +1016,7 @@ describe("a variable named like a unit, after a slash (#642)", () => {
 
   test("a unit written before the slash keeps the rate, both passes", () => {
     const doc = ["h = 4", "$15 / h", "60 km / h", "100 per h"];
-    expect(batch(doc)).toEqual(["4", "15.00 USD/h", "60.00 km/h", "100.00 /h"]);
+    expect(batch(doc)).toEqual(["4", "$15.00/h", "60.00 km/h", "100.00 /h"]);
     expect(incremental(doc)).toEqual(batch(doc));
   });
 
