@@ -248,9 +248,45 @@ unit, the same as `5 km in Tokyo`.
 5 in Tokyo // "Tokyo" is not a unit.
 ```
 
-A signed offset does not work after a date: `2026-04-03 in GMT+9` is read as
-`(2026-04-03 in GMT) + 9`, and since a bare 9 does not say whether it means
-days, hours or minutes, the line is refused rather than moved. Write `in Tokyo`
+An offset from UTC works after a date as well as a place does. An offset is
+the number of hours, and sometimes minutes, that a clock is set ahead of UTC or
+behind it: `UTC-5` is five hours behind, and `UTC+5:45` five and three quarters
+ahead. Unlike a place, an offset never changes for daylight saving, so it names
+a clock that stays put all year. The time is read on that clock and shown there,
+as a place's is.
+
+```solve
+2026-04-03T15:00 in UTC-5 // Friday, April 3, 2026, 3:00:00 PM
+2026-04-03T15:00 in GMT+9 // Friday, April 3, 2026, 3:00:00 PM
+2026-04-03T15:00 in UTC+5:45 // Friday, April 3, 2026, 3:00:00 PM
+2026-04-03 in UTC-05:00 // Friday, April 3, 2026
+```
+
+A time that already names its moment, one written with its own offset such as
+`Z` (UTC itself), or `now`, is moved onto the offset's clock instead, because the
+moment is fixed. Three in the afternoon in UTC is ten in the morning five hours
+behind it.
+
+```solve
+2026-04-03T15:00Z in UTC-5 // Friday, April 3, 2026, 10:00:00 AM
+```
+
+`UTC` and `GMT` are read in either case, with or without a space either side
+of the sign. A number with a unit after it is arithmetic rather than an offset,
+so `in UTC - 5 hours` is the time in UTC less five hours. Clocks are kept from
+twelve hours behind UTC to fourteen ahead, so an offset outside that range, or
+one with sixty minutes or more, is refused rather than read as a clock that
+exists nowhere.
+
+```solve
+2026-04-03T15:00 in UTC - 5 hours // Friday, April 3, 2026, 10:00:00 AM
+2026-04-03T15:00 in UTC+25 // "UTC+25" is not an offset a clock keeps: write whole hours and minutes from UTC-12 to UTC+14, as in "UTC-5" or "UTC+5:45"
+```
+
+An offset suits a clock that never changes. For a place that changes its
+clocks, an offset is right for only part of the year, so name the place and the
+answer follows its clocks through the year: write the city or its abbreviation,
+`in New York` or `in Tokyo`,
 or `in JST` instead. A host that wants the whole
 document computed in one zone can pin it: see
 [dates on Temporal](/guide/dates-on-temporal/#choosing-a-zone-without-temporal).

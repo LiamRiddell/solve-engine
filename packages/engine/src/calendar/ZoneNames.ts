@@ -258,8 +258,8 @@ export const ZONE_LOOKUP: Record<string, string> = {
  * ISO literal carried (`...Z`, `...+09:00`) and leaves the display alone.
  * Encoding the named spelling as an offset made `3 April 2026 in UTC` display
  * as the previous evening for a reader in New York. The signed `GMT+9`
- * spelling is a multi-token form only the time package's own parselet reads,
- * and is out of reach here.
+ * spelling is not a name but an offset, and is resolved beside this by
+ * `resolveUtcOffsetName` in `UtcOffset.ts`.
  *
  * @param name - The name as typed.
  * @returns An IANA identifier or a fixed-offset reference, or null.

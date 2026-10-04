@@ -319,6 +319,8 @@ export type CoreErrorCode = (typeof CoreErrorCodes)[keyof typeof CoreErrorCodes]
  * name a core file needs on the wrong side of that line.
  */
 export const DatetimeErrorCodes = {
+  /** `2026-04-03 in UTC+25`, `time in UTC-5:60`: a signed offset after `UTC` or `GMT` that no clock keeps (outside UTC-12 to UTC+14, sixty minutes or more, a fraction, or a time of day). An Error value from the VM's `in <zone>` branch, and a parse error from the time package's zone forms, each as that form refuses an unknown zone; both read the offset with `calendar/UtcOffset.ts`'s `tryReadUtcOffset` (#730). */
+  TIME_ZONE_OFFSET_OUT_OF_RANGE: "TIME_ZONE_OFFSET_OUT_OF_RANGE",
   /** `2026-04-03 in Atlantis`: a Datetime met `in <name>` and the name is neither a zone this engine knows nor a unit. Before this code the epoch-millisecond payload was simply labelled with the name, and the line answered a fourteen-digit quantity in a unit called Atlantis. */
   DATETIME_ZONE_UNKNOWN: "DATETIME_ZONE_UNKNOWN",
   /** `2026-04-03 in furlongs`: the same handler, where the name IS a real unit. Separate from `DATETIME_ZONE_UNKNOWN` because the two mistakes have different fixes: one is a misspelt zone, the other is a category error, and a message that suggests checking the spelling of `furlongs` would be no help at all. */

@@ -10,7 +10,7 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
 import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
-import { isFixedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
+import { decodeFixedOffsetMinutes, isFixedOffset, isNamedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
 
 function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number, exact?: DecimalData): string {
   // A zero is written without a sign. IEEE's negative zero is kept on the value,
@@ -276,7 +276,7 @@ export function slashYear(year: number): string {
  * backend its engine computes with (`FormattingSettings.calendar`) and a
  * date shows the day it was computed on, in that backend's zone.
  */
-function formatDatetime(value: number, locale: ILocale, settings: FormattingSettings, zone?: string): string {
+function formatDatetime(instant: number, locale: ILocale, settings: FormattingSettings, valueZone?: string): string {
   const calendar = settings.calendar ?? DATE_CALENDAR;
   const format = settings.dateResult?.format ?? "long";
 
@@ -288,6 +288,13 @@ function formatDatetime(value: number, locale: ILocale, settings: FormattingSett
   // records the synthetic fixed-offset form, and how those display is a
   // separate question this does not answer: they keep reading in the zone the
   // engine computes in, as they always have.
+  //
+  // An offset the reader named (`in UTC-5`) is the clock they asked to see, so
+  // it displays as a named zone does: the instant moved by the offset and read
+  // in UTC, which needs no zone data and so reads the same on every runtime.
+  const namedOffset = valueZone !== undefined && isNamedOffset(valueZone);
+  const value = namedOffset ? instant + decodeFixedOffsetMinutes(valueZone) * 60000 : instant;
+  const zone = namedOffset ? "UTC" : valueZone;
   const named = zone !== undefined && !isFixedOffset(zone);
   const d = named ? calendar.fieldsInZone(zone, value) : calendar.fields(value);
   const millisecond = named ? 0 : calendar.fields(value).millisecond;
@@ -327,8 +334,15 @@ function formatDatetime(value: number, locale: ILocale, settings: FormattingSett
  * hours` is `1:00:00 AM (+1 day)`. A time with no anchor recorded shows no
  * shift.
  */
-function formatTimeOfDayValue(value: number, locale: ILocale, settings: FormattingSettings, zone?: string, anchor?: number): string {
+function formatTimeOfDayValue(instant: number, locale: ILocale, settings: FormattingSettings, valueZone?: string, instantAnchor?: number): string {
   const calendar = settings.calendar ?? DATE_CALENDAR;
+  // An offset the reader named (`3pm in UTC-5`) is read as formatDatetime reads
+  // one: the instant moved by the offset and read in UTC (#730).
+  const namedOffset = valueZone !== undefined && isNamedOffset(valueZone);
+  const offsetMs = namedOffset ? decodeFixedOffsetMinutes(valueZone) * 60000 : 0;
+  const value = instant + offsetMs;
+  const anchor = instantAnchor === undefined ? undefined : instantAnchor + offsetMs;
+  const zone = namedOffset ? "UTC" : valueZone;
   const named = zone !== undefined && !isFixedOffset(zone);
   const d = named ? calendar.fieldsInZone(zone, value) : calendar.fields(value);
   const format = settings.dateResult?.format ?? "long";
