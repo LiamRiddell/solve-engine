@@ -48,6 +48,7 @@ g in 1 carat // 0.20 g
 kJ in 1 kcal // 4.18 kJ
 mW in 1 W // 1,000.00 mW
 seconds in a day // 86,400 seconds
+km in -1 mile // -1.61 km
 ```
 
 Every unit a conversion reads can be asked for this way, the less common units
@@ -56,10 +57,9 @@ as everywhere else, so `mW` is the milliwatt and `MW` the megawatt. A currency
 works too, once its rate is known (`USD in 1 EUR`).
 
 The form is kept narrow on purpose: the line must start with the unit, and
-what follows `in` must be a plain amount and a unit, or `a` or `an` standing in
-for one. So `days in February 2020`, which asks how long a named month is, is
-left as its own question, and a signed amount (`km in -1 mile`) is not read
-this way.
+what follows `in` must be a plain amount and a unit, a signed amount (`-1 mile`),
+or `a` or `an` standing in for one. So `days in February 2020`, which asks how
+long a named month is, is left as its own question.
 
 ## Units written in more than one word
 

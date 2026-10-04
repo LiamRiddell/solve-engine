@@ -69,6 +69,19 @@ export function reversedConversionNormalizerRule(priority = 61): NormalizerRule 
 				};
 			}
 
+			// `km in -1 mile`: a signed count. Left alone, the rule did not match
+			// and the leading unit was read as a variable, so the line failed as
+			// "Undefined variable: km". The sign stays in front of the count, so
+			// the conversion reads `-1 mile in km`.
+			const count = tokens[pos + 3];
+			if ((third.type === "MINUS" || third.type === "PLUS") && count?.type === "NUMBER" && isReversibleUnit(tokens[pos + 4])) {
+				return {
+					consumed: 5,
+					replacement: [third, count, tokens[pos + 4], tokens[pos + 1], target],
+					ruleName: "uom:reversed-conversion",
+				};
+			}
+
 			// `seconds in a day`
 			const word = (third.text ?? third.value ?? "").toLowerCase();
 			if (third.type === "IDENT" && ARTICLES.has(word) && isReversibleUnit(tokens[pos + 3])) {

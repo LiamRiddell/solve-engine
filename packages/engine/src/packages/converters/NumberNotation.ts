@@ -16,6 +16,7 @@
 
 import { Value, ValueType, stringValue, errorValue } from "@solve-js/vm/Value";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
+import { moneyUnitOf } from "@solve-js/format/FormatEngine";
 
 /** The compact suffixes, largest first, each with the power of ten it stands for. */
 const COMPACT_TIERS: ReadonlyArray<readonly [number, string]> = [
@@ -67,19 +68,34 @@ export function compactString(n: number): string {
 	return `${sign}${significant(magnitude, 3)}`;
 }
 
+/**
+ * A short form written with its unit, as the full answer writes it: money with
+ * its symbol where the display table has one (`$3.3M`, `-$1.5k`), a price per
+ * unit with the unit after a slash (`$15/hour`), and any other quantity with its
+ * unit after a space (`5k m`). The rate used to be looked up whole in the
+ * display table, where `USD/hour` is not a currency, so it came out as
+ * `15 USD/hour`. The sign goes before a prefix symbol (#554).
+ *
+ * @param text - The number, already written short.
+ * @param unit - The unit the value carries.
+ * @returns The text with its unit or currency.
+ */
+export function withUnit(text: string, unit: string): string {
+	const money = moneyUnitOf(unit);
+	const display = money === undefined || !Object.prototype.hasOwnProperty.call(CURRENCY_DISPLAY, money.code) ? undefined : CURRENCY_DISPLAY[money.code];
+	if (money === undefined || display === undefined) return `${text} ${unit}`;
+	const per = money.per === undefined ? "" : `/${money.per}`;
+	if (display.position !== "prefix") return `${text} ${money.code}${per}`;
+	const sep = display.spaced ? " " : "";
+	const negative = text.startsWith("-");
+	return `${negative ? "-" : ""}${display.symbol}${sep}${negative ? text.slice(1) : text}${per}`;
+}
+
 /** Wrap a short form in the value's unit or currency, or refuse a value that has no number to write. */
 function notation(name: string, write: (n: number) => string): (value: Value) => Value {
 	return (value) => {
 		if (value.type === ValueType.Number) return stringValue(write(value.toNumber()));
-		if (value.type === ValueType.Uom && value.unit !== undefined) {
-			const text = write(value.toNumber());
-			const currency = CURRENCY_DISPLAY[value.unit.toUpperCase()];
-			// The sign goes before a prefix symbol, as the full form writes it (#554).
-			if (currency?.position === "prefix") {
-				return stringValue(text.startsWith("-") ? `-${currency.symbol}${text.slice(1)}` : `${currency.symbol}${text}`);
-			}
-			return stringValue(`${text} ${value.unit}`);
-		}
+		if (value.type === ValueType.Uom && value.unit !== undefined) return stringValue(withUnit(write(value.toNumber()), value.unit));
 		return errorValue("AS_CONVERTER_EXPECTED_NUMBER", `as ${name} expects a number or a quantity`);
 	};
 }

@@ -2,6 +2,25 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { expectsValueAt } from "@solve-js/normalizer/ValuePosition";
+import { getMeasure } from "@solve-js/uom/UomConverter";
+
+/**
+ * Whether `denominator` is a time squared, written with the superscript, under a
+ * length: the `s²` of `ft/s²`, the way the engine prints an acceleration back
+ * (#737). The lexer reads `s²` as one word, and no unit is spelled that way, so
+ * it arrives as a name; only under a length is it the squared time of an
+ * acceleration.
+ *
+ * @param numerator - The token before the slash.
+ * @param denominator - The token after it.
+ * @returns True for a length over a squared time.
+ */
+export function isSquaredTimeUnder(numerator: Token | undefined, denominator: Token | undefined): boolean {
+	if (numerator?.type !== "UNIT" || (denominator?.type !== "IDENT" && denominator?.type !== "UNIT")) return false;
+	const spelling = denominator.value ?? "";
+	if (!spelling.endsWith("²")) return false;
+	return getMeasure(spelling.slice(0, -1)) === "time" && getMeasure(numerator.value ?? "") === "length";
+}
 
 /**
  * Fuses a slash-notation compound unit, `UNIT / UNIT`, into one UNIT token
@@ -47,7 +66,7 @@ export function compoundUnitNormalizerRule(priority = 77): NormalizerRule {
 			const denominator = tokens[pos + 2];
 			if (numerator?.type !== "UNIT") return null;
 			if (slash?.type !== "SLASH") return null;
-			if (denominator?.type !== "UNIT") return null;
+			if (denominator?.type !== "UNIT" && !isSquaredTimeUnder(numerator, denominator)) return null;
 			if (expectsValueAt(tokens, pos)) return null;
 
 			const spelling = `${numerator.value}/${denominator.value}`;

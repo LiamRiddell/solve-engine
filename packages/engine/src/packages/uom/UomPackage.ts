@@ -20,6 +20,7 @@ import { COOKING_CONVERT_FN, cookingConvertHandler } from "./parselets/CookingPl
 import { ingredientNameNormalizerRule } from "./normalizer/IngredientNameNormalizerRule";
 import { multiWordUnitNormalizerRule } from "./normalizer/MultiWordUnitNormalizerRule";
 import { compoundUnitNormalizerRule } from "./normalizer/CompoundUnitNormalizerRule";
+import { rateTargetNormalizerRule } from "./normalizer/RateTargetNormalizerRule";
 import { explainConversion } from "./UomExplain";
 import { fractionBeforeUnitNormalizerRule } from "./normalizer/FractionBeforeUnitNormalizerRule";
 
@@ -60,6 +61,9 @@ export const UOM_PACKAGE: IEnginePackage = {
     // Above the bare-denominator rule (75): a slash-notation compound unit like
     // `km/h` is claimed whole before the slash is read as a bare denominator.
     compoundUnitNormalizerRule(),
+    // A rate written as a conversion target, `in miles per hour` or `in $/day`,
+    // read as the one unit `in miles/hour` is (#738).
+    rateTargetNormalizerRule(),
     uomPossibilitiesNormalizerRule(),
     compoundQuantityNormalizerRule(),
     twoUnitConversionNormalizerRule(),

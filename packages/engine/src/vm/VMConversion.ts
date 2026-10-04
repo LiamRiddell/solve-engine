@@ -1,5 +1,5 @@
 import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, isTimecodeUnit, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
-import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
+import { convertUnit, getMeasure, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { lookupUnit } from "@solve-js/uom/UnitConversion";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { decimalAdd, decimalSubtract, decimalMultiply, decimalDivide, decimalIsZero, decimalToNumber, decimalFromNumberIfExact, decimalCompare, type DecimalData } from "@solve-js/decimal";
@@ -53,6 +53,13 @@ export function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: st
         if (lMeasure && lMeasure === rMeasure) {
             const rvConverted = convertUnit(r.toNumber(), r.unit!, l.unit!);
             return { lv: l.toNumber(), rv: rvConverted, unit: l.unit, sameMeasure: true };
+        }
+        // Two accelerations have no measure in the tables, but are one quantity
+        // in two units: `9.81 m/s^2 + 1 ft/s^2` (#737).
+        const lAcceleration = accelerationSize(l.unit!);
+        const rAcceleration = accelerationSize(r.unit!);
+        if (lAcceleration !== undefined && rAcceleration !== undefined) {
+            return { lv: l.toNumber(), rv: (r.toNumber() * rAcceleration) / lAcceleration, unit: l.unit, sameMeasure: true };
         }
         if (isCurrency) {
             const rvConverted = sharedCurrencyExchange.convertSync(r.toNumber(), r.unit!, l.unit!);
@@ -623,7 +630,8 @@ export function describeMeasure(unit: string): string | undefined {
     if (sharedCurrencyExchange.isCurrency(unit)) return "money";
     // Nor is acceleration, which has a dimension but no measure (uom/Dimensions.ts);
     // unnamed, its internal spelling `mps2` reached the reader (#590).
-    if (unit === "mps2") return "acceleration";
+    // A length over a squared time (`ft/s²`) is one too (#737).
+    if (accelerationSize(unit) !== undefined) return "acceleration";
     const measure = getMeasure(unit);
     if (measure === undefined) return undefined;
     return measureNoun(measure);
@@ -1469,7 +1477,7 @@ export function binaryOp(
             // contrast: describeMeasureMismatch returns undefined and the
             // unit-naming fallback below keeps the "BTC and ETH" form.
             const named = describeMeasureMismatch(lUnit, rUnit, combineVerb(symbolicOp));
-            return errorValue("INCOMPATIBLE_UNITS", named ?? `Cannot combine incompatible units: ${lUnit ?? "?"} and ${rUnit ?? "?"}`);
+            return errorValue("INCOMPATIBLE_UNITS", named ?? `Cannot combine incompatible units: ${unitForMessage(lUnit ?? "?")} and ${unitForMessage(rUnit ?? "?")}`);
         }
         const combined = uomValue(op(lv, rv), unit!);
         // Two currencies met through an exchange rate, so the answer depends

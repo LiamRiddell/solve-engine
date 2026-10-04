@@ -40,6 +40,43 @@ knot, because the unit table already reads `kt` as the kilotonne.
 1 knot in m/s // 0.51 m/s
 ```
 
+The target can be written the way the rate itself can, with `per` in place of
+the slash, and a price with its currency symbol. `in miles per hour` is the same
+target as `in miles/hour`, and `in $/day` the same as `in USD/day`, so a speed
+or a pay rate reads the same on both sides of `in`.
+
+```solve
+60 km/h in miles per hour // 37.28 miles/hour
+60 km/h to miles per hour // 37.28 miles/hour
+$20/hour in $/day // $480.00/day
+$20/hour in dollars per day // $480.00/day
+$20 per hour in USD per day // $480.00/day
+100 Mbps in MB per s // 12.50 MB/s
+```
+
+A target of a bare slash and a unit keeps what the rate counts and changes only
+what it is per, so a weekly amount reads as a monthly one. A frequency, which is
+a count per second, converts to a count per any time.
+
+```solve
+$50/week in /month // $214.29/month
+60 mph in /min // 1.00 mi/min
+10 Hz in /min // 600.00 /min
+```
+
+A price per hour in another currency per day converts through the exchange rate
+once one is known, and until then says the rate is missing. `in $` on its own is
+still a currency conversion, and only `per` and the slash are read in a target:
+after a conversion, `a` and `each` stay prose, so `100 km in miles a day` is a
+distance converted and then made a rate. A target that is not a rate of the
+same kind is refused, as `5 km in miles per hour` is: a distance is not a speed.
+
+```solve-doc
+$20 in $ // $20.00
+100 km in miles a day // 62.14 miles/day
+5 km in miles per hour // ERROR: Cannot convert km to miles/hour: they do not measure the same thing
+```
+
 Dividing a distance by a time builds the same rate, and the conversion applies
 to the whole quotient rather than to the number just before it.
 
