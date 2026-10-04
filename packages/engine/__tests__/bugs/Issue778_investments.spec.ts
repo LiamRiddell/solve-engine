@@ -66,10 +66,10 @@ const DOCUMENTED: readonly (readonly [string, string])[] = [
 	["present value of $1,225.04 after 3 years at 7%", "$1,000.00"],
 	["present value of $10,000 over 5 years at 6%", "$7,472.58"],
 	["present value of 10000 after 5 years at 6%", "7,472.58"],
-	["$500 invested $1,500 returned", "2"],
-	["$1,000 invested $1,500 returned as %", "50.00%"],
-	["$1,000 invested $1,000 returned", "0"],
-	["$1,000 invested $500 returned", "-0.50"],
+	["$500 invested $1,500 returned", "200.00%"],
+	["$1,000 invested $1,500 returned", "50.00%"],
+	["$1,000 invested $1,000 returned", "0.00%"],
+	["$1,000 invested $500 returned", "-50.00%"],
 	["annual return on $1,000 invested $2,000 returned after 5 years", "14.87%"],
 	["annual return on $1,000 invested $2,000 returned in 5 years", "14.87%"],
 	["annual return on $1,000 invested $500 returned after 5 years", "-12.94%"],
@@ -242,7 +242,7 @@ describe("adversarial: edge cases", () => {
 
 	test("the forms survive CRLF line endings and a trailing newline", () => {
 		const { batch, incremental } = docLines("$1,000 after 3 years at 7%\r\n$500 invested $1,500 returned\r\n");
-		expect(batch.slice(0, 2)).toEqual(["$1,225.04", "2"]);
+		expect(batch.slice(0, 2)).toEqual(["$1,225.04", "200.00%"]);
 		expect(incremental.slice(0, 2)).toEqual(batch.slice(0, 2));
 	});
 });

@@ -135,11 +135,39 @@ term in years, in that order.
 ```solve
 compoundInterest(1000, 5%, 3) // 1,157.63
 interestEarned(1000, 5%, 3) // 157.63
-compoundInterestRate(1000, 1157.63, 3) // 0.05
+compoundInterestRate(1000, 1157.63, 3) // 5.00%
 compoundInterestYears(1000, 1157.63, 5%) // 3.00
 monthlyPayment(200000, 4%, 25) // 1,055.67
 loanRepayment(200000, 4%, 25, 12) // 1,055.67
 loanInterest(200000, 4%, 25, 12) // 389.01
+```
+
+## The return on an investment
+
+A return is what an investment gained, measured against what went in: $1,000
+that became $1,500 made a 50% return. Every way of asking answers a percentage,
+so the answers compare and combine with each other. `invested ... returned`
+gives the whole gain; `annual return on` and `compoundInterestRate` give the
+yearly rate that, compounded, turns the one amount into the other.
+
+```solve
+$1,000 invested $1,500 returned // 50.00%
+$500 invested $1,500 returned // 200.00%
+annual return on $1,000 invested $1,500 returned after 3 years // 14.47%
+compoundInterestRate($1,000, $1,500, 3) // 14.47%
+```
+
+The whole gain is the profit against the cost, not the money multiple: tripling
+your money is a 200% return. For the multiple, divide (`$1,500 / $500` is 3), or
+ask for the return `as multiplier`, which is 3x.
+
+The function forms take amounts written the usual way, thousands commas
+included: inside the brackets of a call, a comma after an amount with a
+currency sign and before exactly three digits groups the thousands (see
+[amounts inside a call](/syntax/currency/#amounts-inside-a-call)).
+
+```solve
+compoundInterest($1,000, 5%, 3) // $1,157.63
 ```
 
 ## Inflation

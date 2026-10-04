@@ -4,11 +4,16 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
+/** `float(x)` in VMBuiltins.ts. */
+const FLOAT_BUILTIN = 115;
+
 /**
- * A floating-point component inside a vector literal.
+ * `float(x)`, the number `x` is: `float(2.5)` is 2.5 and `float("2.5")` is 2.5.
  *
- * Separate from the ordinary number parselet because vector components parse
- * in a context where a bare comma separates elements rather than arguments.
+ * It used to build a one-by-one matrix, which printed as `[2.50]` and was
+ * neither a number nor anything its name promised (#828). It is now the
+ * builtin at index 115, which refuses by name what has no plain number to give
+ * (text that is not a number, a quantity, a list).
  */
 export class FloatParselet implements PrefixParselet {
 	readonly category = "Float";
@@ -16,10 +21,8 @@ export class FloatParselet implements PrefixParselet {
 		parser.consume("LPAREN");
 		parser.parseExpression(0, builder);
 		parser.consume("RPAREN");
-		// A 1x1 Matrix. See VectorParselet.ts's comment on why this legacy
-		// sugar emits MAT_NEW rather than being removed.
-		builder.emitOpcode(OpCode.MAT_NEW);
-		builder.emitIndex(1);
+		builder.emitOpcode(OpCode.CALL_BUILTIN);
+		builder.emitIndex(FLOAT_BUILTIN);
 		builder.emitIndex(1);
 	}
 }

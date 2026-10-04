@@ -97,6 +97,28 @@ Multiplication and powers have the longer spellings people say aloud as well:
 40 without 2 // 38
 ```
 
+`add A to B` is the sum written as an instruction. Without its `to`, the word
+`add` is the plus sign it always was. A `to` followed by a unit is still a
+conversion, and `A to B` on its own, with no `add` in front, is the percentage
+change from A to B (see [percentages](/syntax/percentages/)).
+
+```solve
+add 3 to 10 // 13
+add $5 to $10 // $15.00
+add 3 and 4 // 7
+3 to 10 // 233.33%
+```
+
+The words `mul`, `exponent` and `prime` are not operators. They were once
+spellings of `*` and `^`, which made them unusable as names (even as
+`:exponent`), so they are ordinary names now, and `7 is prime` asks whether 7 is
+prime (see [number theory](/syntax/number-theory/)).
+
+```solve-doc
+exponent = 3 // 3
+2 ^ exponent // 8
+```
+
 ## Symbols pasted from elsewhere
 
 A word processor, a chat client or a web page often replaces a typed hyphen

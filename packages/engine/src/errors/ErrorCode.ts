@@ -448,6 +448,10 @@ export const CoreErrorCodes = {
   TIMECODE_FPS_MISMATCH: "TIMECODE_FPS_MISMATCH",
   /** `as <name>` naming no converter any package registered. */
   UNKNOWN_AS_CONVERTER: "UNKNOWN_AS_CONVERTER",
+  /** `float("hello")`, `float(5 km)`: `float` given something with no plain number, text that is not a number or a quantity with a unit. The reader passes a number (#828). */
+  FLOAT_TAKES_NUMBER: "FLOAT_TAKES_NUMBER",
+  /** `"hello" as multiplier`, `5 km as multiplier`: a multiplier asked of something that is not a plain number or a percentage. The reader converts a number (#829). */
+  MULTIPLIER_TAKES_NUMBER: "MULTIPLIER_TAKES_NUMBER",
   /** `as mw`: the target, read regardless of case, could be two units whose prefixes differ only in case (`mW` and `MW`), so it is refused rather than guessed (#824). */
   AS_CONVERTER_AMBIGUOUS_CASE: "AS_CONVERTER_AMBIGUOUS_CASE",
   /** `as MV` when only `mV` is a unit: reading it regardless of case would turn a mega into a milli, so it is refused by name (#824). */

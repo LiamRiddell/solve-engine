@@ -634,6 +634,23 @@ describe("goal seek across entry points", () => {
     expect(incremental(doc)[3]).toBe("170,507.23");
   });
 
+  // The answer carries the unit the unknown has in the note (#835): a price in
+  // pounds is solved as pounds, through either mechanism, and a target in
+  // another unit of the line's measure is read in the line's unit first.
+  test("an unknown in money or a unit is answered in it, through the incremental pass only (#835)", () => {
+    const money = [":price = £200", ":qty = 3", "price * qty", "solve line 3 for price = £1,500"];
+    expect(incremental(money)[3]).toBe("£500.00");
+    const searched = [":deposit = £100000", ":rate = 4%", "monthly repayment on deposit over 25 years at rate", "solve line 3 for deposit = £900"];
+    expect(incremental(searched)[3]).toBe("£170,507.23");
+    const length = [":d = 5 km", "d * 2", "solve line 2 for d = 3000 m"];
+    expect(incremental(length)[2]).toBe("1.50 km");
+    // The lines both passes evaluate agree; the seek itself is refused by the
+    // batch pass, and by the single line, as every goal seek is.
+    expect(batch(money).slice(0, 3)).toEqual(incremental(money).slice(0, 3));
+    expect(batch(money)[3].toLowerCase()).toContain("document");
+    expectNeedsDocument("solve line 3 for price = £1,500");
+  });
+
   test("the batch pass refuses goal seek, since it cannot re-run a line", () => {
     // The one form the two document passes disagree on, and deliberately: the
     // batch pass has no document to solve against, so it errors rather than

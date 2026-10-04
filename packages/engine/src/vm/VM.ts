@@ -15,6 +15,7 @@ import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, resolveAsConverter, datetimeArgumentRefused } from "@solve-js/vm/VMBuiltins";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
+import { multiplierRefused } from "@solve-js/vm/PlainNumberForms";
 import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
@@ -412,6 +413,13 @@ export interface LineExecutionContext {
      * line never reads, rather than searching a relationship that cannot move.
      */
     getLineReads?: (lineNumber: number) => string[] | undefined;
+    /**
+     * The value the document gives a name as it stands, or `undefined` when no
+     * line has set it. Goal seek reads it to learn the unit its unknown is in,
+     * so `solve line 3 for price = £1,500` answers in pounds when `price` is an
+     * amount of pounds (#835). Absent where there is no document.
+     */
+    getVariable?: (name: string) => Value | undefined;
     /**
      * Re-evaluate another line's already-compiled expression with `variable`
      * bound to `bound` for that one evaluation, without disturbing the
@@ -4694,8 +4702,9 @@ export function executeBytecode(
           const v = safePop(stack);
           const toMultiplierFault = faultedOperand(v);
           if (toMultiplierFault) { stack.push(toMultiplierFault); break; }
-          const toMultiplierDate = datetimeConversionRefused(v, "a multiplier");
-          if (toMultiplierDate) { stack.push(toMultiplierDate); break; }
+          // Text, a quantity and a date have no plain number to grow by (#829).
+          const toMultiplierRefused = multiplierRefused(v);
+          if (toMultiplierRefused) { stack.push(toMultiplierRefused); break; }
           stack.push(stringValue(toMultiplierString(v)));
           break;
         }

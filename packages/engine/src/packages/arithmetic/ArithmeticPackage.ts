@@ -4,6 +4,7 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { NumberParselet } from "./parselets/NumberParselet";
 import { PrefixOpParselet } from "./parselets/PrefixOpParselet";
+import { AddToParselet } from "./parselets/AddToParselet";
 import { BinaryOpParselet } from "./parselets/BinaryOpParselet";
 import { GroupParselet } from "./parselets/GroupParselet";
 import { ConstantParselet } from "./parselets/ConstantParselet";
@@ -21,7 +22,8 @@ export const ARITHMETIC_PACKAGE: IEnginePackage = {
     SQRT_SIGN: new SquareRootSignParselet(),
     INFINITY_SIGN: new InfinitySignParselet(),
     E: new ConstantParselet(),
-    PLUS: new PrefixOpParselet(OpCode.POS),
+    // The prefix `+`, and `add A to B` (#829).
+    PLUS: new AddToParselet(),
     MINUS: new PrefixOpParselet(OpCode.NEG),
     // `~x`. The opcode and the lexer token both already existed; without this
     // registration the token reached the parser and stopped there, so `~5`

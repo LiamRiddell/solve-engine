@@ -5,7 +5,8 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, describeQuantity } from "@solve-js/vm/VMConversion";
 import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact, valueInUnit, moneyForCount } from "@solve-js/vm/MoneyExact";
-import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
+import { transpose, determinant, inverse, matrixPower, symbolicToEntry, rowMajorToColumnMajor, dotProduct } from "@solve-js/vm/MatrixOps";
+import { floatOf } from "@solve-js/vm/PlainNumberForms";
 import { symbolicToValue, valueToSymbolic, solveEquationValues, definiteIntegralValue, readSearchRange } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
@@ -1164,7 +1165,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (years <= 0) {
             return errorValue("INVALID_RANGE", `compoundInterestRate: years must be greater than 0`);
         }
-        return numberValue(Math.pow(futureValue / principal, 1 / years) - 1);
+        // A rate, so a percentage, as `annual return on` answers (#830).
+        return percentageValue(Math.pow(futureValue / principal, 1 / years) - 1);
     },
     // compoundInterestYears(principal, futureValue, rate) -> the number of
     // years needed to grow principal to futureValue at a fixed rate.
@@ -1393,11 +1395,11 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (args[0].type === ValueType.Uom && args[0].unit !== undefined) return unitPowerUnsupported(args[0].unit, "-1");
         return numberValue(1 / args[0].toNumber());
     },
-    // dot(a, b), matrix product / scalar-broadcast, the SAME dispatch as
-    // the `*` operator between two matrices (vm/VM.ts's MUL case). Plain
-    // Number operands multiply directly; a Number mixed with a Matrix
-    // promotes the Number to a 1x1 Matrix first, so it broadcasts exactly
-    // like matrixMultiply()'s own 1x1-scalar case.
+    // dot(a, b), the dot product of two vectors: one number, the sum of the
+    // products of matching components (#828). It used to be the matrix
+    // product, so two row vectors were refused and a row and a column gave a
+    // one-by-one matrix. Two plain numbers are one-component vectors, so
+    // their dot product is their product. See dotProduct() in MatrixOps.ts.
     66: (args) => {
         const [a, b] = args;
         if (a.type === ValueType.Number && b.type === ValueType.Number) {
@@ -1405,8 +1407,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         }
         const toMatrix = (v: Value): MatrixData =>
             v.type === ValueType.Matrix ? (v.value as MatrixData) : { rows: 1, cols: 1, data: [v.toNumber()], hasSymbolic: false };
-        return matrixMultiply(toMatrix(a), toMatrix(b));
+        return dotProduct(toMatrix(a), toMatrix(b));
     },
+    // float(x), the plain number x is (#828); see floatOf() in PlainNumberForms.ts.
+    115: (args) => floatOf(args[0]),
     // ── Symbolic algebra (packages/symbolic/) ──
     // expand(expr), multiplying out every product and power. Reached only
     // through its own parselet, never the builtinNameToIndex name map, so that
@@ -1771,7 +1775,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (invested === 0) {
             return errorValue("INVALID_RATE", "roi: nothing was invested, so there is no return on it");
         }
-        return numberValue((returned - invested) / invested);
+        // The gain as a share of what went in, so a percentage: a return of
+        // 0.50 read as a bare number was easy to take for fifty pence (#830).
+        return percentageValue((returned - invested) / invested);
     },
     // annualisedReturn(invested, returned, years) -> CAGR, the constant
     // yearly rate that turns `invested` into `returned` over `years`:
