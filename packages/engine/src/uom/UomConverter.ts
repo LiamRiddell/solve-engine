@@ -13,7 +13,7 @@
 
 import { lookupUnit, convertRaw, convertResolved, convertToBestMetric, hasOffset } from "@solve-js/uom/UnitConversion";
 import { MEASURE_KIND_NAMES, MEASURE_SYMBOLS, UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
-import { EXTENDED_UNITS } from "@solve-js/uom/ExtendedUnits";
+import { EXTENDED_UNITS, IMPERIAL_MPG_SPELLINGS, MILES_PER_IMPERIAL_GALLON_IN_KM_PER_LITRE } from "@solve-js/uom/ExtendedUnits";
 
 // ── "workday", a synthetic unit with no entry in the base table ───────────
 //
@@ -368,14 +368,23 @@ interface RateForm {
  * it stands for and the factor that turns one of it into that rate's base. `mpg`
  * is `km/l` scaled, `l/100km` is `l/km` scaled by a hundredth (issue #190).
  */
-const FUEL_RATE_UNITS: Record<string, { numerator: string; denominator: string; factor: number }> = {
+const FUEL_RATE_UNITS: Readonly<Record<string, { numerator: string; denominator: string; factor: number }>> = {
   mpg: { numerator: "km", denominator: "l", factor: 1.609344 / 3.785411784 },
   kmpl: { numerator: "km", denominator: "l", factor: 1 },
   l100km: { numerator: "l", denominator: "km", factor: 0.01 },
+  // Miles per imperial gallon, under each of its spellings (issue #736).
+  ...Object.fromEntries(
+    IMPERIAL_MPG_SPELLINGS.map((spelling) => [spelling, { numerator: "km", denominator: "l", factor: MILES_PER_IMPERIAL_GALLON_IN_KM_PER_LITRE }]),
+  ),
 };
 
+/** The fuel-economy entry for `unit`, read as an own property so an inherited name is not one. */
+function fuelRateUnit(unit: string): { numerator: string; denominator: string; factor: number } | undefined {
+  return Object.prototype.hasOwnProperty.call(FUEL_RATE_UNITS, unit) ? FUEL_RATE_UNITS[unit] : undefined;
+}
+
 function expandUnitToRate(value: number, unit: string): RateForm | null {
-  const fuel = FUEL_RATE_UNITS[unit];
+  const fuel = fuelRateUnit(unit);
   if (fuel !== undefined) {
     return { value: value * fuel.factor, numerator: fuel.numerator, denominator: fuel.denominator };
   }
@@ -483,7 +492,7 @@ export function convertRate(value: number, from: string, to: string): number | n
   let targetNumerator: string;
   let targetDenominator: string;
   let targetScale: number;
-  const fuelTarget = FUEL_RATE_UNITS[to];
+  const fuelTarget = fuelRateUnit(to);
   const slash = to.indexOf("/");
   if (fuelTarget !== undefined) {
     // The base-pair magnitude divided by the fuel unit's own factor reads out in

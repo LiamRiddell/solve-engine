@@ -268,6 +268,7 @@ Measured against **meter**.
 | centimeter | `centimetre`, `centimeters`, `centimetres`, `cm` | 0.01 |
 | pica | `picas` | 0.0042333 |
 | millimeter | `millimetre`, `millimeters`, `millimetres`, `mm` | 0.001 |
+| typographic point | `typographic points` | 0.000352778 |
 | mil | `mils` | 0.0000254 |
 | micrometer | `micrometre`, `micrometers`, `micrometres`, `μm`, `µm` | 0.000001 |
 | nanometer | `nanometre`, `nanometers`, `nanometres`, `nm` | 1e-9 |
@@ -516,8 +517,10 @@ Measured against **cubic meter**.
 | imperial pint | `imperial pints`, `imp pt` | 0.000568261 |
 | US dry pint | `US dry pt` | 0.00055061 |
 | pint | `pints`, `US liquid pint`, `US liquid pints`, `pt` | 0.000473176 |
+| imperial cup | `imperial cups` | 0.000284131 |
+| metric cup | `metric cups` | 0.00025 |
 | US legal cup | `US legal cups`, `US lc` | 0.00024 |
-| cup | `cups` | 0.000236588 |
+| cup | `cups`, `US cup`, `US cups` | 0.000236588 |
 | deciliter | `deciliters`, `decilitre`, `decilitres`, `dl`, `dL` | 0.0001 |
 | US fluid ounce | `US fluid ounces`, `fl oz` | 0.0000295735 |
 | imperial fluid ounce | `imperial fluid ounces`, `imp fl oz` | 0.0000284131 |
@@ -700,7 +703,7 @@ Measured against **mol**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1570 spellings in total, and 49 of
+The conversion tables carry 1578 spellings in total, and 49 of
 them are missing above. Most carry a character an expression cannot type as
 part of a unit, such as the dot in `W⋅h` or the full stops in `fl. oz.`, and a few
 are ordinary words the lexer leaves to English, such as `turn` and `point`.

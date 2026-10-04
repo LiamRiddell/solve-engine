@@ -514,11 +514,13 @@ a price per kilogram times a weight comes out in money.
 3 kg * $5/kg // $15.00
 ```
 
-**[Cooking](/syntax/cooking/)**: oven gas marks, and the number to multiply a
-recipe by when it has to serve a different number of people.
+**[Cooking](/syntax/cooking/)**: oven gas marks, the US, metric and imperial
+cups, and the number to multiply a recipe by when it has to serve a different
+number of people.
 
 ```solve
 180C in gas mark // gas 4
+1 metric cup in ml // 250.00 ml
 scale 4 servings to 6 // 1.50
 ```
 
@@ -555,11 +557,13 @@ name.
 ```
 
 **[Screen and image sizes](/syntax/screen-and-image-sizes/)**: the shape of a
-screen or an image (its aspect ratio), and the other side after a resize.
+screen or an image (its aspect ratio), the other side after a resize, and how
+large it prints at a stated density.
 
 ```solve
 1920x1080 as ratio // 16:9
 resize 4000x3000 to 1200 wide // 1200 x 900
+4000px at 300 dpi // 13.33 in
 ```
 
 **[Rates & speeds](/syntax/rates-and-speeds/)**: units written with a slash,
@@ -579,11 +583,13 @@ cost to drive 500 km at 7 l/100km at £1.50/litre // £52.50
 250 miles at 60 mph // 4.17 h
 ```
 
-**[Fuel economy](/syntax/fuel-economy/)**: miles per gallon and litres per 100
-km, which run opposite ways (more miles per gallon is fewer litres per 100 km).
+**[Fuel economy](/syntax/fuel-economy/)**: miles per gallon (US or imperial) and
+litres per 100 km, which run opposite ways (more miles per gallon is fewer litres
+per 100 km).
 
 ```solve
 40 mpg in l/100km // 5.88 l/100km
+35 mpg imperial in l/100km // 8.07 l/100km
 ```
 
 **[Named derived units](/syntax/derived-units/)**: quantities multiplied into a
