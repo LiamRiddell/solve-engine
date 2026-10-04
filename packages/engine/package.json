@@ -238,7 +238,7 @@
     "typecheck:tsc": "tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
-    "@tanstack/query-core": "^5.103.1"
+    "@tanstack/query-core": "^5.104.0"
   },
   "devDependencies": {
     "@jest/globals": "^30.5.2",
