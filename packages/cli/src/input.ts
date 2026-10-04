@@ -7,7 +7,7 @@
  * expression that is also the name of a file in the current directory.
  */
 
-import { statSync, readFileSync, type Stats } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, statSync, type Stats } from "node:fs";
 import { quoted } from "./terminal";
 
 /** The largest document read, 16 MiB: far past any note, and well short of what would exhaust memory. */
@@ -73,18 +73,22 @@ export type ReadOutcome = { ok: true; text: string } | { ok: false; message: str
 /**
  * Reads a document file, refusing one that is too large or is not text.
  *
- * The size is checked before the file is read, so a very large file costs a
- * `stat`, not its contents in memory.
+ * The file is opened once and both its size and its contents are read through
+ * that one descriptor, so a file swapped or grown between the check and the
+ * read cannot slip past it. The size is checked before anything is read, so a
+ * very large file costs an `fstat`, not its contents in memory, and the read
+ * itself stops one byte past the limit whatever the size said.
  *
  * @param path - The file, as the command line named it.
  * @param limit - The largest size accepted, in bytes.
  * @returns The text, or a message naming the problem.
  */
 export function readDocumentFile(path: string, limit: number = MAX_INPUT_BYTES): ReadOutcome {
+	let fd: number | undefined;
 	try {
-		const info = statSync(path);
-		if (info.size > limit) return { ok: false, message: tooLarge(quoted(path), limit) };
-		const bytes = readFileSync(path);
+		fd = openSync(path, "r");
+		if (fstatSync(fd).size > limit) return { ok: false, message: tooLarge(quoted(path), limit) };
+		const bytes = readAtMost(fd, limit + 1);
 		if (bytes.length > limit) return { ok: false, message: tooLarge(quoted(path), limit) };
 		return decodeDocument(bytes, quoted(path));
 	} catch (error) {
@@ -92,7 +96,39 @@ export function readDocumentFile(path: string, limit: number = MAX_INPUT_BYTES):
 		if (code === "EACCES" || code === "EPERM") return { ok: false, message: `${quoted(path)} cannot be read: permission denied.` };
 		if (code === "EISDIR") return { ok: false, message: `${quoted(path)} is a directory. Give a document inside it.` };
 		return { ok: false, message: `${quoted(path)} cannot be read.` };
+	} finally {
+		if (fd !== undefined) closeSync(fd);
 	}
+}
+
+/** The size of each read from a document file. */
+const READ_CHUNK_BYTES = 64 * 1024;
+
+/**
+ * Reads from an open file until it ends or `most` bytes have arrived, so a
+ * file that grows while it is read costs no more than `most` bytes.
+ *
+ * @param fd - The open file.
+ * @param most - The most bytes to read.
+ * @returns The bytes read.
+ */
+export function readAtMost(fd: number, most: number): Uint8Array {
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	while (total < most) {
+		const chunk = new Uint8Array(Math.min(READ_CHUNK_BYTES, most - total));
+		const read = readSync(fd, chunk, 0, chunk.length, null);
+		if (read === 0) break;
+		chunks.push(read === chunk.length ? chunk : chunk.subarray(0, read));
+		total += read;
+	}
+	const bytes = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.length;
+	}
+	return bytes;
 }
 
 /** The message for an input past the size limit. */

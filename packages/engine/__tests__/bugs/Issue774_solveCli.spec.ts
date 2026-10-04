@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "@jest/globals";
-import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync, type Stats } from "node:fs";
+import { closeSync, mkdtempSync, mkdirSync, openSync, rmSync, statSync, writeFileSync, type Stats } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
@@ -20,7 +20,7 @@ import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { numberValue, type Value } from "@solve-js/vm/Value";
 import { DOCUMENT_EDGES, NUMERIC_EDGES, PROTOTYPE_WORDS, RESOURCE_PROBES, TEXT_EDGES } from "@tools/adversarial";
 import { DEFAULT_WAIT_MS, EXIT, MAX_WAIT_MS, parseArguments, parseNow, parseSeed } from "../../../cli/src/arguments";
-import { classifyInput, decodeDocument, readDocumentFile, tooLarge, MAX_INPUT_BYTES } from "../../../cli/src/input";
+import { classifyInput, decodeDocument, readAtMost, readDocumentFile, tooLarge, MAX_INPUT_BYTES } from "../../../cli/src/input";
 import {
 	CHECK_LINE,
 	checkSummary,
@@ -447,6 +447,30 @@ describe("#774 the parts: readDocumentFile and decodeDocument", () => {
 		expect(readDocumentFile(file("nul.md", "1 + 1\u00002"))).toMatchObject({ ok: false, message: expect.stringContaining("NUL byte") });
 		expect(decodeDocument(new Uint8Array([0xff, 0xfe]), "x")).toEqual({ ok: false, message: "x is not UTF-8 text." });
 		expect(decodeDocument(new Uint8Array(), "x")).toEqual({ ok: true, text: "" });
+	});
+
+	test("readAtMost stops at the file's end or at its bound, whichever comes first", () => {
+		const read = (content: string | Uint8Array, most: number): number[] => {
+			const fd = openSync(file("bounded.md", content), "r");
+			try {
+				return [...readAtMost(fd, most)];
+			} finally {
+				closeSync(fd);
+			}
+		};
+		expect(read("abc", 10)).toEqual([97, 98, 99]);
+		expect(read("abc", 2)).toEqual([97, 98]);
+		expect(read("abc", 0)).toEqual([]);
+		expect(read("", 5)).toEqual([]);
+		// Past one 64 KiB read, so the chunks are joined in order.
+		const big = new Uint8Array(200_000).map((_, i) => i % 251);
+		expect(Buffer.from(read(big, 300_000)).equals(Buffer.from(big))).toBe(true);
+		expect(read(big, 70_000).length).toBe(70_000);
+	});
+
+	test("a file at exactly the limit is read, and one byte over is refused", () => {
+		expect(readDocumentFile(file("exact.md", "x".repeat(100)), 100)).toEqual({ ok: true, text: "x".repeat(100) });
+		expect(readDocumentFile(file("over.md", "x".repeat(101)), 100)).toMatchObject({ ok: false, message: expect.stringContaining("is larger than") });
 	});
 
 	test("a directory or a missing path is named, never thrown", () => {
