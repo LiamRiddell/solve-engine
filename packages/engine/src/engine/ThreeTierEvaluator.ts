@@ -687,13 +687,39 @@ export class ThreeTierEvaluator {
 	 * **Caller should follow up with `evaluate(viewport)`** to re-evaluate
 	 * dirty lines from line 1 and rebuild the DAG + checkpoints.
 	 *
+	 * A transaction in which every change replaces as many lines as it
+	 * deletes (a keystroke inside a line, sent as delete-one-insert-one) moves
+	 * no line, and is applied in place through `DocumentModel.editLine`
+	 * instead: the lines keep their ids, nothing is renumbered or cleared, and
+	 * the ids of the lines whose text changed come back in `edited`, with
+	 * `inserted` and `removed` empty. A transaction with any change that alters
+	 * the line count takes the structural path for all of it (#713).
+	 *
 	 * @param changes Line-level changes to apply. Must be non-overlapping.
 	 * @returns Metadata about the applied changes.
 	 */
 	applyTransaction(changes: LineChange[]): {
 		inserted: number[];
 		removed: number[];
+		edited: number[];
 	} {
+		// ── A change that moves no line is an edit in place (#713) ──
+		// A host that reports each keystroke as "delete this line, insert its
+		// new text" sends a change whose counts match, and nothing below it has
+		// moved. Taken as structural, it cost a new line id (the compiled
+		// programs and recorded edges went with the old one), a renumbered
+		// chain, a cleared graph and the answers below the viewport. Applied
+		// line by line through `editLine`, the line keeps its id and is only
+		// marked dirty, exactly as a host calling `editLine` itself gets.
+		const inPlace = inPlaceEdits(changes, this.doc.lineCount);
+		if (inPlace !== null) {
+			const edited: number[] = [];
+			for (const [lineNumber, text] of inPlace) {
+				if (this.doc.editLine(lineNumber, text)) edited.push(this.doc.getLineAt(lineNumber)!.lineId);
+			}
+			return { inserted: [], removed: [], edited };
+		}
+
 		// ── Phase 1: Collect DAG writes + downstream lineIds ───────────
 		// Must happen BEFORE applyChanges() because line numbers are still
 		// valid at this point. We collect writes from deleted lines and
@@ -836,6 +862,7 @@ export class ThreeTierEvaluator {
 		return {
 			inserted: result.inserted,
 			removed: result.removed,
+			edited: [],
 		};
 	}
 
@@ -2246,4 +2273,37 @@ export class ThreeTierEvaluator {
 		const content = state.text.slice(contentOffset).trim();
 		return { expressions: content.length > 0 ? [content] : [], inlineSolveCount: 0 };
 	}
+}
+
+/**
+ * The line-by-line edits a transaction amounts to when it moves no line, or
+ * null when it has to take the structural path.
+ *
+ * A change moves no line when it deletes exactly as many lines as it inserts,
+ * all of them inside the document, from a whole-number first line. One change
+ * that does not qualify sends the whole transaction down the structural path,
+ * which is correct for any shape. The edits come back in the order the
+ * structural path would apply them (highest first line first), so two changes
+ * that overlap, which the contract forbids, still end with the same text.
+ * A change of nothing (`deleteCount: 0` and no lines) contributes nothing.
+ *
+ * @param changes - The transaction, as a host sent it.
+ * @param lineCount - How many lines the document holds before it.
+ * @returns `[lineNumber, text]` pairs, or null.
+ */
+export function inPlaceEdits(changes: readonly LineChange[], lineCount: number): [number, string][] | null {
+	const edits: [number, string][] = [];
+	const sorted = [...changes].sort((a, b) => b.startLine - a.startLine);
+	for (const change of sorted) {
+		const { startLine, deleteCount, insertLines } = change;
+		if (!Array.isArray(insertLines) || deleteCount !== insertLines.length) return null;
+		if (deleteCount === 0) continue;
+		if (!Number.isSafeInteger(startLine) || startLine < 1 || startLine + deleteCount - 1 > lineCount) return null;
+		for (let i = 0; i < deleteCount; i++) {
+			const text = insertLines[i];
+			if (typeof text !== "string") return null;
+			edits.push([startLine + i, text]);
+		}
+	}
+	return edits;
 }

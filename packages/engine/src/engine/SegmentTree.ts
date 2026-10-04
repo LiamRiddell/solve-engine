@@ -159,17 +159,62 @@ export class SegmentTree {
 	// ── Iteration ─────────────────────────────────────────────────────────
 
 	/**
-	 * In-order iterator yielding all lineIds.
+	 * Call `visit` with every lineId in document order, with its 0-based
+	 * position.
+	 *
+	 * The walk is iterative, with an explicit stack of the nodes still to
+	 * visit, so each id costs one push and one pop whatever the depth of the
+	 * tree. The recursive generator it replaces handed every id up through one
+	 * `yield*` frame per level, which was twenty times slower at 20,000 lines
+	 * (#763). The stack holds at most one node per level, so its size is the
+	 * tree's depth, O(log N) expected.
 	 */
-	*[Symbol.iterator](): IterableIterator<number> {
-		yield* this.inOrder(this.root);
+	forEach(visit: (lineId: number, index: number) => void): void {
+		const stack: Node[] = [];
+		let node = this.root;
+		let index = 0;
+		while (node !== null || stack.length > 0) {
+			while (node !== null) {
+				stack.push(node);
+				node = node.left;
+			}
+			const next = stack.pop()!;
+			visit(next.lineId, index++);
+			node = next.right;
+		}
 	}
 
-	private *inOrder(node: Node | null): IterableIterator<number> {
-		if (!node) return;
-		yield* this.inOrder(node.left);
-		yield node.lineId;
-		yield* this.inOrder(node.right);
+	/**
+	 * Every lineId in document order, as a fresh array. O(N), the same
+	 * iterative walk as `forEach`.
+	 */
+	toArray(): number[] {
+		const result: number[] = new Array(this.length);
+		this.forEach((lineId, index) => {
+			result[index] = lineId;
+		});
+		return result;
+	}
+
+	/**
+	 * In-order iterator yielding all lineIds.
+	 *
+	 * Built on the same explicit-stack loop as `forEach`, one generator frame
+	 * for the whole walk rather than one per level. It reads the tree lazily,
+	 * so a splice during iteration is not supported, as before.
+	 */
+	*[Symbol.iterator](): IterableIterator<number> {
+		const stack: Node[] = [];
+		let node = this.root;
+		while (node !== null || stack.length > 0) {
+			while (node !== null) {
+				stack.push(node);
+				node = node.left;
+			}
+			const next = stack.pop()!;
+			yield next.lineId;
+			node = next.right;
+		}
 	}
 
 	// ── Private helpers ───────────────────────────────────────────────────
