@@ -2,11 +2,12 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, dateOutOfRange, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
-import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
+import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { resolveStoredFormulaIn } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
-import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
+import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues } from "@solve-js/vm/MatrixOps";
+import { listFromCells, listCellValue, needsUnitCells, unitListArithmetic, listConverted, unitListCompare } from "@solve-js/vm/MatrixUnits";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -23,7 +24,7 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, cellUnitsDiffer } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -44,6 +45,7 @@ import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { LineTrace } from "@solve-js/explain/Explanation";
 import { offsetRefusal, resolveUtcOffsetName } from "@solve-js/calendar/UtcOffset";
+import { CALENDAR_MONTHS_PER_UNIT, addCalendarDays, shiftByCalendarUnit } from "@solve-js/vm/CalendarShift";
 
 /**
  * Create a new VM instance with the given opcode registry and configurable limits.
@@ -537,6 +539,18 @@ export interface LineExecutionContext {
      * must {@link LineRerun.close} the session, in a `finally`.
      */
     rerunLines?: (lineNumber: number) => LineRerun | Value;
+    /**
+     * What line `lineNumber` says with the inputs of the scenario named `name`
+     * in force (`line 5 under bull`, #744), or the error that stops it.
+     *
+     * The scenario is the `scenario <name> with ...` line above the asking
+     * line; none, or two with the same name, is refused by name. It is read as
+     * the what-if it stands for (`line 5 with ...`, with the declaration's
+     * inputs), evaluated where the asking line stands, so every what-if
+     * refusal is a scenario's too. Every line above the asking line is read,
+     * so an edit to any of them re-runs it. Absent where there is no document.
+     */
+    readScenario?: (name: string, lineNumber: number) => Value;
     /**
      * The RAW markdown text of line `lineNumber` (1-based), or `undefined`
      * when there is no real document or the line is out of range. Distinct
@@ -1613,80 +1627,8 @@ function addBusinessDays(epochMs: number, n: number, vm: VM): number {
 }
 
 /** Milliseconds in a day that contains no daylight-saving transition. */
+/** Milliseconds in a day of 24 hours. */
 const MS_PER_DAY = 86_400_000;
-
-/**
- * How many calendar months one of these units spans.
- *
- * The unit table gives a month and a year fixed lengths (2,592,000 and
- * 31,536,000 seconds, i.e. exactly 30 and 365 days). Those ratios are correct
- * for pure duration arithmetic, which is why they are left alone: `2 years in
- * days` genuinely is 730 days, and other code depends on that. They are not
- * correct for landing on a calendar date, because a real month is 28 to 31
- * days and a real year is 365 or 366, so no single ratio can put "a year after
- * January 1 2024" on January 1 2025 (linearly it lands on December 31 2024,
- * a day early, and drifts further with every year added).
- *
- * Every unit named here is therefore shifted with `setMonth()` instead, by
- * this many months. Everything not named here keeps whatever the table says.
- */
-const CALENDAR_MONTHS_PER_UNIT: Record<string, number> = {
-    month: 1, months: 1, mo: 1,
-    year: 12, years: 12, yr: 12, y: 12, a: 12,
-    decade: 120, decades: 120, dec: 120,
-    century: 1200, centuries: 1200,
-    millennium: 12000, millennia: 12000,
-};
-
-/**
- * Move `epochMs` by `days` calendar days, holding the local wall-clock time.
- *
- * Stepping the day field is the whole point, the same reason
- * addBusinessDays() above does it. A day is only 86,400,000 ms when no
- * daylight-saving transition falls inside it: the day a zone springs forward
- * is 23 hours long and the day it falls back is 25. Adding a flat 86,400,000
- * across either one lands an hour off, and an hour off a local midnight is a
- * different calendar day, so `2024-11-03 + 1 day` answered November 3 again
- * in Los Angeles and `26/10/2024 + 2 days` answered October 27 in London.
- * The calendar backend moves the day field and recomputes the offset (see
- * `CalendarBackend.addDays`), so the answer is the day the user named in
- * every zone.
- */
-function addCalendarDays(epochMs: number, days: number, calendar: CalendarBackend): number {
-    const whole = Math.trunc(days);
-    const shifted = calendar.addDays(epochMs, whole);
-    // A shift far enough out to leave the range a Date can represent gives an
-    // Invalid Date. Falling back to the linear arithmetic hands back the same
-    // out-of-range number as before rather than turning it into a NaN here.
-    if (Number.isNaN(shifted)) return epochMs + days * MS_PER_DAY;
-    // A fractional part is elapsed time, not a calendar step ("1.5 days" is a
-    // day and then twelve hours), so it is added as milliseconds.
-    return shifted + (days - whole) * MS_PER_DAY;
-}
-
-/**
- * Move `epochMs` by `months` calendar months, clamping to the end of the month
- * it lands in: January 31 plus a month is February 28, or February 29 in a leap
- * year, and never March.
- *
- * The clamp lives in `CalendarBackend.addMonths`, which parks the day on the
- * 1st before the month field moves. A bare month step keeps the day number,
- * so the 31st of a month whose target has 30 days overflows into the month
- * after it, which is how `2024-01-31 + 1 month` answered March 1 and
- * `2024-03-31 - 1 month` answered March 1 as well. Clamping is what every
- * calendar application does with this case, and it is the only choice that
- * keeps the month the user asked for.
- */
-function addCalendarMonths(epochMs: number, months: number, calendar: CalendarBackend): number {
-    const whole = Math.trunc(months);
-    const shifted = calendar.addMonths(epochMs, whole);
-    // A leftover fraction of a month names no calendar date of its own, so it
-    // falls back to the table's fixed-length month. Same overflow reasoning as
-    // addCalendarDays() above for the NaN case.
-    const monthMs = convertUnit(1, "month", "ms");
-    if (Number.isNaN(shifted)) return epochMs + months * monthMs;
-    return shifted + (months - whole) * monthMs;
-}
 
 /**
  * Move a Datetime by a duration: the operation behind `<date> + <duration>`
@@ -1715,24 +1657,10 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
         // one that needs a configured ceiling. See addBusinessDays().
         if (isWorkdayUnit(unit)) return addBusinessDays(epochMs, amount, vm);
 
-        const monthsPerUnit = CALENDAR_MONTHS_PER_UNIT[unit];
-        if (monthsPerUnit !== undefined) return addCalendarMonths(epochMs, amount * monthsPerUnit, vm.context.calendar);
-
-        // Measure first, for the reason extractDurationMs() gives below: a
-        // unit that is not a duration at all has to contribute nothing rather
-        // than be rescued by a lenient conversion.
-        if (getMeasure(unit) === "time") {
-            // Whether a unit is a whole number of days is read out of the unit
-            // table rather than listed here, so weeks and fortnights are
-            // covered by the same rule as days with nothing to keep in step by
-            // hand. Sub-day units fail the test and fall through to the linear
-            // path below, which is what they want.
-            let daysPerUnit = 0;
-            try { daysPerUnit = convertUnit(1, unit, "day"); } catch { /* Ignore */ }
-            if (Number.isInteger(daysPerUnit) && daysPerUnit >= 1) {
-                return addCalendarDays(epochMs, amount * daysPerUnit, vm.context.calendar);
-            }
-        }
+        // Months, years and whole days step the calendar; see
+        // vm/CalendarShift.ts. Everything else falls through to the linear path.
+        const stepped = shiftByCalendarUnit(epochMs, amount, unit, vm.context.calendar);
+        if (stepped !== undefined) return stepped;
     }
     return epochMs + sign * extractDurationMs(duration);
 }
@@ -2548,26 +2476,16 @@ function matrixLiteral(stack: Value[], rows: number, cols: number): void {
     // literal like `[1,2;3,4]` is textually written), pop in
     // reverse to restore that order, then transpose once into the
     // column-major storage MatrixData actually uses.
-    const rowMajor = checkedArray<MatrixEntry>(count, "matrix cells");
+    const rowMajor = checkedArray<Value>(count, "matrix cells");
     // A MatrixEntry is a number, a boolean or a symbolic node, so a
     // faulted cell has nowhere to live inside the matrix and became a
     // zero cell nothing could tell apart from a real one. The whole
     // literal fails instead, the way one bad cell fails a map() (see
     // MAP_INVOKE's own check).
     let cellFault: Value | null = null;
-    // The unit of the quantity cell nearest the end so far. The cells pop from
-    // the last one written, so a cell met later here was written earlier.
-    let laterUnit: string | undefined;
     for (let i = count - 1; i >= 0; i--) {
       const cellVal = safePop(stack);
       if (cellFault === null) cellFault = faultedOperand(cellVal);
-      // A quantity's unit is dropped as the cell is stored, so two units side
-      // by side cannot both be right: `[1 km, 500 m]` was `[1, 500]`. Refused by
-      // name; one unit, or a bare number beside it, is let through (#641).
-      if (cellVal.type === ValueType.Uom && cellVal.unit !== undefined) {
-        if (cellFault === null && laterUnit !== undefined) cellFault = cellUnitsDiffer(cellVal.unit, laterUnit);
-        laterUnit = cellVal.unit;
-      }
       // A cell with no numeric reading was the same silent zero: a pair
       // inside a list, `[(1, 2), 3]`, answered `[0, 3]`, and a date
       // became its epoch milliseconds. A cell holds one number, so the
@@ -2582,12 +2500,76 @@ function matrixLiteral(stack: Value[], rows: number, cols: number): void {
             : `${kind[0].toUpperCase()}${kind.slice(1)} cannot be a cell of a list: each cell holds one number.`,
         );
       }
-      rowMajor[i] = cellVal.type === ValueType.Boolean ? (cellVal.value as boolean)
-        : cellVal.type === ValueType.Symbolic ? (cellVal.value as SymbolicNodeType)
-        : cellVal.toNumber();
+      rowMajor[i] = cellVal;
     }
     if (cellFault) { stack.push(cellFault); return; }
-    stack.push(matrixValue(rows, cols, rowMajorToColumnMajor(rows, cols, rowMajor)));
+    // A list of quantities carries one unit, the first quantity cell's, and
+    // every later cell is read in it: `[1 km, 500 m]` is 1 and 0.5 in km
+    // (#745). Two measures that do not convert are refused by name. See
+    // vm/MatrixUnits.ts.
+    const columnMajor = new Array<Value>(count);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) columnMajor[r + c * rows] = rowMajor[r * cols + c];
+    }
+    stack.push(listFromCells(rows, cols, columnMajor));
+}
+
+/**
+ * A value converted with `in` (UOM_CONVERT_IN), moved out of the dispatch loop
+ * so a list can convert each of its cells the same way (#745): a quantity
+ * through the measure, currency and rate tables, a date into a zone, a
+ * percentage onto the parts-per scale, and a number given the unit.
+ *
+ * @returns The converted value, and the table it went through for a trace.
+ */
+function convertValueIn(left: Value, writtenTo: string, vm: VM): { value: Value; table?: string } {
+    const toUnit = left.type === ValueType.Uom ? rateTargetUnit(left.unit!, writtenTo) : writtenTo;
+    if (left.type === ValueType.Uom) {
+      const fromUnit = left.unit!;
+      const val = left.toNumber();
+      const measure = getMeasure(fromUnit);
+      if (measure && getMeasure(toUnit) === measure) {
+        return { value: uomValue(convertUnit(val, fromUnit, toUnit), toUnit), table: "measure" };
+      } else if (sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit)) {
+        // Deferred past the measure check, as in UOM_CONVERT_TO above.
+        const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
+        if (converted !== null) {
+          return { value: withSources(uomValue(converted, toUnit), combineSources(left.sources, sharedCurrencyExchange.rateSourcesSync(fromUnit, toUnit))), table: "currency" };
+        } else {
+          // See the matching comment in UOM_CONVERT_TO, pushing the
+          // original value here would silently pass off a missing
+          // exchange rate as a successful (non-)conversion.
+          return { value: rateUnavailable(vm, fromUnit, toUnit) };
+        }
+      } else {
+        // Rate or speed conversion, "(120 km / 2 hours) in kph". See the
+        // matching branch in UOM_CONVERT_TO above.
+        const rate = convertRate(val, fromUnit, toUnit);
+        if (rate !== null) {
+          return { value: uomValue(rate, toUnit), table: "rate" };
+        } else {
+          return { value: rateConversionError(vm, fromUnit, toUnit) };
+        }
+      }
+    } else if (left.type === ValueType.Datetime) {
+      // `<datetime> in <zone>`. Ahead of the fall-through below, which
+      // read the epoch-millisecond payload as a magnitude and labelled it
+      // with the name: `2026-04-03 in Tokyo` answered
+      // `1,775,170,800,000.00 Tokyo`, a fourteen-digit quantity in a unit
+      // named after a city. There is no new parselet here on purpose, the
+      // currency package already owns the `IN` infix slot and a second
+      // registration would overwrite it.
+      return { value: datetimeInZone(left, toUnit, vm) };
+    } else if (left.type === ValueType.Percentage && percentageInPartsPer(left, toUnit) !== null) {
+      // `0.5% in ppm`: a percentage on the parts-per scale (#633).
+      return { value: percentageInPartsPer(left, toUnit)! };
+    } else {
+      // A number given the unit, or a refusal by name: a value with no
+      // single amount (#547), one carrying a tolerance (#639), a constant
+      // with no spelled unit (#648), a target that is not a unit (#646).
+      // See plainValueInUnit().
+      return { value: plainValueInUnit(left, toUnit) };
+    }
 }
 
 /** `m[i]` (MAT_INDEX1), moved out of the dispatch loop. */
@@ -2613,7 +2595,7 @@ function matrixIndex1(stack: Value[]): void {
       return;
     }
     const cell = matIndex(m, index);
-    stack.push(matrixEntryToValue(cell));
+    stack.push(listCellValue(m, cell));
 }
 
 /** `m[r, c]` (MAT_INDEX2), moved out of the dispatch loop. */
@@ -2636,7 +2618,7 @@ function matrixIndex2(stack: Value[]): void {
       return;
     }
     const cell = matAt(m, row, col);
-    stack.push(matrixEntryToValue(cell));
+    stack.push(listCellValue(m, cell));
 }
 
 /** A range literal, `0:3` (RANGE_NEW), moved out of the dispatch loop. */
@@ -2695,7 +2677,7 @@ function matrixSlice(stack: Value[]): void {
         data[r + c * newRows] = matAt(m, rowRange.min + r, colRange.min + c);
       }
     }
-    stack.push(matrixValue(newRows, newCols, data));
+    stack.push(matrixValue(newRows, newCols, data, m.unit));
 }
 
 /** `map(...)` (MAP_INVOKE), moved out of the dispatch loop. */
@@ -2770,7 +2752,7 @@ function mapInvoke(stack: Value[], op: OpCode, kind: number, ref: number, collec
     }
     if (mapEarlyError) { stack.push(mapEarlyError); return; }
 
-    const resultData: MatrixEntry[] = checkedArray<MatrixEntry>(collectionLength, "matrix cells");
+    const resultCells: Value[] = checkedArray<Value>(collectionLength, "matrix cells");
     let mapError: Value | undefined;
     // The builtin is found by the index the bytecode carries (see builtinAt),
     // and called only when one is there.
@@ -2785,9 +2767,7 @@ function mapInvoke(stack: Value[], op: OpCode, kind: number, ref: number, collec
 
       const resultFault = faultedOperand(resultVal);
       if (resultFault) { mapError = resultFault; break; }
-      resultData[i] = resultVal.type === ValueType.Boolean ? (resultVal.value as boolean)
-        : resultVal.type === ValueType.Symbolic ? (resultVal.value as SymbolicNodeType)
-        : resultVal.toNumber();
+      resultCells[i] = resultVal;
     }
     if (mapError) { stack.push(mapError); return; }
 
@@ -2802,10 +2782,12 @@ function mapInvoke(stack: Value[], op: OpCode, kind: number, ref: number, collec
     // (and a 1xN literal) is a row either way.
     const firstCollection = rawCollections[0];
     const sourceShape = firstCollection?.type === ValueType.Matrix ? (firstCollection.value as MatrixData) : undefined;
+    // The answers are gathered as a literal's cells are, so a map over a list
+    // of quantities answers a list in their unit (#745). See vm/MatrixUnits.ts.
     if (sourceShape && sourceShape.rows * sourceShape.cols === collectionLength) {
-      stack.push(matrixValue(sourceShape.rows, sourceShape.cols, resultData));
+      stack.push(listFromCells(sourceShape.rows, sourceShape.cols, resultCells));
     } else {
-      stack.push(matrixValue(1, collectionLength, resultData));
+      stack.push(listFromCells(1, collectionLength, resultCells));
     }
 }
 
@@ -3519,6 +3501,9 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         case OpCode.ADD: {
           const r = safePop(stack), l = safePop(stack);
+          // A list that carries a unit, or a plain list meeting a quantity, is
+          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
+          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("add", l, r)); break; }
           // The plain case first. Two bare numbers with no sidecar are the
           // overwhelming majority of additions, and every helper below would
           // decline them one call at a time. A Number is never a faulted
@@ -3629,6 +3614,9 @@ export function executeBytecode(
         }
         case OpCode.SUB: {
           const r = safePop(stack), l = safePop(stack);
+          // A list that carries a unit, or a plain list meeting a quantity, is
+          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
+          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("sub", l, r)); break; }
           // The plain case first, as in ADD, exact past the safe range as ADD is.
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined
@@ -3707,6 +3695,9 @@ export function executeBytecode(
         }
         case OpCode.MUL: {
           const r = safePop(stack), l = safePop(stack);
+          // A list that carries a unit, or a plain list meeting a quantity, is
+          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
+          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("mul", l, r)); break; }
           // The plain case first, as in ADD. The money and percentage helpers
           // below all decline two bare numbers, at the cost of a call each.
           // Exact past the safe range, as in ADD: `2^40 * 3^20` keeps every digit.
@@ -3811,6 +3802,9 @@ export function executeBytecode(
         }
         case OpCode.DIV: {
           const r = safePop(stack), l = safePop(stack);
+          // A list that carries a unit, or a plain list meeting a quantity, is
+          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
+          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("div", l, r)); break; }
           // The plain case first, as in ADD, with one difference: integer
           // division is the producer of exact fractions (see the general arm
           // below), so two whole numbers still seed a rational here. A
@@ -3914,6 +3908,9 @@ export function executeBytecode(
         }
         case OpCode.MOD: {
           const r = safePop(stack), l = safePop(stack);
+          // A list that carries a unit, or a plain list meeting a quantity, is
+          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
+          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("mod", l, r)); break; }
           carry = combineSources(l.sources, r.sources);
           // A remainder with no value, by zero or of an infinite number, is
           // refused by name in remainder() below, which the plain path ends in.
@@ -4067,6 +4064,9 @@ export function executeBytecode(
           // away from zero to -1.01 rather than dropping to the drifted double
           // (-1.00499...) the float path rounds toward zero.
           else if (v.type === ValueType.Number && v.exact !== undefined) stack.push(numberValueExact(-v.toNumber(), decimalNegate(v.exact)));
+          // A list is negated cell by cell, its unit kept: `-[1, 2]` read the
+          // zero a list's toNumber() reports and answered 0 (#745).
+          else if (v.type === ValueType.Matrix) stack.push(unitListArithmetic("mul", v, numberValue(-1)));
           else stack.push(numberValue(-v.toNumber()));
           break;
         }
@@ -4075,8 +4075,10 @@ export function executeBytecode(
           const posFault = faultedOperand(v);
           if (posFault) { stack.push(posFault); break; }
           carry = v.sources;
-          // Unary plus is a no-op, so money keeps its exact decimal too.
-          if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(v.toNumber(), v.unit!, v.exact));
+          // Unary plus is a no-op, so money keeps its exact decimal too, and a
+          // list is itself rather than the zero its toNumber() reports.
+          if (v.type === ValueType.Matrix) stack.push(v);
+          else if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(v.toNumber(), v.unit!, v.exact));
           else if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
           // Unary plus is a no-op, so it has to leave the type alone too.
           else if (v.type === ValueType.Percentage) stack.push(percentageValue(v.toNumber()));
@@ -4258,7 +4260,7 @@ export function executeBytecode(
             const { equal, sameMeasure } = compareUom(l, r);
             stack.push(boolValue(sameMeasure && equal));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a === b));
+            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a === b));
           } else if (l.type === ValueType.Colour || r.type === ValueType.Colour) {
             // A colour equals only another colour with the same canonical
             // channels, so `#ff0000 == rgb(255,0,0)` is true regardless of
@@ -4302,7 +4304,7 @@ export function executeBytecode(
             const { equal, sameMeasure } = compareUom(l, r);
             stack.push(boolValue(!sameMeasure || !equal));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a !== b));
+            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a !== b));
           } else if (l.type === ValueType.Colour || r.type === ValueType.Colour) {
             // The negation of EQ's colour branch: two colours differ by channel,
             // and a colour and a non-colour are always unequal.
@@ -4340,7 +4342,7 @@ export function executeBytecode(
             const { lv, rv, equal, sameMeasure } = compareUom(l, r);
             stack.push(sameMeasure ? boolValue(!equal && lv < rv) : incomparableUnitsError(l, r));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a < b));
+            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a < b));
           } else {
             stack.push(boolValue(l.toNumber() < r.toNumber()));
           }
@@ -4368,7 +4370,7 @@ export function executeBytecode(
             const { lv, rv, equal, sameMeasure } = compareUom(l, r);
             stack.push(sameMeasure ? boolValue(equal || lv <= rv) : incomparableUnitsError(l, r));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a <= b));
+            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a <= b));
           } else {
             stack.push(boolValue(l.toNumber() <= r.toNumber()));
           }
@@ -4396,7 +4398,7 @@ export function executeBytecode(
             const { lv, rv, equal, sameMeasure } = compareUom(l, r);
             stack.push(sameMeasure ? boolValue(!equal && lv > rv) : incomparableUnitsError(l, r));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a > b));
+            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a > b));
           } else {
             stack.push(boolValue(l.toNumber() > r.toNumber()));
           }
@@ -4424,7 +4426,7 @@ export function executeBytecode(
             const { lv, rv, equal, sameMeasure } = compareUom(l, r);
             stack.push(sameMeasure ? boolValue(equal || lv >= rv) : incomparableUnitsError(l, r));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a >= b));
+            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a >= b));
           } else {
             stack.push(boolValue(l.toNumber() >= r.toNumber()));
           }
@@ -4899,6 +4901,15 @@ export function executeBytecode(
           // unit (km, kg, km/h, ...) is unchanged. See vm/MoneyExact.ts. A list,
           // a value carrying a tolerance and a constant with no spelled unit
           // are refused on the way (#639, #640, #648); see unitAfterValue().
+          // A list takes the unit cell by cell: `[1, 2, 3] km` is a list in km,
+          // and a list already in one unit refuses a second, as a quantity does (#745).
+          if (operand.type === ValueType.Matrix) {
+            const listUnit = (operand.value as MatrixData).unit;
+            stack.push(listUnit !== undefined && listUnit !== unit
+              ? errorValue("UNIT_AFTER_UNIT", `A list in ${listUnit} cannot take a second unit, ${unit}: two units side by side are not a unit. To convert, write "in ${unit}".`)
+              : listConverted(operand, (cell) => unitAfterValue(cell, unit)));
+            break;
+          }
           stack.push(unitAfterValue(operand, unit));
           break;
         }
@@ -4931,6 +4942,17 @@ export function executeBytecode(
           }
           // `1:30 hours in minutes`, as UOM_CONVERT refuses `1:30 hours`.
           if (operand.type === ValueType.Datetime) { stack.push(datetimeTakesNoUnit(fromUnit)); break; }
+          // `[1, 2] km in m`: the list takes the unit, then each cell converts (#745).
+          if (operand.type === ValueType.Matrix) {
+            const listUnit = (operand.value as MatrixData).unit;
+            if (listUnit !== undefined && listUnit !== fromUnit) {
+              stack.push(errorValue("UNIT_AFTER_UNIT", `A list in ${listUnit} cannot take a second unit, ${fromUnit}: two units side by side are not a unit. To convert, write "in ${toUnit}".`));
+              break;
+            }
+            const withUnit = listConverted(operand, (cell) => unitAfterValue(cell, fromUnit));
+            stack.push(withUnit.type === ValueType.Matrix ? listConverted(withUnit, (cell) => convertValueIn(cell, writtenTo, vm).value) : withUnit);
+            break;
+          }
           const val = operand.toNumber();
           const measure = getMeasure(fromUnit);
           if (measure && getMeasure(toUnit) === measure) {
@@ -4998,55 +5020,17 @@ export function executeBytecode(
           const faulted = faultedOperand(left);
           if (faulted) { stack.push(faulted); break; }
           carry = left.sources;
-          const toUnit = left.type === ValueType.Uom ? rateTargetUnit(left.unit!, writtenTo) : writtenTo;
-          if (left.type === ValueType.Uom) {
-            const fromUnit = left.unit!;
-            const val = left.toNumber();
-            const measure = getMeasure(fromUnit);
-            if (measure && getMeasure(toUnit) === measure) {
-              stack.push(uomValue(convertUnit(val, fromUnit, toUnit), toUnit));
-              if (observeCall !== undefined) observeConversion(observeCall, "measure", left, stack);
-            } else if (sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit)) {
-              // Deferred past the measure check, as in UOM_CONVERT_TO above.
-              const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
-              if (converted !== null) {
-                stack.push(withSources(uomValue(converted, toUnit), combineSources(left.sources, sharedCurrencyExchange.rateSourcesSync(fromUnit, toUnit))));
-                if (observeCall !== undefined) observeConversion(observeCall, "currency", left, stack);
-              } else {
-                // See the matching comment in UOM_CONVERT_TO, pushing the
-                // original value here would silently pass off a missing
-                // exchange rate as a successful (non-)conversion.
-                stack.push(rateUnavailable(vm, fromUnit, toUnit));
-              }
-            } else {
-              // Rate or speed conversion, "(120 km / 2 hours) in kph". See the
-              // matching branch in UOM_CONVERT_TO above.
-              const rate = convertRate(val, fromUnit, toUnit);
-              if (rate !== null) {
-                stack.push(uomValue(rate, toUnit));
-                if (observeCall !== undefined) observeConversion(observeCall, "rate", left, stack);
-              } else {
-                stack.push(rateConversionError(vm, fromUnit, toUnit));
-              }
-            }
-          } else if (left.type === ValueType.Datetime) {
-            // `<datetime> in <zone>`. Ahead of the fall-through below, which
-            // read the epoch-millisecond payload as a magnitude and labelled it
-            // with the name: `2026-04-03 in Tokyo` answered
-            // `1,775,170,800,000.00 Tokyo`, a fourteen-digit quantity in a unit
-            // named after a city. There is no new parselet here on purpose, the
-            // currency package already owns the `IN` infix slot and a second
-            // registration would overwrite it.
-            stack.push(datetimeInZone(left, toUnit, vm));
-          } else if (left.type === ValueType.Percentage && percentageInPartsPer(left, toUnit) !== null) {
-            // `0.5% in ppm`: a percentage on the parts-per scale (#633).
-            stack.push(percentageInPartsPer(left, toUnit)!);
-          } else {
-            // A number given the unit, or a refusal by name: a value with no
-            // single amount (#547), one carrying a tolerance (#639), a constant
-            // with no spelled unit (#648), a target that is not a unit (#646).
-            // See plainValueInUnit().
-            stack.push(plainValueInUnit(left, toUnit));
+          // A list is converted cell by cell, each as the scalar it stands for
+          // (#745); `[1, 2] in km` gives the plain cells the unit, as `5 in km`
+          // does. See vm/MatrixUnits.ts.
+          if (left.type === ValueType.Matrix) {
+            stack.push(listConverted(left, (cell) => convertValueIn(cell, writtenTo, vm).value));
+            break;
+          }
+          {
+            const converted = convertValueIn(left, writtenTo, vm);
+            stack.push(converted.value);
+            if (observeCall !== undefined && converted.table !== undefined) observeConversion(observeCall, converted.table, left, stack);
           }
           break;
         }

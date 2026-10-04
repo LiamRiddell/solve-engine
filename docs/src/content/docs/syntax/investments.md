@@ -71,6 +71,13 @@ that are:
 $1,000 for 3 years at 7% compounding biannually // ERROR: compounding biannually: expected one of annually, yearly, semi-annually, semiannually, half-yearly, quarterly, monthly, fortnightly, weekly, daily
 ```
 
+A tail with no interval after it is refused the same way, naming the word that
+was written:
+
+```solve-doc
+$1,000 for 3 years at 7% compounded // ERROR: compounded needs an interval after it: expected one of annually, yearly, semi-annually, semiannually, half-yearly, quarterly, monthly, fortnightly, weekly, daily
+```
+
 `biannually` is left out on purpose, since some readers take it to mean every
 two years and others twice a year. Continuous compounding is not read either.
 

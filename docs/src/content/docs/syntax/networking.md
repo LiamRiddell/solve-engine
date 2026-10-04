@@ -39,12 +39,48 @@ broadcast of 192.168.1.0/24 // 192.168.1.255
 - **as int** is the address as the single 32-bit number it really is, handy when
   a tool wants the integer form.
 
+## IPv6 addresses
+
+IPv6 is the newer, longer kind of address: eight groups of up to four
+hexadecimal digits (0 to 9 and a to f) joined by colons, such as
+`2001:db8:85a3::8a2e:370:7334`. A double colon stands for a run of groups that
+are all zero, so `fe80::1` is short for `fe80:0:0:0:0:0:0:1`.
+
+The engine does not calculate with IPv6 addresses yet, but it does recognise
+one, so an address pasted into a note says so rather than being read as
+something else. The colons would otherwise look like a label (`fe80:` followed
+by `1`) or a clock time:
+
+```solve
+fe80::1 // "fe80::1" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
+2001:db8::/32 // "2001:db8::/32" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
+::ffff:192.168.1.1 // "::ffff:192.168.1.1" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
+fe80::1 + 2 // "fe80::1" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
+```
+
+Every written form is recognised: all eight groups, the shortened form with
+`::` at the start, middle or end, an IPv4 address in the last two groups
+(`::ffff:192.168.1.1`), a zone after a percent sign (`fe80::1%eth0`, the network
+interface the address belongs to), and a prefix after a slash. The shape has to
+be exact, so the other things a colon means keep their meaning: a clock time,
+a timecode and a label are unchanged, and a word before `::` that is not
+hexadecimal (`note::5`) is still read as a label. A clock time such as `12:30`,
+or a timecode, has at most four fields and no double colon, so it is never read
+as an address.
+
+```solve
+Note: 5 // 5
+note::5 // 5
+```
+
 ## The boundary
 
-This covers IPv4, the dotted-quad addresses above. IPv6, the longer addresses
-written with colons, is left for a later addition: its 128-bit addresses need
-their own notation and their own arithmetic, and the dotted-quad form is the
-common case.
+This covers IPv4, the dotted-quad addresses above. IPv6 addresses are
+recognised and refused by name, as shown above; their 128-bit values, `hosts
+in`, netmasks and membership are left for a later addition, since they need
+their own arithmetic, and the dotted-quad form is the common case. A bare `::`
+(the address with every group zero) is not recognised, because nothing in it
+tells it apart from two colons.
 
 A dotted address only reads as one when it is written as a single run, with no
 spaces around the slash. That keeps ordinary division working: `192.168.1.0/24`

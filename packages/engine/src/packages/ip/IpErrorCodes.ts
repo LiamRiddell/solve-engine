@@ -15,4 +15,6 @@ export const IpErrorCodes = {
 	IP_EXPECTED_ADDRESS: "IP_EXPECTED_ADDRESS",
 	/** `<address> in <subnet>` with no subnet on the right. */
 	IP_EXPECTED_BLOCK: "IP_EXPECTED_BLOCK",
+	/** An IPv6 address in a note (`fe80::1`, `2001:db8::/32`): only IPv4 addresses and subnets are covered so far. */
+	IPV6_NOT_SUPPORTED: "IPV6_NOT_SUPPORTED",
 } as const;

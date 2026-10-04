@@ -21,6 +21,19 @@ export function ipLiteral(args: Value[]): Value {
 	return ipCidrValue(data);
 }
 
+/**
+ * `ipv6Address("<address>")`: the refusal an IPv6 address answers. The address
+ * is recognised (so it is not read as a label and a number), but IPv6 values
+ * and their maths are not part of the engine yet.
+ */
+export function ipv6Address(args: Value[]): Value {
+	const address = String(args[0]?.value ?? "");
+	return errorValue(
+		"IPV6_NOT_SUPPORTED",
+		`"${address}" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.`,
+	);
+}
+
 /** `hosts in <cidr>`: the count of usable host addresses in the block. */
 export function hostsIn(args: Value[]): Value {
 	const ip = asIp(args[0], "hosts in");

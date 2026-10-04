@@ -15,14 +15,16 @@ import {
 /**
  * Read a value as a plain list of numbers. A bracketed list is a Matrix (a row
  * or column vector); a `min:max` range expands to its inclusive integers; a bare
- * number is a one-element list. Anything else, or a matrix carrying symbolic
- * cells, is not a list of numbers.
+ * number is a one-element list. Anything else, a matrix carrying symbolic
+ * cells, or a list that carries a unit (#745), is not a list of numbers: these
+ * forms answer plain numbers, and a list of lengths read as one would lose its
+ * unit without saying so.
  */
 function toNumberList(value: Value | undefined): number[] | null {
 	if (!value) return null;
 	if (value.type === ValueType.Matrix) {
 		const m = value.value as MatrixData;
-		if (m.hasSymbolic) return null;
+		if (m.hasSymbolic || m.unit !== undefined) return null;
 		if (m.rows !== 1 && m.cols !== 1) return null;
 		return (m.data as number[]).slice();
 	}

@@ -47,10 +47,9 @@ describe("a list cell holds one number (#546)", () => {
 });
 
 describe("a conversion needs a single amount (#547)", () => {
-	test("a list converted to a unit is refused, not 0 of that unit", () => {
-		expect(codeOf("(1, 2) in miles")).toBe("CONVERT_NON_NUMERIC");
-		expect(evaluate("(1, 2) in miles").errorMessage)
-			.toBe("A bracketed list has no single amount to convert to miles: only a number or a quantity can be converted.");
+	test("a list converted to a unit converts every cell, not 0 of that unit (#745)", () => {
+		expect(formatValue(evaluate("(1, 2) in miles"))).toBe("= [1.00 miles, 2.00 miles]");
+		expect(codeOf("#ff0000 in miles")).toBe("CONVERT_NON_NUMERIC");
 	});
 
 	test("so is text", () => {

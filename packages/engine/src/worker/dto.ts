@@ -35,6 +35,8 @@ export interface SerializedMatrix {
 	cols: number;
 	cells: Array<number | boolean | string>;
 	hasSymbolic: boolean;
+	/** The unit every numeric cell is in, for a list of quantities (`km` for `[1 km, 500 m]`); absent for plain numbers. */
+	unit?: string;
 }
 
 /**

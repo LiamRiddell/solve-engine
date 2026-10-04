@@ -49,7 +49,10 @@ describe("the shipped tax years", () => {
 });
 
 describe("the years HMRC left unchanged", () => {
-	const figures = (b: TaxYearBands) => ({ ...b, year: "" });
+	// The England, Wales and Northern Ireland figures and National Insurance.
+	// Scotland's bands and the student loan thresholds move year to year
+	// (#747), so they are left out of the comparison and pinned elsewhere.
+	const figures = (b: TaxYearBands) => ({ ...b, year: "", incomeTax: b.incomeTax.rUK, studentLoans: {} });
 
 	test("carry identical figures, so a salary answers the same under each", () => {
 		expect(figures(HMRC_2025_26)).toEqual(figures(HMRC_2024_25));
@@ -64,9 +67,11 @@ describe("the years HMRC left unchanged", () => {
 		// 2026 to 2027, read on 3 September 2026.
 		expect(HMRC_2026_27.personalAllowance).toBe(12_570);
 		expect(HMRC_2026_27.personalAllowanceTaperFrom).toBe(100_000);
-		expect(HMRC_2026_27.basicRateLimit).toBe(37_700);
-		expect(HMRC_2026_27.higherRateLimit).toBe(125_140);
-		expect([HMRC_2026_27.basicRate, HMRC_2026_27.higherRate, HMRC_2026_27.additionalRate]).toEqual([0.2, 0.4, 0.45]);
+		expect(HMRC_2026_27.incomeTax.rUK).toEqual([
+			{ rate: 0.2, upTo: 37_700 },
+			{ rate: 0.4, upTo: 125_140 },
+			{ rate: 0.45, upTo: Infinity },
+		]);
 		expect(HMRC_2026_27.niPrimaryThreshold).toBe(12_570);
 		expect(HMRC_2026_27.niUpperEarningsLimit).toBe(50_270);
 		expect([HMRC_2026_27.niMainRate, HMRC_2026_27.niUpperRate]).toEqual([0.08, 0.02]);

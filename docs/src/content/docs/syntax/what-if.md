@@ -120,27 +120,107 @@ rule that keeps its reading single:
 - The end is included when a step lands on it. Otherwise the sweep stops at the
   last value before it, so `from 1 m to 2 m step 30 cm` tries four lengths.
 
-The list holds the answers' amounts. Every list in the engine is a row of plain
-numbers (the same is true of `[$5, $6]`), so a sweep of a money line lists the
-amounts, a quantity lists its amounts in the first answer's unit, and a
-percentage lists as its fraction. The unit belongs to the line you asked about,
-which says what the amounts are.
+The list holds the answers in the first answer's unit, since a list carries one
+unit (see [lists and units](/syntax/vectors-and-matrices/#lists-and-units)): a
+sweep of a money line lists money, a quantity lists its quantities, converting a
+later answer in another unit of the same measure, and a percentage lists as its
+fraction. Answers in two measures have no one unit and stop the sweep by name.
 
 ```solve-doc
 price = $100                                   // $100.00
 qty = 3                                        // 3
 price * qty                                    // $300.00
-line 3 for price from $100 to $300 step $50    // [300, 450, 600, 750, 900]
-line 3 for qty from 1 to 10 step 4             // [100, 500, 900]
+line 3 for price from $100 to $300 step $50    // [$300.00, $450.00, $600.00, $750.00, $900.00]
+line 3 for qty from 1 to 10 step 4             // [$100.00, $500.00, $900.00]
 ```
 
 ```solve-doc
 length = 2 m                                   // 2.00 m
 width = 3 m                                    // 3.00 m
 length * width                                 // 6.00 m²
-line 3 for length from 1 m to 3 m step 50 cm   // [3, 4.50, 6, 7.50, 9]
-line 3 for length from 1 m to 2 m step 30 cm   // [3, 3.90, 4.80, 5.70]
+line 3 for length from 1 m to 3 m step 50 cm   // [3.00 m², 4.50 m², 6.00 m², 7.50 m², 9.00 m²]
+line 3 for length from 1 m to 2 m step 30 cm   // [3.00 m², 3.90 m², 4.80 m², 5.70 m²]
 ```
+
+### Sweeping a date
+
+A sweep can step a date too, which answers "this line for each month from
+January". The start and the end are dates, and the step is a length of time:
+days, weeks, months or years.
+
+```solve-doc
+start = 2026-01-01                                            // Thursday, January 1, 2026
+finish = 2026-12-31                                           // Thursday, December 31, 2026
+working days between start and finish                         // 261
+line 3 for start from 2026-01-01 to 2026-04-01 step 1 month   // [261, 239, 219, 197]
+line 3 for start from 2026-01-01 to 2026-01-15 step 1 week    // [261, 256, 251]
+line 3 for start from 2026-04-01 to 2026-01-01 step -1 month  // [197, 219, 239, 261]
+```
+
+A date steps the way `<date> + <duration>` moves one. A month or a year moves
+the calendar month, so a step of one month from 31 January lands on 28 February
+(29 in a leap year), then 31 March, each the last day of its month rather than a
+date that drifts. A day or a week moves the calendar day and keeps the time of
+day, even across a clock change; a step in hours or minutes is elapsed time. The
+same limit of 1,000 values applies, and the step's direction has to run towards
+the end.
+
+```solve-doc
+start = 2026-01-01                                            // Thursday, January 1, 2026
+finish = 2026-12-31                                           // Thursday, December 31, 2026
+working days between start and finish                         // 261
+line 3 for start from 2026-01-01 to 2026-04-01 step 5         // ERROR: A sweep between two dates steps by a length of time, such as 1 month, 7 days or 1 year.
+line 3 for start from 2026-01-01 to 2030-01-01 step 1 day     // ERROR: This sweep would try more than 1,000 dates, past the limit of 1,000 for one sweep. Use a larger step or a shorter range.
+```
+
+The answers are listed, so the line swept has to answer a number or a quantity.
+A line whose answer is itself a date (`start + 30 days`) has no place in a list,
+and the sweep says so, naming the date it reached.
+
+## Named scenarios
+
+A **scenario** is a set of inputs kept in the note under a name, such as a bull
+case and a bear case for a forecast, so that any line can be read under either
+without writing the inputs out again. Declare one on its own line with
+`scenario`, its name, `with`, and the inputs, written as a what-if writes them;
+then `line 3 under bull` reads line three with those inputs in force.
+
+```solve-doc
+price = $100                                   // $100.00
+qty = 3                                        // 3
+price * qty                                    // $300.00
+scenario bull with price = $120, qty = 5       // bull: price = $120.00, qty = 5
+scenario bear with price = $80 and qty = 2     // bear: price = $80.00, qty = 2
+line 3 under bull                              // $600.00
+line 3 under bear                              // $160.00
+line 3 under bull - line 3                     // $300.00
+```
+
+The declaration answers a summary of the inputs it keeps, so you can see what
+each scenario holds. It is a statement rather than a figure, so a `total above`
+passes over it, as it passes over a check. A scenario read is the what-if it
+stands for, `line 3 with price = $120, qty = 5`, worked out where the reading
+line stands: its values may use variables, it follows its inputs through every
+line in between, and the note's own values are untouched. Edit the declaration
+and every line read under it follows.
+
+A scenario is declared before it is read, since a note is read from the top, and
+each name is declared once. Every refusal a what-if gives is a scenario's too:
+
+```solve-doc
+x = 1                                 // 1
+x * 2                                 // 2
+scenario high with x = 5              // high: x = 5
+scenario spare with y = 5             // spare: y = 5
+line 2 under high                     // 10
+line 2 under low                      // ERROR: No line above this one declares a scenario named low. Declare it first, as in "scenario low with growth = 8%".
+line 2 under spare                    // ERROR: No line up to line 2 uses y, so changing it cannot change line 2's answer.
+```
+
+`under` is used because the words that could otherwise follow a line reference
+already mean something there: `line 3 in miles` is a conversion, `with` starts
+a what-if and `for` a sweep. The words `scenario` and `under` are claimed only in
+these shapes, so a variable named either still works.
 
 ## Nothing in the note changes
 
@@ -205,17 +285,21 @@ The rest, in words:
 
 ## What it does not cover
 
-- The line asked about is a line number, `line 4`. `prev`, a span of lines, and
-  named scenarios kept for reuse (`line 5 in bull`) are not part of this form;
-  scenarios are the natural next step on the same re-run.
+- The line asked about is a line number, `line 4`. `prev` and a span of lines
+  are not part of this form.
+- A scenario overrides inputs of this note only. One whose span sets a `global
+  :name` is refused, as a what-if is, since other notes read globals. A scenario
+  cannot be read inside another scenario's or a what-if's re-run, and a line
+  holding one is not a sweep's or a what-if's target.
 - The re-run reads the note the way the batch pass does, top to bottom. A
   [goal seek](/syntax/goal-seek/) inside the span answers there with that pass's
   refusal, so a what-if whose line depends on a goal seek line reports the
   refusal rather than a number.
 - Goal seek is the reverse question, the input that makes a line reach a target,
   and it still needs its variable on the target line itself.
-- A sweep steps numbers, percentages and quantities. It does not step dates or
-  times.
+- A sweep steps numbers, percentages, quantities and dates. A date sweep steps
+  by the calendar, so a step in working days is refused, and a line whose answer
+  is a date cannot be swept, since a list holds numbers and quantities.
 
 A host asks the same question from code, over the whole note, with
 `engine.whatIf(text, { deposit: 150000 })`; see

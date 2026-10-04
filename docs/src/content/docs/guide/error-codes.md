@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 524 codes, grouped below by the part
+ship. The engine and its built-in packages ship 534 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -352,7 +352,10 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `DESCENDING_RANGE` | as a value | A range whose first bound is above its second (`5:1`). The message suggests the other order. |
 | `COLLECTION_TOO_LARGE` | as a value | A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. |
 | `MATRIX_CELL_NON_NUMERIC` | as a value | A list cell that is not a number or a quantity: a list inside a list, text, a date. |
-| `MATRIX_CELL_UNITS_DIFFER` | as a value | A list whose cells are quantities of different measures, or of one measure in units the list cannot hold together. |
+| `MATRIX_CELL_UNITS_DIFFER` | as a value | A list whose cells are quantities of different measures (`[1 km, 2 kg]`), or money in two currencies with no rate between them: a list holds one unit. |
+| `MATRIX_CELL_NO_UNIT` | as a value | A list with a unit given a cell that has no amount in it: a true or false, a percentage or a formula beside a quantity (`[true, 1 km]`). |
+| `MATRIX_UNIT_OPERATION_UNSUPPORTED` | as a value | A list with a unit in an operation its cells cannot take one by one: multiplied by another quantity, a number divided by it, or a percentage added. |
+| `MATRIX_UNIT_ALGEBRA` | as a value | Matrix algebra on a list with a unit (`det([1 km, 2 km; 3 km, 4 km])`): a determinant, an inverse, a matrix product or power, or a dot product. |
 | `DIMENSION_MISMATCH` | as a value | Two matrices of shapes that do not fit the operation: added with different shapes, or multiplied where the columns of the first are not the rows of the second. |
 | `MATRIX_INDEX_NOT_A_MATRIX` | as a value | `[...]` indexing or slicing applied to something that is not a matrix. |
 | `MATRIX_INDEX_OUT_OF_BOUNDS` | as a value | An index or a slice past the edge of the matrix. |
@@ -835,6 +838,7 @@ In the package as `ERROR_CODE_CATALOGUES.IpErrorCodes`.
 | `IP_NEEDS_ADDRESS_AND_PREFIX` | as a value | `broadcast of` given something without both an address and a prefix. |
 | `IP_EXPECTED_ADDRESS` | as a value | `<address> in <subnet>` with no address on the left. |
 | `IP_EXPECTED_BLOCK` | as a value | `<address> in <subnet>` with no subnet on the right. |
+| `IPV6_NOT_SUPPORTED` | as a value | An IPv6 address in a note (`fe80::1`, `2001:db8::/32`): only IPv4 addresses and subnets are covered so far. |
 
 ## Numerals
 
@@ -859,6 +863,9 @@ In the package as `ERROR_CODE_CATALOGUES.PayrollErrorCodes`.
 | --- | --- | --- |
 | `PAYROLL_EXPECTED_GBP` | as a value | The banded forms were given something other than a pound salary. |
 | `PAYROLL_EXPECTED_RATE` | as a value | A stated tax rate was not a rate a take-home can be worked out from. |
+| `PAYROLL_UNKNOWN_LOAN_PLAN` | either | `with student loan` with no plan, or a plan that does not exist (`with plan 3 student loan`). |
+| `PAYROLL_CONFLICTING_CASE` | either | Two places, two pensions, a plan named twice, or two undergraduate plans on one take-home line. |
+| `PAYROLL_EXPECTED_PENSION_RATE` | either | `with 150% pension`: a pension contribution that is not a percentage between 0 and 100. |
 
 ## Percentage
 
@@ -1149,3 +1156,6 @@ In the package as `ERROR_CODE_CATALOGUES.WhatIfErrorCodes`.
 | `SWEEP_OVER_BUDGET` | as a value | A sweep whose steps together reached a limit on the work one evaluation may do. |
 | `SWEEP_STEP_FAILED` | as a value | A sweep one of whose steps failed. The message names the input value and the failure. |
 | `SWEEP_ANSWER_NOT_NUMERIC` | as a value | A sweep one of whose answers is not a number or a quantity, which is all a sweep lists. |
+| `SWEEP_DATE_STEP_NOT_DURATION` | as a value | A sweep between two dates whose step is not a length of time (`step 5`), or is working days. |
+| `SCENARIO_UNKNOWN` | as a value | `line N under bull` with no `scenario bull with ...` line above it. |
+| `SCENARIO_DUPLICATE` | as a value | `line N under bull` where two lines above both declare a scenario named `bull`. |
