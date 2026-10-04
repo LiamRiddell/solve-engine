@@ -43,7 +43,7 @@ describe("#698: a generated name in each form that reads a zone", () => {
 		["date in Apia", "March 12, 2026"],
 		["time difference between Kathmandu and Kolkata", "Kathmandu is 15 minutes ahead of Kolkata"],
 		["3pm London on 1 March 2027 in Hobart", "2:00 AM (+1 day)"],
-		["3pm London on 1 March 2027 in Kathmandu and Isle of Man", "Kathmandu 8:45 PM, Isle Of Man 3:00 PM"],
+		["3pm London on 1 March 2027 in Kathmandu and Isle of Man", "Kathmandu 8:45 PM, Isle of Man 3:00 PM"],
 	])("%s", (line, expected) => {
 		expect(show(line)).toBe(expected);
 	});
