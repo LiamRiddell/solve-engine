@@ -25,7 +25,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { safeText } from "@solve-js/parser/ParseMessages";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, valueKindName, cellUnitsDiffer } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, valueKindName } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
