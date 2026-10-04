@@ -6794,6 +6794,8 @@ export class ExpressionEngine {
      * a name that becomes a function call when `(` follows it. Lower-cased, in
      * registration order. Used by `LanguageService.getCompletions()`, which
      * offers them as functions.
+     *
+     * @internal Engine plumbing shared with the language service, not host API (#761).
      */
     getCallWords(): string[] {
         return [...this.callFusions.keys()];
