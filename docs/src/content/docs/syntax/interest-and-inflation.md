@@ -51,7 +51,8 @@ total interest on 200000 over 25 years at 4% // 116,702.10
 ```
 
 A repayment is often just called a payment, and `payment on` reads the same way
-as `repayment on`, for each of the four periods:
+as `repayment on` for each of the four periods: `daily payment on`, `monthly
+payment on`, `annual payment on` and `total payment on`.
 
 ```solve
 monthly payment on $200,000 over 25 years at 4% // $1,055.67
