@@ -24,7 +24,6 @@ const SYNTAX = path.resolve(__dirname, "../../../../docs/src/content/docs/syntax
  */
 const EXEMPT = new Map([
 	["unit-reference.md", "generated: each heading is a unit kind followed by its table of spellings"],
-	["time.md: ## Intervals", "rewritten by the open dates batch (#832), which adds the sentence; editing it here would conflict"],
 ]);
 
 interface Offence {
