@@ -23,7 +23,6 @@ const SYNTAX = path.resolve(__dirname, "../../../../docs/src/content/docs/syntax
  * a key cannot be found through an inherited property.
  */
 const EXEMPT = new Map([
-	["unit-reference.md", "generated: each heading is a unit kind followed by its table of spellings"],
 ]);
 
 interface Offence {
