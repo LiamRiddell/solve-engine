@@ -194,7 +194,10 @@ line on it reports it, and none takes a number from the others.
 
 A reference to a line further down is refused too, cycle or not. A note is
 read from the top, so from where line 1 stands, line 2 has not been evaluated
-yet. Put the line that is read above the line that reads it:
+yet. That holds however the note is evaluated and however often: a live editor
+runs a note again on every keystroke, and on the second run the line below has
+an answer from the first, but it is still below, and it is still refused. Put
+the line that is read above the line that reads it:
 
 ```solve-doc
 line 2 + 1   // ERROR: Line 2 has not been evaluated yet (forward reference, or out of range)

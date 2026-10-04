@@ -4,10 +4,13 @@ import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { djb2Hash } from "@solve-js/utilities/Hash";
 import { SegmentTree } from "@solve-js/engine/SegmentTree";
 import { DEFAULT_CONFIG } from "@solve-js/constants/Configuration";
-import { countLines } from "@solve-js/utilities/Strings";
+import { countLines, splitLines } from "@solve-js/utilities/Strings";
 import { memberTagsOf } from "@solve-js/packages/tags/TagScanner";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { isPipeRow, isSeparatorRowText, pipeBlockAround } from "@solve-js/lexer/TableBlocks";
+
+/** The answer for a tag no line carries, shared so a miss allocates nothing. */
+const NO_POSITIONS: readonly number[] = [];
 
 // ── LineState ──────────────────────────────────────────────────────────────
 
@@ -254,6 +257,10 @@ export class DocumentModel {
 	 * Initialize or replace the entire document from a text blob.
 	 * Clears all existing state and assigns new persistent line IDs.
 	 *
+	 * A line ends at a CRLF pair, a line feed or a lone carriage return, the
+	 * breaks `parseDocument` reads, and the break is not part of the line's
+	 * text.
+	 *
 	 * @throws `DOCUMENT_TOO_LARGE` for a document past {@link maxLines}, before
 	 * any of it is stored. Recoverable: nothing has been replaced yet, so the
 	 * model still holds whatever it held.
@@ -278,7 +285,9 @@ export class DocumentModel {
 		this.nextLineId = 1;
 		this.tagIndex = null;
 
-		const rawLines = text.split("\n");
+		// Split where the lexer's document scan splits, a lone carriage return
+		// included, so this model and parseDocument hold the same lines.
+		const rawLines = splitLines(text);
 		const lineIds = new Array<number>(rawLines.length);
 
 		for (let i = 0; i < rawLines.length; i++) {
@@ -545,23 +554,50 @@ export class DocumentModel {
 	 * the line it names has to be the first one in the document, not whichever
 	 * happened to be indexed first.
 	 *
+	 * Read from {@link tagGroups}, so every aggregate over the same tag in one
+	 * pass shares one sorted list rather than each sorting its own.
+	 *
 	 * @param tag - The tag name without its `#`.
 	 * @returns Its lines' positions, ascending; empty when no line carries it.
 	 */
-	linesCarryingTag(tag: string): number[] {
-		const ids = this.ensureTagIndex().get(tag.toLowerCase());
-		if (ids === undefined || ids.size === 0) return [];
-		const positions: number[] = [];
-		for (const id of ids) {
-			const position = this.getLinePosition(id);
-			// A line still in the index but no longer in the document cannot
-			// happen through the maintained paths; guarded rather than trusted,
-			// since the alternative is aggregating over position -1.
-			if (position > 0) positions.push(position);
-		}
-		positions.sort((a, b) => a - b);
-		return positions;
+	linesCarryingTag(tag: string): readonly number[] {
+		return this.tagGroups().get(tag.toLowerCase()) ?? NO_POSITIONS;
 	}
+
+	/**
+	 * Every category tag the document's lines carry, lower-cased, each with the
+	 * 1-based positions of its lines in ascending order.
+	 *
+	 * What `total by tag` reads to find its groups, instead of reading the tags
+	 * off every line of the note on every call (#734). The answer is the same
+	 * object until the text or the line order changes (see {@link revision}),
+	 * so a caller may key work of its own on it.
+	 *
+	 * @returns The groups; empty when no line carries a tag.
+	 */
+	tagGroups(): ReadonlyMap<string, readonly number[]> {
+		const cached = this.tagGroupsCache;
+		if (cached !== null && cached.revision === this._revision) return cached.groups;
+		const groups = new Map<string, number[]>();
+		for (const [tag, ids] of this.ensureTagIndex()) {
+			const positions: number[] = [];
+			for (const id of ids) {
+				const position = this.getLinePosition(id);
+				// A line still in the index but no longer in the document cannot
+				// happen through the maintained paths; guarded rather than trusted,
+				// since the alternative is aggregating over position -1.
+				if (position > 0) positions.push(position);
+			}
+			if (positions.length === 0) continue;
+			positions.sort((a, b) => a - b);
+			groups.set(tag, positions);
+		}
+		this.tagGroupsCache = { revision: this._revision, groups };
+		return groups;
+	}
+
+	/** The answer {@link tagGroups} last built, and the revision it holds for. */
+	private tagGroupsCache: { revision: number; groups: ReadonlyMap<string, readonly number[]> } | null = null;
 
 	/** The tag index, built over every line the first time one is asked for. */
 	private ensureTagIndex(): Map<string, Set<number>> {

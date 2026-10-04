@@ -1290,3 +1290,91 @@ describe("a failed line's shape across entry points (#709)", () => {
     }
   });
 });
+
+/** A live evaluator's answers after `passes` passes over the text, as an editor settles it. */
+function afterPasses(lines: string[], passes: number): string[] {
+  const doc = new DocumentModel();
+  doc.setDocument(lines.join("\n"));
+  const evaluator = new ThreeTierEvaluator(doc, newTrackedEngine());
+  try {
+    let shown: string[] = [];
+    for (let pass = 0; pass < passes; pass++) shown = evaluator.evaluate({ startLine: 1, endLine: doc.lineCount }).lines.map(readEvalLine);
+    return shown;
+  } finally {
+    evaluator.terminateWorker();
+  }
+}
+
+describe("a reference to a line further down, across entry points and passes", () => {
+  // A note is read from the top, so a line below has not been evaluated from
+  // where the reader stands. The batch pass refused it, and so did the first
+  // incremental pass; from the second on, the incremental path read the answer
+  // the previous pass had left the line below, so a live editor showed 10 and
+  // 11 where parseDocument refused both lines. It is refused on every pass now.
+  const reported = ["a = line 3 * 2", "a + 1", "5"];
+  const refusal = "ERROR: Line 3 has not been evaluated yet (forward reference, or out of range)";
+
+  test("the reported document: the forward reference and the line reading it are refused", () => {
+    expect(batch(reported)).toEqual([refusal, refusal, "5"]);
+  });
+
+  test("the incremental pass agrees, on the first pass and on every later one", () => {
+    expect(incremental(reported)).toEqual(batch(reported));
+    for (const passes of [1, 2, 3, 5]) expect(afterPasses(reported, passes)).toEqual(batch(reported));
+  });
+
+  test.each([
+    [["line 2 + 1", "7"]],
+    [["sum(line 2 : line 3)", "1", "2"]],
+    [["total of #a", "1 #a", "2 #a"]],
+    [["total by tag", "1 #a", "2 #b"]],
+    [['total of section "Costs"', "# Costs", "1", "2"]],
+    [["x = 3", "solve line 3 for x = 10", "x * 2"]],
+    [["inputs of line 2", "5"]],
+  ])("every form that reads a line below refuses it through every path: %j", (lines) => {
+    const settled = afterPasses(lines, 3);
+    expect(afterPasses(lines, 1)).toEqual(settled);
+    expect(incremental(lines)).toEqual(settled);
+    // The batch pass refuses goal seek outright; every other form it answers the same.
+    if (!lines.some((line) => line.startsWith("solve"))) expect(batch(lines)).toEqual(settled);
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument("line 3 * 2");
+    expectNeedsDocument("a = line 3 * 2");
+  });
+});
+
+describe("a lone carriage return across entry points", () => {
+  // The batch pass's scan ends a line at a lone "\r" as it does at "\n" and
+  // "\r\n"; the document model split on "\n" alone, so `5\r6` was two lines to
+  // parseDocument and one to evaluateDocument and a live editor. The model now
+  // splits where the scan does, the way #613 made the trailing newline agree.
+  test.each([
+    ["5\r"],
+    ["5\r6"],
+    ["1\r2\rtotal above"],
+    ["1\r\n2\rtotal above\r\n"],
+    ["\r\r\r"],
+    ["10 #a\r20 #a\rtotal of #a"],
+  ])("%j has the same lines through both passes", (text) => {
+    const batchLines = readLines(newTrackedEngine().parseDocument(text, { inputType: "markdown" }));
+    const incrementalLines = readLines(evaluateDocument(newTrackedEngine(), text, { inputType: "markdown" }));
+    expect(incrementalLines).toEqual(batchLines);
+    const doc = new DocumentModel();
+    doc.setDocument(text);
+    expect(doc.lineCount).toBe(batchLines.length);
+  });
+
+  test("the offsets each line reports are the batch pass's", () => {
+    const text = "1\r22\r\n333\n4444\r";
+    const shape = (result: ParsingResult) => result.lines.map((line) => [line.text, line.startPosition, line.endPosition]);
+    expect(shape(evaluateDocument(newTrackedEngine(), text))).toEqual(shape(newTrackedEngine().parseDocument(text)));
+  });
+
+  test("the single-expression path reads a trailing carriage return as the end of the line", () => {
+    const { threw, message } = single("5\r");
+    expect(threw).toBe(false);
+    expect(message).toBe("5");
+  });
+});

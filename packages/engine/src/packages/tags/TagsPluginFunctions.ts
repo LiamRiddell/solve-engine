@@ -4,7 +4,7 @@ import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
 import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { formatValue } from "@solve-js/format/FormatEngine";
-import { lineCarriesTag, tagEdgesOf } from "./TagScanner";
+import { lineCarriesTag, memberTagsOf, tagEdgesOf } from "./TagScanner";
 import { spendSpanReads } from "@solve-js/vm/PassWork";
 
 /**
@@ -72,12 +72,10 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
 
   // Ascending, so the first unreadable member this reports is the first one in
   // the document, which is what the walk named and what a reader looks for.
+  // Asking declares the read of every carrier, before any is read, as one edge
+  // on the tag (#733): the walk below stops at the first member it cannot use,
+  // and a cycle through a later one still has to be known.
   const indexed = context.getTaggedLines?.(needle);
-  // Every carrier is declared before any is read, for the reason the line
-  // range gives: the walk stops at the first member it cannot use.
-  if (indexed !== undefined && context.noteLineRead) {
-    for (const n of indexed) if (n !== context.lineIndex) context.noteLineRead(n);
-  }
 
   for (let i = 1; ; i++) {
     let n: number;
@@ -93,7 +91,8 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
     if (n === context.lineIndex) continue; // the query line reads its own tag
     if (isBoundary && isBoundary(n)) continue; // a blank line or heading
 
-    const v = getResult(n);
+    // A member of the tag asked for is covered by the edge the index took.
+    const v = getResult(n, indexed !== undefined);
     const err = checkLineValue(v, n);
     if (err) return err;
     if (mode !== "count") {
@@ -138,12 +137,6 @@ function combineTagged(values: Value[], isAverage: boolean): Value {
   return combined;
 }
 
-/** One category in the breakdown: the tag as first written, and its lines. */
-interface TagGroup {
-  readonly label: string;
-  readonly lines: number[];
-}
-
 /**
  * A share of the whole as a reader would say it: a whole percentage, with a
  * share too small to round to 1% shown as `<1%` rather than as a `0%` that reads
@@ -164,15 +157,84 @@ function formatAmount(total: Value): string {
   return formatValue(total).replace(/^=\s*/, "");
 }
 
+/** One category in the breakdown: the tag as first written, and its lines. */
+interface TagGroup {
+  readonly label: string;
+  readonly lines: number[];
+}
+
+/**
+ * A breakdown already worked out, kept so every `total by tag` line that asks
+ * the same question of the same values is served the same answer.
+ *
+ * The question is the document's groups (the object the tag index hands out,
+ * which stays the same while the text does) and the one line left out of
+ * them, the asking line when it carries a tag itself. The values are checked
+ * member by member, by identity: a line's answer is a new Value whenever the
+ * line runs again, so an unchanged Value is an unchanged answer, and a member
+ * below the asker that has not run yet reads as `undefined` here as it does in
+ * the walk. Whether each member is a boundary is checked the same way, since
+ * the evaluator can decide that as it reaches the line.
+ */
+interface BreakdownMemo {
+  /** The line left out because it asked and carries a tag, or 0 when none was. */
+  readonly excluded: number;
+  /** Every candidate member, ascending: the lines carrying any tag, less {@link excluded}. */
+  readonly candidates: readonly number[];
+  /** Whether each candidate was a boundary line when the answer was made. */
+  readonly boundary: readonly boolean[];
+  /** Each candidate's answer when the answer was made. */
+  readonly values: readonly (Value | undefined)[];
+  /** The breakdown, or the error that stopped it. */
+  readonly answer: Value;
+}
+
+/**
+ * The breakdowns kept for each set of groups, a few per set.
+ *
+ * Weakly keyed, so a set of groups the document has moved past goes with
+ * everything kept against it. A handful per set, because the asking lines that
+ * carry a tag each leave a different line out, and a note rarely has more
+ * than one or two of those.
+ */
+const breakdownMemos = new WeakMap<ReadonlyMap<string, readonly number[]>, BreakdownMemo[]>();
+
+/** How many breakdowns are kept for one set of groups. */
+const MEMOS_PER_GROUPS = 4;
+
+/**
+ * The document's tag groups read off every line's text, for a host that
+ * supplies line text but no tag index. The same reading the index makes
+ * ({@link memberTagsOf}), so the two agree.
+ */
+function walkTagGroups(getText: (n: number) => string | undefined): Map<string, number[]> {
+  const groups = new Map<string, number[]>();
+  for (let n = 1; ; n++) {
+    const text = getText(n);
+    if (text === undefined) break; // past the end of the document
+    if (text.indexOf("#") === -1) continue; // the overwhelmingly common line
+    for (const tag of memberTagsOf(text)) {
+      const lines = groups.get(tag);
+      if (lines === undefined) groups.set(tag, [n]);
+      else if (lines[lines.length - 1] !== n) lines.push(n);
+    }
+  }
+  return groups;
+}
+
 /**
  * `total by tag`: every category tag in the document, each with its total and
  * its share of the whole, as one line of text.
  *
- * One walk finds the groups, in the order each tag first appears, with the same
- * reading of a line `total of #tag` uses ({@link tagEdgesOf}): the querying
+ * The groups come from the tag index the document paths keep
+ * ({@link LineExecutionContext.getTagGroups}), in the order each tag first
+ * appears, with the same reading of a line `total of #tag` uses: the querying
  * line, headings and blank lines are passed over, and a tag being asked about
- * is not a member. Every tagged line is declared to the dependency graph before
- * any is read, and each is read once.
+ * is not a member. Every tagged line is read once.
+ *
+ * The answer is worked out once for a given set of groups and member values
+ * and served from {@link breakdownMemos} to every other line asking the same,
+ * so five hundred breakdown lines cost about what one does (#734).
  *
  * The whole is every tagged line counted once, read in the first unit written.
  * When each line carries one tag the shares add up to 100%. A line carrying two
@@ -193,45 +255,114 @@ function breakdownByTag(context: LineExecutionContext): Value {
   const refused = spendSpanReads(context, context.getLineCount?.() ?? 0, "total by tag");
   if (refused) return refused;
 
-  const groups = new Map<string, TagGroup>();
-  const members: number[] = [];
-  const firstTagOn = new Map<number, string>();
-  for (let n = 1; ; n++) {
-    const text = getText(n);
-    if (text === undefined) break; // past the end of the document
-    if (n === context.lineIndex) continue;
-    if (text.indexOf("#") === -1) continue; // the overwhelmingly common line
-    if (isBoundary && isBoundary(n)) continue; // a blank line or heading
-    const tags = tagEdgesOf(text).members;
-    if (tags.length === 0) continue;
-    for (const tag of tags) {
-      const key = tag.toLowerCase();
-      let group = groups.get(key);
-      if (group === undefined) {
-        group = { label: tag, lines: [] };
-        groups.set(key, group);
-      }
-      // `#food #Food` on one line is one membership, not two.
-      if (group.lines[group.lines.length - 1] !== n) group.lines.push(n);
+  const indexed = context.getTagGroups?.();
+  const groups: ReadonlyMap<string, readonly number[]> = indexed ?? walkTagGroups(getText);
+
+  // Every line carrying some tag, ascending, less the asking line.
+  const asking = context.lineIndex;
+  const seen = new Set<number>();
+  for (const lines of groups.values()) for (const n of lines) seen.add(n);
+  const excluded = seen.delete(asking) ? asking : 0;
+  const candidates = [...seen].sort((a, b) => a - b);
+
+  const boundary = candidates.map((n) => isBoundary !== undefined && isBoundary(n));
+  // Covered by the edge on every tag the index took, when there is one.
+  const values = candidates.map((n, i) => (boundary[i] ? undefined : getResult(n, indexed !== undefined)));
+
+  // A walk without an index has no edge to take on the tags, so it declares
+  // the members, as it always has.
+  if (indexed === undefined && context.noteLineRead) {
+    for (let i = 0; i < candidates.length; i++) if (!boundary[i]) context.noteLineRead(candidates[i]);
+  }
+
+  const memos = indexed !== undefined ? breakdownMemos.get(indexed) : undefined;
+  if (memos !== undefined) {
+    for (const memo of memos) {
+      // A copy, since a line's answer is its own to decorate.
+      if (memo.excluded === excluded && sameMembers(memo, candidates, boundary, values)) return memo.answer.clone();
     }
-    members.push(n);
-    firstTagOn.set(n, tags[0]);
+  }
+
+  const answer = computeBreakdown(groups, candidates, boundary, values, getText);
+  if (indexed !== undefined) {
+    const memo: BreakdownMemo = { excluded, candidates, boundary, values, answer };
+    if (memos === undefined) breakdownMemos.set(indexed, [memo]);
+    else {
+      if (memos.length >= MEMOS_PER_GROUPS) memos.shift();
+      memos.push(memo);
+    }
+    return answer.clone();
+  }
+  return answer;
+}
+
+/** Whether a kept breakdown was made from exactly these members, boundaries and values. */
+function sameMembers(memo: BreakdownMemo, candidates: readonly number[], boundary: readonly boolean[], values: readonly (Value | undefined)[]): boolean {
+  if (memo.candidates.length !== candidates.length) return false;
+  for (let i = 0; i < candidates.length; i++) {
+    if (memo.candidates[i] !== candidates[i] || memo.boundary[i] !== boundary[i] || memo.values[i] !== values[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * The breakdown itself, from the groups and the members' values: the whole,
+ * each group's total and its share, or the error that stops it.
+ */
+function computeBreakdown(
+  groups: ReadonlyMap<string, readonly number[]>,
+  candidates: readonly number[],
+  boundary: readonly boolean[],
+  values: readonly (Value | undefined)[],
+  getText: (n: number) => string | undefined,
+): Value {
+  const members: number[] = [];
+  const valueAt = new Map<number, Value | undefined>();
+  for (let i = 0; i < candidates.length; i++) {
+    if (boundary[i]) continue; // a blank line or heading
+    members.push(candidates[i]);
+    valueAt.set(candidates[i], values[i]);
   }
   if (members.length === 0) {
     return errorValue("TAG_EMPTY", "No lines carry a tag, so there is nothing to break down.");
   }
-  if (context.noteLineRead) for (const n of members) context.noteLineRead(n);
 
-  const valueAt = new Map<number, Value>();
+  // Read in document order, so the first line that cannot be used is the one
+  // named, as the walk named it.
   for (const n of members) {
-    const v = getResult(n);
+    const v = valueAt.get(n);
     const err = checkLineValue(v, n);
     if (err) return err;
     if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
-      return errorValue("TAG_NON_NUMERIC", `Line ${n}, tagged #${firstTagOn.get(n)}, is not a plain number or unit value.`);
+      const first = tagEdgesOf(getText(n) ?? "").members[0] ?? "";
+      return errorValue("TAG_NON_NUMERIC", `Line ${n}, tagged #${first}, is not a plain number or unit value.`);
     }
-    valueAt.set(n, v!);
   }
+
+  // The groups in the order each tag first appears among the members, and a
+  // tie (two tags new on one line) in the order the line writes them. Each is
+  // labelled as its first member writes it.
+  const isMember = new Set(members);
+  const ordered: { key: string; first: number; lines: number[] }[] = [];
+  for (const [key, lines] of groups) {
+    const kept = lines.filter((n) => isMember.has(n));
+    if (kept.length > 0) ordered.push({ key, first: kept[0], lines: kept });
+  }
+  const tagsOn = new Map<number, string[]>();
+  const writtenOn = (n: number): string[] => {
+    let tags = tagsOn.get(n);
+    if (tags === undefined) {
+      tags = tagEdgesOf(getText(n) ?? "").members;
+      tagsOn.set(n, tags);
+    }
+    return tags;
+  };
+  const placeOnLine = (key: string, n: number): number => writtenOn(n).findIndex((tag) => tag.toLowerCase() === key);
+  ordered.sort((a, b) => a.first - b.first || placeOnLine(a.key, a.first) - placeOnLine(b.key, b.first));
+  const tagGroups: TagGroup[] = ordered.map((group) => ({
+    label: writtenOn(group.first)[placeOnLine(group.key, group.first)] ?? group.key,
+    lines: group.lines,
+  }));
 
   // The whole, which is also where a set mixing measures is refused: two tags
   // in different measures have no whole to be shares of.
@@ -252,7 +383,7 @@ function breakdownByTag(context: LineExecutionContext): Value {
   }
 
   const parts: string[] = [];
-  for (const group of groups.values()) {
+  for (const group of tagGroups) {
     const total = combineTagged(group.lines.map((n) => valueAt.get(n)!), false);
     if (total.type === ValueType.Error) return total;
     const part = group.lines.reduce((acc, n) => acc + magnitudeAt.get(n)!, 0);

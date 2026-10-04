@@ -522,16 +522,22 @@ function aggregateSection(context: LineExecutionContext, name: string, mode: Sec
     if (isSummaryLine(getText(n) ?? "")) continue;
     members.push(n);
   }
+  // The block as one span of figures when the path takes one (#733): its
+  // members are the block less its summary lines, which in a ledger with a
+  // running total is every other line, and one edge per member made each
+  // total cost the length of its block.
+  const spanDeclared = context.noteFigureSpanRead !== undefined;
+  if (spanDeclared) context.noteFigureSpanRead!(open.line + 1, end - 1);
   if (context.noteLineRead) {
     context.noteLineRead(open.line);
-    for (const n of members) context.noteLineRead(n);
+    if (!spanDeclared) for (const n of members) context.noteLineRead(n);
     if (close !== undefined) context.noteLineRead(close.line);
   }
 
   const verb = mode === "average" ? "averaged" : "added";
   const values: Value[] = [];
   for (const n of members) {
-    const v = getResult(n);
+    const v = getResult(n, spanDeclared);
     // A check line is a statement about the section, not one of its figures,
     // passed or failed alike, as `total above` treats it (#506).
     if (isCheckLine(getText(n) ?? "", v)) continue;

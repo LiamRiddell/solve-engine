@@ -1,7 +1,7 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { chargeAllocation } from "@solve-js/vm/AllocationBudget";
 import type { SymbolicNode, Rational } from "@solve-js/symbolic";
-import { decimalToString, type DecimalData } from "@solve-js/decimal";
+import { decimalToString, decimalWithinDigits, type DecimalData } from "@solve-js/decimal";
 import type { ValueSource, FrozenMark } from "@solve-js/vm/Provenance";
 
 /**
@@ -1087,11 +1087,24 @@ export function uomValue(n: number, unit: string): Value {
  * decimal the amount really is. Same-currency arithmetic reads `exact` to stay
  * exact, and the formatter reads it to round a half-cent the way a ledger does
  * rather than the way `toFixed` does on a double.
+ *
+ * The decimal is held to 34 significant digits and 34 places (see
+ * `decimalWithinDigits`); one whose whole part is longer than that is not held
+ * at all, and the Value carries only the double.
  */
 export function uomValueExact(n: number, unit: string, exact: DecimalData): Value {
-	chargeAllocation(bigIntAllocationBytes(exact.coef), "decimal bytes");
+	// Held to the ceiling a plain decimal has (#735). A chain of
+	// multiplications across lines builds a longer decimal on every line, and
+	// each line is a new evaluation, so nothing else bounds it. Past the
+	// ceiling the amount is rounded to 34 significant digits rather than
+	// dropped to the double, which keeps the half-cent rule exact for any
+	// amount a till could hold; a whole part longer than that keeps only the
+	// double.
+	const held = decimalWithinDigits(exact);
+	if (held === null) return uomValue(n, unit);
+	chargeAllocation(bigIntAllocationBytes(held.coef), "decimal bytes");
 	const v = uomValue(n, unit);
-	v.exact = exact;
+	v.exact = held;
 	return v;
 }
 
