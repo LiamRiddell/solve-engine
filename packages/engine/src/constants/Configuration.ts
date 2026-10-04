@@ -259,6 +259,18 @@ export interface ValidationConfig {
    * Has zero overhead when disabled, the O(n) paren-count scan is skipped.
    */
   readonly autoBalanceParens: boolean;
+  /**
+   * Read one `?` or `.` at the end of a line that is complete without it as
+   * the end of a sentence, so `what is 5 km in miles?` answers as
+   * `what is 5 km in miles` does. Never after `in`, `to`, `as` or `=`, where
+   * `?` already means something (`5 cm in ?` lists the units a length
+   * converts to), and never for a doubled `..` or `??`.
+   *
+   * Disabled by default for strict parsing, since a `.` straight after digits
+   * is then read as a full stop: `1.5.` answers 1.5. Enable for a chat or tool
+   * host whose lines are sentences. Costs nothing on a line that parses whole.
+   */
+  readonly allowTrailingPunctuation: boolean;
 }
 
 /**
@@ -553,6 +565,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
       maxComplexity: 500,
       maxNestingDepth: 50,
       autoBalanceParens: false,
+      allowTrailingPunctuation: false,
     },
     vm: {
       maxStackDepth: 200,
