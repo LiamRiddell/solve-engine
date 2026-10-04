@@ -1,12 +1,22 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
-import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+import { namesAUnit } from "@solve-js/vm/VMConversion";
 
-/** Whether a token is a unit spelling the engine knows. */
-function isUnit(token: Token | undefined): boolean {
+/**
+ * Whether a token is a unit spelling the engine knows, read the way the rest
+ * of the unit system reads one: in its own case, and from every table the
+ * conversion path consults (an extended unit such as `furlong`, a currency).
+ *
+ * This used to look the lower-cased text up in the generated table alone, so
+ * `km in 1 furlong` and `USD in 1 EUR` were refused, and `mW` would have been
+ * read as `mw` (#825).
+ */
+export function isReversibleUnit(token: Token | undefined): boolean {
 	if (token === undefined || token.type !== "UNIT") return false;
-	return UNIT_TABLE[(token.value ?? "").toLowerCase()] !== undefined;
+	const text = token.value;
+	if (typeof text !== "string" || text === "") return false;
+	return namesAUnit(text);
 }
 
 /** Articles that stand in for "one" in front of a unit. */
@@ -43,7 +53,7 @@ export function reversedConversionNormalizerRule(priority = 61): NormalizerRule 
 		match(tokens, pos): NormalizerMatch | null {
 			// A bare unit, at the very start of the expression. Anywhere else it
 			// is far more likely to be part of something already being parsed.
-			if (pos !== 0 || !isUnit(tokens[pos])) return null;
+			if (pos !== 0 || !isReversibleUnit(tokens[pos])) return null;
 			if (tokens[pos + 1]?.type !== "IN") return null;
 
 			const target = tokens[pos];
@@ -51,7 +61,7 @@ export function reversedConversionNormalizerRule(priority = 61): NormalizerRule 
 			if (third === undefined) return null;
 
 			// `days in 3 weeks`
-			if (third.type === "NUMBER" && isUnit(tokens[pos + 3])) {
+			if (third.type === "NUMBER" && isReversibleUnit(tokens[pos + 3])) {
 				return {
 					consumed: 4,
 					replacement: [third, tokens[pos + 3], tokens[pos + 1], target],
@@ -61,7 +71,7 @@ export function reversedConversionNormalizerRule(priority = 61): NormalizerRule 
 
 			// `seconds in a day`
 			const word = (third.text ?? third.value ?? "").toLowerCase();
-			if (third.type === "IDENT" && ARTICLES.has(word) && isUnit(tokens[pos + 3])) {
+			if (third.type === "IDENT" && ARTICLES.has(word) && isReversibleUnit(tokens[pos + 3])) {
 				return {
 					consumed: 4,
 					replacement: [

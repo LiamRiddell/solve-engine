@@ -13,6 +13,7 @@ import { combineSources, sourcesOfValues, type ValueSource } from "@solve-js/vm/
 import { valueInUnit } from "@solve-js/vm/MoneyExact";
 import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+import { isKnownUnit } from "@solve-js/lexer/units";
 
 /**
  * The provenance record of the exchange rate an operation between two
@@ -379,6 +380,26 @@ let unitNames: NameIndex | null = null;
  */
 export function unitNameIndex(): NameIndex {
     return unitNames ??= new NameIndex(Object.keys(UNIT_TABLE));
+}
+
+/** The unit spellings a reader can type after a number, indexed once on first use. */
+let typeableUnitNames: NameIndex | null = null;
+
+/**
+ * The unit spellings the lexer reads as a unit, as a {@link NameIndex}: what a
+ * "did you mean" searches when a word typed in an expression is not defined.
+ *
+ * The full table is the right index for a conversion target, where a word
+ * such as `points` is read as a unit however the lexer treats it. In place of
+ * a name it is not: `turn` and `turns` are both in the table and both left
+ * out of the vocabulary as ordinary English (see lexer/units.ts), so `1 turn`
+ * suggested `turns`, which fails the same way, and `1 turns` suggested `turn`
+ * (#825). A spelling the lexer does not claim is never offered here.
+ *
+ * @returns The shared index.
+ */
+export function typeableUnitNameIndex(): NameIndex {
+    return typeableUnitNames ??= new NameIndex(Object.keys(UNIT_TABLE).filter(isKnownUnit));
 }
 
 /**

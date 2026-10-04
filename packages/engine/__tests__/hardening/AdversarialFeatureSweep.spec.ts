@@ -61,6 +61,8 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	// A derived unit's prefix read in its own case after `as` and `in` (#824).
 	derivedPrefixes: ["X W as mW", "X W as MW", "X W as mw", "X V in MV", "X J as pJ"],
 	money: ["$X * 3", "$X split 3 ways", "X% of $200", "₹1,00,000 * X", "X INR + 12,34,567 INR"],
+	// The reversed conversion over every unit table, in each unit's own case (#825).
+	reversedConversion: ["km in X furlong", "mW in X W", "m in X mile"],
 	finance: ["npv of -1000, X, 400 at 10%", "irr of -1000, X, 400"],
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
 	solving: ["solve(x^2 = X, x)", "integral(x, x, 0, X)"],
