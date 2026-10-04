@@ -14,4 +14,4 @@ The walk only reached the output object, never `Object.prototype`, so no other o
 
 ## Verification
 
-`__tests__/hardening/ValueToJsonPrototypeKeys.spec.ts` (4 tests, 2 of which fail on the previous walk) covers the `__proto__` key, every word in `PROTOTYPE_WORDS` at two depths, bigints at depth, and empty and scalar payloads. The `Value.toJSON` and results-as-JSON specs still pass, and `typecheck`, `typecheck:tests`, `lint` and `lint:comments` are clean.
+`__tests__/hardening/ValueToJsonPrototypeKeys.spec.ts` (4 tests, 2 of which fail on the previous walk) covers the `__proto__` key, every word in `PROTOTYPE_WORDS` at two depths, bigints at depth, and empty and scalar payloads. The `Value.toJSON` and results-as-JSON specs still pass. The full suite (`npm run test:full`) passed, 22,905 of 22,909 tests in 705 suites with 4 skipped, as did `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:error-codes`, `lint:docs`, `lint:cheatsheet`, `lint:sidebar` and `lint:dispatch-size` (`executeBytecode` at 46,468 bytecode bytes). `npm run verify:ci` and the bundled-consumer contract were not run whole for this change; CI runs both.
