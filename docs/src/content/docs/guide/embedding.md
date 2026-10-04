@@ -19,7 +19,11 @@ The order of an ambiguous date such as `03/04/2026` is a separate setting,
 because it is a question of region rather than language: a German engine reads
 it as 3 April, as an English one does. It is `config.date.inputOrder`, and
 `'locale'` with `config.date.inputLocale` takes it from a region such as `en-US`
-(see [date literals](/syntax/date-literals/)).
+(see [date literals](/syntax/date-literals/)). The shape of the week, its
+weekend days and the day it starts on, is `config.date.weekend` and
+`config.date.firstDayOfWeek`, and otherwise comes from the region of the locale
+tag, as [working days](/syntax/working-days/#which-days-are-the-weekend) sets
+out.
 
 ## Configuration
 
@@ -39,6 +43,14 @@ const engine = createEngine({
 
 `config` is an `EngineConfigOverride`, merged per section over the defaults: name
 only the fields you change and every other field keeps its default.
+
+An option, a section or a setting the engine does not have is ignored, and the
+engine says so with a console warning that names the nearest real one, since a
+misspelling otherwise passes without a word. `createEngine({ network: { enabled:
+false } })` warns that `network` belongs under `config`, where it switches
+live data off; at the top level it did nothing, and live data stayed on. A
+warning rather than a refusal, because a host typed against a newer release may
+pass an option an older engine does not know.
 
 One section is a policy rather than a limit: `network.enabled`, on by default,
 is the switch a host uses to stop every live-data fetch (weather, currency, and
@@ -81,6 +93,27 @@ of memory). Two more bound a whole note rather than one line: the work its
 cross-line forms do in one pass, and the elements its answers keep. Each
 produces a clear error rather than hanging; the
 [security page](/guide/security/) lists every limit and its setting.
+
+## Knowing what registered
+
+A package that fails to register (an `engineVersion` the engine does not satisfy,
+a keyword a built-in owns, no name) is left out and logged by default, so one bad
+package cannot stop the engine being built. `strict: true` throws the package's
+coded `EngineError` from the constructor instead, and `onPackageError` is told
+of each failure while the rest register. `getRegisteredPackages()` lists the
+names that did register, in order:
+
+```ts
+const engine = createEngine({
+  extraPackages: [myPackage],
+  onPackageError: (pkg, error) => showToReader(`${pkg.name} did not load: ${error.message}`),
+});
+engine.getRegisteredPackages().includes("my-package");
+```
+
+A host whose readers see no console, a notes app, say, is the case for the
+callback: a package that did not load is otherwise met as a parse error on every
+line that uses it.
 
 ## Reading a result
 

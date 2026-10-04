@@ -93,6 +93,76 @@ describe("newly reachable units actually work end to end", () => {
   });
 });
 
+describe("the everyday units (#706)", () => {
+  /** Every spelling #706 added, and one line each that proves it converts. */
+  const EVERYDAY: readonly (readonly [string, string, number])[] = [
+    ["cal", "1 cal in J", 4.184],
+    ["calorie", "1 calorie in J", 4.184],
+    ["calories", "2 calories in J", 8.368],
+    ["kcal", "1 kcal in kJ", 4.184],
+    ["kilocalorie", "1 kilocalorie in cal", 1000],
+    ["kilocalories", "2 kilocalories in cal", 2000],
+    ["Cal", "1 Cal in kcal", 1],
+    ["Calorie", "1 Calorie in kcal", 1],
+    ["Calories", "2 Calories in kcal", 2],
+    ["BTU", "1 BTU in J", 1055.05585262],
+    ["Btu", "1 Btu in BTU", 1],
+    ["therm", "1 therm in BTU", 100_000],
+    ["therms", "2 therms in BTU", 200_000],
+    ["eV", "1 eV in J", 1.602176634e-19],
+    ["keV", "1 keV in eV", 1000],
+    ["MeV", "1 MeV in keV", 1000],
+    ["GeV", "1 GeV in MeV", 1000],
+    ["ohm", "1 ohm in k\u03A9", 0.001],
+    ["ohms", "1000 ohms in k\u03A9", 1],
+    ["\u03A9", "1 \u03A9 in ohm", 1],
+    ["k\u03A9", "1 k\u03A9 in ohm", 1000],
+    ["M\u03A9", "1 M\u03A9 in ohm", 1_000_000],
+    ["\u2126", "1 \u2126 in ohm", 1],
+    ["k\u2126", "1 k\u2126 in ohm", 1000],
+    ["M\u2126", "1 M\u2126 in ohm", 1_000_000],
+    ["coulomb", "3600 coulomb in Ah", 1],
+    ["coulombs", "1 Ah in coulombs", 3600],
+    ["Ah", "1 Ah in mAh", 1000],
+    ["mAh", "3000 mAh in Ah", 3],
+    ["rpm", "3000 rpm in Hz", 50],
+    ["RPM", "60 RPM in Hz", 1],
+    ["revolution", "1 revolution in deg", 360],
+    ["revolutions", "2 revolutions in deg", 720],
+    ["knot", "1 knot in kn", 1],
+    ["knots", "20 knots in km/h", 37.04],
+    ["AU", "1 AU in km", 149_597_870.7],
+    ["mmHg", "760 mmHg in Pa", 101_325.0144354],
+    ["volt", "1 volt in mV", 1000],
+    ["volts", "12 volts in V", 12],
+    ["amp", "1 amp in mA", 1000],
+    ["amps", "5 amps in A", 5],
+    ["ampere", "1 ampere in mA", 1000],
+    ["amperes", "2 amperes in A", 2],
+    ["L", "2 L in ml", 2000],
+    ["mol", "1 mol in mmol", 1000],
+    ["mmol", "500 mmol in mol", 0.5],
+  ];
+
+  test.each(EVERYDAY.map(([spelling]) => spelling))("%s is a known unit", (spelling) => {
+    expect(isKnownUnit(spelling)).toBe(true);
+  });
+
+  test.each(EVERYDAY.map(([, line, expected]) => [line, expected] as const))("%s", (line, expected) => {
+    const result = evaluate(line);
+    expect(result.type).toBe(ValueType.Uom);
+    expect(result.toNumber() / expected).toBeCloseTo(1, 9);
+  });
+
+  test("the lower-case au, the word mole and the knot's kt are not the new units", () => {
+    // `au` starts `au pair`, `mole` is an animal, and `kt` stays the kilotonne.
+    expect(isKnownUnit("au")).toBe(false);
+    expect(isKnownUnit("mole")).toBe(false);
+    expect(isKnownUnit("moles")).toBe(false);
+    expect(evaluate("1 kt in kg").toNumber()).toBe(1_000_000);
+  });
+});
+
 describe("deliberate exclusions", () => {
   test("the exclusion list is not silently empty", () => {
     expect(excludedUnitSpellings.size).toBeGreaterThan(10);
@@ -130,8 +200,9 @@ describe("deliberate exclusions", () => {
 describe("single-character units", () => {
   test("only the grandfathered ones are admitted", () => {
     // `N` (newton) and `J` (joule) joined the set for dimensional arithmetic
-    // (`50 N`, `200 J`); see issue #191.
-    for (const unit of ["m", "g", "s", "h", "d", "l", "b", "B", "C", "F", "K", "W", "t", "N", "J"]) {
+    // (`50 N`, `200 J`); see issue #191. `L`, the litre's capital, joined for
+    // #706, so `2 L` is two litres as `2 l` always was.
+    for (const unit of ["m", "g", "s", "h", "d", "l", "b", "B", "C", "F", "K", "W", "t", "N", "J", "L"]) {
       expect(isKnownUnit(unit)).toBe(true);
     }
   });
@@ -139,9 +210,18 @@ describe("single-character units", () => {
   test("the rest stay identifiers, so placeholder names keep working", () => {
     // `x.y` and `x == y` are written all over the test suite. A one-letter
     // unit is indistinguishable from a placeholder name.
-    for (const letter of ["r", "a", "y", "c", "p", "S", "L", "R", "x", "n"]) {
+    for (const letter of ["r", "a", "y", "c", "p", "S", "R", "x", "n"]) {
       expect(isKnownUnit(letter)).toBe(false);
     }
+  });
+
+  test("the ohm's symbol is the one single character outside the base table, in both code points", () => {
+    // U+03A9 GREEK CAPITAL LETTER OMEGA and U+2126 OHM SIGN (#706). It comes
+    // from ExtendedUnits.ts, which the single-letter rule does not govern, and
+    // it is no placeholder anybody writes.
+    expect(isKnownUnit("\u03A9")).toBe(true);
+    expect(isKnownUnit("\u2126")).toBe(true);
+    expect(isKnownUnit("\u03C9")).toBe(false);
   });
 
   test("each excluded letter still has an unambiguous longer spelling", () => {

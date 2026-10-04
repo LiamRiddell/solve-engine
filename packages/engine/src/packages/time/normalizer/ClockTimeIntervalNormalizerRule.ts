@@ -30,7 +30,10 @@ function intervalToken(source: Token[], minutes: string): Token {
  * for, the engine's `TokenNormalizer.normalize()` is multi-pass
  * specifically to support this kind of cascading fusion.
  *
- * Only the unambiguous `to` form is handled, SoulverCore's own docs flag
+ * `until` reads as `to` (`9am until 5pm`, #704): between two clock times it
+ * can mean nothing else, and `days until` never sees two clock times.
+ *
+ * Only the unambiguous `to` and `until` forms are handled, SoulverCore's own docs flag
  * a bare `-` between two clock times as genuinely ambiguous (`5pm - 7pm`
  * read as a range vs. `5pm - 2pm` read as subtraction) and recommend
  * `to`; this package does the same rather than guessing.
@@ -41,13 +44,13 @@ export function clockTimeIntervalNormalizerRule(priority = 66): NormalizerRule {
     priority,
     // Derived from this rule's own opening guards; see RuleSlot on why an
     // over-broad slot is safe and an over-narrow one is not.
-    shape: [{ types: ["CLOCK_TIME"] }, { types: ["TO"] }],
+    shape: [{ types: ["CLOCK_TIME"] }, { types: ["TO", "UNTIL"] }],
     match(tokens, pos): NormalizerMatch | null {
       const start = tokens[pos];
       const to = tokens[pos + 1];
       const end = tokens[pos + 2];
       if (start.type !== "CLOCK_TIME") return null;
-      if (to?.type !== "TO") return null;
+      if (to?.type !== "TO" && to?.type !== "UNTIL") return null;
       if (end?.type !== "CLOCK_TIME") return null;
 
       return {

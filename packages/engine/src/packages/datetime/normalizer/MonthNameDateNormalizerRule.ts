@@ -1,5 +1,6 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
+import { lowerCased } from "@solve-js/normalizer/RuleIndex";
 import { buildDateToken, faultMatch, runText } from "./DateLiteralNormalizerRule";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
@@ -41,11 +42,24 @@ const CONVERSION_KEYWORDS: ReadonlySet<string> = new Set(["AS", "IN", "TO"]);
  * @param before - The token before it, so a converter name after `as`, `in` or
  * `to` stays the conversion it names.
  */
-function monthOf(token: Token | undefined, before?: Token): number {
+export function monthOf(token: Token | undefined, before?: Token): number {
 	if (token === undefined || !MONTH_TOKEN_TYPES.has(token.type)) return 0;
 	if (token.type === "CONVERTER_NAME" && before !== undefined && CONVERSION_KEYWORDS.has(before.type)) return 0;
-	return MONTHS[(token.text ?? token.value ?? "").toLowerCase()] ?? 0;
+	// Own keys only, through the Map below: `5 __proto__` found Object.prototype
+	// here and was refused as a date whose month was undefined.
+	return MONTH_NUMBERS.get(lowerCased(token.text ?? token.value ?? "")) ?? 0;
 }
+
+/**
+ * {@link MONTHS} as a `Map`, built once, for {@link monthOf}.
+ *
+ * This rule is tried at every number and word of a line, prose included. A
+ * `Map` holds only its own keys, so `constructor` is not a month, and a lookup
+ * reads no global: `Object.prototype.hasOwnProperty.call` reads `Object` on
+ * each call, which inside a `vm` context (the Jest harness the benchmarks run
+ * in) is slow. The word is lower-cased only when it has a capital to lower.
+ */
+const MONTH_NUMBERS: ReadonlyMap<string, number> = new Map(Object.entries(MONTHS));
 
 /** A pure digit string, so hex and scientific literals are never fused. */
 const PLAIN_INTEGER = /^\d+$/;

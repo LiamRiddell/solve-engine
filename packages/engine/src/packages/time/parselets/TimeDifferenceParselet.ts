@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { tryConsumeZoneReference } from "./shared/ZoneReference";
+import { tryParseOnDate } from "./shared/OnDate";
 import { TIME_DIFFERENCE_FN } from "./TimezonePluginFunctions";
 
 /**
@@ -25,6 +26,12 @@ import { TIME_DIFFERENCE_FN } from "./TimezonePluginFunctions";
  * open-ended `expr`, so there's no risk of it swallowing the "and", the
  * bindingPower guard other packages need for this collision doesn't
  * apply here.
+ *
+ * An `on <date>` clause after the second zone (#697) asks for the gap on that
+ * day rather than now, since the gap moves when either place changes its
+ * clocks: `time difference between London and Tokyo on 1 March 2027`. The date
+ * is pushed after the four strings, so the handler tells the two shapes apart
+ * by its argument count.
  */
 export class TimeDifferenceParselet implements PrefixParselet {
   readonly category = "Time";
@@ -53,6 +60,7 @@ export class TimeDifferenceParselet implements PrefixParselet {
     builder.emitString(zone1.displayName);
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(zone2.displayName);
-    builder.emitPluginCall(TIME_DIFFERENCE_FN, 4);
+    const dated = tryParseOnDate(parser, builder);
+    builder.emitPluginCall(TIME_DIFFERENCE_FN, dated ? 5 : 4);
   }
 }

@@ -147,7 +147,7 @@ export type SerializedValue = SerializedValueSidecars & (
 	| { t: ValueType.Hex; v: SerializedNumber | string; big?: boolean; base?: string }
 	| { t: ValueType.BigInt; v: string }
 	| { t: ValueType.String; v: string }
-	| { t: ValueType.Datetime; v: SerializedNumber; g?: DatetimeGrain; z?: string }
+	| { t: ValueType.Datetime; v: SerializedNumber; g?: DatetimeGrain; z?: string; ta?: SerializedNumber }
 	| { t: ValueType.Percentage; v: SerializedNumber }
 	| { t: ValueType.Uom; v: SerializedNumber; unit: string; exact?: SerializedDecimal }
 	| { t: ValueType.Matrix; rows: number; cols: number; data: (SerializedNumber | boolean)[] }
@@ -359,6 +359,7 @@ function serializeValueBody(value: Value, where: string): SerializedValue {
 			const out: Extract<SerializedValue, { t: ValueType.Datetime }> = { t: ValueType.Datetime, v: encodeNumber(value.value as number) };
 			if (value.grain !== undefined) out.g = value.grain;
 			if (value.zone !== undefined) out.z = value.zone;
+			if (value.timeAnchor !== undefined) out.ta = encodeNumber(value.timeAnchor);
 			return out;
 		}
 		case ValueType.Percentage:
@@ -427,6 +428,7 @@ function deserializeValueBody(sv: SerializedValue): Value {
 			const v = new Value(ValueType.Datetime, decodeNumber(sv.v));
 			if (sv.g !== undefined) v.grain = sv.g;
 			if (sv.z !== undefined) v.zone = sv.z;
+			if (sv.ta !== undefined) v.timeAnchor = decodeNumber(sv.ta);
 			return v;
 		}
 		case ValueType.Percentage:
@@ -854,10 +856,11 @@ function assertValueShape(sv: unknown, where: string): void {
 			// Both sidecars are optional, so a snapshot written before they
 			// existed passes here unchanged; present, they must still be the
 			// strings a restore will assign to a `Value`.
-			if (sv.g !== undefined && sv.g !== "date" && sv.g !== "datetime" && sv.g !== "instant") {
-				malformed(`${where}.g`, 'one of "date", "datetime" or "instant"', sv.g);
+			if (sv.g !== undefined && sv.g !== "date" && sv.g !== "datetime" && sv.g !== "instant" && sv.g !== "time") {
+				malformed(`${where}.g`, 'one of "date", "datetime", "instant" or "time"', sv.g);
 			}
 			if (sv.z !== undefined && typeof sv.z !== "string") malformed(`${where}.z`, "a zone reference", sv.z);
+			if (sv.ta !== undefined && !isSerializedNumber(sv.ta)) malformed(`${where}.ta`, "a number", sv.ta);
 			return;
 		case ValueType.Percentage:
 			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);

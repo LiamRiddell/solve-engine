@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { monthOf } from "../normalizer/MonthNameDateNormalizerRule";
 
 /**
  * `<ordinal> <weekday> of <month>` (wiki: Datetime, "2nd Tuesday of March
@@ -25,13 +26,27 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  * A tight binding power keeps a trailing conversion (`... as weekday`) or offset
  * (`... + 1 week`) applying to the resulting date rather than being folded into
  * the anchor.
+ *
+ * A month name with no year (`2nd Tuesday of March`) is read as this year's,
+ * the year `9 March` takes.
  */
 export class NthWeekdayParselet implements PrefixParselet {
 	readonly category = "Date/Time";
 
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-		parser.consume("OF"); // the `of` the normalizer rule left in place
-		parser.parseExpression(BindingPower.Postfix, builder); // month anchor -> Datetime
+		const of = parser.consume("OF"); // the `of` the normalizer rule left in place
+		const month = monthOf(parser.peek(), of);
+		if (month > 0) {
+			// A month with no year (`2nd Tuesday of March`) is this year's, as
+			// `9 March` is (#704).
+			parser.consume();
+			builder.emitOpcode(OpCode.DATE_NOW);
+			builder.emitOpcode(OpCode.PUSH_NUMBER);
+			builder.emitNumber(month - 1);
+			builder.emitPluginCall("monthThisYear", 2);
+		} else {
+			parser.parseExpression(BindingPower.Postfix, builder); // month anchor -> Datetime
+		}
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(token.value); // "<n>:<dow>" or "last:<dow>"
 		builder.emitPluginCall("nthWeekdayOfMonth", 2);

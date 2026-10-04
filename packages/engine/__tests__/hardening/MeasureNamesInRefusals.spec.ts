@@ -34,6 +34,8 @@ const REPRESENTATIVE: Readonly<Record<string, string>> = {
 	speed: "mph", pace: "min_km", dataRate: "Mbps", cssLength: "px", voltage: "V", current: "A",
 	apparentPower: "VA", reactivePower: "kvar", reactiveEnergy: "varh", volumeFlowRate: "lpm",
 	fuelEconomy: "mpg", fuelConsumption: "l100km", partsPer: "ppm",
+	// The measures #706 added.
+	resistance: "ohm", charge: "Ah", amountOfSubstance: "mol",
 };
 
 /** The message a line refuses with, whether it throws or answers an error value. */
@@ -71,6 +73,9 @@ describe("every measure has a reader's name", () => {
 		expect(describeMeasure("VA")).toBe("apparent power");
 		expect(describeMeasure("cd")).toBe("luminous intensity");
 		expect(describeMeasure("s")).toBe("duration");
+		expect(describeMeasure("mol")).toBe("amount of substance");
+		expect(describeMeasure("mAh")).toBe("charge");
+		expect(describeMeasure("\u03A9")).toBe("resistance");
 	});
 });
 

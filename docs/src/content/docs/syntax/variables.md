@@ -40,6 +40,18 @@ m/s^2 // 0.75
 9.81 m/s^2 // 9.81 m/s²
 ```
 
+The capital `L` is the litre in the same way, so a variable named `L` is read as
+the variable on its own and after an operator, and straight after a number it is
+the unit: `2L` is two litres, not twice `L`. Write `2 * L` for the product. The
+same goes for the other unit words, such as `amp`, `volts` and `therm`.
+
+```solve-doc
+L = 3
+L * 2 // 6
+2 * L // 6
+2L // 2.00 L
+```
+
 A slash is an operator too, and a bare unit after one is otherwise read as a
 rate: `100 / t` on its own is a hundred per tonne. When a variable of that name
 is defined above the line, the slash divides by it instead, as it would by any

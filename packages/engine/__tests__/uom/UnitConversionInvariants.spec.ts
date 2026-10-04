@@ -57,11 +57,21 @@ describe("unit vocabularies stay disjoint", () => {
     const shared = EXTENDED_NAMES.filter((unit) => baseMeasures.has(EXTENDED_UNITS[unit].measure));
     expect(shared.length).toBeGreaterThan(0);
 
+    // Every base table measure states its ratios against one unit, the one whose
+    // ratio is exactly one: the metre, the gram, and since #706 the joule, the
+    // pascal and the hertz, which the extended table's energy, pressure and
+    // frequency units extend.
+    const baseUnitOf = (measure: string): string => {
+      const kind = Object.entries(MEASURE_KIND_NAMES).find(([, name]) => name === measure)![0];
+      return ALL_UNITS.find((unit) => String(UNIT_TABLE[unit][0]) === kind && UNIT_TABLE[unit][1] === 1)!;
+    };
+    expect(new Set(shared.map((unit) => EXTENDED_UNITS[unit].measure))).toEqual(
+      new Set(["length", "mass", "energy", "pressure", "frequency"]),
+    );
+
     for (const unit of shared) {
       const { measure, toBase } = EXTENDED_UNITS[unit];
-      // Every base table measure states its ratios against one unit, and for
-      // the two shared here that unit is the metre and the gram.
-      const baseUnit = measure === "length" ? "m" : "g";
+      const baseUnit = baseUnitOf(measure);
       expect(getMeasure(baseUnit)).toBe(measure);
       expect(canConvert(unit, baseUnit)).toBe(true);
       expect(canConvert(baseUnit, unit)).toBe(true);

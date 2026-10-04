@@ -99,6 +99,57 @@ shape with that one `:` guard. If your rule needs a different lookbehind, a deep
 lookahead, or any value logic beyond "is this word one of mine", write a
 [`normalizerRules`](#when-a-word-must-stay-a-variable-too) entry by hand instead.
 
+## Words around their operands: `definePhrasePattern`
+
+A phrase such as `halfway between 10 and 20` has words on both sides of its
+values: `halfway` starts it, `between` and `and` sit between the operands. The
+leading word is a keyword the lexer turns into a token of its own, and the rest
+is the parselet's grammar, which `definePhrasePattern` (from
+`solve-engine/parser`) builds from a declaration: a list of slots, each a
+keyword token or an expression, and what to emit once they are all read.
+
+```ts
+import type { IEnginePackage } from "solve-engine";
+import { definePhrasePattern, BindingPower, OpCode } from "solve-engine/parser";
+
+// `halfway between A and B` is the midpoint, (A + B) / 2.
+const halfway = definePhrasePattern({
+  category: "Halfway",
+  alternatives: [
+    {
+      slots: [
+        { kind: "keyword", tokenTypes: ["BETWEEN"] },
+        { kind: "expr", bindingPower: BindingPower.Conjunction },
+        { kind: "keyword", tokenTypes: ["AND_CONJ"] },
+        { kind: "expr", bindingPower: BindingPower.Conjunction },
+      ],
+      emit: (builder) => {
+        builder.emitOpcode(OpCode.ADD);
+        builder.emitOpcode(OpCode.PUSH_NUMBER);
+        builder.emitNumber(2);
+        builder.emitOpcode(OpCode.DIV);
+      },
+    },
+  ],
+});
+
+export const HALFWAY: IEnginePackage = {
+  name: "halfway",
+  lexerVocabulary: { keywords: { halfway: "HALFWAY" } },
+  prefixParselets: { HALFWAY: halfway },
+  tokenCategories: { HALFWAY: "function" },
+};
+```
+
+With it registered, `halfway between 10 and 20` is 15, and `halfway between $10
+and $20` is `$15.00`, since the operands are ordinary expressions. Each
+expression slot is parsed at the binding power it names: `Conjunction` stops it
+at the `and`, which would otherwise be read as part of the first value. A
+phrase with more than one wording lists an alternative for each, and the first
+slot of every alternative must be a keyword, which is how the parselet chooses
+between them from the next token alone; a line that matches none is refused
+with the keywords it expected (`halfway 10 and 20` names `BETWEEN`).
+
 ## When a word must stay a variable too
 
 `factor(x^2-4)` should call the algebra solver, but `:factor = 1.5` should still

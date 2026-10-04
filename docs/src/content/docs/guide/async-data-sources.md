@@ -12,42 +12,115 @@ This is the async half of a package. It assumes you have read
 two things: a piece of **syntax** that triggers it (a symbol, a function name, a
 phrase) and a **resolver** that fetches the data. This page is the resolver.
 
-## The contract
+## The short way: createQueryResolver
 
-A resolver implements
-[`IAsyncResolver`](/api/resolvers/interfaces/iasyncresolver/): a namespace, a
-`preflight` check, and a `destroy` for cleanup.
+Most data sources are a question and a fetch: a word on the line names what to
+look up, and a request answers it. `createQueryResolver` builds the resolver for
+that shape and the plugin function that reads its answers back, as a pair, so the
+package supplies only the fetch. It handles the parts every live lookup needs:
+the bytecode scan that finds the question, the cache and its expiry, a timeout,
+a cooldown after a failure, how many requests run at once, and the record of
+where each value came from.
+
+A complete package, where `fxrate EUR` asks your own service for a rate:
 
 ```ts
-import type { IAsyncResolver, AsyncCheckResult } from "solve-engine/resolvers";
+import type { IEnginePackage } from "solve-engine";
+import { createQueryResolver } from "solve-engine/resolvers";
+import { OpCode, type PrefixParselet } from "solve-engine/parser";
+import { uomValue } from "solve-engine/vm";
+
+// `fxrate EUR` asks your own service for today's rate into euros.
+const { resolver, pluginFunction } = createQueryResolver({
+  namespace: "myrates",
+  packageName: "my-rates",
+  functionName: "fxrate",
+  fetchQuery: async (currency, signal) => {
+    const response = await fetch(`https://example.com/rate/${currency}`, { signal });
+    const body = (await response.json()) as { value: number };
+    return uomValue(body.value, currency);
+  },
+});
+
+// The syntax: `fxrate` then a currency code, compiled to a call the resolver answers.
+const fxrateParselet: PrefixParselet = {
+  category: "Rates",
+  parse(parser, _token, builder) {
+    const currency = parser.consume();
+    builder.emitOpcode(OpCode.PUSH_STRING);
+    builder.emitString(String(currency.value));
+    builder.emitPluginCall("fxrate", 1);
+  },
+};
+
+export const MY_RATES: IEnginePackage = {
+  name: "my-rates",
+  lexerVocabulary: { keywords: { fxrate: "MYRATES_FXRATE" } },
+  prefixParselets: { MYRATES_FXRATE: fxrateParselet },
+  pluginFunctions: { fxrate: pluginFunction },
+  asyncResolvers: [resolver],
+  tokenCategories: { MYRATES_FXRATE: "function" },
+};
+```
+
+`packageName` and `functionName` name the plugin function the resolver answers
+for, the same name the parselet passes to `emitPluginCall`, and the package
+registers `pluginFunction` under it. A line `fxrate EUR` shows as pending until
+the fetch lands, then as the rate. The engine refuses to register a package whose
+resolver names a function its `pluginFunctions` does not declare, since the call
+the resolver waits for would never come.
+
+The older form names the function by its plugin index, `pluginFunctionIndex`,
+which the built-in weather, stocks, crypto and knowledge packages still use; give
+one form or the other, and anything else is refused when the resolver is built.
+A `fetchQuery` that throws, or resolves to something that is not a `Value`, is
+answered as a failed fetch, with an error on the line.
+
+## The contract
+
+A resolver written by hand implements
+[`IAsyncResolver`](/api/resolvers/interfaces/iasyncresolver/): a namespace, a
+`preflight` check, and a `destroy` for cleanup. Reach for it when a lookup is not
+one question and one fetch, the way the currency resolver reads a pair of
+currencies from either side of `in`.
+
+```ts
+import type { Token } from "solve-engine/lexer";
+import type { BytecodeProgram } from "solve-engine/parser";
+import type { AsyncCheckResult, IAsyncResolver } from "solve-engine/resolvers";
 import { uomValue, type Value } from "solve-engine/vm";
+
+interface Pair {
+  from: string;
+  to: string;
+}
+
+// Your syntax, your parse: the currency pair this line asks about, or null.
+declare function readPairFromTokens(tokens: Token[]): Pair | null;
 
 class RatesResolver implements IAsyncResolver {
   readonly namespace = "myrates";
+  private readonly cache = new Map<string, Value>();
 
-  preflight(tokens, bytecode, packageId, signal): AsyncCheckResult | null {
-    const pair = readPairFromTokens(tokens); // your syntax, your parse
-    if (!pair) return null;                  // this line is not for us
+  preflight(tokens: Token[], _bytecode: BytecodeProgram, packageId: string, signal: AbortSignal): AsyncCheckResult | null {
+    const pair = readPairFromTokens(tokens);
+    if (!pair) return null;                    // this line is not for us
 
     const queryKey = `${packageId}:rates:${pair.from}:${pair.to}`;
     if (this.cache.has(queryKey)) return null; // already have it, run synchronously
 
-    return {
-      queryKey,
-      packageId,
-      signal,
-      resolver: this.fetchRate(pair, signal),
-    };
+    return { queryKey, packageId, signal, resolver: this.fetchRate(queryKey, pair, signal) };
   }
 
-  private async fetchRate(pair, signal): Promise<Value> {
-    const res = await fetch(`https://example.com/rate/${pair.from}/${pair.to}`, { signal });
-    const rate = await res.json();
-    this.cache.set(/* queryKey */, rate);
-    return uomValue(rate.value, pair.to);
+  private async fetchRate(queryKey: string, pair: Pair, signal: AbortSignal): Promise<Value> {
+    const response = await fetch(`https://example.com/rate/${pair.from}/${pair.to}`, { signal });
+    const body = (await response.json()) as { value: number };
+    const rate = uomValue(body.value, pair.to);
+    this.cache.set(queryKey, rate);
+    return rate;
   }
 
-  destroy() {
+  destroy(): void {
     this.cache.clear();
   }
 }
@@ -170,7 +243,8 @@ the number:
 ```ts
 const { resolver, pluginFunction } = createQueryResolver({
   namespace: "tides",
-  pluginFunctionIndex: TIDES_FN,
+  packageName: "my-tides",
+  functionName: "tide",
   fetchQuery: (port, signal) => fetchTide(port, signal),
   maxConcurrent: 2,          // this service allows two connections per client
   timeoutMs: 8_000,

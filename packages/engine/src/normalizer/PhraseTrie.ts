@@ -52,8 +52,13 @@ import { lowerCased } from "./RuleIndex";
  * to a node spells out a partial or complete phrase.
  */
 interface TrieNode {
-	/** Child nodes keyed by next word (all lowercase). */
-	children: Map<string, TrieNode>;
+	/**
+	 * Child nodes keyed by next word (all lowercase), or null for a node no
+	 * longer phrase continues from. Most nodes are leaves, and every engine
+	 * builds its own trie, so a leaf holds no empty Map: that was about half a
+	 * kilobyte a phrase, per engine.
+	 */
+	children: Map<string, TrieNode> | null;
 	/**
 	 * If this node completes a phrase, the terminal metadata.
 	 * A node can be both terminal AND have children. This handles
@@ -124,7 +129,7 @@ export class PhraseTrie {
 		if (this.root.has(firstWord)) {
 			node = this.root.get(firstWord)!;
 		} else {
-			node = { children: new Map(), terminal: null };
+			node = { children: null, terminal: null };
 			this.root.set(firstWord, node);
 		}
 
@@ -137,10 +142,13 @@ export class PhraseTrie {
 		// Walk/insert remaining words
 		for (let i = 1; i < words.length; i++) {
 			const word = words[i];
-			if (!node.children.has(word)) {
-				node.children.set(word, { children: new Map(), terminal: null });
+			node.children ??= new Map();
+			let child = node.children.get(word);
+			if (child === undefined) {
+				child = { children: null, terminal: null };
+				node.children.set(word, child);
 			}
-			node = node.children.get(word)!;
+			node = child;
 		}
 
 		node.terminal = { tokenType, phrase, consumed: words.length };
@@ -250,7 +258,7 @@ export class PhraseTrie {
 			if (node.terminal) {
 				result[path.join(' ')] = node.terminal.tokenType;
 			}
-			for (const [word, child] of node.children) {
+			for (const [word, child] of node.children ?? []) {
 				collect(child, [...path, word]);
 			}
 		};

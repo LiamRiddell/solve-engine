@@ -156,9 +156,11 @@ describe("forms that already worked are unchanged", () => {
 		expect(evaluate("5^-1").toNumber()).toBeCloseTo(0.2, 12);
 	});
 
-	test("a unit target the lexer does not mark is left to the outer conversion: 1 m3 in L", () => {
+	test("a unit target the lexer does not mark is left to the outer conversion: 100 EUR in €", () => {
+		// `1 m3 in L` was the example here until #706 made `L` a lexer unit; it
+		// converts the same either way.
 		expectQuantity("1 m3 in L", 1_000, "L");
-		// A currency symbol is not a lexer unit either, and used to be a parse error.
+		// A currency symbol is not a lexer unit, and used to be a parse error.
 		const euros = evaluate("100 EUR in €");
 		expect(euros.unit).toBe("EUR");
 		expect(euros.toNumber()).toBe(100);

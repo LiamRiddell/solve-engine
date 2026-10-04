@@ -1,6 +1,24 @@
 import { PrefixParselet, InfixParselet } from "@solve-js/parser/Parselet";
 import { tokenTypeId } from "@solve-js/lexer/Token";
-import { BindingPower } from "@solve-js/parser/BindingPower";
+import { BindingPower, isFastPathToken } from "@solve-js/parser/BindingPower";
+
+/**
+ * The warning for a second parselet registered for one token type. On a token
+ * the parser reads on its own fast path, neither parselet runs, and the new one
+ * is the one the package author expects to, so the warning says that (#719);
+ * elsewhere the new one replaces the old.
+ */
+function overwriteWarning(position: "prefix" | "infix", tokenType: string, previous: string, next: string): string {
+	const Position = position === "prefix" ? "Prefix" : "Infix";
+	if (isFastPathToken(tokenType, position)) {
+		return `[ParseletRegistry] ${Position} parselet for token "${tokenType}" (category: "${next}") will never run: ` +
+			`the parser reads "${tokenType}" itself, before it consults the registry, so neither it nor the parselet it ` +
+			`replaces (category: "${previous}") is reached. Give the grammar a token type of its own.`;
+	}
+	return `[ParseletRegistry] ${Position} parselet for token "${tokenType}" is already registered ` +
+		`(category: "${previous}"). The new parselet (category: "${next}") replaces it, so the previous one ` +
+		`is now unreachable. Two packages may be claiming the same token type.`;
+}
 
 /**
  * The one binding-power field a parselet may expose beyond what its interface
@@ -73,12 +91,7 @@ export class ParseletRegistry {
 	registerPrefix(tokenType: string, parselet: PrefixParselet): void {
 		const existing = this.prefixParselets.get(tokenType);
 		if (existing && existing !== parselet) {
-			console.warn(
-				`[ParseletRegistry] Prefix parselet for token "${tokenType}" is already registered ` +
-				`(category: "${existing.category ?? "unknown"}"). Overwriting with a new ` +
-				`parselet (category: "${parselet.category ?? "unknown"}") — the previous ` +
-				`parselet is now unreachable. Two packages may be claiming the same token type.`,
-			);
+			console.warn(overwriteWarning("prefix", tokenType, existing.category ?? "unknown", parselet.category ?? "unknown"));
 		}
 		this.prefixParselets.set(tokenType, parselet);
 		this.prefixById.set(tokenTypeId(tokenType), parselet);
@@ -88,12 +101,7 @@ export class ParseletRegistry {
 	registerInfix(tokenType: string, parselet: InfixParselet): void {
 		const existing = this.infixParselets.get(tokenType);
 		if (existing && existing !== parselet) {
-			console.warn(
-				`[ParseletRegistry] Infix parselet for token "${tokenType}" is already registered ` +
-				`(category: "${existing.category ?? "unknown"}"). Overwriting with a new ` +
-				`parselet (category: "${parselet.category ?? "unknown"}") — the previous ` +
-				`parselet is now unreachable. Two packages may be claiming the same token type.`,
-			);
+			console.warn(overwriteWarning("infix", tokenType, existing.category ?? "unknown", parselet.category ?? "unknown"));
 		}
 		this.infixParselets.set(tokenType, parselet);
 		this.infixById.set(tokenTypeId(tokenType), parselet);

@@ -32,6 +32,7 @@ import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { EXTENDED_UNITS } from "@solve-js/uom/ExtendedUnits";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { enLocale } from "@solve-js/constants/locales/en";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /** Only the units that come from the conversion table, which is what the gates govern. */
 const ADMITTED_BASE_UNITS = [...knownUnits].filter((unit) => unit in UNIT_TABLE);
@@ -195,6 +196,71 @@ describe("gate 4: units are not ordinary English words", () => {
     for (const prose of ["there are 3 options", "5 point plan", "grade 5 exam"]) {
       const types = tokenTypes(prose);
       expect(types).not.toContain("UNIT");
+    }
+  });
+});
+
+describe("the everyday units (#706) pass the same four gates", () => {
+  /**
+   * The spellings #706 added. Most come from ExtendedUnits.ts, which the gates
+   * above do not sweep (they govern the generated table), so they are named
+   * here. `revolution` and `revolutions` are in the generated table and are
+   * swept above as well; `L` is the litre's capital, admitted as a single
+   * character.
+   */
+  const EVERYDAY_SPELLINGS = [
+    "cal", "calorie", "calories", "kcal", "kilocalorie", "kilocalories", "Cal", "Calorie", "Calories",
+    "BTU", "Btu", "therm", "therms", "eV", "keV", "MeV", "GeV",
+    "ohm", "ohms", "\u03A9", "k\u03A9", "M\u03A9", "\u2126", "k\u2126", "M\u2126",
+    "coulomb", "coulombs", "Ah", "mAh", "rpm", "RPM", "revolution", "revolutions",
+    "knot", "knots", "AU", "mmHg", "volt", "volts", "amp", "amps", "ampere", "amperes", "L", "mol", "mmol",
+  ];
+
+  test("each is admitted", () => {
+    expect(EVERYDAY_SPELLINGS.filter((unit) => !knownUnits.has(unit))).toEqual([]);
+  });
+
+  test("gate 1: none is a locale keyword or a single-word package phrase", () => {
+    const keywords = new Set(Object.keys(enLocale.keywordMap));
+    const phraseWords = new Set<string>();
+    for (const enginePackage of BUILTIN_PACKAGES) {
+      for (const phrase of Object.keys(enginePackage.phrases ?? {})) {
+        if (!phrase.includes(" ")) phraseWords.add(phrase);
+      }
+    }
+    const collisions = EVERYDAY_SPELLINGS.filter(
+      (unit) => keywords.has(unit.toLowerCase()) || phraseWords.has(unit) || phraseWords.has(unit.toLowerCase()),
+    );
+    expect(collisions).toEqual([]);
+  });
+
+  test("gate 2: each lexes as a unit after a number, with a space and without", () => {
+    const stolen: string[] = [];
+    for (const unit of EVERYDAY_SPELLINGS) {
+      for (const line of [`1 ${unit}`, `4${unit}`]) {
+        const types = tokenTypes(line);
+        if (types.length !== 2 || types[0] !== "NUMBER" || types[1] !== "UNIT") stolen.push(`${line} lexed as [${types.join(", ")}]`);
+      }
+    }
+    expect(stolen).toEqual([]);
+  });
+
+  test("gate 3: none is a placeholder name", () => {
+    const placeholders = new Set(["x", "y", "z", "n", "i", "j", "k", "v", "w", "u", "p", "q", "r", "a", "c", "e", "f", "foo", "baz", "tmp", "val"]);
+    expect(EVERYDAY_SPELLINGS.filter((unit) => placeholders.has(unit))).toEqual([]);
+  });
+
+  test("gate 4: the English words among them only become units after a number", () => {
+    // `amp`, `volts`, `revolution`, `knots` and `calories` are English. A
+    // sentence that uses one with no number before it keeps the word out of
+    // any arithmetic, and one with a number before it is refused rather than
+    // answered, so no prose line turns into a figure.
+    for (const prose of ["the amp was loud", "the revolution was televised", "tie a knot in it", "count the calories"]) {
+      expect(tokenTypes(prose)[0]).toBe("IDENT");
+    }
+    for (const line of ["3 volts of power", "tie 2 knots in the rope", "I ate 2000 calories today", "the revolution of 1848"]) {
+      const value = newTrackedEngine().parseDocument(line).lines[0].result;
+      expect(value ?? null).toBeNull();
     }
   });
 });

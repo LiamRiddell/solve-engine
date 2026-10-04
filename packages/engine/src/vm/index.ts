@@ -1,6 +1,6 @@
 export { DependencyGraph } from "./DependencyGraph";
 export { ScopeManager } from "./ScopeManager";
-export { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, matrixValue, rowVectorValue, colVectorValue, rangeValue, errorValue } from "./Value";
+export { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, matrixValue, rowVectorValue, colVectorValue, rangeValue, errorValue, boolValue, percentageValue } from "./Value";
 export type { MatrixData, MatrixEntry, RangeData } from "./Value";
 // Provenance, for a package that stamps its own sources on what it fetches
 // (a historical figure's day, say), and the merge rule the VM applies.

@@ -194,6 +194,28 @@ date in Vancouver // March 11, 2026
 time difference between Seattle and Moscow // Moscow is 10 hours ahead of Seattle
 ```
 
+The gap between two places is not fixed: it moves whenever either one changes
+its clocks. To plan for a particular day, add `on` and the date, and the gap is
+worked out for that day. London and New York change on different Sundays in
+March, so for three weeks they are four hours apart rather than five:
+
+```solve
+time difference between London and New York on 1 March 2027 // London is 5 hours ahead of New York on March 1, 2027
+time difference between London and New York on 20 March 2027 // London is 4 hours ahead of New York on March 20, 2027
+time difference between London and Tokyo on 1 July 2027 // Tokyo is 8 hours ahead of London on July 1, 2027
+time difference between Tokyo and Adelaide on 1 March 2027 // Adelaide is 1 hour 30 minutes ahead of Tokyo on March 1, 2027
+```
+
+A date names a whole day, and on the day a place changes its clocks the gap
+changes partway through it. The dated answer is the gap at noon in the first
+place named, which is clear of every clock change in use.
+
+`time in` and `date in` answer only for now. A line such as `time in Tokyo on 1
+March 2027` is refused, because the clock as it is now, carried to another day,
+answers nothing useful. The two questions it usually means have their own forms:
+a time converted on that day (`2pm London in Tokyo on 1 March 2027`), and the
+gap between two places on it, as above.
+
 ## A date or a time in a zone
 
 Writing `in <zone>` after a date, or after a time of day, reads it in that zone
@@ -207,11 +229,11 @@ rather than in yours, and shows it there. A bare date means midnight, so
 2026-04-03 in UTC // Friday, April 3, 2026
 ```
 
-A time of day works the same way, read against today, so its date is whatever
-today is.
+A time of day works the same way: `6pm in Chicago` is six in the evening in
+Chicago, and stays a time of day.
 
 ```solve
-6pm in Chicago // Wednesday, March 11, 2026, 6:00:00 PM
+6pm in Chicago // 6:00:00 PM
 ```
 
 The result is a date, not a quantity. A name that is not a zone is refused
@@ -235,8 +257,13 @@ document computed in one zone can pin it: see
 
 ## The names that work
 
-- **Cities**, about ninety of the world's larger ones, including two-word names
-  such as `New York`, `Hong Kong` and `Buenos Aires`.
+- **Cities and places**: every place the time zone database names, about four
+  hundred, from `Kathmandu` and `Hobart` to `Apia`, with names of more than one
+  word written with spaces (`Ho Chi Minh`, `Dar es Salaam`, `Port au Prince`),
+  and around ninety more cities the database has no zone of its own for, such
+  as `Mumbai` and `San Francisco`. A place the database has renamed answers to
+  both names: `Kolkata` and `Calcutta`, `Kyiv` and `Kiev`, `Ho Chi Minh` and
+  `Saigon`.
 - **Countries**, which read as their capital's zone: `Japan` is Tokyo, and
   `Australia` is Sydney even though the country spans several zones.
 - **Standard abbreviations** such as `PST`, `EST`, `CET`, `JST` and `AEST`. Each
@@ -246,5 +273,19 @@ document computed in one zone can pin it: see
 - **`UTC` and `GMT`**, and in the time conversions above an offset from them,
   `GMT+9` or `UTC-5:30`, which is fixed and never changes for daylight saving.
 
+```solve
+time difference between Kathmandu and Kolkata // Kathmandu is 15 minutes ahead of Kolkata
+3pm London on 1 March 2027 in Hobart // 2:00 AM (+1 day)
+```
+
+A few of the database's names are left out, because reading them as a place
+would mislead: ordinary words (`Easter`, `Christmas` and `Reunion` are islands in
+the database), names a better-known place elsewhere holds (`Cordoba` is in Spain
+as well as Argentina, and `San Juan` reads as Puerto Rico rather than the
+Argentine province), and the Antarctic research stations, several of which are
+named after people. Each is listed, with its reason, in the generator that builds
+the table.
+
 The full identifiers of the zone database, such as `Asia/Tokyo`, cannot be typed
-directly, because the slash reads as division.
+directly, because the slash reads as division, and a hyphenated name is written
+with spaces for the same reason: `Port au Prince`, not `Port-au-Prince`.

@@ -13,22 +13,55 @@ video uses.
 ## Clock times
 
 A clock time is a point in the day, in the twelve-hour form with `am` or `pm`
-or the twenty-four-hour form. It is read as that time today, so adding a length
-of time moves it forward and the answer is a date and a time. The answers shown
-are for Wednesday 11 March 2026 in London, the fixed date these pages are
-checked against; the notepad uses your own today.
+or the twenty-four-hour form. It is shown as a time of day, and adding a length
+of time moves it forward to another.
 
 ```solve
-9:00am + 3 hours // Wednesday, March 11, 2026, 12:00:00 PM
-16:00 // Wednesday, March 11, 2026, 4:00:00 PM
-3.30pm // Wednesday, March 11, 2026, 3:30:00 PM
+9:00am + 3 hours // 12:00:00 PM
+16:00 // 4:00:00 PM
+3.30pm // 3:30:00 PM
 ```
 
 The minutes may follow a point instead of a colon, as British timetables write
 them, so `3.30pm` is `3:30pm`. Only two digits after the point are minutes:
 `3.5pm` could mean half past or five past, so it is not read as a time at all.
 
-A clock time is shown as the full date and time, not as the time of day alone.
+A clock time is read as that time today. When adding or taking away a length of
+time carries it past midnight, the answer says how many days it has moved, the
+way the time-zone forms do:
+
+```solve
+11pm + 2 hours // 1:00:00 AM (+1 day)
+1am - 2 hours // 11:00:00 PM (-1 day)
+```
+
+To show any other date and time as the time of day alone, write it `as time`.
+The moment does not change, only how it is shown:
+
+```solve
+2026-04-03T09:30 as time // 9:30:00 AM
+```
+
+`as time` takes a date. A plain number has no time of day of its own, so it is
+refused rather than read as a moment in 1970; to show a Unix timestamp's time,
+read it as a date first, `1710000000 as date as time` (see
+[timestamps](/syntax/timestamps/)). The gap between two clock times is a length
+of time, not a time of day, so `5pm - 9am` is `8:00` and `9am to 5pm` is 480
+minutes, as before.
+
+`noon` and `midnight` are the clock times 12:00 and 0:00, the same as `12pm`
+and `12am`, and work anywhere a clock time does. `midnight` is the start of
+today, not the end of it.
+
+```solve
+noon // 12:00:00 PM
+noon + 90 minutes // 1:30:00 PM
+midnight // 12:00:00 AM
+```
+
+Because `noon` and `midnight` are now read as times, a variable with either
+name is read with its colon, `:noon`, as any name the engine also reads as a
+word is. Assigning one (`noon = 12`) still works.
 
 ## Durations
 
@@ -96,8 +129,13 @@ $15/hr // 15.00 USD/hr
 
 ## Intervals
 
+The gap between two clock times is written with `to` or `until`, and the
+answer is its length.
+
 ```solve
 7:30 to 20:45 // 795 minutes
+9am until 5pm // 480 minutes
+9am to noon // 180 minutes
 ```
 
 Intervals crossing midnight are handled, so `4pm to 3am` is eleven hours rather

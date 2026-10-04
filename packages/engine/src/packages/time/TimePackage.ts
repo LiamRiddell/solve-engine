@@ -14,6 +14,7 @@ import {
 } from "./parselets/TimezonePluginFunctions";
 import { HOURS_OVERLAP_FN, hoursOverlapHandler } from "./parselets/OverlapPluginFunctions";
 import { clockTimeNormalizerRule } from "./normalizer/ClockTimeNormalizerRule";
+import { noonMidnightNormalizerRule } from "./normalizer/NoonMidnightNormalizerRule";
 import { paceNotationNormalizerRule } from "./normalizer/PaceNotationNormalizerRule";
 import { clockTimeIntervalNormalizerRule } from "./normalizer/ClockTimeIntervalNormalizerRule";
 import { clockTimeSumNormalizerRule } from "./normalizer/ClockTimeSumNormalizerRule";
@@ -23,6 +24,7 @@ import { laptimeNormalizerRule } from "./normalizer/LaptimeNormalizerRule";
 import { videoTimecodeNormalizerRule } from "./normalizer/VideoTimecodeNormalizerRule";
 import { frameCountNormalizerRule } from "./normalizer/FrameCountNormalizerRule";
 import { MULTI_WORD_CITY_ZONES } from "./timezones/CityZones";
+import { GENERATED_MULTI_WORD_PLACES } from "@solve-js/calendar/ZoneNames";
 
 import { toTimespanString, toLaptimeString } from "./TimespanConverters";
 
@@ -85,6 +87,8 @@ export const TIME_PACKAGE: IEnginePackage = {
     "time difference between": "TIME_DIFFERENCE_BETWEEN",
     "overlap of": "OVERLAP_OF",
     ...Object.fromEntries(Object.keys(MULTI_WORD_CITY_ZONES).map((phrase) => [phrase, "CITY_NAME"])),
+    // Every other place of more than one word in the IANA database (#698).
+    ...Object.fromEntries(GENERATED_MULTI_WORD_PLACES.map((phrase) => [phrase, "CITY_NAME"])),
   },
   prefixParselets: {
     CLOCK_TIME: new ClockTimeParselet(),
@@ -100,6 +104,7 @@ export const TIME_PACKAGE: IEnginePackage = {
   },
   normalizerRules: [
     clockTimeNormalizerRule(),
+    noonMidnightNormalizerRule(),
     paceNotationNormalizerRule(),
     clockTimeIntervalNormalizerRule(),
     clockTimeSumNormalizerRule(),

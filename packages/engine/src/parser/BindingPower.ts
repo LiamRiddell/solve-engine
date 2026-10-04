@@ -146,6 +146,29 @@ export const BUILTIN_INFIX_BP: Record<string, number> = {
 //   EQUALITY, NEQ, GTE, LTE → Comparison ops (need dedicated VM opcodes, task 2.15a)
 //   COMMA     → Argument separator (function calls, array/object literals)
 
+/**
+ * The token types the parser reads itself, before it consults the parselet
+ * registry: `PrecedenceParser.parsePrefix`'s inline cases for a prefix, and
+ * every token in {@link BUILTIN_INFIX_BP} for an infix. A parselet a package
+ * registers for one of these never runs (#719). A spec checks this list
+ * against the parser's own behaviour.
+ */
+export const FAST_PATH_PREFIX_TOKENS: ReadonlySet<string> = new Set([
+  "NUMBER", "BIGINT", "STRING", "IDENT", "LPAREN", "MINUS", "PLUS",
+]);
+
+/**
+ * Whether the parser reads `tokenType` on its own fast path, so a parselet
+ * registered for it in that position never runs. See {@link FAST_PATH_PREFIX_TOKENS}.
+ *
+ * @param tokenType - The token type a parselet is registered for.
+ * @param position - Whether the parselet is a prefix or an infix one.
+ */
+export function isFastPathToken(tokenType: string, position: "prefix" | "infix"): boolean {
+  if (position === "prefix") return FAST_PATH_PREFIX_TOKENS.has(tokenType);
+  return Object.prototype.hasOwnProperty.call(BUILTIN_INFIX_BP, tokenType);
+}
+
 /** Cached BP_TABLE, built once at module load, immutable thereafter. */
 let _bpTable: Uint8Array | null = null;
 

@@ -30,6 +30,16 @@ A rate converts to another rate, or to any of the single-word speed spellings
 100 km/h to m/s // 27.78 m/s
 ```
 
+A ship's or an aircraft's speed is in knots: one nautical mile an hour, a little
+faster than a mile an hour. It is written `kn`, `knot` or `knots`. `kt` is not the
+knot, because the unit table already reads `kt` as the kilotonne.
+
+```solve
+20 knots in km/h // 37.04 km/h
+20 kn in mph // 23.02 mph
+1 knot in m/s // 0.51 m/s
+```
+
 Dividing a distance by a time builds the same rate, and the conversion applies
 to the whole quotient rather than to the number just before it.
 
@@ -37,6 +47,26 @@ to the whole quotient rather than to the number just before it.
 120 km / 2 hours // 60.00 km/hours
 120 km / 2 hours in kph // 60.00 kph
 ```
+
+## Speeds of rotation
+
+An engine, a drill or a record player turns rather than travels, and its speed
+is counted in revolutions per minute, `rpm` (or `RPM`, as a dashboard prints it).
+One revolution is one full turn, so a turning speed is a frequency: how many times
+a second something repeats, in hertz (`Hz`). 3,000 rpm is 50 turns a second.
+A single revolution is an angle, written `revolution` or `revolutions`.
+
+```solve
+3000 rpm in Hz // 50.00 Hz
+50 Hz in rpm // 3,000.00 rpm
+1 revolution in deg // 360.00 deg
+2 revolutions in rad // 12.57 rad
+```
+
+The boundary: the word `turn` is not read as a revolution, because it is ordinary
+English (`take turns`, `turn 3 times`). A turning speed is a frequency rather
+than a rate over a time, and a frequency and a time do not multiply here, so
+`3000 rpm * 2 min` is refused rather than counted as 6,000 revolutions.
 
 ## Cancelling a rate
 
