@@ -1,5 +1,475 @@
 # solve-engine
 
+## 2.42.0
+
+### Minor Changes
+
+- 30a1d5c: The everyday spellings of the list aggregates are read: `sum of`, `mean of`, `min of`, `max of`, `product of`, the calls `sum(1, 2, 3)` and `mean(...)`, and `count above`, `max above` and the rest
+  
+  The engine had `total of`, `average of`, `median of`, `total above`, `sum above` and `average above`, but not the neighbouring spellings a spreadsheet or another notepad uses, and each failed with a parser message (#703).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `sum of 1, 2, 3` | throws `Unexpected token after expression: ","` | 6 |
+  | `max of 1, 2, 3` | throws `Expected token type "LPAREN" but got "OF" ("of")` | 3 |
+  | `product of 2, 3 and 4` | throws `Unexpected token after expression: ","` | 24 |
+  | `sum(1, 2, 3)` | throws `Expected token type "RPAREN" but got "COMMA" (",")` | 6 |
+  | `mean(1, 2, 3)` | throws `Undefined function: mean` | 2 |
+  | `max above`, after lines of 10, 20 and 30 | `Expected token type "LPAREN" but got "IDENT" ("above")` | 30 |
+  
+  The list phrases: `sum of` is `total of`, `mean of` and `avg of` are `average of`, and `min of`, `max of` and `product of` give the least value, the greatest and the values multiplied together. Units work as they do for the other lists (`product of 2 m, 3 m` is `6.00 m²`), and mixed measures are refused by name.
+  
+  The calls: `sum(...)`, `total(...)`, `average(...)`, `mean(...)`, `median(...)` and `stdev(...)` over plain values. `stdev(...)` is the population standard deviation, the same as `stdev of` in this engine; a spreadsheet's `STDEV` is the sample form, written `sample stdev of`.
+  
+  The block above: `avg above` and `mean above` for the average, and `count above`, `min above`, `max above` and `median above`. Each walks the block as `total above` does, passing over comments and subtotals, and each is a summary line itself, so the next one reads past it.
+  
+  The boundary: the calls keep the readings the same brackets already had. `sum(x, [10, 20, 30])` and `sum(10*x, 0:9)` are still map-reduce (a two-argument `sum` whose first argument is a bare name, or whose second is a list, a range or a name), and `average(line 1 : line 4)` is still a line range. `mean`, `median` and `stdev` stay ordinary names wherever no bracket follows them (`mean = 4` is a variable); a function of one's own under one of those three names is refused by name, since the call would never reach it, and an empty call such as `mean()` is refused rather than answered 0. `min` stays the minute and `max(...)` the function; each is claimed as a phrase only before `of` or `above`. The statistics and line-references pages gain proven examples.
+  
+  ## Verification
+  
+  `Issue703_aggregateSpellings.spec.ts` holds 42 tests. Each list spelling gives the answer of the form it mirrors, with money and units in the unit written first, mixed measures refused, and `min` and `max` keeping their other meanings where no `of` follows. Each call gives its answer, `stdev(...)` agrees with `stdev of`, map-reduce keeps `sum(x, [10, 20, 30])`, `sum(10*x, 0:9)` and `sum(x, 0:3)`, a line range keeps its call, `mean` and `median` stay names without a bracket, and an empty call and a function of one's own under these names are refused by name. Each `above` form reads its block in both document passes, is a summary line the next one reads past, leaves a subtotal out, keeps units and refuses mixed measures, and stops at a blank line and a heading as `total above` does. The adversarial cases: prototype words as calls and phrases, an unclosed call, and sixty values. `CrossPathDocumentFeatures.spec.ts` holds the cross-path case for the new `above` forms: the block in both passes, an edit reaching each in a live editor, and the single-expression refusal.
+  
+  The full suite (`npm run test:full`) passed, 15,825 of 15,829 tests in 617 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,888 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,404 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- 3784da4: `as date` and `as timestamp` sit beside `to date` and `to timestamp`, and Unix timestamps have a page of their own
+  
+  Every other conversion is spelled with `as`, but an epoch conversion only with `to`, so a reader who wrote `1710000000 as date`, the spelling that works for `as iso8601` and `as weekday`, got an unknown converter (#701). Epoch conversion also had no syntax page.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `1710000000 as date` | `Unknown converter "as date"` | Saturday, March 9, 2024, 4:00:00 PM |
+  | `2024-03-09 as timestamp` | `Unknown converter "as timestamp"` | 1,709,942,400 |
+  | `1710000000000 as timestamp` | `Unknown converter "as timestamp"` | 1,710,000,000 |
+  
+  (The dates are shown in London, as the issue's were.)
+  
+  `as date` is `to date`: the same handler, reading a timestamp in seconds or, at a trillion or more, in milliseconds, and ISO 8601 text, and leaving a date as it is. `as timestamp` writes whole seconds, reading a number as a timestamp first, so one in milliseconds comes back in seconds rather than divided by a thousand again. Both refuse a quantity, money, true or false and a list by name, as `as iso8601` does, rather than read them through their number.
+  
+  A new syntax page, Timestamps, says what an epoch timestamp is before its first example and covers `to date`, `as date`, `to timestamp`, `as timestamp`, `current timestamp` and `as iso8601`, with proven examples read against the docs' pinned zone and clock. It sits in the Dates group of the sidebar.
+  
+  The boundary: `to timestamp` on a plain number keeps its old reading of the number as milliseconds; `as timestamp` is the spelling that reads it as a timestamp. `as time`, a time of day, is the time-of-day change that ships beside this one.
+  
+  ## Verification
+  
+  `Issue701_708_timeOfDayAndTimestamps.spec.ts` holds 41 tests across #701 and #708: `as date` and `as timestamp` beside `to date` and `to timestamp` on seconds, milliseconds, ISO text and dates, and the refusal of a quantity, money, true or false and a list by name.
+  
+  The full suite (`npm run test:full`) passed, 16,937 of 16,941 tests in 627 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (3,220 tests in 94 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,584 documented examples).
+- 3784da4: The helpers the package guides name are exported, and `createQueryResolver` takes the function it answers for by name
+  
+  A package author follows the guides under `packages/` and `guide/`, and five of the helpers they name were exported from no public subpath, so an author outside this repository could not follow them (#717).
+  
+  | helper | before | now |
+  | --- | --- | --- |
+  | `createQueryResolver`, with `QueryResolverOptions` and `QueryResolverPackage` | no public subpath | `solve-engine/resolvers` |
+  | `parseRightOperand` | no public subpath | `solve-engine/parser` |
+  | `definePhrasePattern`, with `PhraseSlot`, `PhraseCapture` and `PhraseAlternative` | no public subpath | `solve-engine/parser` |
+  | `boolValue`, `percentageValue` | no public subpath | `solve-engine/vm` |
+  
+  `createQueryResolver` took the function it answers for only as a raw plugin index, where every other extension point names a function. It now takes `packageName` and `functionName`, the name a parselet passes to `emitPluginCall`, and computes the index the engine assigns that function at registration. A package whose resolver names a function its `pluginFunctions` does not declare is refused at registration with `PACKAGE_RESOLVER_FUNCTION_MISSING`, where the line would otherwise have waited for ever for a call that never comes; so is a resolver built for another package's name. The index form stays for the packages built on it, and giving both forms, half a name, or neither is refused when the resolver is built. A `fetchQuery` that resolves to something that is not a `Value` is now answered as a failed fetch, where it was cached as the figure.
+  
+  The async data source guide opens with a complete package built on `createQueryResolver`, and its hand-written resolver compiles under `strict`, where it had a syntax error and ten type errors; both were compiled against the built package. The functions-and-operators guide says where the value factories and `parseRightOperand` come from, the recognising-phrases guide gains a section on `definePhrasePattern` with a worked example, and the package-authoring routing table points to both.
+  
+  The boundary: this exports helpers that already exist; it does not redesign them. Once exported they are public surface, so the name-keyed form is settled before the export rather than after. Running the TypeScript fences under `guide/` as a whole is a separate documentation item.
+  
+  ## Verification
+  
+  `Issue717_authoringHelpers.spec.ts` holds 11 tests: each helper imported from its public subpath, `createQueryResolver` taking the function by name and resolving to the index the engine assigns, a resolver whose function would never be called refused at registration, and adversarial fetches (one that throws synchronously, one that resolves to something that is not a value, one that never settles, and two resolvers claiming one namespace). `toBeWellFormed` is covered in the #719 spec, and the bundled-consumer contract compiles an authoring probe against the installed copy.
+  
+  The full suite (`npm run test:full`) passed, 16,937 of 16,941 tests in 627 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (3,220 tests in 94 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,584 documented examples).
+- d89e0c4: Currency is read the way it is written, and every amount the engine writes can be typed back: `100 €`, `12.00 kr`, `A$100`, `R12.00` and `100 usd`
+  
+  The engine wrote ten currencies with a symbol after the amount or in letters, and could read none of them back: `12 SEK` showed `12.00 kr`, and `12.00 kr + 1 SEK` was an undefined variable (#693). It also read a symbol only before the amount, a dollar only as `$`, and a code only in capitals, where much of the world writes `100 €`, `A$100` or `100 usd` (#707).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `12.00 kr + 1 SEK` | `Undefined variable: kr` | 13.00 kr |
+  | `100 €` | throws `Unexpected token after expression: "€"` | €100.00 |
+  | `1,000 ₹` | throws `Unexpected token after expression: "₹"` | ₹1,000.00 |
+  | `A$100 + $5 AUD` | throws `Unexpected token after expression: "$"` | $105.00 |
+  | `R1,234.56` | throws `Unexpected token after expression: ","` | R1,234.56 |
+  | `100 usd` | `Undefined variable: usd` | $100.00 |
+  
+  Each newly read form:
+  
+  - **A symbol after the amount**, with or without a space: `100 €`, `100 $`, `100 £`, `100 ¥`, `12 ₽`, `12 ₩`, `1,000 ₹`, `12 ₺`, `12 ₴`, `12 ₪`, `12₫`, `12 ₦` and `12 ₱`, each the same money as the symbol before it.
+  - **The letters written after an amount**: `kr` (the Swedish krona), `zł` (zloty), `Ft` (forint), `Kč` (koruna) and `Fr` (Swiss franc), matched exactly as written, so `ft` stays the foot.
+  - **A dollar named by its country**, written touching the `$`: `A$`, `C$`, `US$`, `HK$`, `NZ$`, `S$`, `MX$` and `R$`.
+  - **The rand as the engine writes it**, the `R` touching an amount with its cents: `R12.00`, `R1,234.56`.
+  - **Thirty-two codes in lower case**: `usd`, `eur`, `gbp`, `jpy`, `cny`, `chf`, `cad`, `aud`, `nzd`, `hkd`, `sgd`, `sek`, `nok`, `dkk`, `pln`, `czk`, `huf`, `inr`, `krw`, `brl`, `mxn`, `zar`, `ils`, `thb`, `aed`, `sar`, `myr`, `idr`, `vnd`, `ngn`, `uah` and `twd`.
+  
+  Of the twenty symbols the engine writes, eight read back before this change. All twenty read back now. Three are written for several currencies, and read as the default each already had or was given: `$` the US dollar, `¥` the yen, and `kr` the Swedish krona, as the word `krona` does.
+  
+  The boundary: those three defaults mean an amount written for one of the others reads back as the default (`12 NOK` is written `12.00 kr`, which reads as kronor), so a note keeps the code where the currency matters; changing what the engine writes for them is not part of this. A bare `R` is not read as the rand, since people use it as a name, so `12 R` still multiplies by `R`, and `R12` without cents can still name a resistor. The prefixed dollars are read only when the letters touch the `$`, so `A` stays the ampere and `C` stays Celsius, and `A $100` is left as written. The lower-case codes are a chosen list rather than every code folded to lower case, because several codes are words or units in lower case (`cup`, `try`, `mad`, `top`, `bob`, `all`, `pen`); `rub` and `php` are left out as a verb and a language. A spec asserts that none of the new spellings was already a unit, a keyword or a function. The currency page gains a section with proven examples.
+  
+  ## Verification
+  
+  `Issue693_707_currencyAsWritten.spec.ts` holds 108 tests. Every code in the display table is written for 12, 1,234.56 and -12 and typed back, reading back as itself or as its symbol's default. Each suffix symbol is read with and without a space, with a thousands group and negative, and reads as the same symbol before the amount; one with another amount after it is left as written. Each letter symbol and each prefixed dollar is read, the letters exactly as written (`Ft` beside `ft`), and a name `Fr`, `A` or `C` defined above still works. The rand is read in the shapes the engine writes and not after an amount or without its cents, so `R = 5` then `12 R` is still 60. Each of the 32 lower-case codes is read, a spec asserts none was already a unit, a keyword or a function, and `try`, `rub`, `php`, `cup` and `Usd` are left alone. The adversarial cases: prototype words as symbols and before a dollar, a symbol after something that is not an amount, and a long line of suffix amounts. The unit-vocabulary spec knows the letter symbols are currencies, and a hardening test that recorded `100 usd in eur` as unreadable now records it read.
+  
+  The full suite (`npm run test:full`) passed, 15,742 of 15,746 tests in 615 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,878 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,385 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- c4dd8c9: A date takes a time of day the way people write one: `2026-01-04 14:30`, `23 September 2026 at 3pm` and `3pm on 23 September 2026`
+  
+  A date and a time together could be written only in the ISO form, `2026-01-04T14:30` (#692). The way people write a meeting or a deadline, a date and then a time, threw, and the message quoted the clock time's minutes since midnight rather than anything the reader typed.
+  
+  A calendar date followed by a clock time, bare or after `at`, and a clock time followed by `on` and a date, now read as that moment: the same instant the ISO form names, with the same wall-clock grain, so it goes wherever that form goes.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `2026-01-04 14:30` | throws `Unexpected token after expression: "870"` | Sunday, January 4, 2026, 2:30:00 PM |
+  | `23 September 2026 at 3pm` | throws `Unexpected token after expression: "at"` | Wednesday, September 23, 2026, 3:00:00 PM |
+  | `3pm on 23 September 2026` | throws `Unexpected token after expression: "on"` | Wednesday, September 23, 2026, 3:00:00 PM |
+  | `2026-01-04 14:30:15` | throws `Unexpected token after expression: "52215"` | Sunday, January 4, 2026, 2:30:15 PM |
+  | `hours between 2026-01-04 9am and 2026-01-10 5pm` | throws `Expected token type "AND_CONJ" but got "CLOCK_TIME" ("540")` | 152 hours |
+  
+  The time is any clock time the engine reads on its own (`14:30`, `3pm`, `9:30am`, `3.30pm`), or `HH:MM:SS` for seconds. After `on`, anything that gives a date works, a name or `today` included, as it already did in the time-zone forms. On the days the clocks change, a time in the skipped or repeated hour lands where the ISO form puts it, since the instant is found through the same parser.
+  
+  Two answers that were wrong change with it. A date followed by a time that does not exist on the clock was read as a label and answered with what followed the colon; it is now refused, as the same time on its own already was. And a line with a stray token after it quotes that token as it was written, where a clock time, a clock interval or an `HH:MM:SS` reading quoted the engine's own number for it.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `2026-01-04 24:00` | 0 | `"24:00" is not a valid time` |
+  | `tomorrow 3pm` | throws `Unexpected token after expression: "900"` | throws `Unexpected token after expression: "3pm"` |
+  | `2026-01-04 9am to 5pm` | throws `Unexpected token after expression: "540:1020"` | throws `Unexpected token after expression: "9am to 5pm"` |
+  
+  The boundary: a day named in words and then a time, `tomorrow 3pm`, is not read this way; it belongs with the spoken relative dates, and `3pm on tomorrow` covers it meanwhile. A month with no day (`February 2026 3pm`) takes no time, since there is no day to put it on. The date-first order does not take a source zone (`23 September 2026 3pm London in Tokyo`); the time-zone form, `3pm London on 23 September 2026 in Tokyo`, does. `readDates` describes the date as before, with the time left out of its reading. The date-literals page gains a section with proven examples.
+  
+  ## Verification
+  
+  `Issue692_dateWithTimeOfDay.spec.ts` holds forty-four tests. Fourteen spellings each give the answer of the `T` literal for that day and time, with its wall-clock grain and instant, and eight forms carry it on as the `T` literal does: a duration added, a subtraction, `days between` and `hours between`, a zone, `frozen`. On both clock changes a time in the skipped or repeated hour lands where the `T` literal's does, and the three entry points agree. After `on`, a name for a date and `today` both work. What must not break is held: `at` before a rate, `on` after a percentage, a clock interval, a spaced subtraction, a date alone as a label, a date followed by a plain number or `13pm`, and a whole month, which takes no time. `24:00`, `25:00` and `9:60` after a date are refused by name, where the first answered 0. The trailing-token message quotes what was typed for a clock time, an interval and `HH:MM:SS`. The adversarial cases: `on` with nothing or not a date after it, a date that failed, prototype words, fifty times after one date, `wallTimeOn` out of range, and `readDates` describing the date as before.
+  
+  The full suite (`npm run test:full`) passed, 15,629 of 15,633 tests in 614 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,873 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,371 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- 3784da4: `time difference between` takes a date: `time difference between London and New York on 20 March 2027` is 4 hours
+  
+  The gap between two places moves whenever either changes its clocks, so a meeting planned for March needs the March gap, not today's. The dated conversion already followed the clocks (`2pm London in Tokyo on 1 March 2027`), but `time difference between` answered only for now and refused a date (#697).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `time difference between London and Tokyo on 1 March 2027` | `Unexpected token after expression: "on"` | Tokyo is 9 hours ahead of London on March 1, 2027 |
+  | `time difference between London and New York on 20 March 2027` | `Unexpected token after expression: "on"` | London is 4 hours ahead of New York on March 20, 2027 |
+  | `time difference between Tokyo and Adelaide on 1 March 2027` | `Unexpected token after expression: "on"` | Adelaide is 1 hour 30 minutes ahead of Tokyo on March 1, 2027 |
+  | `time in Tokyo on 1 March 2027` | `Unexpected token after expression: "on"` | refused, naming the two forms below |
+  
+  - **The dated gap.** An `on <date>` after the second place takes both offsets on that day. A date names a whole day, and on the day a place changes its clocks the gap changes partway through it, so the answer is the gap at noon in the first place named, which is clear of every clock change in use. Any expression that gives a date works (`on next friday`, `on today`); one that does not is refused as the dated conversion refuses it, and a day that does not exist (`on 29 February 2027`) says why.
+  - **`time in` and `date in` stay for now.** The clock as it is now, carried to another day, answers nothing useful, so `time in Tokyo on 1 March 2027` is refused with the two questions it usually means: a time converted on that day (`2pm London in Tokyo on 1 March 2027`), and the gap between two places on it.
+  
+  The boundary: the undated `time difference between` is unchanged and still answers for the present moment. The dated answer reads one moment of the day; a question about the hour the clocks change is the dated conversion's, which refuses a time that did not happen or happened twice.
+  
+  ## Verification
+  
+  `Issue697_datedTimeDifference.spec.ts` holds 37 tests on a pinned clock: dates either side of the US and UK changes and on the change days, a half-hour zone, a fixed offset, zones sharing an offset, agreement with the dated conversion on seven dates, the refusals of `time in` and `date in` with a date, and `on` clauses that are not dates.
+  
+  The full suite (`npm run test:full`) passed, 16,937 of 16,941 tests in 627 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (3,220 tests in 94 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,584 documented examples).
+- 3784da4: The everyday units are read: `2000 kcal in kJ`, `10 Ω`, `3000 mAh * 3.7 V`, `20 knots in km/h`, `120 mmHg in kPa`, `12 volts`, `2 L` and `1 mol`
+  
+  Food energy, heating bills, batteries, engines and gas laws need units the table did not have, and each was refused as an undefined variable (#706). A voltage divided by a current stayed `V/A` rather than becoming an ohm.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `2000 kcal in kJ` | throws `Undefined variable: kcal` | 8,368.00 kJ |
+  | `1 calorie in J` | throws `Undefined variable: calorie` | 4.18 J |
+  | `100000 BTU in kWh` | throws `Undefined variable: BTU` | 29.31 kWh |
+  | `1 therm in kWh` | throws `Undefined variable: therm` | 29.31 kWh |
+  | `1 eV in J` | throws `Undefined variable: eV` | 1.6e-19 J |
+  | `10 Ω` | throws `Undefined variable: Ω` | 10.00 Ω |
+  | `12 V / 2 A` | 6.00 V/A | 6.00 Ω |
+  | `3000 mAh * 3.7 V` | throws `Undefined variable: mAh` | 11.10 Wh |
+  | `3000 rpm in Hz` | throws `Undefined variable: rpm` | 50.00 Hz |
+  | `1 revolution in deg` | throws `Undefined variable: revolution` | 360.00 deg |
+  | `20 knots in km/h` | throws `Undefined variable: knots` | 37.04 km/h |
+  | `1 AU in km` | throws `Undefined variable: AU` | 149,597,870.70 km |
+  | `120 mmHg in kPa` | throws `Undefined variable: mmHg` | 16.00 kPa |
+  | `12 volts` | throws `Undefined variable: volts` | 12.00 volts |
+  | `5 amps` | throws `Undefined variable: amps` | 5.00 amps |
+  | `2 L` | throws `Undefined variable: L` | 2.00 L |
+  | `1 mol` | throws `Undefined variable: mol` | 1.00 mol |
+  
+  Each newly read form:
+  
+  - **Energy**, beside the joules and kilowatt-hours already there: `cal`, `calorie` and `calories` (the small calorie), `kcal`, `kilocalorie`, `kilocalories`, `Cal`, `Calorie` and `Calories` (the food Calorie, a thousand small ones), `BTU` and `Btu`, `therm` and `therms`, and `eV` with `keV`, `MeV` and `GeV`.
+  - **Electricity**: `volt` and `volts` beside `V`; `amp`, `amps`, `ampere` and `amperes` beside `A`; the ohm, a new measure, as `ohm`, `ohms`, `Ω`, `kΩ` and `MΩ`, with the symbol read in both the Greek capital omega and the ohm sign (U+2126) a pasted datasheet can carry; and charge, a new measure, as `Ah`, `mAh`, `coulomb` and `coulombs`.
+  - **Electrical arithmetic**: a voltage over a current is a resistance in ohms, a voltage over a resistance or a power over a voltage is a current in amps, a current for a time is a charge in amp-hours, a charge in amp-hours at a voltage is a battery's energy in watt-hours, and a watt-hour energy over a voltage is its charge in amp-hours. `2 A * 6 Ω` is 12.00 V, `12 V / 6 Ω` 2.00 A, `2 A * 3 h` 6.00 Ah and `11.1 Wh / 3.7 V` 3.00 Ah.
+  - **Speed and rotation**: `knot` and `knots` beside `kn`; `rpm` and `RPM` as a frequency (3,000 rpm is 50 Hz); and `revolution` and `revolutions` as the angle of one full turn.
+  - **Length, pressure and amount of substance**: `AU`, the astronomical unit; `mmHg`, the millimetre of mercury; and `mol` and `mmol`, the mole, a new measure.
+  - **The litre's capital**: `L`, the symbol most bottles print, joins `l`, `mL` and the rest.
+  
+  The spellings that needed a decision, and what was decided. The food Calorie is a kilocalorie and the physics calorie is not, and the lexer is case-sensitive, so the capital is the food figure as a label prints it (`Cal`, `Calorie`) and every lower-case spelling is the small calorie as a physics text writes it: `2000 calories in kJ` is 8.37 kJ, and a food figure is written `kcal` or `Cal`. The calorie is the thermochemical 4.184 J, the size food energy is reckoned in, not the International Table 4.1868 J. The BTU is the International Table one, exactly 1,055.05585262 J, and a therm is 100,000 of those, as the UK and EU therm is. The millimetre of mercury is its conventional 133.322387415 Pa, kept apart from the torr it differs from by less than one part in seven million. The mole enters as a conversion unit only: the dimensional arithmetic tracks mass, length, time and current, the amount of substance is a fifth base quantity outside them, and no named unit is made from it, so `mol` converts to `mmol` and nothing else. A charge worked out by arithmetic is named in amp-hours, the unit a battery is rated in, since the coulomb's symbol `C` is Celsius; `in coulombs` gives the SI figure.
+  
+  Three answers change with it. A unit after a number wins over a variable of the same name, as it always has for `b` and `N`, so where `L`, `amp`, `volts`, `therm` and the other new words were names, the line straight after a number now reads the unit. On its own and after an operator the name is still the variable, so `L * 2` is still 6 and `2 * L` is the product. A power over a voltage now names its current, and a current for a time, which was refused, is now a charge.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `L = 3` then `2L` | 6 | 2.00 L |
+  | `L = 3` then `2 L` | 6 | 2.00 L |
+  | `amp = 3` then `2 amp` | 6 | 2.00 amp |
+  | `24 W / 12 V` | 2.00 W/V | 2.00 A |
+  | `2 A * 3 h` | `current and duration cannot be multiplied` | 6.00 Ah |
+  
+  The boundary: `kt` stays the kilotonne (the knot is `kn`, `knot` or `knots`), `C` stays Celsius so the coulomb is spelled only as a word, and `turn` and `turns` stay excluded as ordinary English while `revolution` names the same angle. The lower-case `au` is not the astronomical unit, since it starts `au pair`, and the word `mole` is not the unit. The US therm, built on an older BTU, is about 0.02% smaller than the therm here. A charge over a current is not named as a time, as an energy over a power is not, so `3000 mAh / 500 mA` stays `6.00 mAh/mA`; frequency does not multiply with a time, so `3000 rpm * 2 min` is refused; and speed, acceleration and frequency in unit arithmetic are a separate item. The `as` readouts gain no names for the ohm, the amp or the amp-hour, because they are matched without case and `mΩ` and `MΩ` would be one name; `in` converts any of them. `amp`, `volts`, `knots`, `revolution` and `calories` are English words too, and a sentence that uses one is left unanswered: with no number before the word it starts with a plain name, and with one it fails to parse rather than answering. Five syntax pages are new (energy units, electricity, pressure, distances in space and moles), the knot and rpm join the rates and speeds page, the capital `L` joins converting units and variables, the named derived units page gains the ohm, the ampere and the amp-hour, and the unit reference is regenerated.
+  
+  ## Verification
+  
+  `Issue706_everydayUnits.spec.ts` holds 535 tests: every spelling the issue names, the charge and resistance compositions, the amp-hour and watt-hour naming, a variable named `L`, `amp`, `therm` or `volts` defined above the line, each new word inside prose, words naming inherited properties as unit names, and mixed-measure refusals. The unit vocabulary, collision, measure-name, table-integrity, conversion-invariant, unit-power and parity specs gain the new spellings.
+  
+  The full suite (`npm run test:full`) passed, 16,937 of 16,941 tests in 627 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (3,220 tests in 94 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,584 documented examples).
+- 3784da4: Misconfiguration is named when the engine is built: an unknown option, config section or setting, a package with no name, a parselet that can never run, and `expectPackage(...).toBeWellFormed()`
+  
+  Each of these was a mistake the engine could see when it was built, and each was accepted without a word, to fail at the first line that tripped over it or never (#719). The one that mattered most: a host that wrote `createEngine({ network: { enabled: false } })` believed live data was off, while every place name and currency pair still went to the public endpoints.
+  
+  | mistake | before | now |
+  | --- | --- | --- |
+  | `network: { enabled: false }` at the top level | ignored; live data on | warns that `network` belongs under `config` |
+  | `config: { validaton: ... }` | ignored | warns, naming `validation` |
+  | `config.validation.maxExpresionLength` | ignored | warns, naming `maxExpressionLength` |
+  | `seed: 42` | ignored | warns that it belongs under `random: { seed }` |
+  | two packages with no name | the second unregistered the first | each refused with `PACKAGE_NAME_MISSING` |
+  | a prefix parselet for `NUMBER` | warned that the new parselet "silently wins" | warns that the new parselet never runs |
+  
+  The option checks are warnings, naming the nearest real key or where the option belongs. A package's name is checked at registration, before anything is written. The two warnings for a parselet on a token the parser reads on its own fast path said the opposite of what happens, since the parser takes that token before it consults the registry; both now say the new parselet never runs, and an overwrite anywhere else still says the new parselet replaces the old.
+  
+  `expectPackage(pkg).toBeWellFormed()` in `solve-engine/testing` checks a package before it ships, and reports every problem at once: it has a name and registers; no parselet claims a fast-path token; every token type of its own has a `tokenCategories` entry; no keyword, operator, phrase or call is keyed to one token while its parselet waits for another; and every plugin function a parselet calls by name is declared, found by compiling the package's own words in the shapes a line puts them in. Run over the built-in packages it found 44 token types with no highlighting category, among them `CLOCK_TIME`, the `TAG_` and `TABLE_COLUMN_` aggregates and the weather phrases, which an editor left unstyled; each now has one.
+  
+  The boundary: validation checks shape, not intent. It does not decide whether a collision was meant, and an unknown option is a warning rather than a refusal, since a host typed against a newer release may pass an option an older engine does not know. `toBeWellFormed` sees a plugin call only in the shapes it compiles, so an expression test is still the proof that a form works, and a token read inside another parselet's grammar (the `and` of `between X and Y`) is not reported. The built-in packages keep their parselets on fast-path tokens, registered for introspection. The embedding guide describes the warnings, and the testing guide describes `toBeWellFormed`.
+  
+  ## Verification
+  
+  `Issue719_misconfiguration.spec.ts` holds 25 tests: each misplaced option, section and setting named with the nearest real one, every real option and optional setting passing without a word (with a spec reading `Configuration.ts` so a new optional setting cannot be reported as unknown), nameless packages and orphaned resolvers refused by code, and every built-in package well formed.
+  
+  The full suite (`npm run test:full`) passed, 16,937 of 16,941 tests in 627 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (3,220 tests in 94 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,584 documented examples).
+- 0c9cd59: One pass over a note has a work budget: sweeps, what-ifs, goal seek and span totals share a million line runs, set by `vm.maxLineRunsPerPass`
+  
+  Every limit counted work inside one expression, and the forms that reach across lines were capped one line at a time: a sweep at 100,000 line re-runs, goal seek at its probes, and a span aggregate (`total above`, a section, a tag, a table column) not at all (#711). Twenty sweep lines, each inside its own cap, made one `parseDocument` re-run 2,000,000 lines, and a host re-parses on every keystroke.
+  
+  One count per pass now bounds them, in line runs. A what-if or sweep charges each line it re-runs, a goal-seek probe one, and a span aggregate its reads at sixteen to a run, the ratio measured between a re-run (about 5.2 µs) and a read (about 0.3 µs). The line whose work would cross the budget is refused with `PASS_WORK_BUDGET_EXCEEDED`, naming the budget and the setting, and the lines above it keep their answers.
+  
+  | note, with `vm.maxLineRunsPerPass` at 500 | before | now |
+  | --- | --- | --- |
+  | five lines, then eight sweeps of line 5 over twenty values (100 line runs each) | all eight sweeps run | the first five run; the sixth, seventh and eighth are refused |
+  | the same note with the default budget | all eight run | all eight run |
+  | 100 lines, then one sweep of line 100 over 1,000 values, with the default | runs, 100,000 line runs | runs, as before |
+  
+  The default is a million line runs, about five seconds of work on the machine it was measured on: ten sweeps at their own cap, or a ledger with a running total after each of about 4,000 entries. Both document passes charge alike and refuse the same line. A line in view re-runs from its program on every pass, so it is charged against the work above it as that work stands, and the incremental evaluator counts a line it does not run (out of view) at the work it recorded when it last ran. So a live editor gives the answer a fresh pass gives, after an edit above and in a viewport scrolled below the sweeps.
+  
+  The boundary: this bounds time, not memory, and it does not make a span aggregate faster; it stops an extreme note from holding the host. The per-line caps stay as they were. Goal seek's probes are charged on the incremental path only, the one that runs them. A tag total is charged as a scan of the whole note on both passes, which is what the batch pass does and what the incremental index saves, so the two agree. The live-data re-run after a value lands carries no cross-line forms, so it spends nothing. A package whose handler re-runs lines charges them through `context.spendWork`, which the functions-and-operators guide describes; the security page's limits table and the what-if page state the budget.
+  
+  ## Verification
+  
+  `Issue711_passWorkBudget.spec.ts` holds nineteen tests. The line that crosses the budget is refused and the lines above keep their answers, with the refusal naming the budget and the setting; the default runs a sweep at its own cap untouched. A what-if, a sweep, `total above`, a section total, a tag total, a table column and goal seek's probes are each charged. The incremental path agrees with a fresh pass after an edit that frees budget above, after one that spends more, after a heavy line is deleted and re-typed twenty times, in a viewport below the sweeps, and for a sweep definition above the viewport that runs out of view after an edit, which is charged once (counting its old record on top once refused the line in view). The single-expression path charges nothing. `CrossPathDocumentFeatures.spec.ts` holds the cross-path case: both document passes refuse the same line, and the single-expression path has no document to spend on.
+  
+  The full suite (`npm run test:full`) passed, 15,581 of 15,585 tests in 613 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,869 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,363 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- 30a1d5c: Percentages can be written in words: `15 percent of 60`, `50 increased by 20%`, `reduce 50 by 20%`, `percent change from 50 to 75` and `75 is what % more than 50`
+  
+  `percent` was read only as a converter's name, after `as`, so a reader who wrote the word instead of the sign got a parse error on the commonest percentage question, and the sentences people use for a change by a percentage were missing (#705).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `15 percent of 60` | throws `Unexpected token after expression: "percent"` | 9 |
+  | `20 is what percent of 80` | throws `Expected "%" after "is what", as in "20 is what % of 200"` | 25.00% |
+  | `50 increased by 20%` | throws `Unexpected token after expression: "by"` | 60 |
+  | `reduce 50 by 20%` | throws `Unexpected token after expression: "50"` | 40 |
+  | `percent change from 50 to 75` | throws `No prefix parselet found for token: CONVERTER_NAME ("percent")` | 50.00% |
+  | `75 is what % more than 50` | throws `Unexpected token after expression: "more"` | 50.00% |
+  
+  Each gives the answer of the symbol form it mirrors: `percent` and `percentage` after a number, a bracket or a name are the `%` sign; `increased by`, `decreased by` and `reduced by` are `increase by` and `decrease by` (so `+ 20%` and `- 20%`); `reduce` is `decrease`; `percent change from A to B` is `A to B as %`; and `A is what % more than B` is the change from B to A as a percentage of B, with `less than` for the fall. A change from zero is refused in words as it is in symbols. Money and units carry through (`$50 increased by 20%` is `$60.00`).
+  
+  The boundary: after `as`, `in` or `to`, `percent` and `percentage` still ask for a number as a percentage (`0.25 as percent` is `25.00%`). `reduce` is also map-reduce's call, so it is read as `decrease` only before an amount and a `by` with a percentage after it; `reduce(...)` with a bracket is map-reduce as before, and `reduce 50 by 20`, with no percentage, is left unread rather than given the decrease form's reading of a bare factor. `100 percent sure` is not a number. The percentages page gains proven examples of each form.
+  
+  ## Verification
+  
+  `Issue705_percentInWords.spec.ts` holds 31 tests. Each worded form gives the answer of the symbol form it mirrors, `less than` gives the fall and a value above gives a negative one, money, a unit and a negative change carry through, and a zero base is refused in words as in symbols. What must not break is held: `as percent`, `as percentage` and `in percent`, the `increase` and `decrease` forms and the other `by` phrases, `reduce` without a percentage and `reduce` as a name, `percent` in prose, and a name before `percent`. The adversarial cases: prototype words before `percent` and after `is what %`, and `more` without `than`.
+  
+  The full suite (`npm run test:full`) passed, 15,825 of 15,829 tests in 617 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,888 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,404 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- 6ceb4bd: A live-data resolver runs at most six fetches at once, and `createQueryResolver` takes `maxConcurrent`
+  
+  `createQueryResolver`, which the weather, stocks, crypto and knowledge packages are built on, started each fetch the moment a line asked for it (#696). A pasted or hostile document of 500 places opened 500 connections to one weather service at once, then 500 more, all from the reader's own address.
+  
+  | 500 lines `weather in Town0` to `weather in Town499`, `fetch` stubbed | before | now |
+  | --- | --- | --- |
+  | geocoding requests in flight at once | 500 | 6 |
+  | forecast requests in flight at once | 500 | 6 |
+  | requests in all | 1,000 | 1,000 |
+  
+  A resolver now runs at most six fetches together and queues the rest in the order they were asked for. `maxConcurrent` sets the number, a positive whole number or `Infinity` for no limit; any other value is refused when the package is built. A queued fetch's `timeoutMs` starts when the fetch does, so a long queue does not time out requests that never ran. A query asked for again while it waits shares the one fetch, and one cancelled while it waits never fetches. A fetch that ignores its signal still gives its slot back at the deadline, with the timeout error for its line, where before it could hold the line pending for ever.
+  
+  The boundary: this bounds how many requests run together, not how many run, and it is not a rate per minute. The limit is one per resolver, shared by every engine in the process. A resolver written by hand, without `createQueryResolver`, keeps whatever limit it keeps of its own. The async data source guide shows the option with a worked example, and the package-authoring routing table points to it.
+  
+  ## Verification
+  
+  `Issue696_queryResolverConcurrency.spec.ts` holds eighteen tests. The limit hands out its slots in arrival order, `tryAcquire` takes a free one in the same turn, a release called twice frees one slot, and a waiter whose signal aborts leaves the queue; `Infinity` is no limit, and zero, negatives, fractions, `NaN` and `-Infinity` are refused. The resolver runs a thousand queries six at a time by default, in order, honours `maxConcurrent`, and refuses an invalid one when the package is built. A queued fetch's timeout starts when it runs, a fetch that never settles frees its slot at the deadline, a query asked for twice while it waits fetches once, and one cancelled while it waits never fetches. An uncontended fetch still starts in the turn that asked for it, so a first pass reads a cached value as before, and prototype words as queries queue like any other. Through the weather package with `fetch` stubbed, a document of 60 places keeps at most six requests in flight and every place answers; the tree before this change had all 60 in flight at once.
+  
+  The full suite (`npm run test:full`) passed, 15,536 of 15,540 tests in 611 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,865 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,363 documented examples).
+- 0c9cd59: What a note keeps is bounded: its answers hold at most ten million elements, set by `vm.maxRetainedElements`
+  
+  Each line's answer stays in memory while the note is open, and every limit counted one line at a time: `vm.maxAllocatedElements` stops one evaluation making more than two million elements, and nothing stopped many lines keeping that much between them (#694). Five hundred lines of `:m = map(10*x, 0:99999)`, 13 KB of text, each inside every per-line limit, kept 50,000,000 elements and 385 MB of heap.
+  
+  One count per pass now bounds it, in elements: a list or matrix counts its cells, text one element to eight characters, and any other answer one. The line whose answer would take the note past the ceiling is refused with `DOCUMENT_ELEMENT_LIMIT_EXCEEDED`, naming its size and the setting, and a name it assigned is let go, so the value is not kept through a variable either. The lines above keep their answers.
+  
+  | 500 lines, `:m0 = map(10*x, 0:99999)` to `:m499 = ...`, default settings | before | now |
+  | --- | --- | --- |
+  | lists kept | 500 | 100 |
+  | elements kept | 50,000,000 | 10,000,000 |
+  | heap the note holds | 385 MB | 80 MB |
+  | lines refused | none | 101 to 500 |
+  
+  Measured on one Windows 11 machine under Node 24.16, heap after two collections with the engine still held.
+  
+  Ten million is a hundred 100,000-element lists, or five lines at `vm.maxAllocatedElements`; an ordinary note of numbers, text and small tables is nowhere near it. The count starts again on every pass, so an edited or deleted line stops counting when it does, and both document passes count alike and refuse the same line. A line waiting on a live value keeps nothing until the value lands; its re-run is then charged against what the whole note keeps, and an answer no larger than the one it replaces is always kept, so a background refresh never refuses a line.
+  
+  The boundary: this bounds memory, not time. A line is refused once its answer is known, so the work of making it is done, within the per-line limits; the 500-line note takes as long as it did. The re-run after a live value lands is charged against the whole note rather than its position, so near the ceiling it can refuse a line a fresh pass would keep; the next pass counts every line in place again. The single-expression path keeps no note and is not counted. The security page's limits table states the setting.
+  
+  ## Verification
+  
+  `Issue694_retainedElementsBudget.spec.ts` holds twenty-two tests. A list counts its cells, text its length in eights and anything else one, and the refusal names the line, its size and the setting. The line that crosses the ceiling is refused, its name let go (a line reading it answers `Undefined variable`) while the kept names stay; an answer that reaches the ceiling exactly is kept and one element more is refused; re-parsing a note twenty-five times refuses nothing new; the default answers 2,000 ordinary lines in full; and a refused line assigning each prototype word lets go of that name only. The incremental path agrees with a fresh pass after an edit that shrinks a line above, after a heavy line is edited back and forth or deleted and re-inserted twenty times, after the refused line is moved to the top, in a viewport below the heavy lines, and for a definition above the viewport that runs out of view after an edit. A line waiting on a `global` value is refused on its re-run at the line a fresh pass refuses, with its name let go; a re-run no larger than the answer it replaces is kept fifty times over; and before any pass a re-run keeps its answer. `CrossPathDocumentFeatures.spec.ts` holds the cross-path case: both document passes refuse the same line, and the single-expression path keeps its answer.
+  
+  The full suite (`npm run test:full`) passed, 15,581 of 15,585 tests in 613 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,869 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,363 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- 3784da4: The spoken relative dates: `3 days ago`, `next week`, `end of month`, `noon`, `this friday` and `2nd Tuesday of March` with no year
+  
+  After `next friday`, `3 days before today` and `2nd Tuesday of March 2027`, these are the next most common ways people write a date or a time, and each was refused (#704). Each now reads as the shipped form it means.
+  
+  | line | before | now (at noon on 11 March 2026, London) |
+  | --- | --- | --- |
+  | `3 days ago` | `Unexpected token after expression: "ago"` | Sunday, March 8, 2026, 12:00:00 PM |
+  | `next week` | `"next" must be followed by a day of the week` | Monday, March 16, 2026 |
+  | `next year` | `"next" must be followed by a day of the week` | Friday, January 1, 2027 |
+  | `end of month` | `Undefined variable: end` | Tuesday, March 31, 2026 |
+  | `start of year` | `Undefined variable: start` | Thursday, January 1, 2026 |
+  | `noon` | `Undefined variable: noon` | 12:00:00 PM |
+  | `this friday` | `Unexpected token after expression: "friday"` | Friday, March 13, 2026, 12:00:00 PM |
+  | `friday + 1 week` | `No prefix parselet found for token: FRIDAY` | Friday, March 20, 2026, 12:00:00 PM |
+  | `first Monday of next month` | `Unexpected token after expression: "Monday"` | Monday, April 6, 2026 |
+  | `2nd Tuesday of March` | `Undefined variable: March` | Tuesday, March 10, 2026 |
+  | `9am until 5pm` | `Unexpected token after expression: "until"` | 480 minutes |
+  
+  - **Days ago.** A length of time and `ago` is that length before now, as `3 days before today` is, so it keeps the time of day.
+  - **Weeks, months and years.** `next week`, `this week`, `last week` and the same for `year` join `next month`, each the first day of its period; a week runs Monday to Sunday. `start of`, `beginning of` and `end of` take a period (`month`, `next week`, `last year`) and give its first or last day, as a calendar day.
+  - **Days of the week.** `this friday` is the coming Friday, today when today is one, where `next friday` steps over today. A weekday name inside an expression (`friday + 1 week`, `days until friday`) reads the same way.
+  - **Clock times.** `noon` and `midnight` are 12:00 and 0:00, the clock times `12pm` and `12am` are, and `until` joins `to` between two clock times.
+  - **The nth weekday.** The ordinal can be a word from `first` to `fifth`, and a month with no year is this year's, the year `9 March` takes.
+  - **Dates past the calendar.** A date moved so far that no calendar holds it (`99999999999 days ago`, past AD 275760) is refused with `DATE_OUT_OF_RANGE` rather than shown as `Invalid Date` (or, formatted with a zoned calendar, thrown as `Invalid time value`).
+  
+  The words these forms use stay free elsewhere. `start`, `end`, `this` and `ago` are claimed only as the whole phrase, so `start = 5`, `end - start` and `3 days ago I paid` are unchanged. A weekday name alone on a line is refused with a message suggesting `this friday`, so a note can head a day with it; `Friday: 3 hours` is unaffected. `noon` and `midnight` are read as times wherever they are not being assigned, so a variable with either name is read with its colon, `:noon`, the convention for any name the engine also reads as a word.
+  
+  The boundary: `today` is still an instant, so `3 days ago` carries the time of day, and a month with no year is this year's even when it has passed. `in 3 days`, `a week ago`, `the day after tomorrow`, `Monday next week`, `tomorrow at noon`, `next weekend` and `end of quarter` are not read, and relative-dates.md lists the spelling that works for each. The week starts on Monday; a configurable first day of the week is #702. A date before AD 1 is still shown without its era, which is #823.
+  
+  ## Verification
+  
+  `Issue704_spokenRelativeDates.spec.ts` holds 90 tests, run on the `Date` and the Temporal backends: each form at the docs moment and against the shipped form it means, a month end, a leap February, a year end, a Sunday and a Friday, the daylight-saving changes in London and New York, the words kept free in prose and as names, dates past the calendar's range, and words naming inherited properties.
+  
+  The full suite (`npm run test:full`) passed, 16,937 of 16,941 tests in 627 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (3,220 tests in 94 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,584 documented examples).
+- 3784da4: A host can tell that a package failed to register: `strict`, `onPackageError` and `getRegisteredPackages()`
+  
+  A package that throws while it registers (an `engineVersion` range the engine does not satisfy, a keyword a built-in already owns) was skipped by the constructor with a console error, and nothing a host could call said so: the list of registered packages was private (#718). A host that shows the reader no console met the missing package as a parse error on every line that used it.
+  
+  | `createEngine({ extraPackages: [oldContract], ... })` | before | now |
+  | --- | --- | --- |
+  | default | built without it; a console error | built without it; a console error, as before |
+  | `strict: true` | not an option | throws `PACKAGE_ENGINE_VERSION_MISMATCH` |
+  | `onPackageError: (pkg, error) => ...` | not an option | told `old-contract: PACKAGE_ENGINE_VERSION_MISMATCH`; the rest register |
+  | `engine.getRegisteredPackages()` | private | the names that registered, in order |
+  
+  A strict engine throws the package's coded `EngineError`, and a callback is told of each failure once, in order, while later packages still register. A strict engine, and one whose callback throws, unregisters the packages it had already registered before throwing, so nothing is left in the registries engines share. `getRegisteredPackages()` returns a copy, and a package unregistered leaves it.
+  
+  The boundary: the default containment is unchanged, so one bad third-party package still cannot take the whole engine down. `strict` covers registration throws only; collisions between packages that only pick a winner stay warnings, since a package may replace a built-in's grammar on purpose. The mistakes that never throw are the misconfiguration change that ships beside this one. The embedding and package-authoring guides describe both options.
+  
+  ## Verification
+  
+  `Issue718_strictRegistration.spec.ts` holds 10 tests: a strict engine throwing the package's coded error and leaving nothing in the shared registries, `onPackageError` told of each failure in order, `getRegisteredPackages` listing what registered, and the default unchanged.
+  
+  The full suite (`npm run test:full`) passed, 16,937 of 16,941 tests in 627 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (3,220 tests in 94 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,584 documented examples).
+- 3784da4: A clock time is shown as a time of day, and `as time` shows any date that way: `9:00am + 3 hours` is `12:00:00 PM`
+  
+  A clock time is a time of day to the reader, and the engine printed it as a full date: `9:00am + 3 hours` showed today's weekday and date, and no form showed another date as a time alone (#708). The time page documented `12:00:00 PM` for that line in a table nothing checked.
+  
+  | line | before (on 25 September 2026) | now |
+  | --- | --- | --- |
+  | `9:00am` | Friday, September 25, 2026, 9:00:00 AM | 9:00:00 AM |
+  | `9:00am + 3 hours` | Friday, September 25, 2026, 12:00:00 PM | 12:00:00 PM |
+  | `11pm + 2 hours` | Saturday, September 26, 2026, 1:00:00 AM | 1:00:00 AM (+1 day) |
+  | `6pm in Chicago` | Friday, September 25, 2026, 6:00:00 PM | 6:00:00 PM |
+  | `2026-04-03T09:30 as time` | `Unknown converter "as time"` | 9:30:00 AM |
+  
+  A datetime carries a new grain, `time`, beside `date`, `datetime` and `instant`. A clock time takes it, duration arithmetic keeps it, and so does `in <zone>`. It is shown as the time alone, in words or, under a numeric date format, as `HH:MM:SS`, with the days it has moved beside it, the way the time-zone forms write a day shift. The day it is counted from is recorded on the value when the time is written (today for a clock time, the value's own day for `as time`), so the shift does not change with the day the answer is shown on. The instant is unchanged; only its display is.
+  
+  `as time` shows a date and time as its time of day. It takes a date: a plain number or text has no time of day of its own, and `5 as time` would otherwise be a moment in 1970, so each is refused by name, with the way to read a timestamp first (`1710000000 as date as time`). The grain and the day it is counted from cross a snapshot and the worker boundary with the value.
+  
+  The boundary: arithmetic between clock times does not change (`9am to 5pm` is still 480 minutes, `5pm - 9am` still `8:00`). A clock time is still read as that time today, and the host's date display settings still apply to full dates. The time page's clock examples are now proven lines, and the time-zones page shows `6pm in Chicago` as the time it is.
+  
+  ## Verification
+  
+  `Issue701_708_timeOfDayAndTimestamps.spec.ts` holds 41 tests across the two issues: a clock time shown as a time of day with its day shift, `as time` on a date and its refusal of a number, the anchor day kept across a snapshot and the worker boundary, and the time-zone forms that answer with a clock time.
+  
+  The full suite (`npm run test:full`) passed, 16,937 of 16,941 tests in 627 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (3,220 tests in 94 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,584 documented examples).
+- 3784da4: The weekend and the first day of the week are configurable, and read from the locale's region: under `ar-SA`, one working day after Thursday 1 January 2026 is Sunday 4 January
+  
+  Working-day arithmetic always skipped Saturday and Sunday. Where the weekend is Friday and Saturday no configuration could say so: the only hook was a holiday predicate, and a predicate can only remove days, so Sunday never became a working day (#702).
+  
+  | engine | line | before | now |
+  | --- | --- | --- | --- |
+  | `date: { weekend: ["friday", "saturday"] }` | `1 working day after 2026-01-01` | setting ignored: Friday, January 2, 2026 | Sunday, January 4, 2026 |
+  | `locale: "ar-SA"` | `1 working day after 2026-01-01` | Friday, January 2, 2026 | Sunday, January 4, 2026 |
+  | `locale: "ar-SA"` | `2026-01-02 is a weekend` | false | true |
+  | `date: { firstDayOfWeek: "sunday" }` | `start of week`, on Wednesday 11 March 2026 | not a form yet (#704) | Sunday, March 8, 2026 |
+  | default | `1 working day after 2026-01-01` | Friday, January 2, 2026 | Friday, January 2, 2026 |
+  
+  - **Two settings.** `config.date.weekend` names the weekend days and `config.date.firstDayOfWeek` the day a week starts on, both by name. An empty weekend makes every day a working day. A name that is not a day is refused when the engine is built, with `DATE_WEEKDAY_INVALID`, rather than quietly ignored.
+  - **From the locale.** Left unset, each comes from the engine's locale tag when the tag names a region and the runtime reports that region's week through `Intl.Locale` (`getWeekInfo()`, or the `weekInfo` getter on Node 22): `ar-SA` and `he-IL` keep Friday and Saturday with a Sunday start, `fa-IR` Friday alone with a Saturday start, `en-US` a Sunday start. A bare language such as the default `en` names no region, so the default engine keeps Saturday and Sunday and a Monday start. A runtime that reports no week leaves the default in place. Each setting stands on its own, so a host can name the weekend and let the locale choose the first day.
+  - **One reading.** The working-day walk, the working-day count, `is a weekend` and `is a workday` read the one weekend, where the predicates held a second hard-coded copy; the week forms (`this week`, `start of week`) begin on the first day. A weekend of all seven days has no working day to land on, and a working-day offset is refused at once rather than after walking the whole hundred-year limit to find that out.
+  
+  The boundary: the ISO week number (`week number of`) stays Monday-based, as ISO defines it. `workdays in <span>` and the `workday` unit in a rate stay a fixed five working days to seven, since neither has a date to read a week from. The engine's `locale` still chooses the language pack by its language alone; only the week reads its region.
+  
+  ## Verification
+  
+  `Issue702_weekShape.spec.ts` holds 45 tests: the default unchanged, a configured weekend on each day of a week, a weekend with a holiday predicate, an empty weekend and one of seven days, a configured first day, five inferred locales, an explicit setting over the locale, invalid names refused, and runtimes with no week information, an older getter, a throwing constructor and out-of-range days.
+  
+  The full suite (`npm run test:full`) passed, 16,937 of 16,941 tests in 627 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (3,220 tests in 94 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,584 documented examples).
+- 3784da4: Every place in the time zone database has a name: `time in Kathmandu`, `time in Kolkata` and `time in Hobart` answer
+  
+  A reader asking the time in a place the engine had not been told about got a refusal. The zone table was written by hand and held about ninety cities, so Kathmandu, Kolkata and Hobart, all zones in the IANA database, were refused, and Kolkata was refused even though Mumbai and Delhi resolved to `Asia/Kolkata` (#698).
+  
+  | line (at noon UTC on 11 March 2026) | before | now |
+  | --- | --- | --- |
+  | `time in Kathmandu` | `Expected a city or zone name after "time in"` | 5:45 PM |
+  | `time in Kolkata` | `Expected a city or zone name after "time in"` | 5:30 PM |
+  | `time in Hobart` | `Expected a city or zone name after "time in"` | 11:00 PM |
+  | `time in Ho Chi Minh` | `Expected a city or zone name after "time in"` | 7:00 PM |
+  | `time difference between Kathmandu and Kolkata` | `Expected a city or zone name after "time difference between"` | Kathmandu is 15 minutes ahead of Kolkata |
+  
+  - **Generated, then committed.** `scripts/generate-zone-names.mjs` writes `calendar/generated/ZoneNames.generated.ts` from the zones the runtime lists, 418 on Node 22 and 24, taking the last part of each identifier as the place: `Asia/Kathmandu` gives `kathmandu`, `America/Argentina/Buenos_Aires` gives `buenos aires`. It is run by hand, like the unit table's generator, so the table changes when someone regenerates it rather than when a runner's Node is upgraded. It adds 393 names.
+  - **Old and new spellings.** The runtime keeps fourteen zones under an older identifier (`Asia/Calcutta`, `Europe/Kiev`), so the generator stores the current one and answers to both names: `Kolkata` and `Calcutta`, `Kyiv` and `Kiev`, `Ho Chi Minh` and `Saigon`.
+  - **Beneath the hand-written table.** Every hand-written name keeps its meaning, and the hand-written table carries what the database cannot: countries, abbreviations, cities with no zone of their own (Mumbai), and `San Juan`, which reads as Puerto Rico rather than the Argentine province.
+  - **Left out, with reasons.** Ordinary words (`Easter`, `Christmas`, `Reunion`, `Wake`, `Center`, `Oral`), names a better-known place elsewhere holds (`Cordoba`, `Merida`, `Chatham`, `Norfolk`, `Petersburg`), county zones in Indiana, Kentucky and North Dakota, and the Antarctic research stations, several named after people (`time in Davis` should not answer for a base in Antarctica). Each is listed with its reason in the generator, and a spec asserts they stay out.
+  
+  A single-word name is read as a place only where a zone is expected, so `kathmandu = 4` is still an ordinary variable. A name of more than one word is fused into one token as `New York` always was; a line that used such a pair of words as prose was already refused and still is. The published package grows by the table's size, which the package-size figures record.
+  
+  The boundary: a zone identifier is still not typed directly (`Asia/Kathmandu` reads the slash as division), and a hyphenated place is written with spaces (`Port au Prince`, not `Port-au-Prince`), for the same reason.
+  
+  ## Verification
+  
+  `Issue698_generatedZoneNames.spec.ts` holds 43 tests: a generated name through each form that reads a zone, old and new spellings agreeing, the hand-written table winning, every excluded name refused, every generated name a plain word or a fused place token, every generated zone one the calendar backend computes in, and single-word names still free as variables. The generator produces the same table on Node 22 and Node 24.
+  
+  The full suite (`npm run test:full`) passed, 16,937 of 16,941 tests in 627 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (3,220 tests in 94 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,584 documented examples).
+
+### Patch Changes
+
+- 6ceb4bd: A `global :name` that nothing declares no longer keeps a listener per read, or its engine, for ever
+  
+  A `global :name` read waits until some note declares the name, and a name nobody declares waits for ever: that is the design. Each wait subscribed its own listener to the process-wide store of globals, and the resolver, one instance shared by every engine, kept each waiting promise in a map of its own (#695). So a note reading 40,000 undeclared names left 40,000 listeners that every later write, from any engine, called in turn, and the promises carried the engine's continuation, so a dropped engine was never collected.
+  
+  | after one engine reads 40,000 undeclared names and is dropped | before | now |
+  | --- | --- | --- |
+  | the resolver's listeners on the store | 40,000 | 0, once the engine is collected (1 while it waits) |
+  | the engine | kept, with 152 MB of heap | collected, 9 MB of heap |
+  | another engine's 2,000 writes | 511 to 700 ms | 19 to 31 ms |
+  
+  Measured on one Windows 11 machine under Node 24.16 with `--expose-gc`, three runs each; the same 2,000 writes take 16 to 50 ms in a fresh process.
+  
+  The resolver now holds one subscription, and dispatches a write through its waits by name. Each engine's waits are kept weakly by that engine's query client, so they go when the engine does, and the subscription goes when nothing waits. A name nobody declares still waits for ever, several lines of one engine waiting on one name still share one promise, and a write settles every engine's wait on its name.
+  
+  The boundary: one engine's teardown no longer ends other engines' waits, as clearing the shared map used to; an engine's own waits end with it, or when the name is written. The values the store keeps for names that have been written are unchanged, since keeping them process-wide is the design the 3.0 Workspace revisits.
+  
+  ## Verification
+  
+  `Issue695_globalWaitsGoWithTheirEngine.spec.ts` holds ten tests. One subscription serves a thousand undeclared names and several engines, and it goes when nothing waits. The waits keep their behaviour: lines of one engine share a promise, a write settles every engine's wait on its name and no other, one engine's teardown ends no other's, a wait survives the store being reset under it, and a name nobody declares still pends. Through real engines, forty thousand undeclared reads add one listener, and a dropped engine is collected with its waits gone from the store (run under `--expose-gc`, as the full suite is). The collection test fails on the tree before this change.
+  
+  The full suite (`npm run test:full`) passed, 15,536 of 15,540 tests in 611 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,865 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,363 documented examples).
+
 ## 2.41.0
 
 ### Minor Changes
