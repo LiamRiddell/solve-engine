@@ -55,7 +55,7 @@ function unquoted(message: string): string {
 }
 
 /** Every token type name the engine registers, the words a message must not use. */
-const TYPE_NAMES = new Set(Object.values(TokenTypes).filter((type) => type.length > 1));
+const TYPE_NAMES = new Set<string>(Object.values(TokenTypes).filter((type) => type.length > 1));
 
 /** The token type names a message uses as words of its own. */
 function typeNamesIn(message: string): string[] {

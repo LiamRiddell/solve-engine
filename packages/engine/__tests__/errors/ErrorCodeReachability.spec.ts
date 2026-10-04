@@ -43,10 +43,15 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	AGGREGATE_NAME_RESERVED: "stdev(a) = a",
 	AGGREGATE_NON_NUMERIC: "min(\"a\", 3)",
 	ALLOCATION_LIMIT_EXCEEDED: { line: "map(x * 2, 0:100)", config: { vm: { maxAllocatedElements: 10 } } },
+	AS_CONVERTER_AMBIGUOUS_CASE: "5 W as mw",
 	AS_CONVERTER_EXPECTED_NAME: "1 as as",
 	AS_CONVERTER_EXPECTED_NUMBER: "\"x\" as compact",
+	AS_CONVERTER_PREFIX_CASE: "1 V as MV",
 	AS_CONVERTER_UNSUPPORTED_BASE: "5 as base 40",
+	AS_DATE_NEEDS_TIMESTAMP: "5 kg as date",
 	AS_ISO8601_NEEDS_DATE: "5 kg as iso8601",
+	AS_TIMESTAMP_NEEDS_DATE: "5 kg as timestamp",
+	AS_TIME_NEEDS_DATE: "5 as time",
 	AS_UNIT_EXPECTED_QUANTITY: "5 as n",
 	AS_UNIT_INCOMPATIBLE: "5 kg as n",
 	BIGINT_DIVISION_BY_ZERO: "10n / 0",
@@ -79,6 +84,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	DATE_OFFSET_LIMIT_EXCEEDED: "today + 100000 workdays",
 	DATE_ORDER_MISMATCH: "12.13.14",
 	DATE_OUT_OF_RANGE: "(2^53) as iso8601",
+	DENSITY_EXPECTED_NUMBER: "4000px at x dpi",
 	DESCENDING_RANGE: "sum(x, 5:1)",
 	DETERMINANT_REQUIRES_SQUARE_MATRIX: "det([1,2,3;4,5,6])",
 	DIMENSION_MISMATCH: "[1,2] + [1,2,3]",
@@ -339,11 +345,13 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	TIMECODE_FRAME_OUT_OF_RANGE: "00:00:00:30 at 30 fps",
 	TIME_DIFFERENCE_EXPECTED_CITY: "time difference between Atlantis and Tokyo",
 	TIME_DIFFERENCE_EXPECTED_SECOND_CITY: "time difference between London and 5",
+	TIME_IN_ZONE_UNDATED: "time in Tokyo on 1 March 2027",
 	TIME_ZONE_EXPECTED_CITY: "time in X",
 	TIME_ZONE_EXPECTED_DATE: "3pm on 5",
 	TIME_ZONE_EXPECTED_IN: "6pm Sydney",
 	TIME_ZONE_EXPECTED_TARGET: "6pm Sydney in",
 	TIME_ZONE_MISSING_DATE: "3pm on",
+	TIME_ZONE_OFFSET_OUT_OF_RANGE: "2026-04-03 in UTC+25",
 	TIME_ZONE_REPEATED_TIME: "1:30am London on 25 October 2026 in Tokyo",
 	TIME_ZONE_SKIPPED_TIME: "1:30am London on 29 March 2026 in Tokyo",
 	TIME_ZONE_TOO_MANY: "9:00 London in Paris, Tokyo, Rome, Oslo, Madrid, Paris, Tokyo, Rome, Oslo, Madrid, Paris, Tokyo, Rome, Oslo, Madrid, Paris, Tokyo, Rome, Oslo, Madrid, Paris, Tokyo, Rome, Oslo, Madrid, Paris, Tokyo, Rome, Oslo, Madrid, Paris, Tokyo, Rome, Oslo, Madrid, Paris, Tokyo, Rome, Oslo, Madrid, Paris, Tokyo, Rome, Oslo, Madrid, Paris, Tokyo, Rome, Oslo, Madrid, Paris, Tokyo, Rome, Oslo, Madrid",
@@ -381,9 +389,12 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	USER_FUNCTION_NO_PARAMS: "f() = 1",
 	VS_INCOMPARABLE: "500g vs £4",
 	WEATHER_EXPECTED_CITY: "low in",
+	WEB_EXPECTED_DENSITY: "4000px at 0 dpi",
 	WEB_EXPECTED_PIXELS: "1920.5x1080 as ratio",
+	WEB_EXPECTED_PIXELS_OR_LENGTH: "5 kg at 300 dpi",
 	WEB_EXPECTED_PX_OR_REM: "5 kg at 20px base",
 	WEB_EXPECTED_ROOT_SIZE: "1.5rem at 0px base",
+	WEEKDAY_ALONE: "Friday",
 	WEIGHTED_AVERAGE_MISSING_WEIGHT: "weighted average of 72, 88",
 	WEIGHTED_AVERAGE_ZERO_WEIGHT: "weighted average of 5 at 0%, 6 at 0%",
 	WHAT_IF_DUPLICATE_INPUT: { doc: ["x = 5", "x * 2", "line 2 with x = 6 and x = 7"] },
@@ -412,6 +423,7 @@ const HOST_API: Readonly<Record<string, string>> = {
 	CONFIG_PROPERTY_NOT_FOUND: "the configuration manager's get and set, given a property that does not exist",
 	CONFIG_SECTION_NOT_FOUND: "the configuration manager's get and set, given a section that does not exist",
 	DATE_INPUT_LOCALE_INVALID: "the date.inputLocale setting, given something that is not a locale tag",
+	DATE_WEEKDAY_INVALID: "the date.weekend and date.firstDayOfWeek settings, given something that is not a day of the week",
 	DATE_ZONE_UNKNOWN: "dateCalendarInZone, given a zone the runtime cannot compute in",
 	DEFINE_FUNCTION_ARGUMENT_TYPE: "a host's own function from defineFunction, which no built-in line calls",
 	DEFINE_FUNCTION_ARITY_MISMATCH: "a host's own function from defineFunction, which no built-in line calls",
@@ -446,6 +458,8 @@ const PACKAGE_AUTHORING: Readonly<Record<string, string>> = {
 	OPCODE_POOL_EXHAUSTED: "registering more packages with opcodes of their own than the range holds",
 	PACKAGE_ENGINE_VERSION_INVALID_RANGE: "registering a package whose engineVersion is not a semver range",
 	PACKAGE_ENGINE_VERSION_MISMATCH: "registering a package whose engineVersion range excludes this engine",
+	PACKAGE_NAME_MISSING: "registering a package with no name, or an empty one",
+	PACKAGE_RESOLVER_FUNCTION_MISSING: "a package whose createQueryResolver watches for a plugin function the package does not declare",
 	PLUGIN_CALL_FUSION_UNREACHABLE: "registering a package whose callFusions name a word the engine already reads",
 	PLUGIN_FUNCTION_INDEX_POOL_EXHAUSTED: "registering more plugin functions than a compiled call can index",
 	PLUGIN_FUNCTION_INDEX_TOO_LARGE: "registering more plugin functions than a compiled call can index",
@@ -510,6 +524,7 @@ const GUARDED_BEFORE_IT: Readonly<Record<string, string>> = {
 	LOG_EXPECTED_BASE: "a guard: the normaliser only fuses log before a base",
 	NORMALIZED_TOKEN_LIMIT_EXCEEDED: "a normaliser rule that grows a line's tokens, which no built-in rule does past the line-length limit",
 	PERCENT_CHANGE_FAILED: "the fallback for a percentage change that fails with no code, which every current failure supplies",
+	PERIOD_EXPECTED: "a guard: the normaliser only fuses start of or end of before a week, a month or a year",
 	RATE_CONVERT_MEASURE_MISMATCH: "an opcode (RATE_CONVERT) no built-in parselet emits; a package may",
 	RATE_CONVERT_NOT_A_RATE: "an opcode (RATE_CONVERT) no built-in parselet emits; a package may",
 	RATE_MISSING_DENOMINATOR_UNIT: "an opcode (RATE_DIV) no built-in parselet emits; a package may",
@@ -624,8 +639,8 @@ function codesOf(example: Example): string[] {
 
 describe("every catalogued code has an example or a reason no line produces it", () => {
 	test("each code is in exactly one of the two", () => {
-		const unaccounted = CATALOGUED.filter((code) => !Object.hasOwn(EXAMPLES, code) && !Object.hasOwn(NOT_FROM_A_LINE, code));
-		const both = CATALOGUED.filter((code) => Object.hasOwn(EXAMPLES, code) && Object.hasOwn(NOT_FROM_A_LINE, code));
+		const unaccounted = CATALOGUED.filter((code) => !Object.prototype.hasOwnProperty.call(EXAMPLES, code) && !Object.prototype.hasOwnProperty.call(NOT_FROM_A_LINE, code));
+		const both = CATALOGUED.filter((code) => Object.prototype.hasOwnProperty.call(EXAMPLES, code) && Object.prototype.hasOwnProperty.call(NOT_FROM_A_LINE, code));
 		expect({ unaccounted, both }).toEqual({ unaccounted: [], both: [] });
 	});
 

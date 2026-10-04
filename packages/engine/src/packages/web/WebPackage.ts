@@ -12,6 +12,8 @@ import { pixelDensityNormalizerRule } from "./normalizer/PixelDensityNormalizerR
 export const WebErrorCodes = {
 	/** A width or a height was not a whole count of pixels. */
 	WEB_EXPECTED_PIXELS: "WEB_EXPECTED_PIXELS",
+	/** `at` and `dpi` with a word rather than a number of dots per inch between them, as in `4000px at x dpi`. */
+	DENSITY_EXPECTED_NUMBER: "DENSITY_EXPECTED_NUMBER",
 	/** A size measured against a root font size was in neither `px` nor `rem`. */
 	WEB_EXPECTED_PX_OR_REM: "WEB_EXPECTED_PX_OR_REM",
 	/** The stated root font size was not a size a `rem` can be measured against. */

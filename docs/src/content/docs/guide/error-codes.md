@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 491 codes, grouped below by the part
+ship. The engine and its built-in packages ship 506 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -243,6 +243,8 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `PLUGIN_UNIT_COLLISION` | thrown | A package registered a unit spelling the engine already has. Refused at registration, since a built-in unit cannot be overridden. |
 | `PACKAGE_ENGINE_VERSION_MISMATCH` | thrown | A package's declared `IEnginePackage.engineVersion` semver range doesn't satisfy the running engine's ENGINE_VERSION. See api/EngineVersionCompatibility.ts. |
 | `PACKAGE_ENGINE_VERSION_INVALID_RANGE` | thrown | A package's declared `IEnginePackage.engineVersion` isn't a parseable semver range at all (a typo in the package's own descriptor). |
+| `PACKAGE_NAME_MISSING` | thrown | A package was registered with no `name`, or an empty one, so nothing could name it to unregister it or report on it (#719). |
+| `PACKAGE_RESOLVER_FUNCTION_MISSING` | thrown | A package's `createQueryResolver` watches for a plugin function the package does not declare, or was built for another package, so the call it waits for would never come (#719). |
 | `OPCODE_POOL_EXHAUSTED` | thrown | More packages asked for opcodes of their own than the dynamic opcode range holds. A registration fault. |
 | `PLUGIN_FUNCTION_INDEX_POOL_EXHAUSTED` | thrown | More plugin functions registered than a compiled call can index (65,536). A registration fault. |
 | `PLUGIN_FUNCTION_INDEX_TOO_LARGE` | thrown | A plugin function's index past the largest a compiled call can hold (65,535). A registration fault. |
@@ -326,6 +328,8 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `INVALID_DATETIME_OP` | as a value | A date moved by a plain number, or by a quantity that is not a length of time, or `to` between a date and something that is not one. The message says what a date moves by. |
 | `TIMECODE_FPS_MISMATCH` | as a value | Two video timecodes at different frame rates added or subtracted. |
 | `UNKNOWN_AS_CONVERTER` | as a value | `as <name>` naming no converter any package registered. |
+| `AS_CONVERTER_AMBIGUOUS_CASE` | as a value | `as mw`: the target, read regardless of case, could be two units whose prefixes differ only in case (`mW` and `MW`), so it is refused rather than guessed (#824). |
+| `AS_CONVERTER_PREFIX_CASE` | as a value | `as MV` when only `mV` is a unit: reading it regardless of case would turn a mega into a milli, so it is refused by name (#824). |
 | `PLOT_INVALID_RANGE` | as a value | A plot's range whose ends are not finite numbers. |
 
 **Lists, ranges and matrices**
@@ -421,9 +425,11 @@ In the package as `ERROR_CODE_CATALOGUES.DatetimeZoneErrorCodes`.
 
 | Code | Arrives | When it arises |
 | --- | --- | --- |
+| `TIME_ZONE_OFFSET_OUT_OF_RANGE` | either | `2026-04-03 in UTC+25`, `time in UTC-5:60`: a signed offset after `UTC` or `GMT` that no clock keeps (outside UTC-12 to UTC+14, sixty minutes or more, a fraction, or a time of day). An Error value from the VM's `in <zone>` branch, and a parse error from the time package's zone forms, each as that form refuses an unknown zone; both read the offset with `calendar/UtcOffset.ts`'s `tryReadUtcOffset` (#730). |
 | `DATETIME_ZONE_UNKNOWN` | as a value | A date converted `in <name>` where the name is neither a time zone the engine knows nor a unit, as in `2026-04-03 in Atlantis`. The reader checks the zone's spelling. |
 | `DATETIME_NOT_CONVERTIBLE` | as a value | A date converted `in <unit>` where the name is a real unit that a date has no reading in, as in `2026-04-03 in furlongs`. Separate from `DATETIME_ZONE_UNKNOWN`, since the fix is different. |
 | `DATE_ZONE_UNKNOWN` | thrown | `dateCalendarInZone` given a zone this runtime cannot compute in, as in `"Europe/Atlantis"`. Raised when the host builds the calendar, not per line. |
+| `DATE_WEEKDAY_INVALID` | thrown | `date: { weekend: ["fri"] }`: `date.weekend` or `date.firstDayOfWeek` named something that is not a day of the week. Raised at construction, because a weekend quietly ignored is every working-day answer quietly wrong (#702). |
 
 ### CurrencyErrorCodes
 
@@ -607,6 +613,11 @@ In the package as `ERROR_CODE_CATALOGUES.DateFormErrorCodes`.
 | `DAYS_IN_EXPECTED_PERIOD` | thrown | `days in` followed by something that is not a month, a quarter or a year. |
 | `WORKDAYS_IN_EXPECTED_DURATION` | as a value | `workdays in` given a quantity that is not a length of time. |
 | `WORKDAYS_UNTIL_UNSUPPORTED` | thrown | `workdays until` or `workdays since`, which are not counted on the calendar. The message points at `workdays between`. |
+| `AS_DATE_NEEDS_TIMESTAMP` | as a value | `as date` given a value that is neither a Unix timestamp, ISO 8601 text nor a date. |
+| `AS_TIMESTAMP_NEEDS_DATE` | as a value | `as timestamp` given a value that is neither a date, ISO 8601 text nor a Unix timestamp. |
+| `AS_TIME_NEEDS_DATE` | as a value | `as time` given something that is not a date, as in `5 as time`. A number has no time of day of its own, so it is read as a date first: `1710000000 as date as time`. |
+| `PERIOD_EXPECTED` | thrown | `start of` or `end of` followed by something that is not a week, a month or a year. |
+| `WEEKDAY_ALONE` | thrown | A day of the week alone on a line, which is read as a heading. The message points at `this friday` or `next friday` for the date. |
 
 ### DatetimeErrorCodes
 
@@ -889,8 +900,11 @@ In the package as `ERROR_CODE_CATALOGUES.WebErrorCodes`.
 | Code | Arrives | When it arises |
 | --- | --- | --- |
 | `WEB_EXPECTED_PIXELS` | as a value | A width or a height was not a whole count of pixels. |
+| `DENSITY_EXPECTED_NUMBER` | thrown | `at` and `dpi` with a word rather than a number of dots per inch between them, as in `4000px at x dpi`. |
 | `WEB_EXPECTED_PX_OR_REM` | as a value | A size measured against a root font size was in neither `px` nor `rem`. |
 | `WEB_EXPECTED_ROOT_SIZE` | as a value | The stated root font size was not a size a `rem` can be measured against. |
+| `WEB_EXPECTED_PIXELS_OR_LENGTH` | as a value | A size measured against a density was neither a CSS length nor a physical length. |
+| `WEB_EXPECTED_DENSITY` | as a value | The stated density was not a number of dots per inch above zero. |
 
 ## Shopping
 
@@ -1024,6 +1038,7 @@ In the package as `ERROR_CODE_CATALOGUES.TimeFormErrorCodes`.
 | `TIMECODE_EXPECTED_FPS` | thrown | A video timecode or frame count without its frame rate, as in `at 30 fps`. |
 | `TIMECODE_EXPECTED_FRAMES` | thrown | A timecode followed by `in` and something other than `frames`. |
 | `TIMECODE_FRAME_OUT_OF_RANGE` | thrown | A timecode whose frame number is not below the frame rate. |
+| `TIME_IN_ZONE_UNDATED` | thrown | `time in Tokyo on 1 March 2027`: the time in a place is the time there now, not on another day. The message points at converting a time on that day instead. |
 
 ### TimezoneErrorCodes
 

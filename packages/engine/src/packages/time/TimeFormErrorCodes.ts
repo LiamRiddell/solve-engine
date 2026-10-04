@@ -33,4 +33,6 @@ export const TimeFormErrorCodes = {
 	TIMECODE_EXPECTED_FRAMES: "TIMECODE_EXPECTED_FRAMES",
 	/** A timecode whose frame number is not below the frame rate. */
 	TIMECODE_FRAME_OUT_OF_RANGE: "TIMECODE_FRAME_OUT_OF_RANGE",
+	/** `time in Tokyo on 1 March 2027`: the time in a place is the time there now, not on another day. The message points at converting a time on that day instead. */
+	TIME_IN_ZONE_UNDATED: "TIME_IN_ZONE_UNDATED",
 } as const;
