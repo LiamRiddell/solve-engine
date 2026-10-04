@@ -325,6 +325,18 @@ document computed in one zone can pin it: see
 - **`UTC` and `GMT`**, and in the time conversions above an offset from them,
   `GMT+9` or `UTC-5:30`, which is fixed and never changes for daylight saving.
 
+A place whose name is more than one word is read whole, with a space between
+the words and in any case, so `time in buenos aires` is Buenos Aires. The
+database's names of that kind, beyond those above, are Addis Ababa, Bahia
+Banderas, Blanc Sablon, Boa Vista, Broken Hill, Buenos Aires, Cambridge Bay,
+Campo Grande, Cape Verde, Ciudad Juarez, Coral Harbour, Costa Rica, Dawson
+Creek, El Aaiun, El Salvador, Fort Nelson, Glace Bay, Goose Bay, Grand Turk,
+Isle of Man, La Paz, Lord Howe, Lower Princes, Pago Pago, Phnom Penh, Port
+Moresby, Port of Spain, Porto Novo, Porto Velho, Punta Arenas, Rankin Inlet, Rio
+Branco, Rio Gallegos, San Marino, Santo Domingo, Sao Tome, South Georgia, St
+Barthelemy, St Helena, St Johns, St Kitts, St Lucia, St Thomas, St Vincent,
+Swift Current and Ust Nera.
+
 ```solve
 time difference between Kathmandu and Kolkata // Kathmandu is 15 minutes ahead of Kolkata
 3pm London on 1 March 2027 in Hobart // 2:00 AM (+1 day)

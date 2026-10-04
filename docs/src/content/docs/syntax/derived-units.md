@@ -31,34 +31,6 @@ pascals (`Pa`).
 100 Pa * 2 m² // 200.00 N
 ```
 
-The named units take the usual metric prefixes, `k` for a thousand, `M` for a
-million and `m` for a thousandth, and `as` asks for any of them. After `as` the
-name may be written in lower case, since there it can only be a unit: `as kn` is
-the kilonewton, `as kj` and `as mj` the kilojoule and the megajoule, `as kpa` and
-`as mpa` the kilopascal and the megapascal, `as kv` and `as mv` the kilovolt and
-the millivolt, and `as kw` and `as mw` the kilowatt and the megawatt.
-
-```solve
-10000 N as kn // 10.00 kN
-2000000 J as mj // 2.00 MJ
-5000 J as kj // 5.00 kJ
-3000000 Pa as mpa // 3.00 MPa
-2000 Pa as kpa // 2.00 kPa
-2000 V as kv // 2.00 kV
-0.5 V as mv // 500.00 mV
-2000000 W as mw // 2.00 MW
-```
-
-The boundary: `as` reads the name without its case, so it cannot tell `m` (a
-thousandth) from `M` (a million). Each name stands for the one unit in the list
-above, so `as mw` is always the megawatt and `as mv` always the millivolt. For a
-unit outside the list, such as the milliwatt, convert with `in`, which keeps the
-case as written:
-
-```solve
-5 mW in mW // 5.00 mW
-```
-
 Every spelling of a quantity takes part, imperial as well as metric, so pounds,
 feet and pound-force (`lbf`) compose just as kilograms, metres and newtons do.
 
