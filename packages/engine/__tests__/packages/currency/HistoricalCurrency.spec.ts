@@ -294,8 +294,11 @@ describe("historical currency — ExpressionEngine integration (seeded cache, sy
 		engine.clear();
 	});
 
-	test("returns Pending when nothing is cached yet (no provider, no seed)", () => {
-		const engine = createEngine();
+	test("returns Pending when nothing is cached yet (historical rates switched off, no seed)", () => {
+		// `null` switches off the built-in Frankfurter provider, so no request
+		// leaves the test (#699).
+		const currency = createCurrencyPackage({ historicalRateProvider: null });
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES.map((p) => (p.name === "solve-currency" ? currency : p)) });
 		const result = engine.evaluateLineWithDebug(1, "100 USD in GBP on 2024-01-15");
 		expect(result.error).toBeUndefined();
 		expect(result.value.type).toBe(ValueType.Pending);
@@ -344,9 +347,12 @@ describe("historical currency — does not regress live conversion or date parsi
 	});
 });
 
-describe("historical currency — unconfigured end to end (default engine)", () => {
-	test("the default engine recognises the syntax and reports not-configured after the pending flash", async () => {
-		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+describe("historical currency — switched off end to end (historicalRateProvider: null)", () => {
+	test("an engine with historical rates switched off recognises the syntax and reports not-configured after the pending flash", async () => {
+		// The default package answers from Frankfurter (#699); `null` is how a
+		// host keeps the dated form but declines every source.
+		const currency = createCurrencyPackage({ historicalRateProvider: null });
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES.map((p) => (p.name === "solve-currency" ? currency : p)) });
 
 		// First evaluation: nothing cached, so the line is Pending while the
 		// (provider-less) resolver resolves its not-configured error.

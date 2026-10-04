@@ -3,26 +3,29 @@ import type { HistoricalRateProvider } from "@solve-js/uom/HistoricalCurrency";
 /**
  * Configuration for {@link createCurrencyPackage}.
  *
- * Live conversion (`100 USD in GBP`) needs no configuration, it is backed by
- * the built-in Frankfurter/CoinGecko fetch and works out of the box. Only the
- * historical form (`100 USD in GBP on <date>`) needs a host-supplied data
- * source, since no free keyless historical-FX endpoint exists to bake in. See
+ * Nothing here is required. Live conversion (`100 USD in GBP`) is backed by
+ * the built-in Frankfurter/CoinGecko fetch, and the historical form (`100 USD
+ * in GBP on <date>`) by the same Frankfurter endpoint asked for a date. See
  * `uom/HistoricalCurrency.ts`'s module doc.
  */
 export interface CurrencyPackageConfig {
 	/**
-	 * Resolve the exchange rate for one currency pair on one past date, backed
-	 * by whichever provider and key the host has. Required for
-	 * `<money> in <currency> on <date>` to return real data, when omitted, that
-	 * form resolves to an honest `HISTORICAL_RATES_NOT_CONFIGURED` error `Value`
-	 * rather than falling back to today's rate.
+	 * Resolve the exchange rate for one currency pair on one past date.
+	 *
+	 * Omitted, the built-in Frankfurter provider answers (the European Central
+	 * Bank's reference rates, fiat only, from 4 January 1999). A function here
+	 * takes precedence over it, backed by whichever provider and key the host
+	 * has. `null` switches the dated form off: it then resolves to an honest
+	 * `HISTORICAL_RATES_NOT_CONFIGURED` error `Value` rather than falling back
+	 * to today's rate.
 	 */
-	historicalRateProvider?: HistoricalRateProvider;
+	historicalRateProvider?: HistoricalRateProvider | null;
 
 	/**
 	 * The name of the service behind {@link historicalRateProvider}, recorded on
 	 * every historical conversion so a host can say whose rate it was (see
-	 * `vm/Provenance.ts`). Defaults to `"host"`.
+	 * `vm/Provenance.ts`). Defaults to `"host"` for a host's provider; the
+	 * built-in one is recorded as `"Frankfurter"`.
 	 */
 	historicalProviderName?: string;
 }
