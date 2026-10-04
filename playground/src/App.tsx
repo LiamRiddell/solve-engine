@@ -4,6 +4,30 @@ import { HeaderBar } from "@/components/HeaderBar"
 import { StatusBar } from "@/components/StatusBar"
 import { DiagnosticsPane } from "@/components/DiagnosticsPane"
 import { usePipelineStore } from "@/stores/pipeline"
+import { useTabsStore } from "@/stores/tabsStore"
+import { useUiStore } from "@/stores/ui"
+import { SHARE_PREFIX, readShareFragment } from "@bridge/share"
+
+/**
+ * Open the document a shared link carries, once, at start-up. Live data is
+ * switched off before the tab opens, so the first evaluation of a shared note
+ * fetches nothing; the reader turns it on from the header. A link that cannot
+ * be read leaves the playground as it was and says why.
+ */
+function openSharedDocument(): void {
+  const hash = window.location.hash
+  if (!hash.startsWith(SHARE_PREFIX)) return
+  void readShareFragment(hash).then((shared) => {
+    const ui = useUiStore.getState()
+    if (!shared.ok) {
+      ui.setNotice(shared.message)
+      return
+    }
+    ui.setLiveData(false)
+    useTabsStore.getState().openDocumentSet([{ title: "Shared document", content: shared.text }])
+    ui.setNotice("Opened from a link, with live data off. Turn it on from the header to fetch.")
+  })
+}
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable"
 
 /**
@@ -18,6 +42,8 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/componen
  * (`useDefaultLayout`) is ever added later.
  */
 function App() {
+  useEffect(openSharedDocument, [])
+
   useEffect(() => {
     function onKeydown(e: KeyboardEvent) {
       if (e.key === "Escape" && usePipelineStore.getState().flamegraphFilter !== null) {

@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Shapes,
   Timer,
+  Lightbulb,
 } from "lucide-react"
 import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { useUiStore, type ActiveTab } from "@/stores/ui"
@@ -34,6 +35,7 @@ import { ParseletRegistryTab } from "@/components/tabs/ParseletRegistryTab"
 import { NormalizerTab } from "@/components/tabs/NormalizerTab"
 import { RulesTab } from "@/components/tabs/RulesTab"
 import { LineSpeedsTab } from "@/components/tabs/LineSpeedsTab"
+import { HostCallsTab } from "@/components/tabs/HostCallsTab"
 import { cn } from "@/lib/utils"
 
 /**
@@ -56,6 +58,7 @@ const TAB_GROUPS: {
       { id: "tokens", label: "Output", icon: Terminal, blurb: "What each line evaluated to" },
       { id: "summary", label: "Summary", icon: LayoutDashboard, blurb: "Totals for the whole document" },
       { id: "errors", label: "Errors", icon: AlertTriangle, blurb: "Lines that did not evaluate" },
+      { id: "host", label: "Host calls", icon: Lightbulb, blurb: "Explain, trace, what-if and references" },
     ],
   },
   {
@@ -188,6 +191,9 @@ export function DiagnosticsPane() {
         </TabsContent>
         <TabsContent value="stream" className="mt-0 flex min-h-0 flex-col">
           <StreamTab key={runId} />
+        </TabsContent>
+        <TabsContent value="host" className="mt-0 flex min-h-0 flex-col">
+          <HostCallsTab />
         </TabsContent>
       </Tabs>
     </section>
