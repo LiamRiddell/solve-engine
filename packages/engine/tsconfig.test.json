@@ -3,10 +3,10 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "paths": {
-      "@solve-js/*": ["src/*"],
-      "@solve-js-examples/*": ["examples/*"],
-      "@tools/*": ["tools/*"],
-      "test/*": ["__tests__/*"]
+      "@solve-js/*": ["./src/*"],
+      "@solve-js-examples/*": ["./examples/*"],
+      "@tools/*": ["./tools/*"],
+      "test/*": ["./__tests__/*"]
     },
     "target": "ES6",
     "module": "ESNext",

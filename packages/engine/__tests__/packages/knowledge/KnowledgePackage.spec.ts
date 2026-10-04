@@ -7,7 +7,7 @@
  * test-provided mock `answerQuery` function, plus the package's
  * distinctive `<query> = ?` raw-line grammar end-to-end.
  */
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, jest, test } from "@jest/globals";
 import { QueryClient } from "@tanstack/query-core";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";

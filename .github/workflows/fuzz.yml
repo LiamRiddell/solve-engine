@@ -29,6 +29,8 @@ jobs:
     name: Soak the engine with generated input
     # Pinned rather than ubuntu-latest, like every other job here.
     runs-on: ubuntu-24.04
+    outputs:
+      seed: ${{ steps.seed.outputs.seed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -39,7 +41,78 @@ jobs:
 
       - run: npm ci
 
+      # The start seed is chosen here rather than inside the fuzzer, so it is
+      # known to the report job below even when this job is cancelled at its
+      # limit before the log is complete. The fuzzer would otherwise choose one
+      # from the clock and name it only in the log.
+      - name: Choose the start seed
+        id: seed
+        run: echo "seed=$(( (RANDOM * 32768 + RANDOM) % 1000000000 ))" >> "$GITHUB_OUTPUT"
+
       # `--no-save` because the corpus lives in the repository and a runner
       # cannot commit to it; a finding is reported in the log with its seed,
       # and reproduced locally with `npm run fuzz -- --seed=<seed>`.
-      - run: npm run fuzz -- --minutes=${{ inputs.minutes || 10 }} --no-save
+      - run: npm run fuzz -- --seed=${{ steps.seed.outputs.seed }} --minutes=${{ inputs.minutes || 10 }} --no-save
+
+  # A scheduled run is shown to nobody: no pull request carries its result, so
+  # a finding, a crash or a run cut off at its limit used to be visible only in
+  # the Actions tab (#792). This reopens, or opens, one issue for the soak, the
+  # way pages.yml does for the site deploy, with the run, the start seed and
+  # the seed of each finding the log names.
+  #
+  # Keyed on the soak job's result rather than on `failure()`, because a job
+  # cut off by a time limit concludes as cancelled. A manual run is watched by
+  # whoever started it, so only the schedule reports.
+  report:
+    needs: [soak]
+    if: always() && github.event_name == 'schedule' && needs.soak.result != 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      # Read the soak job's log for the seeds it names.
+      actions: read
+      issues: write
+    steps:
+      - name: Say so in the tracker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RESULT: ${{ needs.soak.result }}
+          START_SEED: ${{ needs.soak.outputs.seed }}
+        run: |
+          set -euo pipefail
+          title="The scheduled fuzz soak did not pass"
+
+          # The lines of the soak's log that name a seed: the start, and each
+          # finding, crash or hang. Best effort, since a log can be unavailable.
+          job=$(gh api "repos/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}/jobs" \
+            --jq '.jobs[] | select(.name == "Soak the engine with generated input") | .id' || true)
+          seeds=""
+          if [ -n "${job}" ]; then
+            seeds=$(gh api "repos/${GH_REPO}/actions/jobs/${job}/logs" 2>/dev/null \
+              | grep -E 'fuzzing from seed|FINDING|seed=|at seed' | sed -E 's/^[0-9TZ:.-]+ //' | head -n 40 || true)
+          fi
+          [ -n "${seeds}" ] || seeds="(the log named no seed, or could not be read)"
+
+          cat > body.md <<BODY
+          The nightly fuzz soak on \`${GITHUB_REF_NAME}\` ended with the result \`${RESULT}\`.
+
+          Run: ${RUN_URL}
+
+          Start seed: \`${START_SEED:-unknown}\`. Reproduce a finding with \`npm run fuzz -- --seed=<seed>\`, using the seed its line names.
+
+          \`\`\`text
+          ${seeds}
+          \`\`\`
+          BODY
+
+          # One issue, reopened and commented on, rather than a new one per run.
+          number=$(gh issue list --state all --search "\"${title}\" in:title" --json number,title \
+            --jq "[.[] | select(.title == \"${title}\")] | .[0].number // empty")
+
+          if [ -n "${number}" ]; then
+            gh issue reopen "${number}" || true
+            gh issue comment "${number}" --body-file body.md
+          else
+            gh issue create --title "${title}" --body-file body.md --label bug
+          fi

@@ -2226,7 +2226,7 @@ export function registerAsConverter(name: string, handler: AsConverter): void {
     const casePair = !known && spellings.length > 0 && name !== key && !spellings.includes(key);
     const prior = known ? (name !== key ? asConverterExactRegistry.get(name) : asConverterRegistry.get(key)) : asConverterRegistry.get(key);
     if (prior && prior !== handler && !casePair) {
-        console.warn(`[asConverterRegistry] Converter name "${key}" is already registered: overwriting.`);
+        console.warn(`[asConverterRegistry] Converter name "${key}" is already registered, so it is overwritten.`);
     }
     let next = spellings;
     if (!known && !casePair) {

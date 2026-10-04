@@ -13,6 +13,7 @@ on:
       - "packages/engine/tools/**"
       - "packages/engine/benchmarks/thresholds.json"
       - "scripts/compare-benchmarks.mjs"
+      - "scripts/remeasure-benchmarks.mjs"
       - "jest.bench.config.cjs"
       - ".github/workflows/benchmarks.yml"
   workflow_dispatch:
@@ -52,6 +53,11 @@ jobs:
           node-version: 22
           cache: npm
 
+      # The head is the tree this job measures and whose scripts it runs; the
+      # checkout above is the merge ref, which is neither side.
+      - name: Check out this pull request
+        run: git checkout --force --detach "${{ github.event.pull_request.head.sha }}"
+
       - run: npm ci
 
       # Both halves run on this same runner, minutes apart. That is the whole
@@ -60,10 +66,16 @@ jobs:
       # on some other day. Those stay useful for local comparison and for
       # watching a trend, which is a different question from "did this pull
       # request make it slower".
+      #
+      # The base is benchmarked in a worktree of its own, with its own `npm ci`,
+      # so its tree is still there when an over-limit case is measured again
+      # below. It never links the head's node_modules: the workspace links point
+      # into the tree, and removing a worktree through them deletes tracked files.
       - name: Benchmark the merge base
         run: |
           base="${{ github.event.pull_request.base.sha }}"
-          git checkout --detach "$base"
+          git worktree add --detach "$RUNNER_TEMP/base" "$base"
+          cd "$RUNNER_TEMP/base"
           npm ci
           npm run bench || echo "::warning::Benchmarks reported failures on the merge base"
           mkdir -p /tmp/bench-base
@@ -78,16 +90,19 @@ jobs:
 
       - name: Benchmark this pull request
         run: |
-          git checkout --force "${{ github.event.pull_request.head.sha }}"
-          npm ci
           rm -rf packages/engine/benchmarks/current
           npm run bench
+          # Kept apart, because a re-measure below writes over the head's
+          # result files and the first measurement is what it is judged against.
+          mkdir -p /tmp/bench-head
+          cp packages/engine/benchmarks/current/*.json /tmp/bench-head/ 2>/dev/null || true
 
       - name: Compare
         run: |
           # Written to a file as well as to stdout, because two later consumers
           # need it and neither can reach a previous step's stdout: the job
-          # summary, and the pull request comment.
+          # summary, and the pull request comment. Both scripts append their
+          # own report to the job summary.
           #
           # The exit status is carried around the pipe by hand. `tee` would
           # otherwise report its own success and hide a regression, and letting
@@ -95,9 +110,21 @@ jobs:
           # what regressed.
           set -o pipefail
           status=0
-          node scripts/compare-benchmarks.mjs /tmp/bench-base packages/engine/benchmarks/current \
+          node scripts/compare-benchmarks.mjs /tmp/bench-base /tmp/bench-head \
             | tee benchmark-comparison.md || status=$?
-          cat benchmark-comparison.md >> "$GITHUB_STEP_SUMMARY"
+
+          # One measurement over the limit is not yet a regression: an unchanged
+          # case has read 1.95x on this runner. Only the cases and suites over
+          # their limit are measured again, three rounds of base and head
+          # interleaved, and the job fails only if the median is still over
+          # (#790). Status 2 is a usage error, which is not re-measured.
+          if [ "$status" -eq 1 ]; then
+            status=0
+            node scripts/remeasure-benchmarks.mjs \
+              --reference=/tmp/bench-base --current=/tmp/bench-head \
+              --base-tree="$RUNNER_TEMP/base" --head-tree="$GITHUB_WORKSPACE" --rounds=3 \
+              | tee -a benchmark-comparison.md || status=$?
+          fi
           exit $status
 
       # A single comment updated in place, rather than one per push. Marked

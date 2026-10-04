@@ -356,7 +356,7 @@ export class AsyncResolutionBatcher {
 					this.flush();
 				} catch (e) {
 					const engineError = normalizeUnknownError(e);
-					console.error(`[AsyncResolutionBatcher] flush() failed unexpectedly — this should never happen; please report: ${engineError.format()}`);
+					console.error(`[AsyncResolutionBatcher] flush() failed unexpectedly, which should never happen; please report it: ${engineError.format()}`);
 				}
 			};
 			if (mustYield) setTimeout(run, 0);

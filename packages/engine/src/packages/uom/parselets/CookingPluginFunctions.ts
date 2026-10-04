@@ -73,7 +73,7 @@ export function cookingConvertHandler(args: Value[]): Value {
   if (density === undefined) {
     return errorValue(
       "COOKING_UNKNOWN_INGREDIENT",
-      `No density data for "${ingredientName}" — cannot convert between mass and volume for this ingredient`,
+      `No density data for "${ingredientName}", so it cannot be converted between mass and volume`,
     );
   }
 

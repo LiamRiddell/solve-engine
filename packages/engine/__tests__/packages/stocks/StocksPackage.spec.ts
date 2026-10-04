@@ -9,7 +9,7 @@
  * codebase (see e.g. packages/finance/parselets/SalesTaxParselet.ts's doc
  * comment on never hardcoding an assumed rate).
  */
-import { describe, expect, test } from "@jest/globals";
+import { describe, expect, jest, test } from "@jest/globals";
 import { QueryClient } from "@tanstack/query-core";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";

@@ -234,7 +234,7 @@
     "prepublishOnly": "npm run build && node ../../scripts/assert-publishable.mjs .",
     "dev": "tsup --watch",
     "test": "jest --config jest.config.cjs --no-coverage",
-    "typecheck": "tsgo --noEmit --skipLibCheck",
+    "typecheck": "node ../../node_modules/typescript7/bin/tsc --noEmit --skipLibCheck",
     "typecheck:tsc": "tsc --noEmit --skipLibCheck"
   },
   "dependencies": {

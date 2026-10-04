@@ -4,6 +4,7 @@
  * Verifies that when diagnosticMode=true, ExpressionEngine.evaluateLineWithDebug()
  * returns a structured `diagnostic` field with properly populated pipeline stages.
  */
+import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { ExpressionEngine } from '@solve-js/engine/ExpressionEngine';
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { DiagnosticPipelineResult, PipelineStageResult } from '@solve-js/types/DiagnosticPipelineResult';

@@ -90,7 +90,8 @@ describe("#702: a configured weekend", () => {
 	});
 
 	test("the weekend is read as a list of names in any case", () => {
-		expect(engine({ weekend: ["Friday", "SATURDAY"] as WeekdayName[] }).show("2026-01-02 is a weekend")).toBe("true");
+		// A spelling outside WeekdayName on purpose: the config reader folds case.
+		expect(engine({ weekend: ["Friday", "SATURDAY"] as unknown as WeekdayName[] }).show("2026-01-02 is a weekend")).toBe("true");
 	});
 
 	test("a weekend and a holiday predicate both apply", () => {
