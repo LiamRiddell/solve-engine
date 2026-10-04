@@ -239,11 +239,12 @@ whichever backend an engine computes with, and this is a constraint the
 backend is built to rather than a hope: `Temporal` and `Date` disagree by design
 about an instant past the range `Date` represents (a `RangeError` against
 `NaN`), a fractional millisecond (a throw against truncation), a day past the
-end of a month (a clamp against a roll into the next month) and a year from 0
-to 99 (read literally against read as the 1900s), and the backend reproduces
-`Date`'s reading of each. A month step still clamps to the end of the month, a
-working-day count still skips the same weekends, a named-zone conversion still
-answers the same wall-clock time:
+end of a month (a clamp against a roll into the next month), and the backend
+reproduces `Date`'s reading of each. A year from 0 to 99, which the `Date`
+constructor reads as the 1900s, is read as written on both backends, so
+`3 April 0026` is 26 AD whichever computes it. A month step still clamps to the
+end of the month, a working-day count still skips the same weekends, a
+named-zone conversion still answers the same wall-clock time:
 
 ```solve
 31/01/2024 + 1 month // Thursday, February 29, 2024

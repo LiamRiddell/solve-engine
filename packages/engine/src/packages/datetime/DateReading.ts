@@ -356,7 +356,10 @@ export function isRealCalendarDay(day: number, month: number, year: number): boo
 export function describeUnrealDay(day: number, month: number, year: number): string {
   if (month < 1 || month > 12) return `there is no month ${month}`;
   if (day < 1) return `there is no day ${day}`;
-  return `${MONTH_NAMES[month - 1]} ${year} has ${daysInMonth(year, month - 1)} days`;
+  // A year below 1000 keeps four digits, as it was written (`30 Feb 0001`):
+  // "February 1 has 28 days" read as a claim about the first of February.
+  const written = year >= 0 && year < 1000 ? String(year).padStart(4, "0") : String(year);
+  return `${MONTH_NAMES[month - 1]} ${written} has ${daysInMonth(year, month - 1)} days`;
 }
 
 /** A day/month/year triple written out for a reader: "3 April 2026". */

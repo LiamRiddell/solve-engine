@@ -2,7 +2,28 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
 import type { CalendarBackend, CalendarFields, ZonedFields } from "./CalendarBackend";
 import { dayNumber, daysInMonth, utcMs } from "./Gregorian";
-import { dateInZone, isSupportedZone, longDateInZone, timeInZone, timeOfDayInZone, zonedFields, zonedWallClockToUtcMs } from "./IntlZone";
+import { dateInZone, isSupportedZone, longDateInZone, longDateOptions, mayPrecedeYearOne, timeInZone, namedZoneWallClockToUtcMs, timeOfDayInZone, zonedFields } from "./IntlZone";
+
+/**
+ * `new Date(year, month0, day)`, local midnight, with the year read as written.
+ *
+ * The constructor reads a year from 0 to 99 as the 1900s. Such a year is built
+ * four hundred years on, where the Gregorian calendar repeats exactly, and the
+ * year set back with `setFullYear`, which keeps the local date and time of day
+ * and never windows. Every other year is the constructor's own answer.
+ *
+ * @param year - The year, as written: 26 is 26 AD.
+ * @param month0 - Zero-based month; overflow rolls as the constructor rolls it.
+ * @param day - Day of the month; overflow rolls as the constructor rolls it.
+ * @returns A `Date` at local midnight on that day.
+ */
+export function localDate(year: number, month0: number, day: number): Date {
+	const whole = Math.trunc(year);
+	if (!(whole >= 0 && whole <= 99)) return new Date(year, month0, day);
+	const date = new Date(whole + 400, month0, day);
+	date.setFullYear(date.getFullYear() - 400);
+	return date;
+}
 
 /**
  * The default {@link CalendarBackend}: the JavaScript `Date` object, read in
@@ -11,10 +32,13 @@ import { dateInZone, isSupportedZone, longDateInZone, timeInZone, timeOfDayInZon
  * This is the calendar code the engine has always run, moved behind the
  * interface method by method rather than rewritten, so a host that configures
  * nothing sees the same instants and the same strings it did before the
- * backend existed. Where `Date` has a quirk (a two-digit year in a
- * constructor maps to the 1900s, an out-of-range instant answers `NaN`), the
- * quirk is kept here deliberately: the point of this backend is to be the
- * behaviour the `Temporal` backend is measured against, not to improve on it.
+ * backend existed. Where `Date` has a quirk (an out-of-range instant answers
+ * `NaN`), the quirk is kept here deliberately: the point of this backend is to
+ * be the behaviour the `Temporal` backend is measured against, not to improve
+ * on it. The one quirk not kept is the constructor's reading of a year from 0
+ * to 99 as the 1900s: every year the engine hands a backend is one already
+ * read off a date or written out in full, so that window put 26 AD in 1926 and
+ * refused `1 Jan 0001` as no real day (#823).
  *
  * It stays the default because it is the one calendar every supported runtime
  * has. `Temporal` ships unflagged in Node 26 and in current Chrome, Firefox
@@ -44,13 +68,13 @@ export class DateCalendar implements CalendarBackend {
 	}
 
 	localMidnight(year: number, month0: number, day: number): number {
-		return new Date(year, month0, day).getTime();
+		return localDate(year, month0, day).getTime();
 	}
 
 	localWallClock(year: number, month0: number, day: number, minutesPastMidnight: number): number {
 		// Anchored at midnight and then moved by the minutes FIELD, so the
 		// result is the wall-clock reading asked for whatever the day's length.
-		const anchored = new Date(year, month0, day, 0, 0, 0, 0);
+		const anchored = localDate(year, month0, day);
 		anchored.setMinutes(minutesPastMidnight);
 		return anchored.getTime();
 	}
@@ -87,7 +111,10 @@ export class DateCalendar implements CalendarBackend {
 	}
 
 	formatLongDate(epochMs: number, locale: string): string {
-		return new Date(epochMs).toLocaleDateString(locale, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+		const date = new Date(epochMs);
+		// The era only before year 1, where the year alone reads as AD (#823).
+		const beforeYearOne = mayPrecedeYearOne(epochMs) && date.getFullYear() < 1;
+		return date.toLocaleDateString(locale, longDateOptions(beforeYearOne));
 	}
 
 	formatTimeOfDay(epochMs: number, locale: string): string {
@@ -156,7 +183,7 @@ export function calendarOf(context?: { readonly calendar?: CalendarBackend }): C
  * reads named zones with, so the accuracy is the same and nothing new is
  * bundled. The one place it is a simplification is a wall clock that a
  * daylight-saving transition made ambiguous or non-existent (01:30 on a
- * spring-forward morning): {@link zonedWallClockToUtcMs} resolves it one way,
+ * spring-forward morning): {@link namedZoneWallClockToUtcMs} resolves it one way,
  * and a `Temporal` backend's `disambiguation: 'compatible'` may resolve it an
  * hour differently.
  */
@@ -167,6 +194,22 @@ export function calendarOf(context?: { readonly calendar?: CalendarBackend }): C
  * the base class untouched.
  */
 const ISO_LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/;
+
+/** The fields the base class answers for an instant `Date` cannot hold: every one `NaN`. */
+const NAN_FIELDS: CalendarFields = Object.freeze({
+	year: Number.NaN, month0: Number.NaN, day: Number.NaN, weekday: Number.NaN,
+	hour: Number.NaN, minute: Number.NaN, second: Number.NaN, millisecond: Number.NaN,
+});
+
+/**
+ * Whether `Date` can hold an instant: finite and within 8.64e15 milliseconds
+ * of the epoch. `Intl` throws a `RangeError` for any other, where the local
+ * methods' contract is to answer `NaN` (or `Invalid Date`, as `Date` writes
+ * one), so the zone-bound backend checks before it asks.
+ */
+function representable(epochMs: number): boolean {
+	return Number.isFinite(epochMs) && Math.abs(epochMs) <= 8.64e15;
+}
 
 class ZonedDateCalendar extends DateCalendar {
 	/**
@@ -181,6 +224,7 @@ class ZonedDateCalendar extends DateCalendar {
 	}
 
 	fields(epochMs: number): CalendarFields {
+		if (!representable(epochMs)) return NAN_FIELDS;
 		const f = zonedFields(this.namedZone, epochMs);
 		// `zonedFields` answers no weekday and no millisecond: the weekday is a
 		// pure function of the zoned date (`Gregorian.dayNumber`, counting from a
@@ -195,7 +239,7 @@ class ZonedDateCalendar extends DateCalendar {
 	}
 
 	localMidnight(year: number, month0: number, day: number): number {
-		return zonedWallClockToUtcMs(year, month0, day, 0, 0, this.namedZone, this);
+		return namedZoneWallClockToUtcMs(year, month0, day, 0, 0, this.namedZone);
 	}
 
 	localWallClock(year: number, month0: number, day: number, minutesPastMidnight: number): number {
@@ -203,25 +247,29 @@ class ZonedDateCalendar extends DateCalendar {
 		// reading of 540 is 09:00 on that date even on a 23-hour day. `Date.UTC`
 		// rolls a minute field past 59 into the hour, which is what makes one
 		// argument enough.
-		return zonedWallClockToUtcMs(year, month0, day, 0, minutesPastMidnight, this.namedZone, this);
+		return namedZoneWallClockToUtcMs(year, month0, day, 0, minutesPastMidnight, this.namedZone);
 	}
 
 	addDays(epochMs: number, days: number): number {
+		if (!representable(epochMs)) return Number.NaN;
 		const f = zonedFields(this.namedZone, epochMs);
 		return this.reanchor(f, f.day + days, epochMs);
 	}
 
 	addMonths(epochMs: number, months: number): number {
+		if (!representable(epochMs)) return Number.NaN;
 		const f = zonedFields(this.namedZone, epochMs);
-		const target = new Date(Date.UTC(f.year, f.month0 + months, 1));
+		// `utcMs` rather than `Date.UTC`, so a date in the first century keeps its year.
+		const target = new Date(utcMs(f.year, f.month0 + months, 1));
 		const clampedDay = Math.min(f.day, daysInMonth(target.getUTCFullYear(), target.getUTCMonth()));
-		return zonedWallClockToUtcMs(
+		return namedZoneWallClockToUtcMs(
 			target.getUTCFullYear(), target.getUTCMonth(), clampedDay,
-			f.hour, f.minute, this.namedZone, this,
+			f.hour, f.minute, this.namedZone,
 		) + f.second * 1000 + (((epochMs % 1000) + 1000) % 1000);
 	}
 
 	utcOffsetMinutes(epochMs: number): number {
+		if (!representable(epochMs)) return Number.NaN;
 		return this.zoneOffsetMinutes(this.namedZone, epochMs);
 	}
 
@@ -241,21 +289,23 @@ class ZonedDateCalendar extends DateCalendar {
 		if (matched === null) return super.parseIso8601(text);
 		const [, year, month, day, hour, minute, second, fraction] = matched;
 		const millisecond = fraction === undefined ? 0 : Number(fraction.slice(0, 3).padEnd(3, "0"));
-		return zonedWallClockToUtcMs(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), this.namedZone, this)
+		return namedZoneWallClockToUtcMs(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), this.namedZone)
 			+ (second === undefined ? 0 : Number(second)) * 1000 + millisecond;
 	}
 
 	formatLongDate(epochMs: number, locale: string): string {
+		if (!representable(epochMs)) return "Invalid Date";
 		return longDateInZone(this.namedZone, epochMs, locale);
 	}
 
 	formatTimeOfDay(epochMs: number, locale: string): string {
+		if (!representable(epochMs)) return "Invalid Date";
 		return timeOfDayInZone(this.namedZone, epochMs, locale);
 	}
 
 	/** Rebuild an instant on a (possibly overflowed) day, holding its wall clock down to the millisecond. */
 	private reanchor(f: ZonedFields, day: number, epochMs: number): number {
-		return zonedWallClockToUtcMs(f.year, f.month0, day, f.hour, f.minute, this.namedZone, this)
+		return namedZoneWallClockToUtcMs(f.year, f.month0, day, f.hour, f.minute, this.namedZone)
 			+ f.second * 1000 + (((epochMs % 1000) + 1000) % 1000);
 	}
 }

@@ -103,6 +103,11 @@ export interface CalendarBackend {
 	 * year, day 0 the last day of the month before), which is what a caller
 	 * checking for a rolled-over literal relies on: build the date, read its
 	 * fields back, and a 30 February shows up as 1 or 2 March.
+	 *
+	 * The year is taken as written, astronomically: 26 is 26 AD and 0 is 1 BC.
+	 * The `Date` constructor's reading of 0 to 99 as the 1900s is not part of
+	 * the contract, because every year a caller passes is one read off a date
+	 * or written out in full (#823). The same holds for `localWallClock`.
 	 */
 	localMidnight(year: number, month0: number, day: number): number;
 
