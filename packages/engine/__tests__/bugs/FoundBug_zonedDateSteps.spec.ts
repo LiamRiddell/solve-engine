@@ -76,7 +76,7 @@ describe("the reported case: a day on a zoned date is a day on that zone's clock
 	});
 
 	// The display half of the report, fixed where the date is made by #832.
-	test.failing("a zoned date past the calendar's range is refused by name, not a raw RangeError (#832)", () => {
+	test("a zoned date past the calendar's range is refused by name, not a raw RangeError (#832)", () => {
 		expect(on("UTC", "2024-01-01 in Tokyo + 1e15 days")).not.toMatch(/RangeError/);
 	});
 });
