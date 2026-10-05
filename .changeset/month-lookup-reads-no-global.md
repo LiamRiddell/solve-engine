@@ -15,4 +15,4 @@ The boundary: what the lookups read is unchanged, and a prototype word still nam
 
 ## Verification
 
-`__tests__/hardening/MonthLookupReadsNoGlobal.spec.ts` (5 tests) checks that neither lookup reads `hasOwnProperty` or `Object` (both source checks fail on the previous lookups), that a month name reads as a date in any case, and that no word in `PROTOTYPE_WORDS` reads as a month. The found-bugs prototype-month spec and the stocks and datetime package suites pass, and `typecheck`, `typecheck:tests` and `lint:comments` are clean.
+`__tests__/hardening/MonthLookupReadsNoGlobal.spec.ts` (5 tests) checks that neither lookup reads `hasOwnProperty` or `Object` (both source checks fail on the previous lookups), that a month name reads as a date in any case, and that no word in `PROTOTYPE_WORDS` reads as a month. The found-bugs prototype-month spec and the stocks and datetime package suites pass, and `typecheck`, `typecheck:tests` and `lint:comments` are clean. The full suite ran 26,457 tests in 761 suites on this branch, and `npm run test:temporal` passed its 3,461 tests in 95 suites.
