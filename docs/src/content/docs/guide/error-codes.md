@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 541 codes, grouped below by the part
+ship. The engine and its built-in packages ship 546 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -332,6 +332,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `AGGREGATE_NON_NUMERIC` | as a value | A list aggregate (`total of`, `average of`, a line range) meeting something that is not a number or a quantity. The message names what it found. |
 | `PERCENTAGE_OF_QUANTITY` | as a value | A value written as a percentage that is not a proportion, such as a length. |
 | `PERCENTAGE_NOT_FINITE` | as a value | A value written as a percentage that is not a finite number, which is what a division by zero gives. |
+| `PERCENTAGE_OVERFLOW` | as a value | A value written as a percentage that is finite but too large for its percentage, a hundred times it, to be held, as in `1e308 as %`. |
 | `PERCENT_CHANGE_FROM_ZERO` | as a value | A percentage change from zero, which no percentage reaches. The message suggests the difference instead. |
 | `PERCENT_CHANGE_NEGATIVE_BASE` | as a value | A percentage change from a negative base, which has two readings. The message shows how to write the one meant. |
 | `PERCENT_CHANGE_FAILED` | as a value | A percentage change that could not be worked out from its two values. |
@@ -372,7 +373,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `MATRIX_POWER_UNSUPPORTED` | as a value | A matrix used as an exponent, or `^` between a matrix and something with no matrix reading. |
 | `SYMBOLIC_INVERSE_DIMENSION_LIMIT` | as a value | A symbolic matrix inverse larger than the size the symbolic elimination handles. |
 | `SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT` | as a value | A symbolic matrix inverse that meets a zero pivot, which the elimination does not reorder around. |
-| `MAP_REDUCE_REQUIRES_COLLECTION` | as a value | `map` or `reduce` over something that is not a list or a range. |
+| `MAP_REDUCE_REQUIRES_COLLECTION` | as a value | `map`, `reduce`, `sum` or `prod` over something that is not a list or a range (`sum(5)`); the message names the word typed. |
 | `MAP_COLLECTION_LENGTH_MISMATCH` | as a value | `map` over several lists of different lengths. |
 | `REDUCE_EMPTY_COLLECTION` | as a value | `reduce` over an empty list with no starting value. |
 
@@ -568,6 +569,7 @@ In the package as `ERROR_CODE_CATALOGUES.ConditionalsErrorCodes`.
 | `CHECK_EXPECTED_COMPARISON` | either | A `check` whose statement is not a comparison. The message shows the forms a check takes. |
 | `CHECK_FAILED` | as a value | A `check` whose comparison does not hold. The message says by how much; a host counts these through `ParsingResult.checks`. |
 | `CHECK_INCOMPARABLE` | as a value | A `check` between two values that cannot be compared: text with `<`, or quantities of different measures. |
+| `CHECK_JOIN_UNSUPPORTED` | thrown | A `check` whose comparisons are joined by something other than `and`: `or`, a bitwise operator, or a comparison after a `within` margin. The message says to join them with `and` or to bracket a side. |
 | `NOT_NEEDS_BOOLEAN` | as a value | `not` or a prefix `!` before a value that is not true or false (`not 5`, `!"yes"`). The message names what the value is. |
 
 ## Constants
@@ -630,6 +632,7 @@ In the package as `ERROR_CODE_CATALOGUES.DateFormErrorCodes`.
 | `DATE_FIELD_EXPECTED_DATE` | as a value | A question asked of a date (`day of the week on`, `week number of`) given something that is not a date. |
 | `DATE_OUT_OF_RANGE` | as a value | A timestamp outside the dates the engine can hold, about 273,000 years either side of 1970. |
 | `AS_ISO8601_NEEDS_DATE` | as a value | `as iso8601` given something that is not a date, a Unix timestamp or ISO 8601 text. |
+| `AS_ISO8601_DURATION_TOO_LONG` | as a value | `as iso8601` given a length of time too large for its parts to be written with exact digits, as in `1e300 seconds as iso8601`. |
 | `INVALID_ISO8601_STRING` | as a value | Text given as an ISO 8601 date or time that does not read as one. |
 | `INVALID_WEEKDAY` | as a value | A weekday given as a number that is not a day of the week. |
 | `MISSING_WEEKDAY` | thrown | `next` or `last` with no day of the week after it. |
@@ -872,6 +875,7 @@ In the package as `ERROR_CODE_CATALOGUES.PayrollErrorCodes`.
 | `PAYROLL_UNKNOWN_LOAN_PLAN` | either | `with student loan` with no plan, or a plan that does not exist (`with plan 3 student loan`). |
 | `PAYROLL_CONFLICTING_CASE` | either | Two places, two pensions, a plan named twice, or two undergraduate plans on one take-home line. |
 | `PAYROLL_EXPECTED_PENSION_RATE` | either | `with 150% pension`: a pension contribution that is not a percentage between 0 and 100. |
+| `PAYROLL_NEGATIVE_SALARY` | as a value | `-£50,000 after tax` or `hourly for -£50,000`: a salary below zero, which no one is paid. |
 
 ## Percentage
 
@@ -1074,6 +1078,7 @@ In the package as `ERROR_CODE_CATALOGUES.TimeFormErrorCodes`.
 | `TIMECODE_EXPECTED_FRAMES` | thrown | A timecode followed by `in` and something other than `frames`. |
 | `TIMECODE_FRAME_OUT_OF_RANGE` | thrown | A timecode whose frame number is not below the frame rate. |
 | `TIME_IN_ZONE_UNDATED` | thrown | `time in Tokyo on 1 March 2027`: the time in a place is the time there now, not on another day. The message points at converting a time on that day instead. |
+| `ISO_DURATION_MALFORMED` | either | An identifier shaped like an ISO 8601 duration that breaks its grammar, as `P1H` (a time part before the `T`) or `P1D1D`. The message says which rule it breaks. |
 
 ### TimezoneErrorCodes
 

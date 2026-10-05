@@ -8,6 +8,8 @@ import { TimeDifferenceParselet } from "./parselets/TimeDifferenceParselet";
 import { HoursOverlapParselet } from "./parselets/HoursOverlapParselet";
 import { VideoTimecodeParselet } from "./parselets/VideoTimecodeParselet";
 import { FrameCountParselet } from "./parselets/FrameCountParselet";
+import { IsoDurationParselet, UnreadableIsoDurationParselet, ISO_DURATION_FAULT_FN, isoDurationFaultHandler } from "./parselets/IsoDurationParselets";
+import { isoDurationNormalizerRule } from "./normalizer/IsoDurationNormalizerRule";
 import {
   ZONE_CONVERT_FN, ZONE_CONVERT_AT_FN, ZONE_CONVERT_NAMED_FN, TIME_IN_ZONE_FN, DATE_IN_ZONE_FN, TIME_DIFFERENCE_FN, CLOCK_TIME_ON_DATE_FN,
   zoneConvertHandler, zoneConvertAtHandler, zoneConvertNamedHandler, timeInZoneHandler, dateInZoneHandler, timeDifferenceHandler, clockTimeOnDateHandler,
@@ -104,6 +106,9 @@ export const TIME_PACKAGE: IEnginePackage = {
     OVERLAP_OF: new HoursOverlapParselet(),
     VIDEO_TIMECODE: new VideoTimecodeParselet(),
     FRAME_COUNT: new FrameCountParselet(),
+    // `PT1H30M`, an ISO 8601 duration (#760). See normalizer/IsoDurationNormalizerRule.ts.
+    ISO_DURATION: new IsoDurationParselet(),
+    ISO_DURATION_UNREADABLE: new UnreadableIsoDurationParselet(),
   },
   normalizerRules: [
     clockTimeNormalizerRule(),
@@ -112,6 +117,7 @@ export const TIME_PACKAGE: IEnginePackage = {
     clockTimeIntervalNormalizerRule(),
     clockTimeSumNormalizerRule(),
     compactDurationNormalizerRule(),
+    isoDurationNormalizerRule(),
     fpsRateNormalizerRule(),
     laptimeNormalizerRule(),
     videoTimecodeNormalizerRule(),
@@ -131,6 +137,7 @@ export const TIME_PACKAGE: IEnginePackage = {
     [TIME_DIFFERENCE_FN]: timeDifferenceHandler,
     [CLOCK_TIME_ON_DATE_FN]: clockTimeOnDateHandler,
     [HOURS_OVERLAP_FN]: hoursOverlapHandler,
+    [ISO_DURATION_FAULT_FN]: isoDurationFaultHandler,
   },
   tokenCategories: {
     // The phrase is the keyword, as `time in` is; a bare `overlap` stays a
@@ -138,5 +145,8 @@ export const TIME_PACKAGE: IEnginePackage = {
     OVERLAP_OF: "keyword",
     // The source zone after a time held in a variable, as `3pm London` shows it.
     ZONE_SOURCE: "keyword",
+    // An ISO 8601 duration is a length of time, read or refused as one token.
+    ISO_DURATION: "datetime",
+    ISO_DURATION_UNREADABLE: "datetime",
   },
 };

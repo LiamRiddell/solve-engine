@@ -57,7 +57,10 @@ function isInsertedStar(token: Token | undefined, next: Token | undefined): bool
  */
 export function salaryFlourishAt(tokens: readonly Token[], pos: number): "star" | "after" | null {
 	const here = tokens[pos];
-	if (here === undefined || !isSalaryWord(tokens[pos + 1]) || !TAKE_HOME_FORMS.has(tokens[pos + 2]?.type ?? "")) return null;
+	// The take-home form first: one set lookup that rejects almost every word
+	// of prose this is tried at, before the lower-casing the word test does.
+	// Both are pure, so the order changes nothing but the cost.
+	if (here === undefined || !TAKE_HOME_FORMS.has(tokens[pos + 2]?.type ?? "") || !isSalaryWord(tokens[pos + 1])) return null;
 	if (isInsertedStar(here, tokens[pos + 1])) return pos > 0 ? "star" : null;
 	return VALUE_ENDS.has(here.type) ? "after" : null;
 }

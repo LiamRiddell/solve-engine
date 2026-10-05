@@ -5,6 +5,14 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { timecodeUnit } from "@solve-js/vm/Value";
+import { getMeasure } from "@solve-js/uom/UomConverter";
+import { isTimecodeRate } from "../timecode/TimecodeMath";
+import { noFrameRate } from "./FrameCountParselet";
+
+/** Whether a token names a unit of time (`seconds`, `min`), which a timecode converts to through `in`. */
+function isTimeUnitToken(token: Token | undefined): boolean {
+  return token?.type === "UNIT" && getMeasure(token.value) === "time";
+}
 
 /**
  * `HH:MM:SS:FF at <N> fps` / `HH:MM:SS:FF @ <N> fps`, a video-timecode
@@ -64,6 +72,7 @@ export class VideoTimecodeParselet implements PrefixParselet {
     }
     parser.consume();
     const fps = parseFloat(fpsToken.value);
+    if (!isTimecodeRate(fps)) throw noFrameRate(fpsToken.value);
 
     // Frames per timecode SECOND, which is the rounded frame rate rather
     // than the exact one: non-drop-frame timecode at 29.97 fps still
@@ -90,14 +99,18 @@ export class VideoTimecodeParselet implements PrefixParselet {
 
     // Optional trailing "in frames", query the total frame count directly
     // rather than tagging the result with its fps context.
+    //
+    // `in` and a unit of time is left to the ordinary conversion, which reads
+    // a timecode as its frames over its rate (#759): it was refused here, so
+    // `01:02:03:04 at 30 fps in seconds` was a parse error.
     let unit = timecodeUnit(fps);
-    if (parser.peek()?.type === "IN") {
+    if (parser.peek()?.type === "IN" && !isTimeUnitToken(parser.peekAt(1))) {
       parser.consume();
       const framesWord = parser.peek();
       if (!framesWord || framesWord.type !== "IDENT" || framesWord.value.toLowerCase() !== "frames") {
         throw ErrorFactory.parsing(
           "TIMECODE_EXPECTED_FRAMES",
-          `Expected "frames" after "in" (e.g. "... in frames") but got ${framesWord ? `"${framesWord.value}"` : "end of input"}`
+          `A timecode converts to frames or to a unit of time, as in "in frames" or "in seconds", not to ${framesWord ? `"${framesWord.value}"` : "nothing"}.`
         );
       }
       parser.consume();

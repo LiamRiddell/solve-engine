@@ -1,4 +1,5 @@
-import { Value, ValueType, stringValue } from "@solve-js/vm/Value";
+import { Value, ValueType, stringValue, isTimecodeUnit, timecodeFps } from "@solve-js/vm/Value";
+import { timecodeSeconds } from "./timecode/TimecodeMath";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 
 /**
@@ -40,6 +41,11 @@ const TIMESPAN_PARTS: readonly (readonly [singular: string, plural: string, seco
 function durationSeconds(value: Value): number | null {
 	if (value.type === ValueType.Number) return value.toNumber();
 	if (value.type !== ValueType.Uom || value.unit === undefined) return null;
+	// A timecode is a length of time too, its frames over its rate (#759): it
+	// was refused here under its internal unit name, `got timecode@30`.
+	// Read into a boolean first: the guard narrows the unit to never on its false branch.
+	const timecode: boolean = isTimecodeUnit(value.unit);
+	if (timecode) return timecodeSeconds(value.toNumber(), timecodeFps(value.unit));
 	const entry = UNIT_TABLE[value.unit.toLowerCase()] as readonly [number, number] | undefined;
 	if (entry === undefined || entry[0] !== TIME_KIND) return null;
 	return value.toNumber() * entry[1];

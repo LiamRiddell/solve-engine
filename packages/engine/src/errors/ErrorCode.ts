@@ -448,6 +448,8 @@ export const CoreErrorCodes = {
   PERCENTAGE_OF_QUANTITY: "PERCENTAGE_OF_QUANTITY",
   /** A value written as a percentage that is not a finite number, which is what a division by zero gives. */
   PERCENTAGE_NOT_FINITE: "PERCENTAGE_NOT_FINITE",
+  /** A value written as a percentage that is finite but too large for its percentage, a hundred times it, to be held, as in `1e308 as %`. */
+  PERCENTAGE_OVERFLOW: "PERCENTAGE_OVERFLOW",
   /** A percentage change from zero, which no percentage reaches. The message suggests the difference instead. */
   PERCENT_CHANGE_FROM_ZERO: "PERCENT_CHANGE_FROM_ZERO",
   /** A percentage change from a negative base, which has two readings. The message shows how to write the one meant. */
@@ -520,7 +522,7 @@ export const CoreErrorCodes = {
   SYMBOLIC_INVERSE_DIMENSION_LIMIT: "SYMBOLIC_INVERSE_DIMENSION_LIMIT",
   /** A symbolic matrix inverse that meets a zero pivot, which the elimination does not reorder around. */
   SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT: "SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT",
-  /** `map` or `reduce` over something that is not a list or a range. */
+  /** `map`, `reduce`, `sum` or `prod` over something that is not a list or a range (`sum(5)`); the message names the word typed. */
   MAP_REDUCE_REQUIRES_COLLECTION: "MAP_REDUCE_REQUIRES_COLLECTION",
   /** `map` over several lists of different lengths. */
   MAP_COLLECTION_LENGTH_MISMATCH: "MAP_COLLECTION_LENGTH_MISMATCH",

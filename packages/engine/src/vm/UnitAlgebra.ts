@@ -28,6 +28,7 @@ import { getMeasure, convertUnit, accelerationSize, unitForMessage } from "@solv
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { UNIT_TABLE, MEASURE_SYMBOLS } from "@solve-js/uom/generated/UnitTable.generated";
 import { describeMeasure } from "@solve-js/vm/VMConversion";
+import { timecodeUnitPhrase } from "@solve-js/vm/TimecodeConversion";
 
 /**
  * The factor that turns one `from` into `to`, or `null` when the two do not
@@ -307,8 +308,11 @@ export function refuseLikeProduct(l: Value, r: Value): Value | undefined {
 	const alike = l.unit === r.unit || (left !== undefined && left === describeMeasure(r.unit));
 	if (!alike) return undefined;
 	const noun = left ?? l.unit;
+	// A timecode is named as one: its unit, `timecode@30`, is internal (#759).
+	const leftName = timecodeUnitPhrase(l.unit)?.replace(/^a/, "A") ?? `A quantity in ${l.unit}`;
+	const rightName = timecodeUnitPhrase(r.unit) ?? `one in ${r.unit}`;
 	return errorValue(
 		"UNIT_PRODUCT_UNSUPPORTED",
-		`A quantity in ${l.unit} times one in ${r.unit} has no unit: ${noun} times ${noun} is not a unit. Lengths multiply into an area or a volume, and no other quantity squares into one.`,
+		`${leftName} times ${rightName} has no unit: ${noun} times ${noun} is not a unit. Lengths multiply into an area or a volume, and no other quantity squares into one.`,
 	);
 }

@@ -194,7 +194,7 @@ export function multiplyLengths(l: Value, r: Value): Value | undefined {
 
 	return errorValue(
 		"UNIT_PRODUCT_UNSUPPORTED",
-		`A quantity in ${l.unit} times one in ${r.unit} has no unit: lengths multiply into an area or a volume, and a product of more than three lengths is not a unit.`,
+		`A quantity in ${unitForMessage(l.unit!)} times one in ${unitForMessage(r.unit!)} has no unit: lengths multiply into an area or a volume, and a product of more than three lengths is not a unit.`,
 	);
 }
 

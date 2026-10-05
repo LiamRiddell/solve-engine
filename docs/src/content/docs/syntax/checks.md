@@ -80,6 +80,48 @@ check 1/3 ≈ 0.333 // ✓ (differs by 0.000333)
 check 5.4 ≈ 5 // check failed: 5.4 is not equal to 5
 ```
 
+## Several things at once
+
+One check can state more than one thing. A chain of comparisons, such as
+`0 < :a < 10`, says that a value lies between two others: it is read as every
+link at once (`0 < :a` and `:a < 10`), the way it is written in mathematics,
+and the middle value is worked out once for both links. Comparisons joined
+with `and` (or `&&`) are one check of all of them. Either way the check passes
+when everything it states holds, and a failure names the first comparison that
+does not:
+
+```solve-doc
+:a = 3
+:b = 4
+check 0 < :a < 10 // ✓
+check :a > 0 and :b > 0 // ✓
+check 1 == 1 == 1 // ✓
+check :a > 0 and :b > 10 // ERROR: check failed: 4 is not more than 10
+```
+
+A `within` margin belongs to the comparison it is written after, so each part
+of a joined check can have its own, and a passing check says how far apart each
+approximate part was:
+
+```solve
+check 22/7 ≈ pi within 0.1% and 5 m ≈ 5.01 m within 1 cm // ✓ (differs by 0.04% and by 0.01 m)
+```
+
+A check states what must hold, so it is not joined with `or`, which would let
+a broken part pass unnoticed. To check that one of two things holds, compare
+the yes-or-no answer itself (see the next section). Anything else written after
+a check's comparison, such as a `|`, is refused rather than applied to the
+check's tick:
+
+```solve-doc
+check 1 == 1 or 1 == 2 // ERROR: a check states things that must all hold, so it joins them with "and", not "or". To check that one of two things holds, compare the answer, as in "check (:a > 0 or :b > 0) == true"
+check (1 == 1 or 1 == 2) == true // ✓
+```
+
+A comparison outside a check is unchanged: `1 < 2 < 3` still reads from the
+left, as `(1 < 2) < 3`, and the word `and` between two numbers still adds them
+(`5 and 3` is 8).
+
 ## Yes or no answers
 
 A comparison answers true or false, and two such answers compare as equal or
@@ -186,4 +228,17 @@ between two pieces of text that a note would mean:
 check 1 m == 1 kg // check: length and mass cannot be compared
 check "a" == "a" // ✓
 check "a" > "b" // check: text can only be compared with == or !=, not >
+check "a " == "a" // check failed: "a " is not equal to "a"
+```
+
+A piece of text is quoted in a check's message, so two texts that differ only
+by a space can be told apart. Text and a number are two kinds of thing, even
+when they read the same, so a check between them is refused and the message
+says which side is the text. When the text holds a number, `as number` turns it
+into one, and the check can then compare it:
+
+```solve
+check 255 == "255" // check: "255" on the right is text and 255 is a number, so they cannot be compared. To read the text as a number, write "255" as number
+check (255 in hex) == "0xFF" // check: "0xFF" on the right is text and 0xFF is a number, so they cannot be compared
+check "255" as number == 255 // ✓
 ```

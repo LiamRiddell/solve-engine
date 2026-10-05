@@ -209,6 +209,48 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"sum(X:3)",
 		"prod(1:X)",
 		"sum([X, 2])",
+		// The fourth: a salary below zero, a number past 2^53 as an integer and
+		// as a percentage, and a map or reduce over a single value.
+		"-£X after tax",
+		"hourly for -£X",
+		"-X after 20% tax",
+		"X + 0.5 as int",
+		"-(X) as int",
+		"X + 0.5 as percent",
+		"map(x * 2, X)",
+		"reduce(acc + x, X)",
+		// The fifth: an exact fraction past 2^53 through each rounding, and a
+		// number whose percentage, a hundred times it, overflows.
+		"floor((X) + 2^60 + 1/2)",
+		"round(-(X) - 2^60 - 1/2)",
+		"(X) + 2^60 + 1/3 as int",
+		"(X) * 1e306 as %",
+		"-(X) * 1e306 in %",
+		"50% + (X) * 1e308",
+	],
+	// A timecode in its own notation, its arithmetic and its conversions out
+	// (#759), and an ISO 8601 duration beside a value, spread through a date
+	// and written back (#760).
+	timecodes: [
+		"01:02:03:04 at 30 fps + X",
+		"00:00:00:00 at 30 fps - X",
+		"(01:02:03:04 at 30 fps) * X",
+		"(01:02:03:04 at 30 fps) / X",
+		"X frames at 30 fps",
+		"01:02:03:04 at 30 fps + X seconds",
+		"(01:02:03:04 at 30 fps + X) in seconds",
+		"(01:02:03:04 at 30 fps + X) as timespan",
+	],
+	isoDurations: [
+		"PT1H30M + X",
+		"PT1H30M * X",
+		"X * P1DT1H",
+		"X - P1DT1H",
+		"2026-01-31 + P1M1D + X days",
+		"PT1H30M + X minutes",
+		"(PT1H30M * X) as iso8601",
+		"X seconds as iso8601",
+		"X months as iso8601",
 	],
 	// Arithmetic straight on a value written in a base, a base conversion of
 	// a value with no digits, and checks between colours and addresses.
@@ -235,6 +277,22 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"X == X to hex",
 		"check X to hex != X + 1",
 	],
+	// A fraction written in a base, which the value now drops as the display
+	// does (FoundBug_fractionInABase); a check against text, refused by name
+	// (FoundBug_checkAgainstText); a chained check and a check joined with
+	// `and`, each read as every comparison at once (FoundBug_chainedCheck,
+	// FoundBug_checkJoinedWithAnd).
+	checksOfSeveralThings: [
+		"(X + 0.5) in hex == X in hex",
+		"check ((X + 0.7) in hex) == X in hex",
+		"check X == \"X\"",
+		"check X in hex == \"X\"",
+		"check 0 <= X <= X",
+		"check X == X == X",
+		"check X > -1/0 and X < 1/0",
+		"check X == X and X ≈ X within 1%",
+		"check X == X or X == 1",
+	],
 };
 
 describe("every form stays honest over the numeric edges", () => {
@@ -256,6 +314,24 @@ describe("text edges are read as text, not acted on", () => {
 
 	test.each(fill("X + 1", TEXT_EDGES.filter((t) => t.trim() !== "")))("inside an expression: %j", (line) => {
 		expectHonestLine(line);
+	});
+});
+
+/**
+ * An ISO 8601 duration is read from an identifier, so the text edges go inside
+ * it as well as beside it, and the prototype words go where a duration's
+ * letters, a converter or a unit would be (#760). A timecode's conversion
+ * target is a word the reader typed too (#759).
+ */
+describe("an ISO 8601 duration and a timecode stay honest over the text edges and the prototype words", () => {
+	test.each([...fill("PTX1H", TEXT_EDGES), ...fill("P1DX", TEXT_EDGES), ...fill("X + PT1H30M", TEXT_EDGES.filter((t) => t.trim() !== ""))])("%j", (line) => {
+		expectHonestLine(line);
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`P${word}`, `${word} + PT1H`, `PT1H in ${word}`, `01:02:03:04 at 30 fps in ${word}`, `(01:02:03:04 at 30 fps) in ${word}`]))("%s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line);
+		});
 	});
 });
 
@@ -319,6 +395,9 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "lab = X\n192.168.1.7 in lab" },
 	{ form: "big = (2^100 + X) in hex\nbig + 1" },
 	{ form: "A = X\nB = X\nA in hex == B in hex\ncheck A in hex == B in binary" },
+	// A chained check and a check joined with `and` over the lines above.
+	{ form: "A = X\ncheck A - 1 < A < A + 1\ncheck A == A and A >= A" },
+	{ form: "A = X + 0.5\nB = A in hex\ncheck B == A and B in hex == B" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {
@@ -359,6 +438,9 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"fe80::1 in X",
 		"192.168.1.7 in X",
 		"check X == #ff0000",
+		"check 1 < X < 2",
+		"check X == 1 and 1 == X",
+		"check X == \"X\"",
 		"hosts in X",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {

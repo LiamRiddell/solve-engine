@@ -75,18 +75,57 @@ from exact arithmetic on it:
 2^60 + 0.5 // 1,152,921,504,606,846,976.50
 ```
 
+Converting such a number keeps the exact reading too. `as int` drops the
+fraction the way `int` and `trunc` do, towards zero, so a negative number loses
+its fraction upwards; and `as percent`, which writes a number as a share of a
+hundred, moves the point of the exact decimal two places:
+
+```solve
+9007199254740993.5 as int // 9,007,199,254,740,993
+-9007199254740993.5 as int // -9,007,199,254,740,993
+floor(9007199254740993.5) // 9,007,199,254,740,993
+(2^53 + 1) as int // 9,007,199,254,740,993
+9007199254740993.5 as percent // 900,719,925,474,099,350.00%
+(2^53 + 1) as percent // 900,719,925,474,099,300.00%
+```
+
+A fraction is kept exactly as well. `2^60 + 0.5` is not a decimal anyone typed
+but a sum, held as the exact fraction 2,305,843,009,213,693,953 over 2, while
+its double, which holds no fraction at that size, is 2^60 itself. The rounding
+functions and `as int` read the exact fraction first, then an exact decimal, and
+the double only when there is neither, so each one rounds the number written.
+`floor` rounds down and `ceil` up, `int`, `trunc` and `as int` drop the fraction
+towards zero, and `round` takes a half away from zero, as it does for a small
+number (`round(2.5)` is 3 and `round(-2.5)` is -3):
+
+```solve
+floor(2^60 + 0.5) // 1,152,921,504,606,846,976
+ceil(2^60 + 0.5) // 1,152,921,504,606,846,977
+round(2^60 + 0.5) // 1,152,921,504,606,846,977
+(2^60 + 0.5) as int // 1,152,921,504,606,846,976
+floor(-(2^60 + 0.5)) // -1,152,921,504,606,846,977
+int(-(2^60 + 0.5)) // -1,152,921,504,606,846,976
+round(-(2^60 + 0.5)) // -1,152,921,504,606,846,977
+round(2^60 + 1/3) // 1,152,921,504,606,846,976
+```
+
 The other limits:
 
 - **A result with no exact reading.** A square root, a power with a fractional
   exponent or a logarithm has no exact decimal, so its result is a double, and so
   is arithmetic on it.
 - **Past the largest double.** A double has no finite value beyond about
-  1.8 × 10^308, and the answer there is infinity, as it always was.
-- **A unit or a percentage.** A quantity with a unit, and a percentage of a
-  number, read the nearest double, typed digits included (`9007199254740993 m`
-  is 9,007,199,254,740,992.00 m, and `9007199254740993.5 m` is
-  9,007,199,254,740,994.00 m). Money is the exception: an amount of money keeps
-  its exact decimal at any size.
+  1.8 × 10^308, and the answer there is infinity, as it always was. A
+  percentage is a hundred times its number, so one past that point is refused
+  by name rather than written as an infinity (see
+  [percentages](/syntax/percentages/#a-number-as-a-percentage)).
+- **A unit, or a percentage typed with its sign.** A quantity with a unit reads
+  the nearest double, typed digits included (`9007199254740993 m` is
+  9,007,199,254,740,992.00 m, `9007199254740993.5 m` is 9,007,199,254,740,994.00
+  m, and `as int` of it is 9,007,199,254,740,994). So does a percentage written
+  with `%` after a number that large (`900719925474099350%`); `as percent` of the
+  number is the exact form. Money is the exception: an amount of money keeps its
+  exact decimal at any size.
 
 ```solve
 sqrt(2^106) + 0.5 // 9,007,199,254,740,992

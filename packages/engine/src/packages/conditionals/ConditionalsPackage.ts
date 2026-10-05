@@ -7,7 +7,7 @@ import { BooleanLiteralParselet } from "./parselets/BooleanLiteralParselet";
 import { IfThenElseParselet } from "./parselets/IfThenElseParselet";
 import { checkParselet } from "./parselets/CheckParselet";
 import { checkLineNormalizerRule, approxOperatorNormalizerRule } from "./normalizer/CheckNormalizerRules";
-import { checkComparison } from "./CheckFunctions";
+import { checkComparison, checkLink, checkBoth } from "./CheckFunctions";
 import { notWordParselet, bangParselet } from "./parselets/NotParselet";
 import { notWordNormalizerRule } from "./normalizer/NotNormalizerRule";
 import { logicalNot } from "./NotFunctions";
@@ -79,6 +79,8 @@ export const CONDITIONALS_PACKAGE: IEnginePackage = {
   normalizerRules: [checkLineNormalizerRule(), approxOperatorNormalizerRule(), notWordNormalizerRule()],
   pluginFunctions: {
     checkComparison,
+    checkLink,
+    checkBoth,
     logicalNot,
   },
   tokenCategories: {

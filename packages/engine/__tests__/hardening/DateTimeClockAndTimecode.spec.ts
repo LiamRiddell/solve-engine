@@ -19,6 +19,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { ValueType } from "@solve-js/vm/Value";
+import { formatValue } from "@solve-js/format/FormatEngine";
 
 function evaluate(source: string) {
 	const engine = newTrackedEngine();
@@ -28,6 +29,8 @@ function evaluate(source: string) {
 
 const num = (source: string) => evaluate(source).toNumber();
 const str = (source: string) => evaluate(source).value as string;
+// A frame count at a rate is the timecode itself since #759, shown in its notation.
+const shown = (source: string) => formatValue(evaluate(source)).replace(/^= /, "");
 
 /** The local wall-clock hour and minute a Datetime value lands on. */
 function wallClock(source: string): [number, number] {
@@ -192,17 +195,17 @@ describe("writing a duration out", () => {
 describe("video timecode carry at the frame-rate boundary", () => {
 	test("the last frame of a second plus one is the first frame of the next", () => {
 		expect(num("00:00:00:29 at 30 fps + 1 frames")).toBe(30);
-		expect(str("30 frames at 30 fps")).toBe("00:00:01:00");
+		expect(shown("30 frames at 30 fps")).toBe("00:00:01:00 at 30 fps");
 	});
 
 	test("the carry propagates through minutes", () => {
 		expect(num("00:00:59:29 at 30 fps + 1 frames")).toBe(1800);
-		expect(str("1800 frames at 30 fps")).toBe("00:01:00:00");
+		expect(shown("1800 frames at 30 fps")).toBe("00:01:00:00 at 30 fps");
 	});
 
 	test("and through hours", () => {
 		expect(num("00:59:59:29 at 30 fps + 1 frames")).toBe(108000);
-		expect(str("108000 frames at 30 fps")).toBe("01:00:00:00");
+		expect(shown("108000 frames at 30 fps")).toBe("01:00:00:00 at 30 fps");
 	});
 
 	test("a frame number equal to the frame rate does not exist", () => {
@@ -229,12 +232,12 @@ describe("timecode at a broadcast (fractional) frame rate", () => {
 		// This used to produce 107,892 frames going in and "00:59:56:12"
 		// coming back out.
 		expect(num("01:00:00:00 at 29.97 fps in frames")).toBe(108000);
-		expect(str("108000 frames at 29.97 fps")).toBe("01:00:00:00");
+		expect(shown("108000 frames at 29.97 fps")).toBe("01:00:00:00 at 29.97 fps");
 	});
 
 	test("an arbitrary timecode survives the round trip intact", () => {
 		expect(num("01:02:03:04 at 29.97 fps in frames")).toBe(111694);
-		expect(str("111694 frames at 29.97 fps")).toBe("01:02:03:04");
+		expect(shown("111694 frames at 29.97 fps")).toBe("01:02:03:04 at 29.97 fps");
 	});
 
 	test("the frame count matches the whole-numbered rate it rounds to", () => {

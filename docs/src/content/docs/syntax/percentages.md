@@ -124,8 +124,10 @@ a percentage of the other. The word works in place of the sign here too.
 20 is what percent of 80 // 25.00%
 ```
 
+### A number as a percentage
+
 With no base after it, `as %` writes a number as a percentage, and so do
-`to %` and `in %`:
+`to %`, `in %` and `as percent`:
 
 ```solve
 0.5 as % // 50.00%
@@ -133,6 +135,20 @@ With no base after it, `as %` writes a number as a percentage, and so do
 0.25 to % // 25.00%
 20/80 in % // 25.00%
 ```
+
+A percentage is its number a hundred times over, so a number can be an ordinary
+finite one while its percentage is not. The largest number that can be held is
+about 1.8e308, so past about 1.8e306 the percentage would be beyond it. Rather
+than print an infinity with a percent sign, the line is refused and says why,
+below zero as well as above it:
+
+```solve
+1e308 as % // This is too large to write as a percentage: a percentage is a hundred times the number, and that is past about 1.8e308, the largest number that can be held.
+-1e308 in % // This is too large to write as a percentage: a percentage is a hundred times the number, and that is past about 1.8e308, the largest number that can be held.
+```
+
+That is a different refusal from a value that is not a number at all, such as a
+division by zero (`1/0 as %`), which names the division instead.
 
 ## Change between two values
 
@@ -237,7 +253,8 @@ one, with an `x` after it. The conversion is read by `CONVERTERS_PACKAGE`, which
   `2 permille * 5000` is 10,000 permille: the same amount as 10, in the unit it
   was written in.
 - A percentage of zero (`40 is what % of 0`), or of any value that is not a
-  finite number, is refused rather than shown as an infinite percentage.
+  finite number, is refused rather than shown as an infinite percentage, and so
+  is a number too large for a hundred times it to be held (`1e308 as %`).
 - A decimal comma in a percentage (`12,5%`) is read only by an engine whose
   locale writes one, German or French (see [locales](/guide/locales/#the-decimal-comma));
   an English engine refuses it, as it refuses `12,5` alone.

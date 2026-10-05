@@ -6,7 +6,7 @@ import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-j
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { resolveStoredFormulaIn } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
-import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues } from "@solve-js/vm/MatrixOps";
+import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues, ReduceForm, reduceFormCall } from "@solve-js/vm/MatrixOps";
 import { listFromCells, listCellValue, needsUnitCells, unitListArithmetic, listConverted } from "@solve-js/vm/MatrixUnits";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
@@ -26,7 +26,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { safeText } from "@solve-js/parser/ParseMessages";
-import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused, bigBaseArithmetic } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageNotFinite, percentageTooLarge, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused, bigBaseArithmetic } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -50,6 +50,7 @@ import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-
 import type { LineTrace } from "@solve-js/explain/Explanation";
 import { offsetRefusal, resolveUtcOffsetName } from "@solve-js/calendar/UtcOffset";
 import { CALENDAR_MONTHS_PER_UNIT, addCalendarDays, shiftByCalendarUnit } from "@solve-js/vm/CalendarShift";
+import { timecodeConverted, timecodeOperandRefused, timecodeUnitPhrase } from "@solve-js/vm/TimecodeConversion";
 
 /**
  * Create a new VM instance with the given opcode registry and configurable limits.
@@ -1393,7 +1394,11 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
         // Number/Percentage make sense here; anything else (a date, a matrix)
         // falls through to the ordinary error path.
         if (r.type !== ValueType.Percentage && r.type !== ValueType.Number) return null;
-        return percentageValue(l.toNumber() + sign * r.toNumber());
+        const fraction = l.toNumber() + sign * r.toNumber();
+        // `50% + 1e308` is a fraction a double holds, but not a hundred times
+        // it, so it is refused as `1e308 as %` is; see toPercentage().
+        if (!Number.isFinite(fraction * 100)) return Number.isNaN(fraction) ? percentageNotFinite() : percentageTooLarge();
+        return percentageValue(fraction);
     }
     if (r.type !== ValueType.Percentage) return null;
 
@@ -1444,7 +1449,7 @@ function multiplyPercentWithUncertainty(l: Value, r: Value): Value | null {
  * {@link multiplyPercentWithUncertainty}). One call from the loop, as before.
  */
 function multiplyPrelude(l: Value, r: Value): Value | null {
-    return quantityOperandRefused(l, r, "mul") ?? multiplyPercentWithUncertainty(l, r);
+    return quantityOperandRefused(l, r, "mul") ?? timecodeOperandRefused(l, r, "mul") ?? multiplyPercentWithUncertainty(l, r);
 }
 
 /**
@@ -1495,7 +1500,7 @@ function multiplyScalarExact(l: Value, r: Value): Value | null {
  * and an uncertain number (see {@link dividePercentWithUncertainty}).
  */
 function dividePrelude(l: Value, r: Value): Value | null {
-    return quantityOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r);
+    return quantityOperandRefused(l, r, "div") ?? timecodeOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r);
 }
 
 /**
@@ -1883,8 +1888,17 @@ function combineTimecode(tc: Value, r: Value, sign: 1 | -1): Value {
         return uomValue(tc.toNumber() + sign * seconds * fps, tc.unit!);
     }
 
-    // Bare Number (or any other Uom), treated as a raw frame count.
-    return uomValue(tc.toNumber() + sign * r.toNumber(), tc.unit!);
+    // A bare number is a count of frames: `01:02:03:04 at 30 fps + 10` is ten
+    // frames on.
+    if (r.type === ValueType.Number) return uomValue(tc.toNumber() + sign * r.toNumber(), tc.unit!);
+
+    // Anything else used to be read as a frame count too, so `+ 5 kg` moved
+    // the timecode five frames: a confident answer to a question with none.
+    const what = r.type === ValueType.Uom && r.unit !== undefined ? describeQuantity(r.unit) : valueKindName(r);
+    return errorValue(
+        "INCOMPATIBLE_UNITS",
+        `${timecodeUnitPhrase(tc.unit)!.replace(/^a/, "A")} moves by frames or by a length of time, such as 10 frames or 2 seconds, not by ${what}.`,
+    );
 }
 
 /**
@@ -2358,7 +2372,7 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
         if (composed) return composed;
         return errorValue(
             "RATE_MUL_MEASURE_MISMATCH",
-            `Cannot multiply a rate per ${denominator} by a quantity in ${multiplier.unit}: they measure different things, and together they make no unit.`
+            `Cannot multiply a rate per ${denominator} by a quantity in ${unitForMessage(multiplier.unit!)}: they measure different things, and together they make no unit.`
         );
     }
     const multiplierInDenominatorUnit = convertUnit(multiplier.toNumber(), multiplier.unit!, denominator);
@@ -2680,6 +2694,9 @@ function convertValueIn(left: Value, writtenTo: string, vm: VM): { value: Value;
     if (membership !== null) return { value: membership };
     const toUnit = left.type === ValueType.Uom ? rateTargetUnit(left.unit!, writtenTo) : writtenTo;
     if (left.type === ValueType.Uom) {
+      // A timecode into frames or a unit of time (#759). See vm/TimecodeConversion.ts.
+      const timecode = timecodeConverted(left, writtenTo);
+      if (timecode !== null) return { value: timecode, table: "measure" };
       const fromUnit = left.unit!;
       const val = left.toNumber();
       const measure = getMeasure(fromUnit);
@@ -3023,12 +3040,13 @@ function plotInvoke(stack: Value[], op: OpCode, bodyRef: number, exprRef: number
 }
 
 /** `reduce(...)` (REDUCE_INVOKE), moved out of the dispatch loop. */
-function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, hasInitial: number, strings: string[], anonymousBodies: Bytecode["anonymousBodies"], vm: VM, pipeline: DiagnosticPipeline | undefined, expression: string | undefined, context: LineExecutionContext | undefined, symbolicTolerant: boolean | undefined): void {
+function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, form: number, strings: string[], anonymousBodies: Bytecode["anonymousBodies"], vm: VM, pipeline: DiagnosticPipeline | undefined, expression: string | undefined, context: LineExecutionContext | undefined, symbolicTolerant: boolean | undefined): void {
     requireKnownBodyKind(kind, ref, op);
 
     // Pushed in textual order (collection, then optional initial)
-    // pop in reverse.
-    const initialVal = hasInitial ? safePop(stack) : undefined;
+    // pop in reverse. Every form but a bare reduce has a starting value; see
+    // ReduceForm in vm/MatrixOps.ts.
+    const initialVal = form !== ReduceForm.reduce ? safePop(stack) : undefined;
     const collectionVal = safePop(stack);
 
     let paramNames: string[] = [];
@@ -3062,7 +3080,7 @@ function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, has
       program = fn.program;
     }
 
-    const cells = collectionToValues(collectionVal, vm.getMaxCollectionSize());
+    const cells = collectionToValues(collectionVal, vm.getMaxCollectionSize(), reduceFormCall(form));
     if (!Array.isArray(cells)) { stack.push(cells); return; }
     // Same post-charge, and the same note, as MAP_INVOKE above.
     chargeAllocation(cells.length, "collection elements");
@@ -4006,7 +4024,7 @@ export function executeBytecode(
               // "$X per €Y" isn't a meaningful derived unit the way
               // "km/day" is, so this stays INCOMPATIBLE_UNITS rather than
               // silently becoming a nonsensical currency-pair rate.
-              stack.push(errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${l.unit} and ${r.unit}`));
+              stack.push(errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${unitForMessage(l.unit!)} and ${unitForMessage(r.unit!)}`));
             } else {
               // A quotient whose dimensions divide onto a named derived unit:
               // `J / s` is a watt, `W / A` a volt (issue #191). Only when it
@@ -4916,7 +4934,7 @@ export function executeBytecode(
           if (operand.type === ValueType.Uom && operand.unit !== undefined && operand.unit !== unit) {
             stack.push(errorValue(
               "UNIT_AFTER_UNIT",
-              `A quantity in ${operand.unit} cannot take a second unit, ${unit}: two units side by side are not a unit. To convert, write "in ${unit}".`,
+              `A quantity in ${unitForMessage(operand.unit)} cannot take a second unit, ${unit}: two units side by side are not a unit. To convert, write "in ${unit}".`,
             ));
             break;
           }
@@ -4967,7 +4985,7 @@ export function executeBytecode(
           if (operand.type === ValueType.Uom && operand.unit !== undefined && operand.unit !== fromUnit) {
             stack.push(errorValue(
               "UNIT_AFTER_UNIT",
-              `A quantity in ${operand.unit} cannot take a second unit, ${fromUnit}: two units side by side are not a unit. To convert, write "in ${toUnit}".`,
+              `A quantity in ${unitForMessage(operand.unit)} cannot take a second unit, ${fromUnit}: two units side by side are not a unit. To convert, write "in ${toUnit}".`,
             ));
             break;
           }
@@ -5301,8 +5319,8 @@ export function executeBytecode(
         case OpCode.REDUCE_INVOKE: {
           const kind = operandByte(opcodes, ip++, op, "body kind");
           const ref = operandByte(opcodes, ip++, op, "body reference");
-          const hasInitial = operandByte(opcodes, ip++, op, "initial-value flag");
-          reduceInvoke(stack, op, kind, ref, hasInitial, strings, anonymousBodies, vm, pipeline, expression, context, symbolicTolerant);
+          const form = operandByte(opcodes, ip++, op, "reduce form");
+          reduceInvoke(stack, op, kind, ref, form, strings, anonymousBodies, vm, pipeline, expression, context, symbolicTolerant);
           break;
         }
 

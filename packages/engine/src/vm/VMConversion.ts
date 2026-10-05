@@ -1,3 +1,4 @@
+import { timecodeUnitPhrase } from "@solve-js/vm/TimecodeConversion";
 import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, isTimecodeUnit, boolValue, type MatrixData, type MatrixEntry, type IpCidrData, type ColourData } from "@solve-js/vm/Value";
 import { convertUnit, convertRate, getMeasure, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { lookupUnit } from "@solve-js/uom/UnitConversion";
@@ -146,7 +147,9 @@ export function valueKindName(v: Value): string {
         case ValueType.Percentage:
             return "a percentage";
         case ValueType.Uom:
-            return v.unit === undefined ? "a number" : `an amount in ${v.unit}`;
+            if (v.unit === undefined) return "a number";
+            // A timecode's unit is an internal spelling (`timecode@30`), never shown (#759).
+            return timecodeUnitPhrase(v.unit) ?? `an amount in ${v.unit}`;
         case ValueType.Boolean:
             return "true or false";
         case ValueType.Pending:
@@ -236,7 +239,7 @@ export function unifyQuantities(values: readonly Value[], verb: string): { magni
             const named = describeMeasureMismatch(anchor.unit, v.unit, verb);
             return errorValue(
                 "INCOMPATIBLE_UNITS",
-                named ?? `Cannot combine incompatible units: ${anchor.unit ?? "?"} and ${v.unit ?? "?"}`,
+                named ?? `Cannot combine incompatible units: ${unitForMessage(anchor.unit ?? "?")} and ${unitForMessage(v.unit ?? "?")}`,
             );
         }
         magnitudes[i] = rv;
@@ -647,6 +650,9 @@ export function describeMeasure(unit: string): string | undefined {
     // unnamed, its internal spelling `mps2` reached the reader (#590).
     // A length over a squared time (`ft/s²`) is one too (#737).
     if (accelerationSize(unit) !== undefined) return "acceleration";
+    // Nor is a timecode, whose unit carries its frame rate (`timecode@30`) and
+    // must not reach a sentence as written (#759).
+    if (isTimecodeUnit(unit)) return "timecode";
     const measure = getMeasure(unit);
     if (measure === undefined) return undefined;
     return measureNoun(measure);
@@ -738,7 +744,7 @@ export function incomparableUnitsError(l: Value, r: Value): Value {
     const lUnit = l.type === ValueType.Uom ? l.unit : undefined;
     const rUnit = r.type === ValueType.Uom ? r.unit : undefined;
     const named = describeMeasureMismatch(lUnit, rUnit, "compared");
-    return errorValue("INCOMPATIBLE_UNITS", named ?? `Cannot compare incompatible units: ${lUnit ?? "?"} and ${rUnit ?? "?"}`);
+    return errorValue("INCOMPATIBLE_UNITS", named ?? `Cannot compare incompatible units: ${unitForMessage(lUnit ?? "?")} and ${unitForMessage(rUnit ?? "?")}`);
 }
 
 /**
@@ -1443,14 +1449,22 @@ export function partsPerFraction(value: Value): number {
  * read the 100 as whole ones and answered 10000.00%. A quantity that is not a
  * proportion (a length, money) has no percentage and is refused, where
  * `5 km as %` answered 500.00%. A number or a ratio is its own fraction, as
- * before; one that is not finite is refused (see {@link percentageNotFinite}).
+ * before; one that is not finite is refused (see {@link percentageNotFinite}),
+ * and so is one whose percentage, a hundred times it, is past the largest
+ * number a double holds (see {@link percentageTooLarge}).
  *
  * @param value - The value, already checked for a fault and a date.
  * @returns The Percentage, or an error Value.
  */
 export function toPercentage(value: Value): Value {
     if (value.type === ValueType.Uom && value.unit !== undefined) {
-        if (isPartsPerUnit(value.unit)) return percentageValue(partsPerFraction(value));
+        if (isPartsPerUnit(value.unit)) {
+            // A parts-per figure past the largest double converts to an
+            // infinite fraction (1e308 permille is 1e311 ppm), though the
+            // quantity typed is finite: too large, not a division by zero.
+            const fraction = partsPerFraction(value);
+            return Number.isFinite(fraction * 100) ? percentageValue(fraction) : percentageTooLarge();
+        }
         const what = describeQuantity(value.unit);
         return errorValue(
             "PERCENTAGE_OF_QUANTITY",
@@ -1458,7 +1472,52 @@ export function toPercentage(value: Value): Value {
         );
     }
     const fraction = value.toNumber();
-    return Number.isFinite(fraction) ? percentageValue(fraction) : percentageNotFinite();
+    // One multiplication: the percentage is what the formatter writes, and a
+    // fraction past about 1.8e306 is finite while a hundred times it is not.
+    if (!Number.isFinite(fraction * 100)) return Number.isNaN(fraction) || (!Number.isFinite(fraction) && !hasFiniteExactReading(value)) ? percentageNotFinite() : percentageTooLarge();
+    const percentage = percentageValue(fraction);
+    const exact = percentageExact(value);
+    if (exact !== undefined) percentage.exact = exact;
+    return percentage;
+}
+
+/**
+ * The places of a percentage a double must be able to hold before a percentage
+ * goes without its exact decimal: six, four more than a percentage shows by
+ * default, so a host that asks for more places than that still sees exact
+ * digits well before the double's run out.
+ */
+const PERCENTAGE_EXACT_PLACES = 6;
+
+/**
+ * The exact decimal a percentage keeps beside its double, or undefined: the
+ * exact fraction of a plain number (its exact decimal, or its exact whole
+ * number) wherever the double of the percentage cannot hold
+ * {@link PERCENTAGE_EXACT_PLACES} places.
+ *
+ * Past 2^53 a double holds no fraction, so `9007199254740993.5 as percent`
+ * showed the double's digits, 900,719,925,474,099,456.00%, though the number
+ * kept its exact decimal. The percentage now keeps it too, and the formatter
+ * writes the digits from it (see `formatPercentage`), as it does for a plain
+ * number. The sidecar is the fraction the percentage stands for, the same
+ * value its double holds, so an operation that reads it reads the same number.
+ *
+ * The boundary: below that magnitude the double already writes the right
+ * digits, so a percentage there carries nothing new and every operation on it
+ * is unchanged; a quantity (`100 ppm`) and a value with no exact reading (a
+ * fraction such as `1/3`, a `sqrt` result) keep their double, since there are
+ * no exact digits to show.
+ *
+ * @param value - The number being written as a percentage.
+ * @returns The exact fraction, or undefined.
+ */
+export function percentageExact(value: Value): DecimalData | undefined {
+    if (value.type !== ValueType.Number) return undefined;
+    const fraction = value.value as number;
+    if (!Number.isFinite(fraction) || Math.abs(fraction * 100) * Number.EPSILON < 0.5 * 10 ** -PERCENTAGE_EXACT_PLACES) return undefined;
+    if (value.exact !== undefined) return value.exact;
+    const r = value.rational;
+    return r !== undefined && r.d === 1n ? { coef: r.n, scale: 0 } : undefined;
 }
 
 /**
@@ -1500,6 +1559,36 @@ export function percentageNotFinite(): Value {
         "PERCENTAGE_NOT_FINITE",
         "This has no percentage: its value is not a finite number, which is what dividing by zero gives.",
     );
+}
+
+/**
+ * The refusal for a percentage too large to hold: `1e308 as %` printed
+ * Infinity%, though 1e308 is an ordinary number, because a percentage is a
+ * hundred times its fraction and a hundred times 1e308 is past the largest
+ * double (about 1.8e308). A whole number written with `n` past that
+ * (`2n^2000`) is refused the same way, since its double is infinite only for
+ * want of room. The value is a real number, so this names its size, where
+ * {@link percentageNotFinite} names a division by zero.
+ *
+ * @returns The `PERCENTAGE_OVERFLOW` error Value.
+ */
+export function percentageTooLarge(): Value {
+    return errorValue(
+        "PERCENTAGE_OVERFLOW",
+        "This is too large to write as a percentage: a percentage is a hundred times the number, and that is past about 1.8e308, the largest number that can be held.",
+    );
+}
+
+/**
+ * Whether a value whose double is infinite still stands for a finite number:
+ * a whole number written with `n` (`2n^2000`), or a number carrying an exact
+ * integer, fraction or decimal past where a double reaches. A plain infinity
+ * (`1/0`, and `2^2000`, which is computed in doubles) has none of these.
+ *
+ * @param value - The value.
+ */
+export function hasFiniteExactReading(value: Value): boolean {
+    return value.type === ValueType.BigInt || value.rational !== undefined || value.exact !== undefined;
 }
 
 /**
