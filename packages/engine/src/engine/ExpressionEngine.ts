@@ -136,6 +136,7 @@ import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { trailingTokenWording } from "@solve-js/parser/ParseMessages";
 import { wordLabelEnd } from "@solve-js/engine/WordLabel";
 import { MultiWordNameTable, multiWordDefinitionRule, multiWordNameRule, multiWordNameRefusal } from "@solve-js/packages/variables/MultiWordNames";
+import { isTopLevel, namesSomething, severalUnknownsRefusal } from "@solve-js/engine/SeveralUnknowns";
 import { documentErrors, errorOnLine, inlineExpressionOffset, lineFailureOf, recordLineFailure } from "@solve-js/engine/LineDiagnostics";
 import {
     type DiagnosticPipelineResult,
@@ -5321,7 +5322,13 @@ export class ExpressionEngine {
         if (lhsTokens.some(t => t.type === 'COLON')) return null;
 
         const unknowns = this.equationUnknowns(lhsTokens, rhsTokens);
-        if (unknowns.length !== 1) return null;
+        if (unknowns.length !== 1) {
+            // Two or more is refused by name rather than left to the parse
+            // error at the `=` (see engine/SeveralUnknowns.ts).
+            const refusal = unknowns.length > 1 ? this.severalUnknowns(normalizedTokens, eqIdx, lhsTokens, rhsTokens) : null;
+            if (refusal !== null) throw refusal;
+            return null;
+        }
 
         const variable = unknowns[0];
         const lhsProgram = this.compileAdHoc(lhsTokens);
@@ -5330,6 +5337,39 @@ export class ExpressionEngine {
         this.vm.defineScalarEquation(variable, lhsProgram, rhsProgram);
         this.noteEquationOwner("scalar", variable, lineNumber);
         return lineMessage(`${variable} stored as an equation: solve with "${variable} =>"`);
+    }
+
+    /**
+     * The refusal for an equation line with two or more unknowns, or `null`
+     * when the line is not plainly one and keeps the reading it had.
+     *
+     * Only names count, not units: `2 km + x = 5 km` has one unknown and a
+     * unit, and stays the parse error it was. A unit word with no amount before
+     * it (`b`, `h`) is a name, as the arrow reads it. The `=` must stand outside every
+     * bracket, and each side must read as an expression of its own, so a line
+     * that merely contains an `=` somewhere is not described as an equation.
+     *
+     * @param tokens - The whole line's normalised tokens.
+     * @param eqIdx - Index of the `=`.
+     * @param lhsTokens - The tokens before it.
+     * @param rhsTokens - The tokens after it.
+     */
+    private severalUnknowns(tokens: Token[], eqIdx: number, lhsTokens: Token[], rhsTokens: Token[]): EngineError | null {
+        const named: string[] = [];
+        for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i];
+            if (!namesSomething(tokens, i) || named.includes(token.value)) continue;
+            if (this.vm.getVar(token.value) !== undefined || this.vm.hasUserFunction(token.value)) continue;
+            named.push(token.value);
+        }
+        if (named.length < 2 || !isTopLevel(tokens, eqIdx)) return null;
+        try {
+            this.compileAdHoc(lhsTokens);
+            this.compileAdHoc(rhsTokens);
+        } catch {
+            return null;
+        }
+        return severalUnknownsRefusal(named, tokens);
     }
 
     /**
@@ -7913,7 +7953,13 @@ export class ExpressionEngine {
 		// A would-be name holding a word the engine reads is refused as it
 		// compiles (#743), so it is not code here either.
 		if (multiWordNameRefusal(tokens, eq) !== null) return false;
-		return this.parsesWhole(tokens.slice(0, eq), hasParens) && this.parsesWhole(tokens.slice(eq + 1), hasParens);
+		const lhs = tokens.slice(0, eq), rhs = tokens.slice(eq + 1);
+		if (!this.parsesWhole(lhs, hasParens) || !this.parsesWhole(rhs, hasParens)) return false;
+		// Nor is an equation with several unknowns, refused the same way: the
+		// shape trySymbolicGrammar() hands to tryStoreScalarEquation(), with
+		// other than one unknown.
+		const equationShaped = this.parseFactorChain(lhs) === null && tokens[1]?.type !== 'LPAREN' && !lhs.some((t) => t.type === 'COLON');
+		return !(equationShaped && this.equationUnknowns(lhs, rhs).length !== 1 && this.severalUnknowns(tokens, eq, lhs, rhs) !== null);
 	}
 
 	/**

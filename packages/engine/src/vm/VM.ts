@@ -3,7 +3,7 @@ import { Value, ValueType, numberValue, numberValueExact, numberValueRational, n
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-js/symbolic";
-import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
+import { symbolicPow, symbolicNeg, symbolicBuiltin, unknownNameIn, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { resolveStoredFormulaIn } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
 import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues, ReduceForm, reduceFormCall } from "@solve-js/vm/MatrixOps";
@@ -46,6 +46,7 @@ import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { WeekShape } from "@solve-js/calendar/WeekShape";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
+import { fieldsShownIn, noonOnDay, shownZone, zoneAnswerJoinedText } from "@solve-js/vm/ZoneAnswers";
 import { addZonedCalendarDays, addZonedCalendarMonths } from "@solve-js/calendar/ZonedSteps";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { LineTrace } from "@solve-js/explain/Explanation";
@@ -1744,16 +1745,19 @@ function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Valu
             `A date or time moves by a length of time, such as 5 days, 2 weeks or 3 hours, not by ${what}.`,
         );
     }
-    let moved: number;
+    let moved: Value;
     try {
-        moved = shiftDatetime(date.toNumber(), duration, sign, vm, date.zone);
+        moved = datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm, date.zone), date.grain, date.zone, date.timeAnchor);
     } catch (e) {
         // A calendar backend throws a RangeError for a day past its range,
         // where the arithmetic itself is sound: the answer is only too far.
         if (e instanceof RangeError) return dateOutOfRange();
         throw e;
     }
-    return datetimeValue(moved, date.grain, date.zone, date.timeAnchor);
+    // A time of day keeps how finely it is written, so a time in a zone moved
+    // by an hour still reads to the minute (#757).
+    if (date.timePrecision !== undefined) moved.timePrecision = date.timePrecision;
+    return moved;
 }
 
 /** The base types a percentage change reads a size from, and so checks for zero and sign. */
@@ -1966,6 +1970,10 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
             );
     }
     const epochMs = left.toNumber();
+    // A time already shown in a zone (`3pm London in Tokyo`, #757) names its
+    // instant, so another zone shows that moment on its own clock, still as a
+    // time of day and still counted from the day the reader named.
+    if (left.grain === "time" && typeof left.zone === "string") return zoneTimeRezoned(left, zoneRef, vm.context.calendar);
     if (left.grain !== "date" && left.grain !== "datetime" && left.grain !== "time") {
         return datetimeValue(epochMs, "instant", zoneRef);
     }
@@ -1985,6 +1993,28 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
     // time, counted from its own day there (#708).
     if (left.grain === "time") return datetimeValue(reanchored, "time", zoneRef, reanchored);
     return datetimeValue(reanchored, "instant", zoneRef);
+}
+
+/**
+ * A time in a zone shown in another one: the same instant, the same
+ * precision, and the anchor moved to noon on the same day as the new zone
+ * counts it, so the day shift stays against the day the reader named.
+ *
+ * @param time - A time of day that names a zone.
+ * @param zoneRef - The zone to show it in.
+ * @param calendar - The backend that resolves a named zone.
+ * @returns The time in the new zone.
+ */
+function zoneTimeRezoned(time: Value, zoneRef: string, calendar: CalendarBackend): Value {
+    const zone = time.zone as string;
+    let anchor: number | undefined;
+    if (time.timeAnchor !== undefined) {
+        const day = fieldsShownIn(time.timeAnchor, zone, calendar);
+        anchor = noonOnDay(day.year, day.month0, day.day, zoneRef, calendar);
+    }
+    const moved = datetimeValue(time.toNumber(), "time", shownZone(zoneRef), anchor);
+    if (time.timePrecision !== undefined) moved.timePrecision = time.timePrecision;
+    return moved;
 }
 
 /** `a % b` for two doubles, the MOD opcode's arithmetic. */
@@ -3257,6 +3287,21 @@ function throwUndefinedVariable(varName: string, vm: VM): never {
     throw undefinedVariable(varName, vm);
 }
 
+/**
+ * An unknown met by an operation that needs one amount (a unit after it, a
+ * percentage, a base, a fraction, `as number`, a tolerance). Each read the
+ * formula as 0, so `foo percent =>` answered `0.00%` and `foo km =>` `0.00 km`
+ * where `foo percent` said `Undefined variable: foo`. The line is refused with
+ * that same error, naming the formula's first unknown (see unknownNameIn()).
+ * The arms test the type themselves, so a value that is not a formula pays one
+ * comparison and no call.
+ */
+function throwUnknownAmount(v: Value, vm: VM): never {
+    const name = unknownNameIn(v);
+    if (name !== null) throw undefinedVariable(name, vm);
+    throw ErrorFactory.execution("UNDEFINED_VARIABLE", "This needs a number, and the expression is a formula with no value yet.");
+}
+
 /** CALL_USER_FUNCTION on a name no function has, with the nearest real ones. */
 function throwUndefinedFunction(name: string, vm: VM): never {
     const nearFunctions = nearestNames(name, functionNameCandidates(vm), 3, builtinNameIndex());
@@ -3727,6 +3772,10 @@ export function executeBytecode(
             const ratAdd = exactRationalOp(l, r, "add");
             if (ratAdd) { stack.push(ratAdd); break; }
           }
+          // Text joined to a time-zone answer reads the answer's English text, as
+          // it did when the answer was text (#757): `"at " + (3pm London in Tokyo)`.
+          const zoneJoin = l.type === ValueType.String || r.type === ValueType.String ? zoneAnswerJoinedText(l, r) : null;
+          if (zoneJoin !== null) { stack.push(stringValue(zoneJoin)); break; }
           const pctAdd = combinePercentage(l, r, 1);
           const ratePeriodAdd = pctAdd === null ? unifyRatePeriods(l, r) : null;
           if (pctAdd !== null) {
@@ -4270,9 +4319,10 @@ export function executeBytecode(
           if (posFault) { stack.push(posFault); break; }
           carry = v.sources;
           // Unary plus is a no-op, so money keeps its exact decimal too, and a
-          // list, an IPv6 address or a colour is itself rather than the reading
-          // its toNumber() reports (zero for a list, none for an address).
-          if (v.type === ValueType.Matrix || hasNoNumber(v)) stack.push(v);
+          // list, an IPv6 address, a colour or a formula is itself rather than
+          // the reading its toNumber() reports (zero for a list or a formula,
+          // none for an address): `+foo =>` answered 0.
+          if (v.type === ValueType.Matrix || v.type === ValueType.Symbolic || hasNoNumber(v)) stack.push(v);
           else if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(v.toNumber(), v.unit!, v.exact));
           else if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
           // Unary plus is a no-op, so it has to leave the type alone too.
@@ -4295,6 +4345,7 @@ export function executeBytecode(
           const spread = safePop(stack), center = safePop(stack);
           const uncFault = faultedOperand(center, spread);
           if (uncFault) { stack.push(uncFault); break; }
+          if (center.type === ValueType.Symbolic) throwUnknownAmount(center, vm);
           // The center is the measured value, the spread its one-sigma tolerance.
           // The spread is taken as a magnitude, so "5 +/- -2" reads the same as
           // "5 +/- 2". A percentage spread is relative to the center and a spread
@@ -4828,6 +4879,8 @@ export function executeBytecode(
           const v = safePop(stack);
           const toNumberFault = faultedOperand(v);
           if (toNumberFault) { stack.push(toNumberFault); break; }
+          // An unknown has no amount to read, here or below (see throwUnknownAmount()).
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           if (v.type === ValueType.String) {
             // Text reads as a number only when it is one, whole. Through
             // `toNumber()` it went by `parseFloat`: `"11:00 PM" as number` was
@@ -4844,6 +4897,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toHexFault = faultedOperand(v);
           if (toHexFault) { stack.push(toHexFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           // A colour keeps its channels and a bigint its digits; see inBase().
           stack.push(inBase(v, "hex"));
           break;
@@ -4852,6 +4906,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toPercentageFault = faultedOperand(v);
           if (toPercentageFault) { stack.push(toPercentageFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toPercentageDate = datetimeConversionRefused(v, "a percentage");
           if (toPercentageDate) { stack.push(toPercentageDate); break; }
           const toPercentageOpaque = noNumberRefused(v, "written as a percentage");
@@ -4865,6 +4920,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toFractionFault = faultedOperand(v);
           if (toFractionFault) { stack.push(toFractionFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toFractionDate = datetimeConversionRefused(v, "a fraction");
           if (toFractionDate) { stack.push(toFractionDate); break; }
           const toFractionOpaque = noNumberRefused(v, "written as a fraction");
@@ -4888,6 +4944,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toSciFault = faultedOperand(v);
           if (toSciFault) { stack.push(toSciFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toSciDate = datetimeConversionRefused(v, "scientific notation");
           if (toSciDate) { stack.push(toSciDate); break; }
           const toSciOpaque = noNumberRefused(v, "written in scientific notation");
@@ -4901,6 +4958,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toBinaryFault = faultedOperand(v);
           if (toBinaryFault) { stack.push(toBinaryFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           stack.push(inBase(v, "bin"));
           break;
         }
@@ -4908,6 +4966,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toOctalFault = faultedOperand(v);
           if (toOctalFault) { stack.push(toOctalFault); break; }
+          if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           stack.push(inBase(v, "oct"));
           break;
         }
@@ -4941,6 +5000,7 @@ export function executeBytecode(
           const operand = safePop(stack);
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          if (operand.type === ValueType.Symbolic) throwUnknownAmount(operand, vm);
           carry = operand.sources;
           // A second unit written straight after a quantity used to relabel it:
           // `5 kg m` was 5 m, the kilograms discarded without a word, and
@@ -4995,6 +5055,7 @@ export function executeBytecode(
           // carried its fault everywhere except through here.
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          if (operand.type === ValueType.Symbolic) throwUnknownAmount(operand, vm);
           carry = operand.sources;
           // The same second-unit refusal as UOM_CONVERT, for the literal with a
           // conversion attached: `5 kg m in cm` read the five kilograms as five
@@ -5070,6 +5131,7 @@ export function executeBytecode(
           const operand = safePop(stack);
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          if (operand.type === ValueType.Symbolic) throwUnknownAmount(operand, vm);
           carry = operand.sources;
           const { value, unit: bestUnit } = getBestUnit(operand.toNumber(), unit);
           stack.push(uomValue(value, bestUnit));

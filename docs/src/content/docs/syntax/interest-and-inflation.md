@@ -208,41 +208,133 @@ compoundInterest($1,000, 5%, 3) // $1,157.63
 Inflation adjusts an amount into another year's money: `what is $100 from 1990`
 asks what $100 in 1990 is worth now. The figures come from a consumer price
 index, a record of what a typical basket of shopping cost in each year, so the
-ratio of two years' figures says how much more money buys the same things. The
-index is bundled with the engine so that no line needs the network, and it is
-the **US** index, so it adjusts amounts in US dollars.
+ratio of two years' figures says how much more money buys the same things. Each
+country's index records its own prices, so the amount's currency picks the
+index: US dollars read the US index, pounds sterling the UK one and euros the
+euro-area one. The indices are bundled with the engine, so no line needs the
+network.
 
 ```solve
-what is $100 from 1990 // $254.55
-inflationAdjust($100, 1990, 2020) // $198.01
-what is $500 in 1990 worth in 2010 // $834.35
+what is $100 from 1990 // $253.39
+inflationAdjust($100, 1990, 2020) // $198.02
+what is $500 in 1990 worth in 2010 // $834.19
 ```
 
 The first line runs to the current year, so its answer moves on each January;
 the other two name both years.
 
-The index is the United States CPI-U (the consumer price index for all urban
-consumers) as annual averages, from 1970 to 2026, with 2025 and 2026 estimated
-rather than published. A year outside that range is refused rather than
-extrapolated:
+`what was $500 worth in 1965` runs the other way: it takes $500 of today's money
+and says what the same buying power came to in 1965, when prices were lower.
+`$100 in 1965 dollars` asks the same question in fewer words.
 
 ```solve
-what is $100 from 1960 // Year 1960 is outside the bundled CPI table's range (1970-2026)
+what was $500 worth in 1965 // $47.56
+$100 in 1965 dollars // $9.51
 ```
 
-The US index says nothing about what a pound or a euro bought, so an amount in
-any other currency is refused rather than given the American figure with its own
-currency sign. So is a quantity that is not money, and so is a bare number,
-which would be read as dollars without saying so. An index for another country
-is not bundled.
+### Which index answers each currency
+
+Three indices are bundled, one for each currency below, and each covers only
+the years its publisher has figures for.
+
+| Currency | Index | Years |
+| --- | --- | --- |
+| US dollars (`$`, `USD`) | US CPI-U, series CUUR0000SA0 from the Bureau of Labor Statistics | 1913 to 2026 |
+| Pounds sterling (`£`, `GBP`) | ONS series CDKO, the long-term indicator of prices of consumer goods and services | 1800 to 2026 |
+| Euros (`€`, `EUR`) | Eurostat's HICP (harmonised index of consumer prices) for the euro area | 1999 to 2025 |
+
+Every table is built ahead of time by a script in the repository from the
+published series, and its source and the date it was retrieved are written at
+the top of the table's file.
+
+**US dollars.** The index is the United States CPI-U (the consumer price index
+for all urban consumers, US city average, all items), series CUUR0000SA0 from
+the Bureau of Labor Statistics. Each year is the average of its twelve monthly
+figures, worked out the way BLS works out its own annual average, and the table
+runs from 1913, the first year of the series, to the current year. Two years are
+not a full twelve months:
+
+- **2025** has eleven: October 2025 was never collected, during the 2025 lapse
+  in US government funding. Its figure is the average of the other eleven, which
+  is the 321.943 BLS published.
+- **The current year** is partial: it averages the months published so far
+  (January to July 2026 in this build), so an answer that reads it moves a
+  little each time the table is rebuilt.
+
+**Pounds sterling.** The UK has several price indices (CPI, CPIH and RPI), and
+none of them on its own reaches back before the Second World War. The bundled
+one is ONS series CDKO, the long-term indicator of prices of consumer
+goods and services (January 1974 = 100). CDKO is the ONS's own long-run consumer
+price series, which chains RPI-era data before the CPI's start, so a single
+series runs from 1800 to now. It is none of CPI, CPIH or RPI on its own, so an
+answer here can differ a little from one worked out with any one of them. Each
+year is the annual figure ONS publishes, and the current year is partial, the
+average of the months published so far (January to July 2026 in this build).
 
 ```solve
-what is £100 from 1990 // this is the US consumer price index, which says nothing about what GBP bought: only an amount in US dollars, such as $100, can be adjusted with it
-what is 100 from 1990 // this is the US consumer price index, so it adjusts an amount in US dollars: write the amount with its currency, as $100 or 100 USD
+what is £100 from 1990 // £327.52
+what was £500 worth in 1965 // £17.92
+inflationAdjust(£100, 1990, 2020) // £232.44
+```
+
+**Euros.** The euro-area index is Eurostat's HICP (the harmonised index of
+consumer prices, the measure the European Central Bank targets) for the euro
+area as its membership changed, taken from the ECB's monthly series
+ICP.M.U2.N.000000.4.INX. Each year is the average of its twelve months, which is
+how Eurostat works out its own annual average.
+
+```solve
+inflationAdjust(€100, 2000, 2020) // €138.15
+what is €100 in 1999 worth in 2025 // €172.87
+```
+
+The euro has two boundaries of its own. The index starts in 1996, but the euro
+began in 1999, so a euro amount from before 1999 would be a sum in francs, marks
+or lire converted at a rate fixed afterwards: those years are refused with the
+reason. And the series ends with 2025: the ECB discontinued it in February 2026,
+when Eurostat changed how the HICP is compiled, and its replacement is a
+different series, which is not joined on. So a euro line that runs to the
+current year is refused; naming both years, as `inflationAdjust` does, answers.
+
+```solve
+what is €100 from 1990 // Year 1990 is before the euro began in 1999, so there is no amount in euros from then to adjust (the euro-area price index itself starts in 1996)
+what is €100 from 2000 // Year 2026 is outside the bundled euro-area price index's range (1999-2025): the series it is built from ends with 2025, so name a year up to 2025 to adjust to
+```
+
+### Years and amounts an index cannot read
+
+A year outside an index is refused rather than extrapolated, since a year before
+a series began has no figure, and a year after the latest has a forecast at
+best. The refusal names the index and its range:
+
+```solve
+what is $100 from 1912 // Year 1912 is outside the bundled CPI table's range (1913-2026)
+what is £100 from 1799 // Year 1799 is outside the bundled UK price index's range (1800-2026)
+```
+
+An amount in any other currency is refused rather than adjusted by another
+country's prices with its own currency sign. So is a quantity that is not money,
+and so is a bare number, which names no currency for an index to be chosen by.
+An amount converted into a currency first, such as `($100 in GBP)`, is in that
+currency, so it reads that currency's index.
+
+```solve
+what is ¥100 from 1990 // no price index for JPY is bundled, so there is no record of what it bought in another year: only an amount in US dollars, pounds sterling or euros, such as $100, £100 or €100, can be adjusted
+what is 100 from 1990 // a price index measures one currency, and this amount has none: write it with its currency, in US dollars, pounds sterling or euros, such as $100, £100 or €100
+```
+
+`in 1965 dollars` names the currency it answers in, so it takes an amount in
+dollars only; for pounds or euros, `what was £100 worth in 1965` reads their own
+index.
+
+```solve
+£100 in 1990 dollars // in 1990 dollars asks for US dollars, and this amount is in GBP: ask what it was worth in 1990 instead, which reads the UK price index (ONS CDKO)
 ```
 
 `value of £100 in 2030 assuming 3% inflation` is a different question: it states
-the rate rather than reading the index, so it takes any currency.
+the rate rather than reading an index, so it takes any currency.
 
-The inflation figures are an approximation, not a substitute for a real
-financial calculation.
+The figures are the published indices, but an adjustment by one is still an
+average over a typical basket of shopping, not what any one price did. For a
+contract, a tax figure or a cost-of-living clause, use the series from its
+publisher directly: bls.gov/cpi, ons.gov.uk, or Eurostat.

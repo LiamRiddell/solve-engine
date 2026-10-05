@@ -372,6 +372,48 @@ export function multiWordNameRule(table: MultiWordNameTable, priority = 30): Nor
 	};
 }
 
+/**
+ * A word that is letters and quote marks: what a reader typing a possessive
+ * produces, including with a mark that is not an apostrophe.
+ */
+const QUOTED_WORD = /^[\p{L}\p{M}'’‘′‛`´-]+$/u;
+
+/** The marks shaped like an apostrophe that are not one: an opening quote, a prime, a reversed quote, a grave and an acute accent. */
+const NOT_AN_APOSTROPHE = /[‘′‛`´]/u;
+
+/**
+ * How a word typed as part of a name fails to be a name's word, or null when
+ * it is one or is not word-shaped at all.
+ *
+ * A name's words are letters with an apostrophe or hyphen inside or at the end
+ * (`Alice's`, `the Smiths' rent`). Two near misses are refused by name rather
+ * than left to the parse error the line would otherwise give (`Expected an
+ * operator ... but found "food"`), which says nothing about the quote mark:
+ *
+ * - A mark shaped like an apostrophe that is another character: an opening
+ *   quote `‘`, a prime `′`, a reversed quote `‛`, a grave or an acute accent.
+ *   It is read as the name's own character elsewhere, so `Alice‘s` and
+ *   `Alice's` would be two names that look the same.
+ * - An apostrophe before the first letter (`’tis`). A name's word starts with a
+ *   letter, and a straight `'` there is skipped as any stray mark is, so the
+ *   two apostrophes would read differently.
+ *
+ * @param text - A token's text.
+ * @returns The reason, for {@link multiWordNameRefusal}, or null.
+ */
+export function quoteMarkInWord(text: string): string | null {
+	if (WORD.test(text) || !QUOTED_WORD.test(text)) return null;
+	const mark = NOT_AN_APOSTROPHE.exec(text);
+	if (mark !== null) return `"${mark[0]}" in "${text}" is a quotation mark, not an apostrophe. Write the apostrophe as ' or ’`;
+	if (/^['’]/u.test(text)) return `"${text}" starts with an apostrophe, and a word in a name starts with a letter`;
+	return null;
+}
+
+/** Whether a token is an operator spelled as a word (`take`, `plus`, `times`), as opposed to its symbol. */
+function isOperatorWord(token: Token | undefined): boolean {
+	return token !== undefined && OPERATOR_WORD_MEANING[token.type] !== undefined && WORD.test(token.text);
+}
+
 /** How one word before a definition's `=` stands in the way of a name, or null when it is a plain word. */
 function reservedWord(token: Token): string | null {
 	if (isNameWord(token)) return null;
@@ -393,6 +435,12 @@ function reservedWord(token: Token): string | null {
  *   5` as equations; the refusal says what the word is and how to write each
  *   meaning. An operator word between names (`x plus y = 10`) is an equation
  *   as it always was.
+ * - The same word last, after plain words: `monthly take = 4000`. An operator
+ *   with nothing on its right is no arithmetic, so there is no equation to
+ *   offer, and the line used to fail with "The line ends after take".
+ * - A word with a quote mark that is not an apostrophe, or an apostrophe
+ *   before its first letter (`Alice‘s food = 3`, `’tis rate = 5`); see
+ *   {@link quoteMarkInWord}.
  * - A fused phrase among the words: `tax on = 5`, `hourly for = 5`. These
  *   failed with the phrase's own "expected a value" message.
  *
@@ -404,22 +452,38 @@ export function multiWordNameRefusal(tokens: readonly Token[], eqIdx: number): E
 	if (eqIdx < 1 || eqIdx > MAX_NAME_WORDS) return null;
 	const first = tokens[0];
 	let wordCount = 0;
+	let quoteMark: string | null = null;
 	for (let i = 0; i < eqIdx; i++) {
 		const t = tokens[i];
 		if (isNameWord(t) || WORD.test(t.text)) wordCount++;
 		else if (PHRASE.test(t.text)) wordCount += t.text.split(" ").length;
+		else if (t.type === "IDENT" && quoteMark === null && (quoteMark = quoteMarkInWord(t.text)) !== null) wordCount++;
 		else return null;
 	}
 	if (wordCount < 2 || wordCount > MAX_NAME_WORDS) return null;
+	if (quoteMark !== null) {
+		const typedName = tokens.slice(0, eqIdx).map((t) => t.text).join(" ");
+		return ErrorFactory.parsing({
+			code: VariablesErrorCodes.NAME_HAS_QUOTE_MARK,
+			message: `"${typedName}" cannot be a name: ${quoteMark}.`,
+			context: { name: typedName },
+		});
+	}
 	let reason: string | null = null;
 	let equation = "";
-	if (OPERATOR_WORD_MEANING[first.type] !== undefined && WORD.test(first.text)) {
+	if (isOperatorWord(first)) {
 		// Only before plain words: the rest of the left side is a name's words.
 		for (let i = 1; i < eqIdx; i++) if (!isNameWord(tokens[i])) return null;
 		reason = reservedWord(first);
 		const rest = tokens.slice(1, eqIdx).map((t) => t.text).join(" ");
 		const right = tokens.slice(eqIdx + 1).map((t) => t.text).join(" ");
 		if (eqIdx === 2 && right !== "") equation = ` For the equation, write ${OPERATOR_SYMBOL[first.type]}${rest} = ${right}.`;
+	} else if (isOperatorWord(tokens[eqIdx - 1])) {
+		// Last, after plain words: `monthly take = 4000`. An operator with
+		// nothing on its right is no arithmetic, so the line can only have
+		// meant a name, and it failed with "The line ends after take".
+		for (let i = 0; i < eqIdx - 1; i++) if (!isNameWord(tokens[i])) return null;
+		reason = reservedWord(tokens[eqIdx - 1]);
 	} else {
 		for (let i = 0; i < eqIdx && reason === null; i++) {
 			const t = tokens[i];

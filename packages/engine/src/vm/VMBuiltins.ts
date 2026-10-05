@@ -30,8 +30,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 // link dangling, which is worse than an unused-import warning.
 // eslint-disable-next-line no-unused-vars
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
-import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
-import { inflationAmountRefused } from "@solve-js/packages/finance/data/InflationAmount";
+import { adjustByCurrency } from "@solve-js/packages/finance/data/InflationAmount";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure, unitForMessage } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } from "@solve-js/vm/QuantityPowers";
@@ -1400,10 +1399,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         return numberValue(amount / (1 + rate));
     },
 
-    // inflationAdjust(amount, fromYear, toYear) -- CPI-based inflation
-    // adjustment between two arbitrary years, using the bundled CPI-U
-    // table (packages/finance/data/CpiTable.ts -- see its doc comment for
-    // vintage/accuracy notes). Backs the function-call form
+    // inflationAdjust(amount, fromYear, toYear) -- price-index inflation
+    // adjustment between two arbitrary years, using the bundled index for
+    // the amount's currency (packages/finance/data/PriceIndices.ts, and each
+    // table's doc comment for its source and method). Backs the function-call form
     // inflationAdjust(...) (FunctionCallParselet's builtinNameToIndex map)
     // and the "what is $X in fromYear worth in toYear" phrase form
     // (InflationQueryParselet.ts). The two present-year-relative phrase
@@ -1411,24 +1410,13 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // in year dollars") and the flat-rate future-value projection ("value
     // of $X in year assuming N% inflation") are collision-safe
     // pluginFunctions instead, not indices here -- see
-    // packages/finance/parselets/InflationPluginFunctions.ts. The table is the
-    // US index, so only an amount in US dollars is adjusted (#650); see
-    // inflationAmountRefused().
+    // packages/finance/parselets/InflationPluginFunctions.ts. The amount's
+    // currency picks the index (US dollars, pounds, euros; #650, #756), and
+    // any other amount is refused; see adjustByCurrency().
     60: (args) => {
-        const refused = inflationAmountRefused(args[0]);
-        if (refused) return refused;
-        const amount = args[0].toNumber();
-        const fromYear = args[1].toNumber();
-        const toYear = args[2].toNumber();
-        const ratio = inflationRatio(fromYear, toYear);
-        if (ratio === undefined) {
-            return errorValue(
-                "INFLATION_YEAR_OUT_OF_RANGE",
-                `Year ${inflationRatio(fromYear, fromYear) === undefined ? fromYear : toYear} is outside the bundled CPI table's range (${CPI_MIN_YEAR}-${CPI_MAX_YEAR})`,
-            );
-        }
-        const result = amount * ratio;
-        return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
+        const result = adjustByCurrency(args[0], args[1].toNumber(), args[2].toNumber());
+        if ("refused" in result) return result.refused;
+        return args[0].type === ValueType.Uom ? uomValue(result.value, args[0].unit!) : numberValue(result.value);
     },
 
     // root(n, x) -- the n-th root of x (Numi's `root n (x)` phrasing maps

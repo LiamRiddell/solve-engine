@@ -50,6 +50,9 @@ const SUITES = [
 	"packages/engine/__tests__/engine/CalendarBackendOption",
 	"packages/engine/__tests__/worker/",
 	"packages/engine/__tests__/integration/",
+	// The time-zone answers as values (#757): zone reads, day shifts and a
+	// pinned clock, which is what this run exists to prove on both backends.
+	"packages/engine/__tests__/bugs/Issue757_zoneAnswersAsValues",
 ];
 
 const args = process.argv.slice(2);

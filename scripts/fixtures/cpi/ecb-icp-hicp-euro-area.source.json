@@ -1,0 +1,4 @@
+{
+	"source": "the ECB data API's CSV of the series (data-api.ecb.europa.eu/service/data/ICP/M.U2.N.000000.4.INX?format=csvdata) as archived in the public repository github.com/MaxGhenis/expectations (data/raw/ecb_ea_hicp_index_monthly.csv, retrieved by that project on 2026-09-05, SHA-256 9bfa365fe6dd664c75f90f271821011bfb8cc5a7e1d0b181850951529e225b88 as archived there, line endings since normalised to LF), recorded in scripts/fixtures/cpi/ecb-icp-hicp-euro-area.csv, since the ECB and Eurostat hosts were not reachable from the build",
+	"retrieved": "2026-10-01"
+}

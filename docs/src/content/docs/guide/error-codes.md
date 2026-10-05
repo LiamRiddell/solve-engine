@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 547 codes, grouped below by the part
+ship. The engine and its built-in packages ship 550 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -395,6 +395,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `EQUATION_FACTOR_UNDEFINED` | as a value | A matrix equation (`A * x = b`) naming a factor no line defines yet. |
 | `EQUATION_FACTOR_NOT_MATRIX` | as a value | A matrix equation whose factor is not a matrix. |
 | `EQUATION_RHS_NOT_MATRIX` | as a value | A matrix equation whose right-hand side is not a matrix. |
+| `EQUATION_SEVERAL_UNKNOWNS` | thrown | An equation on a line of its own with two or more unknowns, as in `(salary / 12) * rate / 100 = net`. An equation line is solved for its one unknown, so the message says to give the others values above it or to name one with `solve`. |
 
 **Goal seek, as the engine runs it**
 
@@ -699,7 +700,8 @@ In the package as `ERROR_CODE_CATALOGUES.FinanceErrorCodes`.
 | `IRR_UNRESOLVED` | as a value | `irr` of flows whose rates are too close together to tell apart. |
 | `PAYBACK_NO_OUTLAY` | as a value | `payback` of flows whose running total is never below zero, so there is nothing to pay back. |
 | `PAYBACK_NEVER` | as a value | `payback` of flows that never recover the outlay. The message says how far short the total ends. |
-| `INFLATION_EXPECTED_USD` | as a value | An inflation adjustment of an amount that is not in US dollars, which the bundled price index measures. |
+| `INFLATION_EXPECTED_USD` | as a value | `<amount> in <year> dollars` of an amount in another currency that has its own index: the phrase asks for dollars. |
+| `INFLATION_NO_INDEX` | as a value | An inflation adjustment of an amount no bundled price index measures: a currency without one, a quantity that is not money, or a bare number. |
 | `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. |
 | `INFLATION_EXPECTED_INFLATION_WORD` | thrown | `assuming <rate>%` not followed by the word `inflation`. |
 | `SAVINGS_GOAL_SYNTAX` | thrown | `how much per month to reach <target>` followed by neither `in` nor `over` and the time the saving runs for. |
@@ -1127,7 +1129,8 @@ In the package as `ERROR_CODE_CATALOGUES.VariablesErrorCodes`.
 | Code | Arrives | When it arises |
 | --- | --- | --- |
 | `EXPECTED_IDENTIFIER` | thrown | A `:` or `global :` not followed by a name, as in `:= 5`. |
-| `NAME_HAS_RESERVED_WORD` | thrown | A name of several words holding a word the engine already reads: an operator spelled as a word (`take home = 5`) or a phrase (`tax on = 5`). The message names the word. |
+| `NAME_HAS_RESERVED_WORD` | thrown | A name of several words holding a word the engine already reads: an operator spelled as a word, first or last (`take home = 5`, `monthly take = 4000`), or a phrase (`tax on = 5`). The message names the word. |
+| `NAME_HAS_QUOTE_MARK` | thrown | A name of several words with a quote mark that is not an apostrophe in a word (`Alice‘s food = 3`), or an apostrophe before a word's first letter (`’tis rate = 5`). The message names the mark. |
 
 ## Weather
 

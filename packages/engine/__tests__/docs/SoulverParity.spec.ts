@@ -220,7 +220,7 @@ const GAPS: readonly Example[] = [
 	// projection below: they adjust to the CURRENT year, and Soulver's figures
 	// were computed when its documentation was written, which the implied rates
 	// put several years before 2026. No table accuracy makes a fixed string
-	// reproducible. CpiTableAccuracy.spec.ts checks the table against the IMF
+	// reproducible. CpiTableAccuracy.spec.ts checks the table against the BLS
 	// series instead, which is the thing that can actually be wrong.
 	//
 	// "value of $X in <future year> assuming N% inflation" is deliberately not

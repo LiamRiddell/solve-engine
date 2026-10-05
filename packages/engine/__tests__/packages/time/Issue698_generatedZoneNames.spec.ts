@@ -117,7 +117,8 @@ describe("#698 adversarial: the names left out, and the words kept", () => {
 	test("every generated zone is one the calendar backend can compute in", () => {
 		const refused = [...Object.keys(GENERATED_ZONE_NAMES), ...Object.keys(GENERATED_MULTI_WORD_ZONE_NAMES)].filter((name) => {
 			const value = e.evaluateExpression(`time in ${name}`);
-			return value.type !== ValueType.String;
+			// A time in a place is a time of day, a Datetime (#757).
+			return value.type !== ValueType.Datetime;
 		});
 		expect(refused).toEqual([]);
 	});

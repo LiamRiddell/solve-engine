@@ -43,7 +43,7 @@ export type { EngineConfigOverride } from "@solve-js/constants/Configuration";
 // subpaths keep exporting them; this is the same binding under the name a
 // first-time reader reaches for.
 export { Value, ValueType } from "@solve-js/vm/Value";
-export type { DatetimeGrain } from "@solve-js/vm/Value";
+export type { DatetimeGrain, TimePrecision, ZoneDifference } from "@solve-js/vm/Value";
 // Where a live figure came from, and the mark a frozen answer carries, read off
 // the same Value, so a host showing "reference rate, 23 Sep 16:02" needs no
 // other import.

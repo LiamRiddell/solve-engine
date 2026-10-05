@@ -12,7 +12,7 @@
  * timesheet needs, and that is most of what is pinned here.
  */
 import { describe, expect, test } from "@jest/globals";
-import { formatValue } from "@solve-js/format/FormatEngine";
+import { formatMsDuration, formatValue } from "@solve-js/format/FormatEngine";
 import { uomValue, Value } from "@solve-js/vm/Value";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
@@ -138,5 +138,29 @@ describe("what the mark deliberately does not survive", () => {
 		// A shift plus a latency budget is not a shift, and the honest answer
 		// is the count rather than a clock that implies it is one.
 		expect(answer("(9:30 - 8:30) + 40ms")).toBe("= 3,600,040.00 ms");
+	});
+});
+
+describe("formatMsDuration, called directly", () => {
+	test("ordinary spans read as a clock, with seconds only when there are some", () => {
+		expect(formatMsDuration(3_600_000)).toBe("1:00");
+		expect(formatMsDuration(5_430_000)).toBe("1:30:30");
+		expect(formatMsDuration(-5_400_000)).toBe("-1:30");
+	});
+
+	test("a span that rounds to no whole second has no sign, on either side of zero", () => {
+		// `now - now` reads the clock twice, so it can land a millisecond below zero.
+		for (const ms of [0, -0, 1, -1, -3, 499, -499]) expect({ ms, shown: formatMsDuration(ms) }).toEqual({ ms, shown: "0:00" });
+		expect(formatMsDuration(-500)).toBe("-0:00:01");
+		expect(formatMsDuration(500)).toBe("0:00:01");
+	});
+
+	test("edge: a day and the 2^53 boundary keep their hours", () => {
+		expect(formatMsDuration(86_400_000)).toBe("24:00");
+		expect(formatMsDuration(-Number.MAX_SAFE_INTEGER)).toMatch(/^-\d+:\d{2}:\d{2}$/);
+	});
+
+	test("realistic: two reads of now on one line show no negative zero", () => {
+		for (let i = 0; i < 50; i++) expect(answer("now - now")).toBe("= 0:00");
 	});
 });

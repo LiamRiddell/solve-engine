@@ -734,7 +734,7 @@ $120 + 18% split 3 ways // $47.20 each
 ```
 interest on 1000 over 3 years at 5% // 157.63
 monthly repayment on 200000 over 25 years at 4% // 1,055.67
-what is $500 in 1990 worth in 2010 // $834.35
+what is $500 in 1990 worth in 2010 // $834.19
 ```
 
 ```
@@ -2764,18 +2764,44 @@ compoundInterest($1,000, 5%, 3) // $1,157.63
 ```
 
 ```
-what is $100 from 1990 // $254.55
-inflationAdjust($100, 1990, 2020) // $198.01
-what is $500 in 1990 worth in 2010 // $834.35
+what is $100 from 1990 // $253.39
+inflationAdjust($100, 1990, 2020) // $198.02
+what is $500 in 1990 worth in 2010 // $834.19
 ```
 
 ```
-what is $100 from 1960 // Year 1960 is outside the bundled CPI table's range (1970-2026)
+what was $500 worth in 1965 // $47.56
+$100 in 1965 dollars // $9.51
 ```
 
 ```
-what is £100 from 1990 // this is the US consumer price index, which says nothing about what GBP bought: only an amount in US dollars, such as $100, can be adjusted with it
-what is 100 from 1990 // this is the US consumer price index, so it adjusts an amount in US dollars: write the amount with its currency, as $100 or 100 USD
+what is £100 from 1990 // £327.52
+what was £500 worth in 1965 // £17.92
+inflationAdjust(£100, 1990, 2020) // £232.44
+```
+
+```
+inflationAdjust(€100, 2000, 2020) // €138.15
+what is €100 in 1999 worth in 2025 // €172.87
+```
+
+```
+what is €100 from 1990 // Year 1990 is before the euro began in 1999, so there is no amount in euros from then to adjust (the euro-area price index itself starts in 1996)
+what is €100 from 2000 // Year 2026 is outside the bundled euro-area price index's range (1999-2025): the series it is built from ends with 2025, so name a year up to 2025 to adjust to
+```
+
+```
+what is $100 from 1912 // Year 1912 is outside the bundled CPI table's range (1913-2026)
+what is £100 from 1799 // Year 1799 is outside the bundled UK price index's range (1800-2026)
+```
+
+```
+what is ¥100 from 1990 // no price index for JPY is bundled, so there is no record of what it bought in another year: only an amount in US dollars, pounds sterling or euros, such as $100, £100 or €100, can be adjusted
+what is 100 from 1990 // a price index measures one currency, and this amount has none: write it with its currency, in US dollars, pounds sterling or euros, such as $100, £100 or €100
+```
+
+```
+£100 in 1990 dollars // in 1990 dollars asks for US dollars, and this amount is in GBP: ask what it was worth in 1990 instead, which reads the UK price index (ONS CDKO)
 ```
 
 ```
@@ -4737,6 +4763,19 @@ solve(a*x+b=0, x) // -b/a
 :factor * 2 // 3
 ```
 
+```
+(one document)
+(salary / 12) * rate / 100 = net // ERROR: This equation has 3 unknowns, salary, rate and net, and an equation on a line of its own is solved for its one unknown. Give the others values on the lines above it, or name the one to solve for, as in solve((salary / 12) * rate / 100 = net, salary).
+```
+
+```
+(one document)
+salary = 60000 // 60,000
+net = 1000 // 1,000
+(salary / 12) * rate / 100 = net // rate stored as an equation: solve with "rate =>"
+rate => // 20
+```
+
 ## splitting-a-bill
 
 https://liamriddell.github.io/solve-engine/syntax/splitting-a-bill/
@@ -4950,6 +4989,10 @@ sqrt(x) => // sqrt(x)
 ```
 
 ```
+foo + 1 => // foo+1
+```
+
+```
 x/3 => // x/3
 2^10 + x => // x+1024
 ```
@@ -4964,6 +5007,20 @@ expand((x*0)^-1) // This expression divides by zero, so it has no value, whateve
 a = [1, 2; 3, 4]
 a*x = [60; 70]
 x => // [-50.00; 55.00]
+```
+
+```
+(one document)
+foo percent => // ERROR: Undefined variable: foo
+foo km => // ERROR: Undefined variable: foo
+foo as hex => // ERROR: Undefined variable: foo
+```
+
+```
+(one document)
+foo = 12 // 12
+foo percent => // 12.00%
+foo km => // 12.00 km
 ```
 
 ## table-columns
@@ -5424,6 +5481,17 @@ https://liamriddell.github.io/solve-engine/syntax/time-zones/
 ```
 
 ```
+(3pm London on 23 September 2026 in Tokyo) + 1 hour // 12:00 AM (+1 day)
+(3pm London on 23 September 2026 in Tokyo) - 30 minutes // 10:30 PM
+(3pm London on 23 September 2026 in Tokyo) in New York // 10:00 AM
+```
+
+```
+(3pm London on 23 September 2026 in Tokyo) == "11:00 PM" // true
+"call at " + (3pm London on 23 September 2026 in Tokyo) // call at 11:00 PM
+```
+
+```
 3pm London on 23 September 2026 in Tokyo, New York and Sydney // Tokyo 11:00 PM, New York 10:00 AM, Sydney 12:00 AM (+1 day)
 ```
 
@@ -5510,6 +5578,17 @@ time difference between London and New York on 1 March 2027 // London is 5 hours
 time difference between London and New York on 20 March 2027 // London is 4 hours ahead of New York on March 20, 2027
 time difference between London and Tokyo on 1 July 2027 // Tokyo is 8 hours ahead of London on July 1, 2027
 time difference between Tokyo and Adelaide on 1 March 2027 // Adelaide is 1 hour 30 minutes ahead of Tokyo on March 1, 2027
+```
+
+```
+time difference between Seattle and Moscow in hours // 10 hours
+time difference between Moscow and Seattle in hours // -10 hours
+time difference between London and New Delhi in minutes // 330 minutes
+```
+
+```
+time difference between Paris and Berlin // Berlin and Paris currently share the same UTC offset
+time difference between Paris and Berlin in hours // 0 hours
 ```
 
 ```
@@ -6217,6 +6296,28 @@ hourly rate = $50 // $50.00
 (one document)
 take home = 5 // ERROR: "take home" cannot be a name: "take" is a spelling of minus. Choose other words, or join them as take_home. For the equation, write -home = 5.
 tax on = 5 // ERROR: "tax on" cannot be a name: "tax on" is a phrase the engine reads. Choose other words, or join them as tax_on.
+```
+
+```
+(one document)
+monthly take = 4000 // ERROR: "monthly take" cannot be a name: "take" is a spelling of minus. Choose other words, or join them as monthly_take.
+monthly_take = 4000 // 4,000
+monthly pay = 4000 // 4,000
+```
+
+```
+(one document)
+Alice's food = £30 // £30.00
+Bob’s food = £20 // £20.00
+Alice’s food + Bob's food // £50.00
+the Smiths' rent = £900 // £900.00
+the Smiths' rent / 3 // £300.00
+```
+
+```
+(one document)
+Alice‘s food = 3 // ERROR: "Alice‘s food" cannot be a name: "‘" in "Alice‘s" is a quotation mark, not an apostrophe. Write the apostrophe as ' or ’.
+’tis rate = 5 // ERROR: "’tis rate" cannot be a name: "’tis" starts with an apostrophe, and a word in a name starts with a letter.
 ```
 
 ## vectors-and-matrices

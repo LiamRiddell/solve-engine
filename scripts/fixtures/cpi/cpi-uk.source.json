@@ -1,0 +1,4 @@
+{
+	"source": "annual and monthly figures as mirrored by the Frictionless Data cpi-uk dataset (github.com/datasets/cpi-uk, data/cpi-uk-annual.csv and data/cpi-uk-monthly.csv, from raw.githubusercontent.com, line endings normalised to LF), recorded in scripts/fixtures/cpi, since www.ons.gov.uk was not reachable from the build",
+	"retrieved": "2026-10-01"
+}

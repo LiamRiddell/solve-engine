@@ -8,7 +8,7 @@
  * byte-for-byte the same DTO.
  */
 
-import { Value, ValueType, isTimecodeUnit, timecodeFps, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type ChartData, type IpCidrData } from "@solve-js/vm/Value";
+import { Value, ValueType, copyZoneDifference, isTimecodeUnit, timecodeFps, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type ChartData, type IpCidrData } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { toHexString, formatColour } from "@solve-js/packages/colour/ColourMath";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
@@ -106,7 +106,11 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 	// dropped them would answer a different question from the synchronous one.
 	if (value.grain !== undefined) dto.grain = value.grain;
 	if (value.zone !== undefined) dto.zone = value.zone;
+	// A time in a zone and a zone difference cross with what they need to be
+	// shown again (#757), as fresh plain copies.
 	if (value.timeAnchor !== undefined) dto.timeAnchor = value.timeAnchor;
+	if (value.timePrecision !== undefined) dto.timePrecision = value.timePrecision;
+	if (value.zoneDifference !== undefined) dto.zoneDifference = copyZoneDifference(value.zoneDifference);
 	// A weekday or month name crosses with which one it is, as a fresh plain copy.
 	if (value.calendarName !== undefined) dto.calendarName = { kind: value.calendarName.kind, index: value.calendarName.index };
 	// Provenance and the frozen mark cross as plain copies, for the same reason:

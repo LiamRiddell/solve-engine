@@ -50,6 +50,7 @@
     "lint:links": "node scripts/check-doc-links.mjs",
     "lint:error-codes": "node scripts/check-error-codes.mjs",
     "docs:error-codes": "node scripts/check-error-codes.mjs --write",
+    "data:cpi": "node scripts/build-price-indices.mjs",
     "lint:jest-configs": "node scripts/check-jest-configs.mjs",
     "lint:ci-parity": "node scripts/check-ci-parity.mjs",
     "lint:dispatch-size": "node scripts/check-dispatch-size.mjs",

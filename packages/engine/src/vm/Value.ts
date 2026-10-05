@@ -127,11 +127,51 @@ export type ChartKind = "sparkline" | "plot";
  * - `time`: a time of day, as a clock time names one (`9:00am`, `16:00`), or
  *   a value written `as time` (#708). A wall-clock reading like `datetime`,
  *   held on the day it was written for so arithmetic keeps working, and shown
- *   as the time alone, with the days it has moved from that day beside it.
+ *   as the time alone, with the days it has moved from that day beside it
+ *   (see {@link Value.timeAnchor}). A time converted into another zone takes
+ *   it too (`3pm London in Tokyo`, #757), held as the instant it names and
+ *   read in that zone.
  *
  * See {@link Value.grain} for why the number cannot answer this on its own.
  */
 export type DatetimeGrain = "date" | "datetime" | "instant" | "time";
+
+/**
+ * How finely a time of day is written: `minute` for the time-zone answers,
+ * which have always answered to the minute (`7:00 PM`). See
+ * {@link Value.timePrecision}.
+ */
+export type TimePrecision = "minute";
+
+/**
+ * The two places a time difference was asked between, as the reader named
+ * them (`time difference between London and Tokyo`, #757). The quantity it
+ * rides on is how far the second place's clock is ahead of the first's, so a
+ * negative one means the second is behind. See {@link Value.zoneDifference}.
+ */
+export interface ZoneDifference {
+	/** The first place, as the reader wrote it (`London`). */
+	readonly from: string;
+	/** The second place, as the reader wrote it (`Tokyo`). */
+	readonly to: string;
+	/**
+	 * The day the gap was read on, as the answer names it (`March 1, 2027`),
+	 * when the line asked for one (`... on 1 March 2027`, #697). Absent for
+	 * the gap right now.
+	 */
+	readonly on?: string;
+}
+
+/**
+ * A fresh plain copy of a zone difference, keeping its day only when it has
+ * one, so a copy of an undated gap carries no `on` key at all.
+ *
+ * @param zd - The zone difference to copy.
+ * @returns The copy.
+ */
+export function copyZoneDifference(zd: ZoneDifference): ZoneDifference {
+	return zd.on === undefined ? { from: zd.from, to: zd.to } : { from: zd.from, to: zd.to, on: zd.on };
+}
 
 /**
  * Which name a String drawn from a date holds, so a formatter can write it in
@@ -613,14 +653,33 @@ export class Value {
 	/**
 	 * For a time of day (grain `"time"`, #708), an instant on the day it is
 	 * counted from, in epoch milliseconds: today's midnight for a clock time, the
-	 * value's own instant for one written `as time`. The formatter shows the time alone and
-	 * the days it has moved from this one beside it (`1:00:00 AM (+1 day)` for
-	 * `11pm + 2 hours`), so the shift is fixed when the time is written rather
-	 * than counted from whatever day it is displayed on. Carried through
-	 * duration arithmetic with the grain. Cleared by {@link recycle} alongside
-	 * the other sidecars.
+	 * value's own instant for one written `as time`. The formatter shows the
+	 * time alone and the days it has moved from this one beside it, read in the
+	 * value's zone (`1:00:00 AM (+1 day)` for `11pm + 2 hours`; `8:00 AM (+1
+	 * day)` for `11pm London in Tokyo on 10 March 2026`, since Tokyo's clock is
+	 * on the day after the one the reader named), so the shift is fixed when the
+	 * time is written rather than counted from whatever day it is displayed on.
+	 * Carried through duration arithmetic with the grain. Cleared by
+	 * {@link recycle} alongside the other sidecars.
 	 */
 	public timeAnchor?: number;
+	/**
+	 * For a time of day, that it is written to the minute (`7:00 PM`) rather
+	 * than to the second, as every time-zone answer is (#757). Carried through
+	 * duration arithmetic with the grain. Cleared by {@link recycle}.
+	 */
+	public timePrecision?: TimePrecision;
+	/**
+	 * For a duration that is the gap between two places' clocks (`time
+	 * difference between London and Tokyo`, #757), the two places, so the
+	 * formatter writes the gap as a direction: `Tokyo is 8 hours ahead of
+	 * London`. The quantity is a plain signed duration in hours, positive when
+	 * the second place is ahead, so it converts (`in hours`), adds and compares
+	 * as any duration does; a conversion or arithmetic gives a plain duration,
+	 * since the answer is then a new quantity. A variable holding it keeps it,
+	 * through {@link clone}. Cleared by {@link recycle}.
+	 */
+	public zoneDifference?: ZoneDifference;
 	/**
 	 * That this quantity is the gap between two datetimes, rather than a
 	 * duration someone wrote down.
@@ -766,6 +825,8 @@ export class Value {
 		this.grain = undefined;
 		this.zone = undefined;
 		this.timeAnchor = undefined;
+		this.timePrecision = undefined;
+		this.zoneDifference = undefined;
 		this.datetimeSpan = undefined;
 		// Provenance clears too: a reused Value that once held a converted
 		// amount must not tell a host that a plain number came from a rate.
@@ -833,6 +894,8 @@ export class Value {
 		if (this.grain !== undefined) out.grain = this.grain;
 		if (this.zone !== undefined) out.zone = this.zone;
 		if (this.timeAnchor !== undefined) out.timeAnchor = this.timeAnchor;
+		if (this.timePrecision !== undefined) out.timePrecision = this.timePrecision;
+		if (this.zoneDifference !== undefined) out.zoneDifference = { from: this.zoneDifference.from, to: this.zoneDifference.to };
 		if (this.datetimeSpan !== undefined) out.datetimeSpan = this.datetimeSpan;
 		if (this.timedOut !== undefined) out.timedOut = this.timedOut;
 		if (this.sources !== undefined) out.sources = this.sources;

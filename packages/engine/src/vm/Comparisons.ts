@@ -2,6 +2,7 @@ import { Value, ValueType, boolValue, errorValue, faultedOperand, type MatrixDat
 import { compareUom, incomparableUnitsError, compareBigIntOperands, compareRationalOperands, ipEqual, ipv6Order, colourEqual, colourRefused, valueKindName } from "@solve-js/vm/VMConversion";
 import { unitListCompare } from "@solve-js/vm/MatrixUnits";
 import { bigBaseInteger } from "@solve-js/vm/ExactIntegers";
+import { zoneAnswerEqualsText } from "@solve-js/vm/ZoneAnswers";
 
 /**
  * The six comparison opcodes past their plain-number fast path.
@@ -86,7 +87,9 @@ export function orderHoldsFor(op: Order, order: -1 | 0 | 1): boolean {
  * (a list of answers, so NEQ is not EQ negated there); two colours on their
  * channels; and a colour or an IP value never equals anything else. Text
  * never equals a value that is not text, however alike the two read (see
- * {@link textAgainstOther}).
+ * {@link textAgainstOther}), with one exception: a time-zone answer equals
+ * the English text it was answered as before it was a value (see
+ * `vm/ZoneAnswers.ts`).
  *
  * @param l - The left operand.
  * @param r - The right operand.
@@ -96,6 +99,10 @@ export function orderHoldsFor(op: Order, order: -1 | 0 | 1): boolean {
 export function valuesEqual(l: Value, r: Value, negate: boolean): Value {
 	const fault = faultedOperand(l, r);
 	if (fault) return fault;
+	// A time-zone answer was text before it was a value (#757), and a note
+	// that compared it with that text keeps its answer.
+	const zoneText = zoneAnswerEqualsText(l, r);
+	if (zoneText !== null) return boolValue(zoneText !== negate);
 	if (textAgainstOther(l, r)) return boolValue(negate);
 	const ip = ipEqual(l, r);
 	if (ip !== null) return boolValue(ip !== negate);
