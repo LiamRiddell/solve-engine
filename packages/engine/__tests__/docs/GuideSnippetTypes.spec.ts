@@ -89,7 +89,7 @@ const BEFORE_AND_AFTER = "sets a 1.x call beside the 2.0 one in one fence, and t
 /** The page's "your syntax, your parse": the reader of the currency pair a line names. */
 const READ_PAIR = `import type { Token as __Token } from "solve-engine/lexer";\ndeclare function readPairFromTokens(tokens: __Token[]): { from: string; to: string } | null;`;
 
-const RATES = "guide/async-data-sources.md | import type { IAsyncResolver, AsyncCheckResult } from \"solve-engine/resolvers\";";
+const RATES = "guide/async-data-sources.md | import type { Token } from \"solve-engine/lexer\";";
 
 /** The fences that are not whole modules, and what each needs. */
 const MANIFEST: Record<string, FenceTreatment> = {
@@ -103,8 +103,7 @@ const MANIFEST: Record<string, FenceTreatment> = {
 	"guide/async-and-live-data.mdx | const value = engine.evaluateLine(n, text);": {
 		prelude: `declare const n: number;\ndeclare const text: string;\ndeclare function replaceLine(line: number, text: string): void;`,
 	},
-	[RATES]: { prelude: READ_PAIR },
-	"guide/async-data-sources.md | engine.registerPackage({": { continues: RATES, prelude: READ_PAIR },
+	"guide/async-data-sources.md | engine.registerPackage({": { continues: RATES },
 	"guide/async-data-sources.md | class TableResolver implements IAsyncResolver {": {
 		noCheck: "a sketch of the one field a local resolver adds, whose comment stands for the preflight and destroy above",
 	},
@@ -136,6 +135,9 @@ const MANIFEST: Record<string, FenceTreatment> = {
 	},
 	'guide/dates-on-temporal.md | const tokyo = createEngine({ calendar: createTemporalCalendar(Temporal, { timeZone: "Asia/Tokyo" }) });': { prelude: TEMPORAL },
 	'guide/determinism.md | dateCalendarInZone("UTC", { now: () => Date.UTC(2026, 0, 1) });': { prelude: TEMPORAL },
+	"guide/embedding.md | const engine = createEngine({ (2)": {
+		prelude: `import type { IEnginePackage } from "solve-engine";\ndeclare const myPackage: IEnginePackage;\ndeclare function showToReader(text: string): void;`,
+	},
 	"guide/embedding.md | const restored = ExpressionEngine.fromJSON(state, { packages: myPackages });": { prelude: SNAPSHOT },
 	'guide/embedding.md | import { EngineError } from "solve-engine/errors";': {
 		prelude: `import type { EngineSnapshot } from "solve-engine";\ndeclare const fromAnOlderEngine: EngineSnapshot;`,

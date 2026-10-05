@@ -6,7 +6,7 @@ import { endsNamedTime, namesListedZone, zoneAfterNameAt, zoneAfterNameNormalize
 import { zoneConvertNamedHandler } from "@solve-js/packages/time/parselets/TimezonePluginFunctions";
 import { ingredientNameNormalizerRule } from "@solve-js/packages/uom/normalizer/IngredientNameNormalizerRule";
 import { ZONE_LOOKUP } from "@solve-js/packages/time/timezones/CityZones";
-import { datetimeValue, errorValue, numberValue, pendingValue, stringValue, type Value } from "@solve-js/vm/Value";
+import { Value, ValueType, datetimeValue, errorValue, numberValue, pendingValue, stringValue } from "@solve-js/vm/Value";
 import { tokenTypeId, type Token } from "@solve-js/lexer/Token";
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 
@@ -136,8 +136,14 @@ describe("zoneConvertNamedHandler", () => {
 	});
 
 	test("a time outside the calendar's range is refused rather than written as NaN", () => {
-		expect(at(datetimeValue(8.64e15 * 2), "Tokyo").errorCode).toBe("TIME_ZONE_EXPECTED_TIME");
-		expect(at(datetimeValue(NaN), "Tokyo").errorCode).toBe("TIME_ZONE_EXPECTED_TIME");
+		// The value is refused where it is built (DATE_OUT_OF_RANGE), and a
+		// failed time passes through the zone unchanged.
+		expect(at(datetimeValue(8.64e15 * 2), "Tokyo").errorCode).toBe("DATE_OUT_OF_RANGE");
+		expect(at(datetimeValue(NaN), "Tokyo").errorCode).toBe("DATE_OUT_OF_RANGE");
+		// A datetime built past the constructor still meets the zone's own guard.
+		for (const instant of [8.64e15 * 2, NaN]) {
+			expect(at(new Value(ValueType.Datetime, instant), "Tokyo").errorCode).toBe("TIME_ZONE_EXPECTED_TIME");
+		}
 	});
 
 	test("a skipped wall-clock reading is refused as the clock-time form refuses it", () => {
