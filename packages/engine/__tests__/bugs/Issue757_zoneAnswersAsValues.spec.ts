@@ -597,14 +597,15 @@ describe("adversarial", () => {
 		expect(shown("3pm London in Tokyo on 2100-03-01")).toBe("= 12:00 AM (+1 day)");
 		expectHonestLine("3pm London in Tokyo on 9999-12-31");
 		expectHonestLine("(3pm London in Tokyo on 9999-12-31) + 1 day");
-		// Past the calendar's range a zone time reads as every such date does
-		// today, rather than throwing where its zone is read; refusing such a
-		// date by name is the dates batch's change (#832), not this one.
-		expect(shown("(3pm London in Tokyo on 2026-03-10) + 1e15 hours")).toBe("= Invalid Date");
-		expect(shown("(3pm London in Tokyo on 2026-03-10) + 1e15 hours", de)).toBe("= Invalid Date");
+		// Past the calendar's range a zone time is refused by name where it is
+		// made (DATE_OUT_OF_RANGE, the dates batch, #832), in every locale,
+		// rather than throwing where its zone is read, and the refusal passes
+		// through a conversion of it.
+		expect(value("(3pm London in Tokyo on 2026-03-10) + 1e15 hours").value).toBe("DATE_OUT_OF_RANGE");
+		expect(shown("(3pm London in Tokyo on 2026-03-10) + 1e15 hours", de)).toMatch(/past the range a calendar holds/);
 		const engine = newTrackedEngine();
 		engine.evaluateExpression("far = (3pm London in Tokyo on 2026-03-10) + 1e15 hours");
-		expect(value("far London in Paris", engine).value).toBe("TIME_ZONE_EXPECTED_TIME");
-		expect(() => value("far in Paris", engine)).not.toThrow();
+		expect(value("far London in Paris", engine).value).toBe("DATE_OUT_OF_RANGE");
+		expect(value("far in Paris", engine).value).toBe("DATE_OUT_OF_RANGE");
 	});
 });

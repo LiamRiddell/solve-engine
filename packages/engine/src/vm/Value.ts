@@ -124,11 +124,13 @@ export type ChartKind = "sparkline" | "plot";
  *   instant follows from the zone it is read in.
  * - `instant`: a fixed point on the timeline, named without depending on a
  *   zone (`2026-04-03T10:30:00Z`, `...+09:00`, `now`).
- * - `time`: a time of day, shown as the time alone with the days it has moved
- *   from the day it is counted from beside it (see {@link Value.timeAnchor}).
- *   A time converted into another zone takes it (`3pm London in Tokyo`, #757),
- *   held as the instant it names and read in that zone, so arithmetic keeps
- *   working.
+ * - `time`: a time of day, as a clock time names one (`9:00am`, `16:00`), or
+ *   a value written `as time` (#708). A wall-clock reading like `datetime`,
+ *   held on the day it was written for so arithmetic keeps working, and shown
+ *   as the time alone, with the days it has moved from that day beside it
+ *   (see {@link Value.timeAnchor}). A time converted into another zone takes
+ *   it too (`3pm London in Tokyo`, #757), held as the instant it names and
+ *   read in that zone.
  *
  * See {@link Value.grain} for why the number cannot answer this on its own.
  */
@@ -649,14 +651,16 @@ export class Value {
 	 */
 	public zone?: string;
 	/**
-	 * For a time of day (grain `"time"`), an instant on the day it is counted
-	 * from, in epoch milliseconds. The formatter shows the time alone and the
-	 * days it has moved from this one beside it, read in the value's zone, so
-	 * `11pm London in Tokyo on 10 March 2026` is `8:00 AM (+1 day)`: Tokyo's
-	 * clock is on the day after the one the reader named. The shift is fixed
-	 * when the time is written rather than counted from whatever day it is
-	 * displayed on. Carried through duration arithmetic with the grain. Cleared
-	 * by {@link recycle} alongside the other sidecars.
+	 * For a time of day (grain `"time"`, #708), an instant on the day it is
+	 * counted from, in epoch milliseconds: today's midnight for a clock time, the
+	 * value's own instant for one written `as time`. The formatter shows the
+	 * time alone and the days it has moved from this one beside it, read in the
+	 * value's zone (`1:00:00 AM (+1 day)` for `11pm + 2 hours`; `8:00 AM (+1
+	 * day)` for `11pm London in Tokyo on 10 March 2026`, since Tokyo's clock is
+	 * on the day after the one the reader named), so the shift is fixed when the
+	 * time is written rather than counted from whatever day it is displayed on.
+	 * Carried through duration arithmetic with the grain. Cleared by
+	 * {@link recycle} alongside the other sidecars.
 	 */
 	public timeAnchor?: number;
 	/**
@@ -1468,9 +1472,10 @@ export function boolValue(b: boolean): Value {
  * @param grain - What the instant anchors, when the caller knows.
  * @param zone - The zone reference the instant was named in, when the line named one.
  * @param timeAnchor - For a time of day, an instant on the day it is counted from. See {@link Value.timeAnchor}.
- * @returns The Datetime value.
+ * @returns The Datetime value, or a `DATE_OUT_OF_RANGE` error Value.
  */
 export function datetimeValue(n: number, grain?: DatetimeGrain, zone?: string, timeAnchor?: number): Value {
+	if (!(n >= -DATE_RANGE_MS && n <= DATE_RANGE_MS)) return dateOutOfRange();
 	const v = _arenaActive && _arena ? _arena.acquire(ValueType.Datetime, n) : new Value(ValueType.Datetime, n);
 	if (grain !== undefined) v.grain = grain;
 	if (zone !== undefined) v.zone = zone;
