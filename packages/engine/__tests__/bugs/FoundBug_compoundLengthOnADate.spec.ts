@@ -337,10 +337,10 @@ describe("adversarial", () => {
 		expectHonestDocument("2026-01-31 + 1 month 1 day\r\n2026-03-31 - 1 month 1 day\r\n");
 	});
 
-	// A date pushed past the calendar's range shows `Invalid Date` today, as a
-	// single-unit length does (`2026-01-31 + 9007199254740992 days`); #832
+	// A date pushed past the calendar's range showed `Invalid Date`, as a
+	// single-unit length did (`2026-01-31 + 9007199254740992 days`); #832
 	// refuses such a date where it is made, with DATE_OUT_OF_RANGE.
-	test.failing("a compound length that pushes a date past the calendar's range is refused by name (#832)", () => {
+	test("a compound length that pushes a date past the calendar's range is refused by name (#832)", () => {
 		expect(show("2026-01-31 + 9007199254740992 months 1 day")).toMatch(/^DATE_OUT_OF_RANGE: /);
 	});
 });
