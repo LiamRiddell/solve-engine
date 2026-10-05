@@ -37,7 +37,7 @@ import type { ScopeId } from "@solve-js/vm/CellScope";
 import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } from "@solve-js/vm/QuantityPowers";
 import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf, rateThroughQuantity, unitQuotientUnsupported } from "@solve-js/vm/UnitAlgebra";
 import { rateForm } from "@solve-js/uom/RateForms";
-import { bigIntPow, valueInBase, bigBaseInteger, wholeFromBase, exactIntegerValue, exactWholeLiteral } from "@solve-js/vm/ExactIntegers";
+import { bigIntPow, valueInBase, bigBaseInteger, wholeFromBase, exactWholeLiteral } from "@solve-js/vm/ExactIntegers";
 import { indeterminateQuotient } from "@solve-js/vm/IndeterminateQuotient";
 import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
