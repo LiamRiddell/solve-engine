@@ -3051,7 +3051,7 @@ x + 1 // 3
 (one document)
 Room 4: 12 // 12
 Item 2:45 // ERROR: Expected an operator or the end of the line, but found "2:45"
-9: 30 // Wednesday, March 11, 2026, 9:30:00 AM
+9: 30 // 9:30:00 AM
 ```
 
 ```
@@ -5792,8 +5792,8 @@ total(24:00, 0:00) // ERROR: "24:00" is not a valid time
 ```
 (one document)
 Room 4: 12 // 12
-Day 1: 9:30 // Wednesday, March 11, 2026, 9:30:00 AM
-9: 30 // Wednesday, March 11, 2026, 9:30:00 AM
+Day 1: 9:30 // 9:30:00 AM
+9: 30 // 9:30:00 AM
 ```
 
 ```
