@@ -21,3 +21,5 @@ The boundary: only the first of two arguments decides. A colon in the list, `sum
 `FoundBug_sumOfClockTimes.spec.ts` holds 14 tests: the line through `evaluateLine`, `parseDocument` and `evaluateDocument`, its agreement with `total(9:30, 10:15)`, the forms that stay as they were, unit tests of the new `hasOwnColon` and `isMapReduceSum` and of the aggregate call rule (ordinary, boundary and hostile token runs), and adversarial cases from the kit (prototype words, a long list of times, a huge range, look-alike digits and markup, times from the lines above, a check, midnight and the end of the day, the numeric edges, CRLF). The adversarial sweep has the new template, and the map-reduce page has proven examples.
 
 Gates run: `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:changeset`, `lint:docs`; the docs, hardening, integration and aggregate suites; and the fast suite. `npm run verify` and the bundled-consumer contract were not run.
+
+On top of main, the full suite ran 35,461 tests in 864 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,777 tests.

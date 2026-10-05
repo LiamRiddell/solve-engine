@@ -19,3 +19,5 @@ The boundary: `and` is still refused rather than read as a sum, since it also jo
 `FoundBug_inflationFromOrInReachable.spec.ts` holds 9 tests: the line through `evaluateLine`, `parseDocument` and `evaluateDocument`, the `what was` shape, no parser wording from any refusal of the code, unit tests of the new `fromOrInRefusal` (ordinary, boundary and hostile tokens), and adversarial cases from the kit (prototype words and markup between the amounts, a long run of words, a check over the refusal, CRLF). `ErrorCodeReachability.spec.ts` lists the code as reachable, and the interest and inflation page proves the message.
 
 Gates run: `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:changeset`, `lint:error-codes`, `lint:docs`; the docs, errors and inflation suites; and the fast suite. `npm run verify` and the bundled-consumer contract were not run.
+
+On top of main, the full suite ran 35,461 tests in 864 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,777 tests.

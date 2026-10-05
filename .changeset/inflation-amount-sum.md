@@ -23,3 +23,5 @@ The boundary: only `+` and `-` between the amount's terms are joined; a word tha
 Gates run: `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:changeset`, `lint:docs`; the docs, hardening, integration and finance suites.
 
 `FoundBug_inflationAmountInWords.spec.ts` pinned `what is $300 + $50 from 2003` as refused at the `+`; it now expects the bracketed form's answer. The fast suite ran 31,651 tests in 827 suites: 31,645 passed, 5 were skipped, and the one failure was that pinned line, passing since. `npm run verify` and the bundled-consumer contract were not run.
+
+On top of main, the full suite ran 35,461 tests in 864 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,777 tests.

@@ -25,3 +25,5 @@ The boundary: only the one-argument form is `sum`'s. With commas, `total(1, 2, 3
 Gates run: `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:changeset`, `lint:error-codes`, `lint:docs`; the docs, hardening, integration, normaliser and map-reduce suites.
 
 The fast suite ran 31,651 tests in 827 suites: 31,645 passed, 5 were skipped, and the one failure was a pinned inflation line updated for the sum change, passing since. `npm run verify` and the bundled-consumer contract were not run.
+
+On top of main, the full suite ran 35,461 tests in 864 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,777 tests.

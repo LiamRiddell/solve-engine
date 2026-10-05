@@ -16,3 +16,5 @@ The boundary: the names are those of the active tab's last evaluation, as the sn
 ## Verification
 
 `packages/playground-bridge/__tests__/FoundBug_playgroundDocumentNames.spec.ts` holds 5 tests of the report through the batch and streaming paths: a defined name and a name only read, names of several words, a colon definition and a function, an empty and a prose-only document, a name refused for a direction control, and prototype words as names with `expectPrototypeUntouched`. The playground built (`npm ci` and `npm run build` in `playground/`, which runs `tsc -b`); its completions were not tried in a browser.
+
+On top of main, the full suite ran 35,461 tests in 864 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,777 tests.

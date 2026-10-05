@@ -28,3 +28,5 @@ The boundary: a whole number is a year even when no index covers it, so `from -1
 `Issue700_cpiTableFromBls.spec.ts` and `Issue756_ukAndEuroPriceIndices.spec.ts` pinned a fractional year (`1912.999`, `1799.999`) as out of range; it is now `INFLATION_EXPECTED_YEAR`, and the two specs say so.
 
 Gates run: `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:changeset`, `lint:error-codes`, `lint:docs`, `lint:cheatsheet`, `lint:sidebar`; the docs, hardening, integration, errors, inflation and aggregate suites; and the fast suite. `npm run verify` and the bundled-consumer contract were not run.
+
+On top of main, the full suite ran 35,461 tests in 864 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,777 tests.
