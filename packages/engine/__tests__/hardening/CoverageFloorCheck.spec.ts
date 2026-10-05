@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 
 /**
  * The sharded coverage run (#890): `scripts/run-coverage.mjs` runs the
@@ -56,7 +57,7 @@ function fileCoverage(file: string, statementHits: number[], fnHits = 1, branchH
 /** Calls one export of the library in a child node with JSON arguments, returning its JSON result or its error message. */
 function callLib(expression: string, input: unknown): { ok: true; value: unknown } | { ok: false; message: string } {
 	const script = `
-		import * as lib from ${JSON.stringify(LIB)};
+		import * as lib from ${JSON.stringify(pathToFileURL(LIB).href)};
 		const input = JSON.parse(process.argv[1]);
 		try {
 			const value = (${expression});
