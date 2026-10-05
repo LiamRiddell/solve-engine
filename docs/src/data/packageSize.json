@@ -1,9 +1,9 @@
 {
-  "importOneBrotli": 164311,
-  "importEverythingBrotli": 259396,
-  "esbuildFullBrotli": 258940,
-  "esbuildSlimBrotli": 165433,
-  "tarballBytes": 5973733,
-  "unpackedBytes": 20946305,
+  "importOneBrotli": 165914,
+  "importEverythingBrotli": 260861,
+  "esbuildFullBrotli": 260547,
+  "esbuildSlimBrotli": 167137,
+  "tarballBytes": 6019188,
+  "unpackedBytes": 21073745,
   "fileCount": 925
 }
