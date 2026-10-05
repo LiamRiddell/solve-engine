@@ -8,10 +8,10 @@ name: Coverage
 # one of over twenty. A pull-request gate that slow is one people route
 # around, so the floor lives here instead. As the suite grew the single run
 # reached 80 to 90 minutes and half the daily runs were cancelled at the limit
-# (#890), so `npm run test:coverage` now runs two shards side by side, one
-# 4 GB process each (three were shut down for memory 43 minutes in on the
-# 16 GB runner), and checks the floor
-# once on their merged coverage (`scripts/run-coverage.mjs`). It fails the run when coverage
+# (#890), so the limit is now 150 minutes. Shards run side by side on this
+# runner were tried and were slower, not faster (they contend for its memory
+# and cores), so `npm run test:coverage` (`scripts/run-coverage.mjs`) runs one
+# process here and checks the floor on its coverage. It fails the run when coverage
 # falls under the thresholds in `jest.coverage.config.cjs`, which sit a few
 # points beneath the value measured when they were set, so a real drop shows
 # within a day and ordinary churn never trips it. `npm run test:coverage` is

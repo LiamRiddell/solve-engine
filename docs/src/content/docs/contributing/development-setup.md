@@ -62,7 +62,7 @@ measured daily by its own workflow because the measurement is slow; run
 | `npm run typecheck:tests` | The spec files and test tools, type-checked by the same compiler against a per-file baseline in `packages/engine/__tests__/typecheck-baseline.json` that may only fall. A new error fails; a fixed one rewrites the baseline lower, to commit. |
 | `npm test`, `npm run test:ci` | The default test run: every suite except the four slow ones. |
 | `npm run test:full` | Every suite, single-threaded with a raised heap. Writes the report `stats:tests` reads. |
-| `npm run test:coverage` | Every suite with coverage measured against the floor in `jest.coverage.config.cjs`, in two shards run side by side and merged before the floor is checked (`SOLVE_COVERAGE_SHARDS` sets the count). Slow; CI runs it daily rather than per pull request. |
+| `npm run test:coverage` | Every suite with coverage measured against the floor in `jest.coverage.config.cjs`, in one process by default (`SOLVE_COVERAGE_SHARDS` splits it into shards run side by side, merged before the floor is checked). Slow; CI runs it daily rather than per pull request. |
 | `npm run test:light` | The default run minus the fuzz and robustness suites, for a quick signal on a slow machine. |
 | `npm run lint` | oxlint over the engine source, the spec files, the tools, the playground bridge and the scripts. Correctness rules fail; style rules warn. |
 | `npm run lint:comments` | Comment style, over the whole tree. |

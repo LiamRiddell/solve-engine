@@ -1,13 +1,16 @@
 /**
- * Runs the coverage suite in shards side by side, then checks the floor once
- * on the merged result.
+ * Runs the coverage suite, in one process or several, then checks the floor
+ * once on the merged result.
  *
  * Measured whole and single-threaded, the run had grown to between 80 and 90
- * minutes on the runner, using one of its four cores, against the workflow's 90-minute
- * limit, and about half the daily runs were cancelled with the floor unmeasured
- * (#890). The time is the v8 provider converting coverage for every loaded
- * source file once per spec file, which no setting makes cheaper; what helps is
- * doing it in several processes at once. Each shard is the same
+ * minutes against the workflow's 90-minute limit, and about half the daily
+ * runs were cancelled with the floor unmeasured (#890). The workflow's limit is
+ * now 150 minutes, and the run is one process by default. Several processes
+ * side by side were tried on the CI runner and were slower, not faster: three
+ * ran it out of memory 43 minutes in, and with two, one shard alone took over
+ * two hours, since each process converts coverage for every source file it
+ * loads and they contend for the same memory and cores. Sharding stays for a
+ * machine with more of both. Each shard is the same
  * `jest.coverage.config.cjs` run with `--shard=i/n`, single-threaded within
  * itself as before, writing Istanbul's `coverage-final.json` to its own
  * directory with the config's threshold switched off, since one shard alone
@@ -17,9 +20,7 @@
  *
  * A failing test in any shard fails the run, after every shard has finished,
  * so one log shows all of them. `SOLVE_COVERAGE_SHARDS` sets the count
- * (default 2). Three were tried first and the runner, with 16 GB, was shut down
- * 43 minutes in: three 4 GB heaps plus the coverage each holds leave too little
- * room, so two run side by side, and the workflow's limit is raised to match.
+ * (default 1); each shard is a 4 GB process.
  *
  * Usage:
  *   node scripts/run-coverage.mjs
@@ -44,7 +45,7 @@ const require = createRequire(import.meta.url);
 /** The shard count from the environment, refusing anything but a small whole number. */
 function shardCount() {
 	const raw = process.env.SOLVE_COVERAGE_SHARDS;
-	if (raw === undefined || raw === "") return 2;
+	if (raw === undefined || raw === "") return 1;
 	const n = Number(raw);
 	if (!Number.isInteger(n) || n < 1 || n > 16) {
 		console.error(`SOLVE_COVERAGE_SHARDS is ${JSON.stringify(raw)}: give a whole number from 1 to 16.`);

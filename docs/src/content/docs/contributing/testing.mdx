@@ -60,17 +60,17 @@ request, because the per-file coverage conversion makes the run several times
 slower than the suite itself. `npm run test:coverage` is the same check
 locally; run it for a change that removes tests.
 
-Coverage is measured in shards. `scripts/run-coverage.mjs` starts two Jest
-processes side by side, each running half of the spec files with `--shard`,
-and each writes its raw counts without checking any threshold, because half
-of the specs covers only part of the code. The script then adds the two sets
-of counts together and checks the floor once, on the
-whole suite's figures, so the number is the same one a single run would give.
-`SOLVE_COVERAGE_SHARDS` changes the count; each shard is a 4 GB process, so
-three did not fit the 16 GB runner, which was shut down part-way through, and
-a machine with less memory can use one. A single run had grown to 80 to 90 minutes, against the
-workflow's 90-minute limit, and about half the daily runs were cancelled
-before the floor was measured (#890).
+A single run had grown to 80 to 90 minutes, against the workflow's 90-minute
+limit, and about half the daily runs were cancelled before the floor was
+measured (#890), so the workflow now allows 150 minutes. The run goes through
+`scripts/run-coverage.mjs`, which can split the spec files into shards with
+Jest's `--shard`, run them side by side, add their counts together and check
+the floor once on the whole suite's figures. On the CI runner it runs one
+process: shards side by side there were slower, not faster, because each
+converts coverage for every source file it loads and they contend for the same
+memory and cores (three ran it out of memory, and with two one shard alone took
+over two hours). `SOLVE_COVERAGE_SHARDS` sets the count on a machine with more
+of both; each shard is a 4 GB process.
 
 No pull request shows a scheduled run's result, so the coverage workflow and
 the nightly fuzz soak each end in a report job: when the run does not succeed,
