@@ -53,7 +53,7 @@ import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
 import { fieldsShownIn, noonOnDay, shownZone, zoneAnswerJoinedText } from "@solve-js/vm/ZoneAnswers";
 import { descendingRangeMessage } from "@solve-js/vm/RangeBounds";
-import { addZonedCalendarDays, addZonedCalendarMonths } from "@solve-js/calendar/ZonedSteps";
+import { addZonedCalendarDays, addZonedCalendarMonths, walkDatesInZone, zonedDateAsLocalMidnight } from "@solve-js/calendar/ZonedSteps";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { LineTrace } from "@solve-js/explain/Explanation";
 import { offsetRefusal, resolveUtcOffsetName } from "@solve-js/calendar/UtcOffset";
@@ -1652,7 +1652,7 @@ const WORKDAYS_PER_YEAR = 260;
  * range. Recoverable: it is a statement about this line, not about the
  * engine.
  */
-function addBusinessDays(epochMs: number, n: number, vm: VM): number {
+function addBusinessDays(epochMs: number, n: number, vm: VM, zone?: string): number {
     const remaining = Math.trunc(Math.abs(n));
     const direction = n >= 0 ? 1 : -1;
     // Checked before the first step rather than counted during it, so a
@@ -1684,7 +1684,12 @@ function addBusinessDays(epochMs: number, n: number, vm: VM): number {
     // in-limit offset never trips this. A pathological all-holiday calendar
     // does, and is reported as the same limit error rather than hanging.
     const maxCalendarSteps = limitWorkdays * 7 + 7;
-    const landed = walkBusinessDays(epochMs, n, (ms) => vm.isHoliday(ms), maxCalendarSteps, vm.context.calendar, vm.context.week.weekend);
+    const walk = (startMs: number) => walkBusinessDays(startMs, n, (ms) => vm.isHoliday(ms), maxCalendarSteps, vm.context.calendar, vm.context.week.weekend);
+    // A date read in a zone counts the days that zone's calendar shows, not
+    // the backend's (calendar/ZonedSteps.ts): on a host in UTC, Friday 23:30
+    // in New York is already Saturday, and a workday on from it landed on a
+    // Sunday.
+    const landed = zone === undefined ? walk(epochMs) : walkDatesInZone(epochMs, zone, vm.context.calendar, walk);
     if (landed === null) {
         throw ErrorFactory.execution(
             "DATE_OFFSET_LIMIT_EXCEEDED",
@@ -1717,8 +1722,8 @@ const MS_PER_DAY = 86_400_000;
  * adding milliseconds does.
  *
  * A date read in a zone (`zone`, as `2024-11-02 12:00 in New York` carries
- * one) steps its days and months on that zone's calendar, not the host's: see
- * `calendar/ZonedSteps.ts`. Workdays still walk the backend's calendar.
+ * one) steps its days, months and workdays on that zone's calendar, not the
+ * host's: see `calendar/ZonedSteps.ts`.
  */
 function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM, zone?: string): number {
     if (duration.type === ValueType.Uom && duration.unit !== undefined) {
@@ -1728,7 +1733,7 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM, z
         // `vm` is threaded in for this one branch: the workday walk is the
         // only date offset whose cost grows with the offset, so it is the only
         // one that needs a configured ceiling. See addBusinessDays().
-        if (isWorkdayUnit(unit)) return addBusinessDays(epochMs, amount, vm);
+        if (isWorkdayUnit(unit)) return addBusinessDays(epochMs, amount, vm, zone);
 
         // A date read in a zone steps its months and whole days on that zone's
         // calendar (calendar/ZonedSteps.ts); a date with no zone steps the
@@ -2646,7 +2651,11 @@ function workdayOffset(stack: Value[], workdayDirection: number, vm: VM): void {
       ));
       return;
     }
-    stack.push(datetimeValue(addBusinessDays(anchorValue.toNumber(), workdayDirection * countValue.toNumber(), vm)));
+    // The date keeps its zone and its grain, as `+ 3 workdays` keeps them, so
+    // a date in New York is counted and shown on New York's calendar.
+    const moved = datetimeValue(addBusinessDays(anchorValue.toNumber(), workdayDirection * countValue.toNumber(), vm, anchorValue.zone), anchorValue.grain, anchorValue.zone, anchorValue.timeAnchor);
+    if (anchorValue.timePrecision !== undefined && moved.type === ValueType.Datetime) moved.timePrecision = anchorValue.timePrecision;
+    stack.push(moved);
 }
 
 /** `working days between <date> and <date>` (DATE_WORKDAYS_BETWEEN), moved out of the dispatch loop. */
@@ -2667,7 +2676,11 @@ function workdaysBetween(stack: Value[], vm: VM): void {
     // Bounded by the full configured offset range in calendar days, so a
     // span of millennia is refused rather than walked a day at a time.
     const spanLimitDays = Math.ceil((vm.getMaxDateOffsetYears() - vm.getMinDateOffsetYears()) * 366);
-    const workdayCount = countBusinessDaysBetween(startValue.toNumber(), endValue.toNumber(), (ms) => vm.isHoliday(ms), spanLimitDays, vm.context.calendar, vm.context.week.weekend);
+    // An endpoint read in a zone is the calendar day that zone shows.
+    const dayOf = (v: Value) => (v.zone === undefined ? v.toNumber() : zonedDateAsLocalMidnight(v.toNumber(), v.zone, vm.context.calendar));
+    const startDay = dayOf(startValue), endDay = dayOf(endValue);
+    if (!Number.isFinite(startDay) || !Number.isFinite(endDay)) { stack.push(dateOutOfRange()); return; }
+    const workdayCount = countBusinessDaysBetween(startDay, endDay, (ms) => vm.isHoliday(ms), spanLimitDays, vm.context.calendar, vm.context.week.weekend);
     if (workdayCount === null) {
       stack.push(errorValue(
         CoreErrorCodes.WORKDAYS_BETWEEN_RANGE_TOO_LARGE,

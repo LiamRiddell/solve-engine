@@ -113,3 +113,58 @@ export function addZonedCalendarMonths(epochMs: number, months: number, zoneRef:
 	if (Number.isNaN(moved)) return epochMs + months * monthMs;
 	return moved + (months - whole) * monthMs;
 }
+
+/**
+ * Move an instant by a walk over calendar dates, read on a zone's calendar:
+ * the working-day offsets (`2024-11-01 23:30 in New York + 1 workday`), which
+ * count the days that zone's clock shows rather than the host's.
+ *
+ * The zone's date is handed to `walkDates` as the backend's local midnight of
+ * that same date, so the weekend, the host's holiday predicate and the step cap
+ * all read it as the calendar date it is. The date the walk lands on is read
+ * back, and the zone's wall-clock time put on it, as the day steps above keep
+ * it.
+ *
+ * @param epochMs - The instant.
+ * @param zoneRef - The zone the instant is read in.
+ * @param calendar - The backend that resolves a named zone.
+ * @param walkDates - A walk from one local midnight to another, or `null` when
+ * it gives up.
+ * @returns The moved instant, `null` when the walk gave up, or NaN when the
+ * zone's clock cannot be read there.
+ */
+export function walkDatesInZone(epochMs: number, zoneRef: string, calendar: CalendarBackend, walkDates: (localMidnightMs: number) => number | null): number | null {
+	if (!Number.isFinite(epochMs)) return Number.NaN;
+	try {
+		const fields = fieldsInZoneRef(zoneRef, epochMs, calendar);
+		const landed = walkDates(calendar.localMidnight(fields.year, fields.month0, fields.day));
+		if (landed === null) return null;
+		const to = calendar.fields(landed);
+		const millisecond = ((epochMs % 1000) + 1000) % 1000;
+		return zonedWallClockToUtcMs(to.year, to.month0, to.day, fields.hour, fields.minute, zoneRef, calendar) + fields.second * 1000 + millisecond;
+	} catch (e) {
+		if (e instanceof RangeError) return Number.NaN;
+		throw e;
+	}
+}
+
+/**
+ * The backend's local midnight of the calendar date an instant shows in a
+ * zone, so a count over calendar dates (`working days between`) reads a zoned
+ * endpoint as the day its own zone shows.
+ *
+ * @param epochMs - The instant.
+ * @param zoneRef - The zone it is read in.
+ * @param calendar - The backend that resolves a named zone.
+ * @returns That local midnight, or NaN when the zone's clock cannot be read there.
+ */
+export function zonedDateAsLocalMidnight(epochMs: number, zoneRef: string, calendar: CalendarBackend): number {
+	if (!Number.isFinite(epochMs)) return Number.NaN;
+	try {
+		const fields = fieldsInZoneRef(zoneRef, epochMs, calendar);
+		return calendar.localMidnight(fields.year, fields.month0, fields.day);
+	} catch (e) {
+		if (e instanceof RangeError) return Number.NaN;
+		throw e;
+	}
+}
