@@ -96,7 +96,7 @@ describe("the page", () => {
 
 	test("links to the short path, and the anchor is one the guide has", () => {
 		const link = /\(\/guide\/async-data-sources\/#([a-z0-9-]+)\)/.exec(section());
-		expect(link?.[1]).toBe("the-short-path-createqueryresolver");
+		expect(link?.[1]).toBe("the-short-way-createqueryresolver");
 		const headings = fs.readFileSync(GUIDE, "utf8").split("\n").filter((l) => l.startsWith("## ")).map((l) => anchorOf(l.slice(3)));
 		expect(headings).toContain(link?.[1]);
 	});

@@ -68,7 +68,7 @@ The package below is built the way the [package
 starter](https://github.com/LiamRiddell/solve-engine/tree/main/examples/package-starter)
 builds its `rainfall("Oslo")`: with `createQueryResolver` from
 `solve-engine/resolvers`, the engine's helper for a lookup of one quoted query
-(see [the short path](/guide/async-data-sources/#the-short-path-createqueryresolver)).
+(see [the short way](/guide/async-data-sources/#the-short-way-createqueryresolver)).
 The helper builds the resolver, which starts the fetch before the line runs, and
 the plugin function that reads its answer, so the package supplies only the
 fetch. Taking the fetch as an argument is what makes the package testable: the

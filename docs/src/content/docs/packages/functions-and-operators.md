@@ -175,7 +175,7 @@ The boundary: the helper reads the query from the line before it runs, so the
 query must be written in the line as quoted text (`rainfall("Oslo")`). A lookup
 whose argument is a variable, or one with two operands, keeps a handler of its
 own, or the fuller contract the guide describes. The worked example is the
-guide's [short path](/guide/async-data-sources/#the-short-path-createqueryresolver).
+guide's [short way](/guide/async-data-sources/#the-short-way-createqueryresolver).
 
 Check your own arguments, and return an `errorValue(code, message)` rather than
 throwing when they are wrong, as `doubleHandler` does above. A returned error is a
