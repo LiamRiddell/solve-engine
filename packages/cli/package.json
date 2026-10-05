@@ -1,6 +1,6 @@
 {
   "name": "solve-engine-cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "The solve command: evaluate a Solve expression or document from a shell, and fail a CI job when a document's check lines fail.",
   "license": "MIT",
@@ -27,7 +27,7 @@
     "typecheck": "node ../../node_modules/typescript7/bin/tsc --noEmit --skipLibCheck -p tsconfig.json"
   },
   "dependencies": {
-    "solve-engine": "^2.41.0"
+    "solve-engine": "^2.43.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.1",
