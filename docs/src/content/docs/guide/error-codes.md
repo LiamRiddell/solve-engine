@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 554 codes, grouped below by the part
+ship. The engine and its built-in packages ship 557 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -184,6 +184,8 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `COMPOUND_ASSIGN_ASYNC_UNSUPPORTED` | thrown | A running total (`+= / -=`) whose right-hand side calls an async plugin (weather/stocks/currency). The same v1 scope restriction as the `"=>"` and user-function bodies. |
 | `UNKNOWN_SAVINGS_PERIOD` | thrown | A savings-goal contribution period that is not one of daily/weekly/monthly/yearly (`how long to save $X at $Y <period>`). Names the accepted set. |
 | `INVALID_TIME_LITERAL` | thrown | Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. |
+| `TERNARY_UNSUPPORTED` | either | A choice written `condition ? value : other` (`true ? 25 : 30`). There is no such operator; the message spells the line as `if ... then ... else`. Raised by the labelled-line fallback, which used to read `true ? 25` as a label and answer 30. |
+| `LABEL_NOT_A_NAME` | either | Text before a colon that is a comparison, an assignment or a calculation with no word in it (`a > b: 1`, `(1+2): 5`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. |
 | `NETWORK_DISABLED` | as a value | A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. |
 
 **What-if**
@@ -705,7 +707,8 @@ In the package as `ERROR_CODE_CATALOGUES.FinanceErrorCodes`.
 | `INFLATION_EXPECTED_USD` | either | `<amount> in <year> dollars` of an amount in another currency that has its own index: the phrase asks for dollars. |
 | `INFLATION_EXPECTED_CURRENCY` | either | `<amount> in <year> pounds` or `in <year> euros` of an amount in another currency that has its own index: the phrase asks for that currency. |
 | `INFLATION_NO_INDEX` | as a value | An inflation adjustment of an amount no bundled price index measures: a currency without one, a quantity that is not money, or a bare number. |
-| `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. |
+| `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`, as in `what is $300 and $50 from 2003`. |
+| `INFLATION_EXPECTED_YEAR` | as a value | The year of an inflation question that is not a plain whole number: money, a quantity, a date or a fraction, as in `what is $100 from 1990.5`. |
 | `INFLATION_EXPECTED_INFLATION_WORD` | thrown | `assuming <rate>%` not followed by the word `inflation`. |
 | `SAVINGS_GOAL_SYNTAX` | thrown | `how much per month to reach <target>` followed by neither `in` nor `over` and the time the saving runs for. |
 | `UNKNOWN_COMPOUNDING_INTERVAL` | thrown | `compounding <interval>` naming an interval the package does not know. The message lists the ones it does. |
