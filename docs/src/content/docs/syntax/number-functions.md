@@ -56,13 +56,17 @@ fact(3 m) // ERROR: fact takes a plain number, not a length
 Text in quotes is words, not a number, even when the words are digits, so a
 function given text refuses it by name rather than reading it as zero or as its
 leading digits. `as number` turns text that is a number into one, and `int`
-reads such text itself, cutting any fraction off:
+reads such text itself, cutting any fraction off. `int` and `float` read a
+number written in another base the way `as number` does, after `0x`
+(hexadecimal), `0b` (binary) or `0o` (octal):
 
 ```solve
 sqrt("abc") // sqrt takes a number, not text. To use a number held as text, convert it first with "as number".
 round("3.5") // round takes a number, not text. To use a number held as text, convert it first with "as number".
 sqrt("16" as number) // 4
 int("42.9") // 42
+int("0xFF") // 255
+float("0o17") // 15
 ```
 
 A colour or an IPv6 address has no one number either, and is refused the same

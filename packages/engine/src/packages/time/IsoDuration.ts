@@ -105,6 +105,9 @@ export function readIsoDuration(text: string): IsoDurationReading | null {
 			continue;
 		}
 		const number = AMOUNT.exec(text.slice(i));
+		if (number === null && (text[i] === "." || text[i] === ",") && /[0-9]/.test(text[i + 1] ?? "")) {
+			return malformed(`a decimal mark needs a digit before it, as in ${text.slice(0, i)}0${text.slice(i)}.`);
+		}
 		if (number === null) {
 			return malformed(`each part is a number and then a letter, and "${text[i]}" has no number before it.`);
 		}

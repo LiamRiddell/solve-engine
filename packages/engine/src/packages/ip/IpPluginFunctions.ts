@@ -1,6 +1,7 @@
 import { Value, ValueType, numberValue, bigIntValue, boolValue, errorValue, ipCidrValue, type IpCidrData } from "@solve-js/vm/Value";
 import { usableHosts, netmask, networkAddress, broadcastAddress, addressInBlock } from "./IpMath";
-import { roundExactToWhole } from "@solve-js/vm/ExactDecimals";
+import { roundExactQuantityToWhole, roundExactToWhole } from "@solve-js/vm/ExactDecimals";
+import { exactIntegerValue } from "@solve-js/vm/ExactIntegers";
 import { IPV6_BITS, ipv6AddressCount, ipv6InBlock, ipv6LastAddress, ipv6Netmask, ipv6Network } from "./Ipv6Math";
 
 /** The IP/CIDR payload of a value, or a coded error when it is not one. */
@@ -200,5 +201,11 @@ export function ipAsInt(value: Value): Value {
  * @returns A whole number.
  */
 export function truncateToWhole(value: Value): Value {
+	// `as int` answers a plain number, so a quantity's unit is dropped, though
+	// an amount of money is still cut from the decimal it keeps.
+	if (value.type === ValueType.Uom) {
+		const whole = roundExactQuantityToWhole(value, "trunc")?.exact;
+		return whole === undefined ? numberValue(Math.trunc(value.toNumber())) : exactIntegerValue(whole.coef);
+	}
 	return roundExactToWhole(value, "trunc") ?? numberValue(Math.trunc(value.toNumber()));
 }

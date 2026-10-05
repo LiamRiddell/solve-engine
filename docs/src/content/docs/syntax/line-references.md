@@ -75,7 +75,10 @@ median above   // 20
 ```
 
 A column that carries units answers in the unit written at its top, as a total
-does, and a column mixing measures is refused rather than compared.
+does, and a column mixing measures is refused rather than compared. A number
+written in another base (`255 in hex`) is a figure like any other, added as the
+number it is, and the total is a plain decimal number (see
+[number bases](/syntax/number-bases/#a-base-is-still-a-number)).
 
 A line that is only `sum` or `total` is the same total, the way other
 calculators read the word under a column. It totals the block above it as

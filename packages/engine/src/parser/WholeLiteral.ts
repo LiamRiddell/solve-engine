@@ -32,3 +32,31 @@ export function isPastSafeWholeLiteral(digits: string): boolean {
 	const approx = Number(digits);
 	return approx > Number.MAX_SAFE_INTEGER && Number.isFinite(approx);
 }
+
+/** A typed number in a base: `0x`, `0b` or `0o` in either case, then digits of that base and nothing else. */
+const BASE_LITERAL = /^0(?:[xX][0-9a-fA-F]+|[bB][01]+|[oO][0-7]+)$/;
+
+/**
+ * The exact decimal digits of a typed hexadecimal, binary or octal literal a
+ * double cannot hold, or null when the double read of it is already exact.
+ *
+ * `0xFFFFFFFFFFFFFFFFFFFF` read through `parseInt` is the nearest double,
+ * which shows as 1,208,925,819,614,629,200,000,000 with its last digits
+ * invented. A literal past 2^53 is compiled from these digits instead, to
+ * PUSH_DECIMAL, the opcode a long decimal literal takes, so the VM keeps its
+ * exact integer (see `vm/ExactIntegers.ts`) and `"0xFF..." as number` and the
+ * typed literal agree digit for digit.
+ *
+ * The boundary matches {@link isPastSafeWholeLiteral}: a literal past about
+ * 1.8e308 is Infinity as a double, and is left so, so no bigint is built from
+ * a literal of any length.
+ *
+ * @param raw - The literal as the lexer read it, prefix included.
+ * @param approx - The double `parseInt` read from it, which settles the common literal without a bigint.
+ * @returns The decimal digits, or null.
+ */
+export function pastSafeBaseLiteralDigits(raw: string, approx: number): string | null {
+	if (!(approx > Number.MAX_SAFE_INTEGER) || approx === Number.POSITIVE_INFINITY) return null;
+	if (!BASE_LITERAL.test(raw)) return null;
+	return BigInt(raw).toString();
+}

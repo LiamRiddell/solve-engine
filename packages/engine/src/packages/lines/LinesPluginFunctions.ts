@@ -4,6 +4,7 @@ import { isScenarioDeclarationText } from "@solve-js/packages/whatif/ScenarioTex
 import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
 import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
 import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
+import { numberOfBase } from "@solve-js/vm/ExactIntegers";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { lineValueProblem as checkLineValue, noDocument as requireContext } from "@solve-js/vm/LineReads";
 import { headingOf, isSummaryLine, sectionKey } from "./SectionReader";
@@ -173,10 +174,12 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
     const v = context.getLineResult!(n);
     const err = checkLineValue(v, n);
     if (err) return err;
-    if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
+    // A number written in a base is added as the number it is.
+    const figure = numberOfBase(v!);
+    if (figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
       return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value, so it cannot be included in a sum, total or average range`);
     }
-    values.push(v!);
+    values.push(figure);
   }
   if (values.length === 0) {
     return errorValue("LINE_RANGE_EMPTY", `Lines ${from} to ${to} hold no figures to ${isAverage ? "average" : "add up"}: every line in the range is blank or a heading.`);
@@ -268,10 +271,12 @@ function aggregateAbove(context: LineExecutionContext, mode: AboveMode): Value {
     if (isSummaryLine(context.getLineText?.(n) ?? "")) continue;
     const err = checkLineValue(v, n);
     if (err) return err;
-    if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
+    // A number written in a base is added as the number it is.
+    const figure = numberOfBase(v!);
+    if (figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
       return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value, so it cannot be included in an "above" aggregation`);
     }
-    values.push(v!);
+    values.push(figure);
   }
   const refused = spendSpanReads(context, walked, `${mode} above`);
   if (refused) return refused;
@@ -570,10 +575,12 @@ function aggregateSection(context: LineExecutionContext, name: string, mode: Sec
     if (err) return err;
     // `count of section` is "how many figures sit under the heading", so a
     // line that is not a number still counts; only sum and average add.
-    if (mode !== "count" && v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
+    // A number written in a base is added as the number it is.
+    const figure = numberOfBase(v!);
+    if (mode !== "count" && figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
       return sectionNonNumeric(v!, n, open.name, verb);
     }
-    values.push(v!);
+    values.push(figure);
   }
 
   if (mode === "count") return numberValue(values.length);

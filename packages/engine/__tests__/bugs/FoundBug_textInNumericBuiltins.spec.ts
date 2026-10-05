@@ -137,9 +137,11 @@ describe("intOfText", () => {
 	});
 
 	test("hostile: leading digits, look-alike digits, markup and a long text", () => {
-		for (const text of ["12abc", "1,23", "٥", "５", "<b>5</b>", "0x10", "Infinity", "NaN", "constructor"]) {
+		for (const text of ["12abc", "1,23", "٥", "５", "<b>5</b>", "0xZZ", "Infinity", "NaN", "constructor"]) {
 			expect(intOfText(text).errorCode).toBe("TEXT_NOT_A_NUMBER");
 		}
+		// A base prefix is read as `as number` reads it (FoundBug_baseTextInIntAndFloat).
+		expect(intOfText("0x10").toNumber()).toBe(16);
 		const long = intOfText("a".repeat(10_000));
 		expect(long.type).toBe(ValueType.Error);
 		expect(String(long.errorMessage).length).toBeLessThan(120);

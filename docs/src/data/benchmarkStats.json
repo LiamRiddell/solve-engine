@@ -1,40 +1,40 @@
 {
   "measuredOn": {
-    "cpu": "AMD Ryzen 9 7950X3D 16-Core Processor",
-    "node": "v24.16.0",
-    "platform": "win32",
+    "cpu": "AMD EPYC 9V45 96-Core Processor",
+    "node": "v22.23.2",
+    "platform": "linux",
     "arch": "x64"
   },
   "stages": {
-    "lex": 24,
-    "normalize": 35.4,
-    "parseCompile": 20.7,
-    "execute": 19.9
+    "lex": 11.5,
+    "normalize": 33.2,
+    "parseCompile": 30.8,
+    "execute": 24.6
   },
   "tiers": [
     {
       "name": "small",
       "lines": 100,
-      "coldLinesPerSec": 19812,
-      "warmLinesPerSec": 68154
+      "coldLinesPerSec": 29212,
+      "warmLinesPerSec": 396980
     },
     {
       "name": "medium",
       "lines": 1000,
-      "coldLinesPerSec": 55305,
-      "warmLinesPerSec": 88255
+      "coldLinesPerSec": 120142,
+      "warmLinesPerSec": 390069
     },
     {
       "name": "large",
       "lines": 10000,
-      "coldLinesPerSec": 42041,
-      "warmLinesPerSec": 43103
+      "coldLinesPerSec": 119071,
+      "warmLinesPerSec": 261755
     },
     {
       "name": "massive",
       "lines": 50000,
-      "coldLinesPerSec": 14499,
-      "warmLinesPerSec": 14495
+      "coldLinesPerSec": 115416,
+      "warmLinesPerSec": 204748
     }
   ]
 }

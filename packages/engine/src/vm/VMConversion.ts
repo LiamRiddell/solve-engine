@@ -1449,9 +1449,8 @@ export function partsPerFraction(value: Value): number {
  * read the 100 as whole ones and answered 10000.00%. A quantity that is not a
  * proportion (a length, money) has no percentage and is refused, where
  * `5 km as %` answered 500.00%. A number or a ratio is its own fraction, as
- * before; one that is not finite is refused (see {@link percentageNotFinite}),
- * and so is one whose percentage, a hundred times it, is past the largest
- * number a double holds (see {@link percentageTooLarge}).
+ * before; one whose percentage, a hundred times it, cannot be held is refused
+ * with the reason it cannot (see {@link percentageRefusal}).
  *
  * @param value - The value, already checked for a fault and a date.
  * @returns The Percentage, or an error Value.
@@ -1474,7 +1473,10 @@ export function toPercentage(value: Value): Value {
     const fraction = value.toNumber();
     // One multiplication: the percentage is what the formatter writes, and a
     // fraction past about 1.8e306 is finite while a hundred times it is not.
-    if (!Number.isFinite(fraction * 100)) return Number.isNaN(fraction) || (!Number.isFinite(fraction) && !hasFiniteExactReading(value)) ? percentageNotFinite() : percentageTooLarge();
+    // A difference with itself is zero only for a finite number, which tests
+    // finiteness without reading the global `Number` on every percentage.
+    const hundredfold = fraction * 100;
+    if (hundredfold - hundredfold !== 0) return percentageRefusal(value, fraction);
     const percentage = percentageValue(fraction);
     const exact = percentageExact(value);
     if (exact !== undefined) percentage.exact = exact;
@@ -1488,6 +1490,16 @@ export function toPercentage(value: Value): Value {
  * digits well before the double's run out.
  */
 const PERCENTAGE_EXACT_PLACES = 6;
+
+/**
+ * A magnitude below which no fraction needs an exact decimal, so
+ * {@link percentageExact} turns it away with two comparisons. The test it
+ * stands in front of passes only from about 2.25e7, where a hundred times the
+ * fraction, scaled by the double's precision, reaches half of the sixth place;
+ * 2e7 sits safely under that, so a fraction this turns away is one the full
+ * test would have turned away too.
+ */
+const PERCENTAGE_EXACT_FLOOR = 2e7;
 
 /**
  * The exact decimal a percentage keeps beside its double, or undefined: the
@@ -1514,6 +1526,10 @@ const PERCENTAGE_EXACT_PLACES = 6;
 export function percentageExact(value: Value): DecimalData | undefined {
     if (value.type !== ValueType.Number) return undefined;
     const fraction = value.value as number;
+    // The ordinary percentage (`50%`, `0.25 as %`) is far below the floor.
+    // Inside a `vm` context, which the benchmarks run in, each read of `Math`
+    // or `Number` below costs hundreds of nanoseconds, so it is answered first.
+    if (fraction < PERCENTAGE_EXACT_FLOOR && fraction > -PERCENTAGE_EXACT_FLOOR) return undefined;
     if (!Number.isFinite(fraction) || Math.abs(fraction * 100) * Number.EPSILON < 0.5 * 10 ** -PERCENTAGE_EXACT_PLACES) return undefined;
     if (value.exact !== undefined) return value.exact;
     const r = value.rational;
@@ -1547,10 +1563,39 @@ export function asRate(value: Value): Value {
 }
 
 /**
- * The refusal for a percentage of a value that is not finite: `40 is what % of
- * 0` divided by zero and printed Infinity%, and `0 / 0 as %` printed NaN%
- * (#636). A percentage is a proportion, and an infinite or undefined one names
- * none, so it is refused rather than printed with a percent sign.
+ * The refusal for a value whose percentage, a hundred times it, a double
+ * cannot hold, with the reason it cannot, in the reader's terms:
+ *
+ * - NaN, a value that is no number (`(1/0 - 1/0) as %`): not finite, and
+ *   named as no number ({@link percentageOfNoNumber}).
+ * - An infinity a division by zero gave (`1/0 as %`, `40 is what % of 0`,
+ *   marked by the VM's `/`; see `Value.divisionByZero`): not finite, and
+ *   named as what dividing by zero gives ({@link percentageNotFinite}).
+ * - Any other infinity (`2^2000 as %`, `1e309 as %`): a number that grew past
+ *   the largest double, so too large ({@link percentageInfinite}). It used to
+ *   be told that it "is what dividing by zero gives", which it is not.
+ * - A finite value, or one with a finite exact reading (`1e308 as %`,
+ *   `2n^2000 as %`): too large for its percentage ({@link percentageTooLarge}).
+ *
+ * The double cannot say why it is infinite, so the mark is the only witness:
+ * an infinity reached from a division by zero through a step that does not
+ * carry it (a function such as `abs`) is called too large.
+ *
+ * @param value - The value being written as a percentage.
+ * @param fraction - Its number, already found to overflow a hundred times over.
+ * @returns The error Value.
+ */
+export function percentageRefusal(value: Value, fraction: number): Value {
+    if (fraction !== fraction) return percentageOfNoNumber();
+    if (Number.isFinite(fraction) || hasFiniteExactReading(value)) return percentageTooLarge();
+    return value.divisionByZero === true ? percentageNotFinite() : percentageInfinite();
+}
+
+/**
+ * The refusal for a percentage of an infinity a division by zero gave: `40 is
+ * what % of 0` divided by zero and printed Infinity% (#636). A percentage is a
+ * proportion, and an infinite one names none, so it is refused rather than
+ * printed with a percent sign.
  *
  * @returns The `PERCENTAGE_NOT_FINITE` error Value.
  */
@@ -1558,6 +1603,36 @@ export function percentageNotFinite(): Value {
     return errorValue(
         "PERCENTAGE_NOT_FINITE",
         "This has no percentage: its value is not a finite number, which is what dividing by zero gives.",
+    );
+}
+
+/**
+ * The refusal for a percentage of a value that is no number at all (NaN), as
+ * an infinity less an infinity is: `0 / 0 as %` printed NaN% (#636) before a
+ * zero over a zero was refused on its own.
+ *
+ * @returns The `PERCENTAGE_NOT_FINITE` error Value.
+ */
+export function percentageOfNoNumber(): Value {
+    return errorValue(
+        "PERCENTAGE_NOT_FINITE",
+        "This has no percentage: its value is not a number at all, as an infinity less an infinity is not.",
+    );
+}
+
+/**
+ * The refusal for a percentage of a number that is itself past the largest
+ * double: `2^2000` and `1e309` are held as an infinity because no double is
+ * large enough for them, and a percentage of one was told it "is what
+ * dividing by zero gives". It is too large, and says so, with the code a
+ * finite number too large for its percentage takes.
+ *
+ * @returns The `PERCENTAGE_OVERFLOW` error Value.
+ */
+export function percentageInfinite(): Value {
+    return errorValue(
+        "PERCENTAGE_OVERFLOW",
+        "This is too large to write as a percentage: the number is past about 1.8e308, the largest number that can be held.",
     );
 }
 

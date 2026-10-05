@@ -147,8 +147,37 @@ below zero as well as above it:
 -1e308 in % // This is too large to write as a percentage: a percentage is a hundred times the number, and that is past about 1.8e308, the largest number that can be held.
 ```
 
-That is a different refusal from a value that is not a number at all, such as a
-division by zero (`1/0 as %`), which names the division instead.
+A large percentage that can be held is written in full, every digit of its
+whole part, as a large number is:
+
+```solve
+1e22 as % // 1,000,000,000,000,000,000,000,000.00%
+```
+
+A number can also be too large to be held at all before it is written as a
+percentage. `2^2000` and a typed `1e309` are both past about 1.8e308, so each is
+held as an infinity (shown `∞`), and its percentage is too large in the same
+way. The refusal says so, in the same terms:
+
+```solve
+2^2000 as % // This is too large to write as a percentage: the number is past about 1.8e308, the largest number that can be held.
+1e309 as % // This is too large to write as a percentage: the number is past about 1.8e308, the largest number that can be held.
+```
+
+A division by zero gives an infinity too, but not because a number grew too
+large: there is no number it could be. That is a different refusal, which names
+the division:
+
+```solve
+1/0 as % // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
+40 is what % of 0 // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
+```
+
+The two infinities look the same once they are made, so the engine records
+which one a division by zero gave, and keeps that record through `+`, `-`, `*`,
+`^` and a minus sign in front (`1 - 40/0` is still a division by zero). The
+boundary: a step that does not carry the record, such as a function
+(`abs(1/0)`), leaves an infinity that is read as a number too large to hold.
 
 ## Change between two values
 
@@ -254,7 +283,8 @@ one, with an `x` after it. The conversion is read by `CONVERTERS_PACKAGE`, which
   was written in.
 - A percentage of zero (`40 is what % of 0`), or of any value that is not a
   finite number, is refused rather than shown as an infinite percentage, and so
-  is a number too large for a hundred times it to be held (`1e308 as %`).
+  is a number too large for a hundred times it to be held (`1e308 as %`, and
+  `2^2000 as %`, which is too large to hold even before it is a percentage).
 - A decimal comma in a percentage (`12,5%`) is read only by an engine whose
   locale writes one, German or French (see [locales](/guide/locales/#the-decimal-comma));
   an English engine refuses it, as it refuses `12,5` alone.

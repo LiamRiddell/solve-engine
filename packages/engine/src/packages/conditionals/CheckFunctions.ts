@@ -18,6 +18,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { DEFAULT_FORMATTING_SETTINGS, type FormattingSettings } from "@solve-js/format/FormattingSettings";
 import { decimalCompare } from "@solve-js/decimal";
 import { convertRate } from "@solve-js/uom/UomConverter";
+import { fixedDecimalText, shortestText } from "@solve-js/utilities/Number";
 import { valuesEqual, valuesOrdered, hasExactSide, type Order } from "@solve-js/vm/Comparisons";
 import { kindOfOperand } from "./NotFunctions";
 
@@ -119,7 +120,7 @@ function toldApart(left: Value, right: Value, lv: number, rv: number, l: string,
 
 /** A relative difference as a percentage, to two places. */
 function percent(fraction: number): string {
-	return `${(fraction * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
+	return `${fixedDecimalText(fraction * 100, 2).replace(/\.?0+$/, "")}%`;
 }
 
 /** The longest a piece of text is quoted at in a check's message. */
@@ -279,10 +280,11 @@ export function quotedText(text: string): string {
 
 /**
  * Text that `as number` reads: decimal digits with an optional sign, thousands
- * commas, point and exponent. A base prefix (`"0xFF"`) is not among them, so a
- * check does not suggest a conversion that would be refused.
+ * commas, point and exponent, or a whole number after a base prefix
+ * (`"0xFF"`, `"0b101"`, `"0o17"`). Text outside it is not offered the
+ * conversion, so a check does not suggest one that would be refused.
  */
-const NUMBER_AS_TEXT = /^\s*[-+]?\d[\d,]*(?:\.\d+)?(?:e[-+]?\d+)?\s*$/i;
+const NUMBER_AS_TEXT = /^\s*[-+]?(?:\d[\d,]*(?:\.\d+)?(?:e[-+]?\d+)?|0x[0-9a-f]+|0b[01]+|0o[0-7]+)\s*$/i;
 
 /**
  * A check with text on either side: equal or not between two pieces of text,
@@ -461,14 +463,14 @@ export function checkComparison(args: Value[]): Value {
 	const unit = left.type === ValueType.Uom && left.unit !== undefined ? ` ${left.unit}` : "";
 	const difference = tolerance?.type === ValueType.Percentage && rv !== 0
 		? percent(gap / Math.abs(rv))
-		: `${Number(gap.toPrecision(3))}${unit}`;
+		: `${shortestText(Number(gap.toPrecision(3)))}${unit}`;
 	if (holds) return stringValue(approximate && gap > 0 ? `✓ (differs by ${difference})` : "✓");
 
 	// An approximate failure is a small difference by definition, which the
 	// usual two decimal places would round away ("3.14 differs from 3.14"), so
 	// its sides are shown to six significant figures.
 	const precise = (v: Value, n: number): string =>
-		approximate && v.type !== ValueType.Datetime ? `${Number(n.toPrecision(6))}${v.type === ValueType.Uom && v.unit !== undefined ? ` ${v.unit}` : ""}` : shown(v);
+		approximate && v.type !== ValueType.Datetime ? `${shortestText(Number(n.toPrecision(6)))}${v.type === ValueType.Uom && v.unit !== undefined ? ` ${v.unit}` : ""}` : shown(v);
 	let l = precise(left, left.toNumber());
 	let r = precise(right, right.toNumber());
 	// A side that is equal to the other already reads the same, as it should

@@ -709,6 +709,16 @@ export class Value {
 	 * value does, through {@link clone}. Cleared by {@link recycle}.
 	 */
 	public unitLabel?: UnitLabel;
+	/**
+	 * Set on an infinity that a division by zero gave (`1/0`, `40 is what %
+	 * of 0`), so a refusal can name that cause; an infinity reached because a
+	 * number grew past the largest double (`2^2000`, `1e309`) carries none.
+	 * The double alone cannot tell the two apart. Set by the VM's `/` (see
+	 * vm/IndeterminateQuotient.ts's `zeroDivisorQuotient`) and carried by `+`,
+	 * `-`, `*` and `^` when an operand had it and the result is still
+	 * infinite. Cleared by {@link recycle}.
+	 */
+	public divisionByZero?: boolean;
 
 	constructor(
 		type: ValueType,
@@ -767,6 +777,8 @@ export class Value {
 		this.calendarName = undefined;
 		// Nor lend a quantity it once was the name it was shown under.
 		this.unitLabel = undefined;
+		// Nor tell an overflowed infinity that it came from dividing by zero.
+		this.divisionByZero = undefined;
 	}
 
 	/**

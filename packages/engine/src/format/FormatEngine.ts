@@ -5,7 +5,7 @@ import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { formatIpv6 } from "@solve-js/packages/ip/Ipv6Math";
 import { decimalCompare, decimalDivide, decimalFromInteger, decimalRound, decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
-import { autoFormatIntegerOrFloat, compactParts, tooSmallToPrintText } from "@solve-js/utilities/Number";
+import { autoFormatIntegerOrFloat, compactParts, fixedDecimalText, shortestText, tooSmallToPrintText } from "@solve-js/utilities/Number";
 import { localCalendarName, localCurrencyPlacement, withLocalUnitName } from "./LocaleWords";
 import { getMeasure } from "@solve-js/uom/UomConverter";
 import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS, resolveFormattingSettings, type FormattingOverrides } from "./FormattingSettings";
@@ -601,6 +601,40 @@ function localiseDigits(ascii: string, loc: string): string {
   return out;
 }
 
+/** The most grouping formatters {@link groupedIntegerFormatFor} keeps before starting again. */
+const GROUPED_INTEGER_FORMAT_LIMIT = 64;
+
+/** Grouping formatters by locale; see {@link groupedIntegerFormatFor}. */
+const groupedIntegerFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * The formatter that groups a whole number's digits for a locale, built once
+ * and reused.
+ *
+ * `BigInt.prototype.toLocaleString(loc, { useGrouping: true })` builds a new
+ * `Intl.NumberFormat` on every call. A long money chain met that on every line
+ * once batch L wrote money past 1e21 in full digits rather than in exponent
+ * form, and 4,000 lines of `x = x * 1.123456789` from `$1` took about four
+ * times as long to show. `format` on a formatter built from the same locale and
+ * options writes what `toLocaleString` writes, since that is how the
+ * specification defines it. `useGrouping: true` is kept as it was, which under
+ * current `Intl` groups every number of four digits or more, so the text is
+ * unchanged. The cache is bounded because the locale is a host string; an
+ * unusable locale throws the constructor's `RangeError` and caches nothing.
+ *
+ * @param loc - `Intl` locale tag.
+ * @returns The formatter.
+ */
+export function groupedIntegerFormatFor(loc: string): Intl.NumberFormat {
+  let format = groupedIntegerFormats.get(loc);
+  if (format === undefined) {
+    format = new Intl.NumberFormat(loc, { useGrouping: true });
+    if (groupedIntegerFormats.size >= GROUPED_INTEGER_FORMAT_LIMIT) groupedIntegerFormats.clear();
+    groupedIntegerFormats.set(loc, format);
+  }
+  return format;
+}
+
 /**
  * Write a fixed-decimal string (`"1234567.50"`) the way `loc` writes numbers:
  * its digits, its decimal mark, and its digit grouping when `useGrouping` is on.
@@ -626,7 +660,7 @@ export function localiseFixedDecimal(fixed: string, loc: string, useGrouping: bo
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(fixed);
   if (!match) return fixed;
   const [, sign, integer, fraction] = match;
-  const integerText = useGrouping ? BigInt(integer).toLocaleString(loc, { useGrouping: true }) : localiseDigits(integer, loc);
+  const integerText = useGrouping ? groupedIntegerFormatFor(loc).format(BigInt(integer)) : localiseDigits(integer, loc);
   if (fraction === undefined) return `${sign}${integerText}`;
   return `${sign}${integerText}${decimalMark(loc)}${localiseDigits(fraction, loc)}`;
 }
@@ -697,13 +731,14 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
     formatted = tooSmall;
   } else if (isTimeSpan && value === Math.floor(value)) {
     // For whole number TimeSpan values, format as integer
-    formatted = localiseFixedDecimal(value.toString(), loc, useGrouping);
+    formatted = localiseFixedDecimal(fixedDecimalText(value, 0), loc, useGrouping);
     shownPlaces = 0;
   } else {
     // For other values, use the configured decimal places, less the zeros
     // that only pad them when the host asked for that (#750). An explicit
     // `to N dp` keeps every place it asked for.
-    const fixed = value.toFixed(dp);
+    // In full digits at any size; see fixedDecimalText.
+    const fixed = fixedDecimalText(value, dp);
     const shown = explicitPlaces === undefined && settings.floatResult.trimTrailingZeros === true ? trimFractionZeros(fixed, 0) : fixed;
     formatted = localiseFixedDecimal(shown, loc, useGrouping);
     const point = shown.indexOf(".");
@@ -753,8 +788,8 @@ function formatLabelledUom(value: number, unit: string, label: UnitLabel, settin
   const tooSmall = explicitPlaces === undefined ? tooSmallToPrintText(count, dp, loc) : undefined;
   let formatted: string;
   if (tooSmall !== undefined) formatted = tooSmall;
-  else if (explicitPlaces === undefined && TIME_SPAN_UNITS.has(unit) && Number.isInteger(count)) formatted = localiseFixedDecimal(count.toString(), loc, useGrouping);
-  else formatted = localiseFixedDecimal(count.toFixed(dp), loc, useGrouping);
+  else if (explicitPlaces === undefined && TIME_SPAN_UNITS.has(unit) && Number.isInteger(count)) formatted = localiseFixedDecimal(fixedDecimalText(count, 0), loc, useGrouping);
+  else formatted = localiseFixedDecimal(fixedDecimalText(count, dp), loc, useGrouping);
   return `= ${formatted} ${label.name}`;
 }
 
@@ -863,7 +898,7 @@ function formatMoney(value: number, money: MoneyUnit, places: MoneyPlaces, exact
   } else if (tooSmall !== undefined) {
     text = tooSmall;
   } else {
-    const fixed = exact !== undefined ? decimalToFixed(exact, places.max) : value.toFixed(places.max);
+    const fixed = exact !== undefined ? decimalToFixed(exact, places.max) : fixedDecimalText(value, places.max);
     text = localiseFixedDecimal(trimFractionZeros(fixed, places.min), loc, useGrouping);
   }
   const per = money.per === undefined ? "" : `/${money.per}`;
@@ -1028,7 +1063,7 @@ export function formatMatrixAligned(m: MatrixData, settings?: FormattingOverride
 }
 
 function formatRange(min: number, max: number, locale: ILocale): string {
-  return `${locale.display.resultPrefix}${min}:${max}`;
+  return `${locale.display.resultPrefix}${shortestText(min)}:${shortestText(max)}`;
 }
 
 function formatPercentage(value: number, locale: ILocale, settings: FormattingSettings, exact?: DecimalData): string {
@@ -1053,7 +1088,9 @@ function formatPercentage(value: number, locale: ILocale, settings: FormattingSe
   // them rather than in the whole-number form a plain number takes.
   const exactPercent = exact === undefined ? undefined : percentOfFraction(exact);
   const exactText = exactPercent !== undefined && exactDigitsWhereDoubleCannot(percent, { exact: exactPercent }, dp) !== undefined ? decimalToFixed(exactPercent, dp) : undefined;
-  const plain = exactText ?? percent.toFixed(dp);
+  // Written to its places in full digits at any size: `toFixed` writes 1e21
+  // and above in exponent form, so `1e306 as %` showed `1e+308%`.
+  const plain = exactText ?? fixedDecimalText(percent, dp);
   // Less the zeros that only pad the places, when the host asked for that (#750).
   const fixed = settings.floatResult.trimTrailingZeros === true ? trimFractionZeros(plain, 0) : plain;
   let formatted = tooSmall ?? localiseFixedDecimal(fixed, loc, settings.floatResult.enableSeperator);
@@ -1081,7 +1118,7 @@ export function percentOfFraction(fraction: DecimalData): DecimalData {
 }
 
 function formatUnit(value: number, unit: string | undefined): string {
-  return `= ${value} ${unit || ""}`.trim();
+  return `= ${shortestText(value)} ${unit || ""}`.trim();
 }
 
 /**

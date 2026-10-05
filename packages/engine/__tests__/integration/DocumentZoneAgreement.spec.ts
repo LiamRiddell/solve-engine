@@ -21,13 +21,11 @@
  *    saying so. This is written out row by row rather than left implicit, so a
  *    change that quietly made two zones agree on an instant would fail here.
  *
- * The second block is also this phase's executable specification for the
- * whole-day and daylight-saving work deferred to phase 4. `<date> - <date>`
- * still answers a `ms` duration, so two calendar days either side of a
- * transition are 47 or 49 hours apart rather than two days, and the numbers
- * below say so. Changing that changes `value.unit` and not only the number,
- * which is why it is a separate change; the grain sidecar this phase records
- * is what phase 4 needs to make the distinction.
+ * `<date> - <date>` used to answer a `ms` duration, so two calendar days
+ * either side of a transition were 47 or 49 hours apart in one zone and 48 in
+ * another. Two dates now subtract to their day count on the calendar, read
+ * through the grain each literal records, so that row has moved to the first
+ * block: every zone answers two days.
  */
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -119,6 +117,20 @@ describe("what every zone agrees on", () => {
 			expect(formatValue(run.results[9], { ...DEFAULT_FORMATTING_SETTINGS, calendar: run.calendar })).toBe("= 2 days");
 		}
 	});
+
+	test("two dates across a daylight-saving transition are the same day count in every zone", () => {
+		// `<date> - <date>` was a `ms` span, so London's spring-forward weekend
+		// was 47:00 and its fall-back weekend 49:00 while other zones answered
+		// 48:00. Two calendar dates now subtract to their day count on the
+		// calendar (FoundBug_dateDifferenceInDays), so every zone agrees.
+		for (const run of runs) {
+			for (const index of [7, 8]) {
+				expect(formatValue(run.results[index], { ...DEFAULT_FORMATTING_SETTINGS, calendar: run.calendar })).toBe("= 2 days");
+				expect(run.results[index].type).toBe(ValueType.Uom);
+				expect(run.results[index].unit).toBe("days");
+			}
+		}
+	});
 });
 
 describe("what legitimately differs, row by row", () => {
@@ -143,30 +155,4 @@ describe("what legitimately differs, row by row", () => {
 		});
 	});
 
-	test("two dates across a daylight-saving transition subtract to a duration, not a day count", () => {
-		// Deferred to phase 4, and pinned here as it stands rather than left
-		// implicit. `<date> - <date>` answers a `ms` Uom, so London's
-		// spring-forward weekend is 47 hours and its fall-back weekend 49, while
-		// a zone whose transition is elsewhere answers a flat 48. Fixing this
-		// changes the unit as well as the number, which is why it is its own
-		// change; the grain recorded this phase is what it needs.
-		const springForward = Object.fromEntries(runs.map((run) => [run.zone, formatValue(run.results[7], { ...DEFAULT_FORMATTING_SETTINGS, calendar: run.calendar })]));
-		expect(springForward).toEqual({
-			"Europe/London": "= 47:00",
-			"America/New_York": "= 48:00",
-			"Pacific/Auckland": "= 48:00",
-		});
-
-		const fallBack = Object.fromEntries(runs.map((run) => [run.zone, formatValue(run.results[8], { ...DEFAULT_FORMATTING_SETTINGS, calendar: run.calendar })]));
-		expect(fallBack).toEqual({
-			"Europe/London": "= 49:00",
-			"America/New_York": "= 48:00",
-			"Pacific/Auckland": "= 48:00",
-		});
-
-		for (const run of runs) {
-			expect(run.results[7].type).toBe(ValueType.Uom);
-			expect(run.results[7].unit).toBe("ms");
-		}
-	});
 });

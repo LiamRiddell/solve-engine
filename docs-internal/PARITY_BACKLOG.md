@@ -66,12 +66,15 @@ off for this engine).
 
 The other calculator-notepad apps have their own spec,
 `packages/engine/__tests__/docs/OtherAppsParity.spec.ts`, in the same shape:
-<!-- parity:otherApps.supported -->8<!-- /parity --> of
-<!-- parity:otherApps.total -->11<!-- /parity --> documented examples produce the
-documented answer, <!-- parity:otherApps.gaps -->2<!-- /parity --> do not (the
-CSS pixel conversions, engine limitation 3 in `OTHER_APPS_FEATURE_AUDIT.md`), and
-<!-- parity:otherApps.declined -->1<!-- /parity --> is declined with its reason
-(bare `x` as multiplication).
+<!-- parity:otherApps.supported -->10<!-- /parity --> of
+<!-- parity:otherApps.total -->16<!-- /parity --> documented examples produce the
+documented answer, <!-- parity:otherApps.gaps -->4<!-- /parity --> do not (the
+CSS pixel conversions, engine limitation 3 in `OTHER_APPS_FEATURE_AUDIT.md`; Calca's
+rainfall note, refused where a rate per year meets an area; and Calca's symbolic
+`tax percent =>`), and <!-- parity:otherApps.declined -->2<!-- /parity --> are declined
+with their reasons (bare `x` as multiplication, and `33%` kept a percentage). NumPad's
+and Notes Calculator's own sites were not reachable, so their forms the audit quotes
+without a result stay prose there.
 
 ## Notes for whoever picks this up
 

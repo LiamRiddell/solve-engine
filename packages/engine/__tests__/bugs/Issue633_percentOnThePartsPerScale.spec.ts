@@ -5,6 +5,7 @@ import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { ValueType, numberValue, percentageValue, stringValue, uomValue } from "@solve-js/vm/Value";
 import { asRate, isPartsPerUnit, partsPerFraction, percentageInPartsPer, toPercentage } from "@solve-js/vm/VMConversion";
+import { zeroDivisorQuotient } from "@solve-js/vm/IndeterminateQuotient";
 
 /**
  * Issue #633: percent sat outside the parts-per scale. `in %` left the `%` for
@@ -37,7 +38,10 @@ describe("the helpers", () => {
 		expect(toPercentage(uomValue(100, "ppm")).toNumber()).toBeCloseTo(0.0001, 15);
 		expect(toPercentage(uomValue(5, "km")).errorCode).toBe("PERCENTAGE_OF_QUANTITY");
 		expect(toPercentage(numberValue(0.25)).toNumber()).toBe(0.25);
-		expect(toPercentage(numberValue(Infinity)).errorCode).toBe("PERCENTAGE_NOT_FINITE");
+		// An infinity with no mark of a division by zero is a number past the
+		// largest double, too large (FoundBug_percentageOfAnInfinity).
+		expect(toPercentage(numberValue(Infinity)).errorCode).toBe("PERCENTAGE_OVERFLOW");
+		expect(toPercentage(zeroDivisorQuotient(Infinity)).errorCode).toBe("PERCENTAGE_NOT_FINITE");
 		expect(toPercentage(numberValue(NaN)).errorCode).toBe("PERCENTAGE_NOT_FINITE");
 	});
 

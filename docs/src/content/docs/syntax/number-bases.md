@@ -41,6 +41,20 @@ result comes back in decimal.
 0x1F + 1 // 32
 ```
 
+A literal too long for an ordinary number to hold exactly (past about nine
+thousand million million, 2^53) keeps every digit it was typed with, as a long
+decimal literal does, so twenty hex digits are read as the twenty digits and
+not the nearest round number:
+
+```solve
+0xFFFFFFFFFFFFFFFFFFFF // 1,208,925,819,614,629,174,706,175
+0x20000000000001 // 9,007,199,254,740,993
+0xFFFFFFFFFFFFFFFFFFFF + 1 // 1,208,925,819,614,629,174,706,176
+```
+
+The boundary: a literal past about 1.8e308, the largest an ordinary number
+holds, is infinite, as the same number typed in decimal is.
+
 ## Showing a number in another base
 
 `as` converts the display, and there is a function form for each base.
@@ -100,6 +114,34 @@ check (0.5 in hex) == 0 // ✓
 ```
 
 To keep the fraction, keep the number in decimal: `255.7 + 1` is 256.70.
+
+The cut is made on the number exactly as it was typed. A decimal past about
+nine thousand million million (2^53) has no fraction left in an ordinary
+number, and its nearest ordinary number can be a few units away from it, so the
+digits come from the decimal itself: `12345678901234567890.5` is cut to
+12,345,678,901,234,567,890 before it is written in hex.
+
+```solve
+12345678901234567890.5 in hex // 0xAB54A98CEB1F0AD2
+12345678901234567890 in hex // 0xAB54A98CEB1F0AD2
+```
+
+A number in a base is a figure like any other in a column, so `total above`,
+`average above`, a line range and a section or tag total add it as the number it
+is. The total is a plain number, in decimal, since the lines above can be in
+different bases; to see it in a base, convert it:
+
+```solve-doc
+255 in hex // 0xFF
+0b1010 as binary // 0b1010
+5 // 5
+total above // 270
+total above in hex // 0x10E
+```
+
+The boundary: a column total reads a whole number past 2^53 as the nearest
+ordinary number, as it does when the same number is written in decimal, so a
+base adds no digits a total would not otherwise keep.
 
 A whole number too large for an ordinary number to hold exactly (past about
 nine thousand million million, 2^53) keeps every digit when it is written in

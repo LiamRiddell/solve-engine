@@ -293,6 +293,36 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"check X == X and X ≈ X within 1%",
 		"check X == X or X == 1",
 	],
+	// A number against text in a plain comparison, a base prefix read by
+	// `as number`, a decimal past 2^53 in a base, money through a rounding,
+	// and a large percentage or quantity written in full (the sixth
+	// found-bug batch).
+	textNumbersAndLargeResults: [
+		"X == \"X\"",
+		"X != \"X\"",
+		"\"X\" > X",
+		"\"0xFF\" as number + X",
+		"(X + 12345678901234567890.5) in hex",
+		"floor($9007199254740993.5 + (X))",
+		"round(-(X) * $1)",
+		"(X) * 1e22 as %",
+		"(X) * 1e22 m",
+		"(X) / 0 as %",
+	],
+	// A typed hex literal past 2^53, a sign before text, a base prefix read by
+	// int and float, the difference of two dates, and an ISO duration with no
+	// digit before its decimal mark (the seventh found-bug batch).
+	baseLiteralsSignsAndDateDifferences: [
+		"0xFFFFFFFFFFFFFFFFFFFF + X",
+		"-(\"0xFF\" as number) + X",
+		"-\"X\"",
+		"int(\"0xFF\") + X",
+		"float(\"0b101\") * X",
+		"(25/12/2026 - 24/12/2026) * X",
+		"2026-12-24 + (2026-12-25 - 2026-12-24) * X",
+		"P.5D + X",
+		"P * .5 + X",
+	],
 };
 
 describe("every form stays honest over the numeric edges", () => {
@@ -398,6 +428,9 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	// A chained check and a check joined with `and` over the lines above.
 	{ form: "A = X\ncheck A - 1 < A < A + 1\ncheck A == A and A >= A" },
 	{ form: "A = X + 0.5\nB = A in hex\ncheck B == A and B in hex == B" },
+	// A number in a base inside a column the span aggregates read.
+	{ form: "X in hex\n0b101 as binary\ntotal above\naverage above\ntotal above in hex" },
+	{ form: "X in hex\n2\nsum(line 1 : line 2)" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {
@@ -441,6 +474,12 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"check 1 < X < 2",
 		"check X == 1 and 1 == X",
 		"check X == \"X\"",
+		"X == \"X\"",
+		"\"X\" < 1",
+		"\"X\" as number",
+		"-\"X\"",
+		"int(\"0xX\")",
+		"P.5X",
 		"hosts in X",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {

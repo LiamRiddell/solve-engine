@@ -239,6 +239,13 @@ into one, and the check can then compare it:
 
 ```solve
 check 255 == "255" // check: "255" on the right is text and 255 is a number, so they cannot be compared. To read the text as a number, write "255" as number
-check (255 in hex) == "0xFF" // check: "0xFF" on the right is text and 0xFF is a number, so they cannot be compared
+check (255 in hex) == "0xFF" // check: "0xFF" on the right is text and 0xFF is a number, so they cannot be compared. To read the text as a number, write "0xFF" as number
 check "255" as number == 255 // ✓
 ```
+
+A plain comparison, without `check`, reads the same pair the same way, as two
+kinds of thing: `==` answers false and `!=` true, as they do for a length
+beside a mass, and an order between text and a number is refused (see
+[conditionals](/syntax/conditionals/#comparing-text)). `check` refuses the `==`
+too, since a check that cannot hold is a fault in the note, not a failure of
+the figures.
