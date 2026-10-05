@@ -22,6 +22,7 @@
  *   node scripts/check-message-style.mjs                 check packages/engine/src
  *   node scripts/check-message-style.mjs --root=<dir>    check <dir>/packages/engine/src
  *   node scripts/check-message-style.mjs --count         report, do not fail
+ *   node scripts/check-message-style.mjs --pending=<file> read the pending list from a JSON file (for the lint's own tests)
  *
  * @module check-message-style
  */
@@ -146,9 +147,7 @@ export const RULES = [
  * cannot outlive the fixes it waits for: delete the entry once the message is
  * reworded.
  */
-export const PENDING = [
-	{ file: "packages/engine/src/packages/uom/parselets/CookingPluginFunctions.ts", includes: "is not a recognized", owner: "#736" },
-];
+export const PENDING = [];
 
 /** The names `ErrorFactory` exposes, one per error category. */
 const FACTORY_METHODS = new Set(["parsing", "validation", "execution", "external", "internal", "config"]);
@@ -274,11 +273,48 @@ export function findViolations(fileName, source) {
 	return found;
 }
 
+/**
+ * Checks a pending list before it is used: an array of entries whose `file`,
+ * `includes` and `owner` are strings, with `includes` not blank, since a
+ * blank `includes` is in every message and would exempt the whole file. A
+ * list that fails ends the run with one line naming where it came from.
+ */
+function checkPending(list, source) {
+	if (!Array.isArray(list)) {
+		console.error(`The pending list in ${source} must be an array of { file, includes, owner }.`);
+		process.exit(1);
+	}
+	list.forEach((p, i) => {
+		const ok = p !== null && typeof p === "object" && typeof p.file === "string" && typeof p.owner === "string" && typeof p.includes === "string" && p.includes.trim() !== "";
+		if (!ok) {
+			console.error(`Pending entry ${i} in ${source} needs a file, an owner and a part of the message to match (not blank).`);
+			process.exit(1);
+		}
+	});
+	return list;
+}
+
+/** Reads a pending list from a JSON file, ending the run with one line when it cannot. */
+function readPending(file) {
+	try {
+		return JSON.parse(fs.readFileSync(file, "utf8"));
+	} catch (e) {
+		console.error(`Cannot read the pending list ${file}: ${e.message}`);
+		process.exit(1);
+	}
+}
+
 function main() {
 	const args = process.argv.slice(2);
 	const countOnly = args.includes("--count");
 	const rootArg = args.find((a) => a.startsWith("--root="));
 	const root = rootArg ? path.resolve(rootArg.slice("--root=".length)) : REPO;
+	// A pending list read from a JSON file instead of the one above, so the
+	// mechanism stays tested while the real list is empty.
+	const pendingArg = args.find((a) => a.startsWith("--pending="));
+	const pendingPath = pendingArg ? path.resolve(pendingArg.slice("--pending=".length)) : null;
+	const pendingSource = pendingPath ?? "scripts/check-message-style.mjs";
+	const pendingList = checkPending(pendingPath ? readPending(pendingPath) : PENDING, pendingSource);
 	const srcDir = path.join(root, "packages/engine/src");
 	if (!fs.existsSync(srcDir)) {
 		console.error(`No engine source at ${srcDir}.`);
@@ -291,7 +327,7 @@ function main() {
 	for (const file of files) {
 		const relative = path.relative(root, file).split(path.sep).join("/");
 		for (const v of findViolations(relative, fs.readFileSync(file, "utf8"))) {
-			const pending = PENDING.findIndex((p) => p.file === relative && v.whole.includes(p.includes));
+			const pending = pendingList.findIndex((p) => p.file === relative && v.whole.includes(p.includes));
 			if (pending !== -1) {
 				used.add(pending);
 				continue;
@@ -307,9 +343,9 @@ function main() {
 
 	// An entry is stale when its file is there and no message in it matches. A
 	// file that is not there at all (a fixture tree) says nothing either way.
-	const stale = PENDING.filter((p, i) => !used.has(i) && fs.existsSync(path.join(root, p.file)));
+	const stale = pendingList.filter((p, i) => !used.has(i) && fs.existsSync(path.join(root, p.file)));
 	for (const p of stale) {
-		console.log(`PENDING entry for ${p.file} ("${p.includes}", ${p.owner}) matches no message any more. Delete it from scripts/check-message-style.mjs.`);
+		console.log(`PENDING entry for ${p.file} ("${p.includes}", ${p.owner}) matches no message any more. Delete it from ${pendingSource}.`);
 	}
 
 	if (countOnly) {
@@ -320,7 +356,7 @@ function main() {
 		console.error(`\n${violations.length} message-style violation(s), ${stale.length} stale pending entr${stale.length === 1 ? "y" : "ies"}.`);
 		process.exit(1);
 	}
-	const waiting = PENDING.length - stale.length;
+	const waiting = pendingList.length - stale.length;
 	console.log(`Messages follow the house voice across ${files.length} file(s)${waiting > 0 ? ` (${waiting} pending another change)` : ""}.`);
 }
 

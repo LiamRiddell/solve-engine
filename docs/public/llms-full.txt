@@ -1569,6 +1569,13 @@ https://liamriddell.github.io/solve-engine/syntax/converting-units/
 ```
 
 ```
+3600 seconds in hours // 1 hour
+2 hour // 2 hours
+90 minutes in hours // 1.50 hours
+0 hours // 0 hours
+```
+
+```
 km in 1 mile // 1.61 km
 m in 1 furlong // 201.17 m
 km in a furlong // 0.20 km
@@ -4670,6 +4677,10 @@ $50/week in /month // $214.29/month
 50 Hz in rpm // 3,000.00 rpm
 1 revolution in deg // 360.00 deg
 2 revolutions in rad // 12.57 rad
+```
+
+```
+3000 rpm * 2 min // 6,000
 ```
 
 ```

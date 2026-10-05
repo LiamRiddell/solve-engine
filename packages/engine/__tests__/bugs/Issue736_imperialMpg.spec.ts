@@ -83,7 +83,7 @@ describe("what it must not break", () => {
 	});
 
 	test("a word after mpg that is no spelling still reaches the cooking form, which refuses it", () => {
-		expect(show("35 mpg foo in l/100km")).toBe('"mpg" is not a recognized mass or volume unit');
+		expect(show("35 mpg foo in l/100km")).toBe('"mpg" is not a recognised mass or volume unit');
 	});
 
 	test("imperial, uk and UK stay names", () => {

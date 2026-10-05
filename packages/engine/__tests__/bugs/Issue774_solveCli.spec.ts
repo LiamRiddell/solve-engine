@@ -424,7 +424,8 @@ describe("#774 the parts: classifyInput", () => {
 
 	test("the real file system: a directory, /dev/null, and a file", () => {
 		expect(classifyInput([dir], false)).toMatchObject({ kind: "refused", message: expect.stringContaining("is a directory") });
-		expect(classifyInput(["/dev/null"], false)).toMatchObject({ kind: "refused", message: expect.stringContaining("not a regular file") });
+		// Windows has no device path a stat reads, as the read test below also allows.
+		if (process.platform !== "win32") expect(classifyInput(["/dev/null"], false)).toMatchObject({ kind: "refused", message: expect.stringContaining("not a regular file") });
 		const path = file("classify.md", "1 + 1\n");
 		expect(classifyInput([path], false)).toEqual({ kind: "file", path });
 	});
@@ -746,7 +747,8 @@ describe("#774 a document", () => {
 	});
 
 	test("a directory, a device, a missing document and an unreadable one are usage errors", async () => {
-		for (const argv of [[dir], ["/dev/null"], ["/dev/zero"], [join(dir, "missing.md")], [file("bin.md", new Uint8Array([0xc3, 0x28]))]]) {
+		const devices = process.platform === "win32" ? [] : [["/dev/null"], ["/dev/zero"]];
+		for (const argv of [[dir], ...devices, [join(dir, "missing.md")], [file("bin.md", new Uint8Array([0xc3, 0x28]))]]) {
 			const r = await solve(argv);
 			expect(r.code).toBe(EXIT.USAGE);
 			expect(r.out).toBe("");

@@ -36,6 +36,25 @@ the unit. A list converts every cell, since each cell is an amount (see
 (1, 2) in miles // [1.00 miles, 2.00 miles]
 ```
 
+A time written as a word agrees with its count, the way it is said: one hour,
+two hours. A count of exactly one takes the singular and every other count the
+plural, whichever spelling was typed, so converting 3,600 seconds into hours
+gives one hour rather than one hours. A symbol such as `h` or `min` has no
+plural and is written as it is.
+
+```solve
+3600 seconds in hours // 1 hour
+2 hour // 2 hours
+90 minutes in hours // 1.50 hours
+0 hours // 0 hours
+```
+
+The boundary: only the time words (`second` to `year`, the words a duration is
+already written in) change their spelling. Other unit words are written as the
+value carries them, so `1609.344 m in miles` is `1.00 miles`, and a count shown
+with places is plural even when it rounds to one, because the places say it is
+a measurement rather than a count.
+
 ## Asked the other way round
 
 "How many metres are in a kilometre?" is a conversion asked the other way

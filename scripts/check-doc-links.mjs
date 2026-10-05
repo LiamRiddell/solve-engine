@@ -85,7 +85,7 @@ function idsOf(slug) {
 const problems = [];
 let checked = 0;
 for (const [page, file] of [...pages].sort(([a], [b]) => a.localeCompare(b))) {
-	const where = path.relative(CONTENT, file);
+	const where = path.relative(CONTENT, file).split(path.sep).join("/");
 	for (const target of linkTargets(fs.readFileSync(file, "utf8"))) {
 		// External addresses and mail links are not this check's to follow.
 		if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith("//")) continue;

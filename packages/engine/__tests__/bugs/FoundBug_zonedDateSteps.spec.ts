@@ -21,8 +21,8 @@ import { formatValue } from "@solve-js/format/FormatEngine";
  * because the workday walk is being reshaped by #832 (weekend shapes) and the
  * zone belongs in it after that lands. Displaying a zoned date past the range a
  * calendar holds, the other half of this report, threw a raw `RangeError`;
- * #832 refuses such a date where it is made (`DATE_OUT_OF_RANGE`), and the
- * pin below turns green with it.
+ * #832 refuses such a date where it is made (`DATE_OUT_OF_RANGE`), which the
+ * test below asserts.
  */
 
 const ZONES = ["UTC", "Europe/London", "America/New_York", "Pacific/Kiritimati", "Asia/Kolkata"];
