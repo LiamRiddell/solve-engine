@@ -5481,6 +5481,17 @@ https://liamriddell.github.io/solve-engine/syntax/time-zones/
 ```
 
 ```
+(3pm London on 23 September 2026 in Tokyo) + 1 hour // 12:00 AM (+1 day)
+(3pm London on 23 September 2026 in Tokyo) - 30 minutes // 10:30 PM
+(3pm London on 23 September 2026 in Tokyo) in New York // 10:00 AM
+```
+
+```
+(3pm London on 23 September 2026 in Tokyo) == "11:00 PM" // true
+"call at " + (3pm London on 23 September 2026 in Tokyo) // call at 11:00 PM
+```
+
+```
 3pm London on 23 September 2026 in Tokyo, New York and Sydney // Tokyo 11:00 PM, New York 10:00 AM, Sydney 12:00 AM (+1 day)
 ```
 
@@ -5567,6 +5578,17 @@ time difference between London and New York on 1 March 2027 // London is 5 hours
 time difference between London and New York on 20 March 2027 // London is 4 hours ahead of New York on March 20, 2027
 time difference between London and Tokyo on 1 July 2027 // Tokyo is 8 hours ahead of London on July 1, 2027
 time difference between Tokyo and Adelaide on 1 March 2027 // Adelaide is 1 hour 30 minutes ahead of Tokyo on March 1, 2027
+```
+
+```
+time difference between Seattle and Moscow in hours // 10 hours
+time difference between Moscow and Seattle in hours // -10 hours
+time difference between London and New Delhi in minutes // 330 minutes
+```
+
+```
+time difference between Paris and Berlin // Berlin and Paris currently share the same UTC offset
+time difference between Paris and Berlin in hours // 0 hours
 ```
 
 ```
