@@ -242,7 +242,7 @@ describe("adversarial: edge cases", () => {
 
 	test("negative zero and the non-finite readings are named, not lost", () => {
 		expect(serializeValue(newTrackedEngine().evaluateExpression("-1/0"), settings).nonFinite).toBe("-Infinity");
-		expect(serializeValue(newTrackedEngine().evaluateExpression("0/0"), settings).nonFinite).toBe("NaN");
+		expect(serializeValue(newTrackedEngine().evaluateExpression("1/0 - 1/0"), settings).nonFinite).toBe("NaN");
 		// Negative zero crosses as zero, so JSON and structured cloning agree.
 		const zero = serializeValue(newTrackedEngine().evaluateExpression("-0"), settings);
 		expect(Object.is(zero.number, 0)).toBe(true);

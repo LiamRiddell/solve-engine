@@ -40,6 +40,13 @@ knot, because the unit table already reads `kt` as the kilotonne.
 1 knot in m/s // 0.51 m/s
 ```
 
+A knot is a rate, so a speed in knots times a time cancels the hours and
+leaves the distance covered, in nautical miles.
+
+```solve
+10 knots * 2 hours // 20.00 nmi
+```
+
 The target can be written the way the rate itself can, with `per` in place of
 the slash, and a price with its currency symbol. `in miles per hour` is the same
 target as `in miles/hour`, and `in $/day` the same as `in USD/day`, so a speed

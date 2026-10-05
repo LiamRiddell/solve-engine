@@ -70,9 +70,9 @@ describe("hexadecimal", () => {
 		// that are not hex digits, which reads back as nothing.
 		expect(shown("1 / 0 as hex")).toBe("Infinity");
 		expect(shown("-1 / 0 as hex")).toBe("-Infinity");
-		expect(shown("0 / 0 as hex")).toBe("NaN");
+		expect(shown("(1 / 0 - 1 / 0) as hex")).toBe("NaN");
 		expect(shown("1 / 0 as binary")).toBe("Infinity");
-		expect(shown("0 / 0 as octal")).toBe("NaN");
+		expect(shown("(1 / 0 - 1 / 0) as octal")).toBe("NaN");
 	});
 });
 

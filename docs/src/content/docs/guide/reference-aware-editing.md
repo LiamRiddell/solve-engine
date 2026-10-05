@@ -105,8 +105,11 @@ import { formatValue } from "solve-engine/format";
 const results = engine.parseDocument(text);
 const hover = service.getHover(text, { line: 2, character: 12 }, results);
 
-hover.definitionText;      // ":tax = 20%"
-formatValue(hover.value);  // "= 20.00%"
+// null where the position names no variable, and its value is null without results.
+if (hover !== null && hover.value !== null) {
+  hover.definitionText;      // ":tax = 20%"
+  formatValue(hover.value);  // "= 20.00%"
+}
 ```
 
 Without results the hover still carries the definition and its text, with a
@@ -122,7 +125,8 @@ const result = service.rename(text, { line: 1, character: 1 }, "vat");
 // { ok: true, edits: [{ line: 1, from: 1, to: 4, text: "vat" },
 //                     { line: 2, from: 12, to: 15, text: "vat" }] }
 
-applyTextEdits(text, result.edits);
+// A refusal (a keyword, a name already taken) is { ok: false, code, message }.
+if (result.ok) applyTextEdits(text, result.edits);
 // ":vat = 20%\n100 + 100 * vat\ntax is due in April"
 ```
 
@@ -179,7 +183,7 @@ const shift = service.shiftLineReferences(inserted, { kind: "insert", line: 1, c
 // { ok: true, edits: [{ line: 4, from: 5, to: 6, text: "2" },
 //                     { line: 4, from: 14, to: 15, text: "3" }], deleted: [] }
 
-applyTextEdits(inserted, shift.edits);
+if (shift.ok) applyTextEdits(inserted, shift.edits);
 // "# Groceries\n10\n20\nline 2 + line 3"
 ```
 

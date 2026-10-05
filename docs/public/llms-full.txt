@@ -130,7 +130,8 @@ combination(56, 23) // 3,167,295,784,216,200
 ```
 
 ```
-12345678901234567890 + 1 // 12,345,678,901,234,567,000
+9007199254740993 // 9,007,199,254,740,993
+12345678901234567890 + 1 // 12,345,678,901,234,567,891
 1e16 + 1 - 1e16 // 0
 10^16 + 1 - 10^16 // 1
 ```
@@ -2655,6 +2656,11 @@ what is 100 from 1990 // this is the US consumer price index, so it adjusts an a
 
 ```
 (one document)
+compound interest on 1000 over 3 years at -150% // ERROR: A rate of -150% cannot be used: it must be more than -100%, since at -100% or less the amount falls to nothing or below.
+```
+
+```
+(one document)
 payment = monthly payment on 200000 over 25 years at 4% // 1,055.67
 payment * 12 // 12,668.08
 ```
@@ -2740,6 +2746,13 @@ Rent $1200 // $1,200.00
 Flight to Paris $450 // $450.00
 Petrol 40 l // 40.00 l
 Fees 45 EUR // €45.00
+```
+
+```
+(one document)
+x = 2 // 2
+x:3 // 3
+x + 1 // 3
 ```
 
 ```
@@ -2999,7 +3012,7 @@ $0.0049999999999999999999999999999999 // $0.00
 ```
 
 ```
-$1234567890123456789012345678901234 * 10 // $1.2345678901234567e+34
+$1234567890123456789012345678901234 * 10 // $1.234567890123457e+34
 ```
 
 ```
@@ -3466,6 +3479,13 @@ subtract 3 // -3
 
 ```
 (one document)
+5/0 // ∞
+-5/0 // -∞
+0/0 // ERROR: 0 divided by 0 has no single answer: every number times 0 is 0, so no one quotient is right.
+```
+
+```
+(one document)
 (-8)^(1/3) // -2
 (-32)^0.2 // -2
 (-8)^(2/3) // 4
@@ -3627,6 +3647,13 @@ $50,000 after 20% tax // $40,000.00
 ```
 hourly for 45000 // 23.44
 hourly for $45,000 // $23.44
+```
+
+```
+(one document)
+salary = £50,000 // £50,000.00
+salary after tax // £39,519.60
+salary per month after tax // £3,293.30
 ```
 
 ## percentages
@@ -3925,6 +3952,10 @@ https://liamriddell.github.io/solve-engine/syntax/rates-and-speeds/
 20 knots in km/h // 37.04 km/h
 20 kn in mph // 23.02 mph
 1 knot in m/s // 0.51 m/s
+```
+
+```
+10 knots * 2 hours // 20.00 nmi
 ```
 
 ```
@@ -4496,7 +4527,12 @@ split $100 between 3 // $33.33 each, with 1 share paying $33.34
 ```
 ¥100 split 3 ways // ¥33 each, with 1 share paying ¥34
 split ¥1000 between 3 // ¥333 each, with 1 share paying ¥334
-split (10 KWD) between 3 // 3.333 KWD each, with 1 share paying 3.334 KWD
+split 10 KWD between 3 // 3.333 KWD each, with 1 share paying 3.334 KWD
+```
+
+```
+split 1/2 KWD between 3 // 0.166 KWD each, with 2 shares paying 0.167 KWD
+split 3/8 KWD between 2 // 0.187 KWD each, with 1 share paying 0.188 KWD
 ```
 
 ## splitting-fractions
@@ -5197,6 +5233,20 @@ time difference between Tokyo and Adelaide on 1 March 2027 // Adelaide is 1 hour
 ```
 time difference between Kathmandu and Kolkata // Kathmandu is 15 minutes ahead of Kolkata
 3pm London on 1 March 2027 in Hobart // 2:00 AM (+1 day)
+```
+
+```
+(one document)
+meeting = 2026-09-23T15:00 // Wednesday, September 23, 2026, 3:00:00 PM
+meeting London in Tokyo // 11:00 PM
+meeting London in rio de janeiro and New York // Rio de Janeiro 11:00 AM, New York 10:00 AM
+(meeting + 1 hour) London in Tokyo // 12:00 AM (+1 day)
+```
+
+```
+(one document)
+t = 5 // 5
+t London in Tokyo // ERROR: A zone after a name converts the time of day it holds, as in "t London in Tokyo" with t = 3pm, and this holds a number.
 ```
 
 ## timesheets

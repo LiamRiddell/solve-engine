@@ -9,8 +9,8 @@ import { formatValue } from "@solve-js/format/FormatEngine";
  * exponent as a fraction when it was written as one (`1/3`) or typed as a
  * decimal (`0.2` is 1/5), so it can tell: an odd denominator gives the real
  * root, anything else is refused by name, as `log(-1)` is (#510). `sqrt(-1)`
- * still answers `i`; `^` stays in the real numbers. `0/0` stays NaN, the
- * floating-point standard's defined answer, as `1/0` stays infinity.
+ * still answers `i`; `^` stays in the real numbers. `1/0` stays infinity, and
+ * `0/0`, once NaN, is refused by name as the quotient with no single answer.
  */
 
 const evaluate = (source: string) => newTrackedEngine().evaluateExpression(source);
@@ -46,10 +46,11 @@ describe("an even root of a negative number is refused by name", () => {
 });
 
 describe("what does not change", () => {
-	test("a whole power of a negative number, the complex square root, and 0/0", () => {
+	test("a whole power of a negative number, the complex square root, and 0/0 refused", () => {
 		expect(shown("(-8)^2")).toBe("= 64");
 		expect(shown("(-2)^3")).toBe("= -8");
 		expect(shown("sqrt(-1)")).toBe("i");
-		expect(evaluate("0/0").toNumber()).toBeNaN();
+		// 0/0 answered NaN until FoundBug_zeroOverZero; it is refused by name now.
+		expect(evaluate("0/0").errorCode).toBe("QUOTIENT_UNDEFINED");
 	});
 });

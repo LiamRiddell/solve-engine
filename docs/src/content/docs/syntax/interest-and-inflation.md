@@ -29,6 +29,14 @@ interest together, which is the figure a savings statement shows.
 compound interest on 1000 over 3 years at 5% // 1,157.63
 ```
 
+A rate of -100% or less has no answer: the sum would fall to nothing, or below
+it, so every one of these forms refuses it, and says so with the rate as you
+wrote it.
+
+```solve-doc
+compound interest on 1000 over 3 years at -150% // ERROR: A rate of -150% cannot be used: it must be more than -100%, since at -100% or less the amount falls to nothing or below.
+```
+
 ## Repayments and interest by the period
 
 A loan is repaid in equal instalments that cover the interest and a share of the

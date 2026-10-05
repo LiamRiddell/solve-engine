@@ -684,6 +684,7 @@ Measured against **kilometre per litre**.
 | --- | --- | --- |
 | kilometre per litre | `kmpl` | 1 |
 | mile per US gallon | `mpg` | 0.425144 |
+| mile per imperial gallon | `mpg imperial`, `imperial mpg`, `mpg uk`, `mpg UK`, `UK mpg` | 0.354006 |
 
 ## Fuel consumption
 
@@ -715,7 +716,7 @@ Measured against **mol**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1578 spellings in total, and 49 of
+The conversion tables carry 1583 spellings in total, and 49 of
 them are missing above. Most carry a character an expression cannot type as
 part of a unit, such as the dot in `W⋅h` or the full stops in `fl. oz.`, and a few
 are ordinary words the lexer leaves to English, such as `turn` and `point`.

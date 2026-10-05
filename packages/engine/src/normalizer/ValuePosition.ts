@@ -2,12 +2,16 @@ import type { Token } from "@solve-js/lexer/Token";
 
 /**
  * The token types after which an expression expects a value to begin: an
- * operator, an opening bracket, a separator or an assignment.
+ * operator, an opening bracket, a separator or an assignment, and the word of
+ * a form that is followed by its amount (`split <amount> between <N>`, the
+ * `SPLIT` token the bill-split rule retypes the word to), so `split 1/2 KWD
+ * between 3` splits half a dinar as `1/2 KWD` on its own line is one.
  */
 const VALUE_STARTS_AFTER: ReadonlySet<string> = new Set([
 	"PLUS", "MINUS", "STAR", "SLASH", "CARET", "PERCENT", "MOD", "PLUS_MINUS",
 	"LPAREN", "LBRACKET", "LBRACE", "COMMA", "EQUALS", "PLUS_EQUALS", "MINUS_EQUALS", "STAR_EQUALS", "SLASH_EQUALS",
 	"COLON", "SEMICOLON", "AND_CONJ", "OF", "BIT_AND", "BIT_OR", "BIT_NOT", "LSHIFT", "RSHIFT", "URSHIFT",
+	"SPLIT",
 ]);
 
 /**

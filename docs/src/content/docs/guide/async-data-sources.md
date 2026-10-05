@@ -285,6 +285,8 @@ once and queues the rest, in the order they were asked for. `maxConcurrent` sets
 the number:
 
 ```ts
+import { createQueryResolver } from "solve-engine/resolvers";
+
 const { resolver, pluginFunction } = createQueryResolver({
   namespace: "tides",
   packageName: "my-tides",
@@ -331,9 +333,9 @@ return {
   queryKey,
   packageId,
   signal,
-  resolver: this.fetchRate(pair, signal),
+  resolver: this.fetchRate(queryKey, pair, signal),
   refetchIntervalMs: 60_000,                    // refresh an on-screen rate once a minute
-  refetch: () => this.fetchRate(pair, this.refreshSignal),
+  refetch: () => this.fetchRate(queryKey, pair, this.refreshSignal),
 };
 ```
 
@@ -357,7 +359,7 @@ engine carries it through every line computed from that value; you do nothing
 further.
 
 ```ts
-private async fetchRate(pair, signal): Promise<Value> {
+private async fetchRate(queryKey: string, pair: Pair, signal: AbortSignal): Promise<Value> {
   const res = await fetch(`https://example.com/rate/${pair.from}/${pair.to}`, { signal });
   const rate = await res.json();
   const value = uomValue(rate.value, pair.to);
@@ -367,6 +369,7 @@ private async fetchRate(pair, signal): Promise<Value> {
     fetchedAt: Date.now(),       // when it arrived, in epoch milliseconds
     subject: `${pair.from}/${pair.to}`,
   }];
+  this.cache.set(queryKey, value);
   return value;
 }
 ```

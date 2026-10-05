@@ -181,7 +181,7 @@ decillion, has no 34-digit form to keep, and is held as a floating-point
 number, shown in scientific notation.
 
 ```solve
-$1234567890123456789012345678901234 * 10 // $1.2345678901234567e+34
+$1234567890123456789012345678901234 * 10 // $1.234567890123457e+34
 ```
 
 A plain number past the ceiling falls back to floating point instead (see

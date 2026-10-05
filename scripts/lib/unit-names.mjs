@@ -62,6 +62,7 @@ export const DISPLAY_NAMES = new Map([
 	["cfs", "cubic foot per second"],
 	["kmpl", "kilometre per litre"],
 	["mpg", "mile per US gallon"],
+	["mpg imperial", "mile per imperial gallon"],
 	["l100km", "litre per 100 kilometres"],
 	["ppm", "part per million"],
 	["ppb", "part per billion"],

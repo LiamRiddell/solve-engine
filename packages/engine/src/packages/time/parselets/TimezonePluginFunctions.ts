@@ -4,6 +4,7 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
 import { utcMs } from "@solve-js/calendar/Gregorian";
+import { valueKindName } from "@solve-js/vm/VMConversion";
 import {
   formatTimeInZone, formatDateInZone, resolveOffsetMinutes,
   wallClockInstants, describeMinutes, dayShiftSuffix, zoneLabel,
@@ -29,6 +30,11 @@ export const ZONE_CONVERT_FN = "zoneConvert";
  * date: `3pm London on 23 September 2026 in Tokyo, New York and Sydney`.
  */
 export const ZONE_CONVERT_AT_FN = "zoneConvertAt";
+/**
+ * Plugin name for a time held in a variable, converted from the zone named
+ * after it: `t London in Tokyo` with `t = 3pm`.
+ */
+export const ZONE_CONVERT_NAMED_FN = "zoneConvertNamed";
 /** Plugin name for `time in <zone>`, the current wall clock there. */
 export const TIME_IN_ZONE_FN = "timeInZone";
 /** Plugin name for `date in <zone>`, which can differ from the local date. */
@@ -50,6 +56,8 @@ export const TimezoneErrorCodes = {
   TIME_ZONE_REPEATED_TIME: "TIME_ZONE_REPEATED_TIME",
   /** `3pm London on 5 in Tokyo`, or `3pm on 5`: the `on` clause was given something that is not a date. */
   TIME_ZONE_EXPECTED_DATE: "TIME_ZONE_EXPECTED_DATE",
+  /** `t London in Tokyo` where `t` holds something that is not a time (`t = 5`): a zone after a name converts the time of day it holds. */
+  TIME_ZONE_EXPECTED_TIME: "TIME_ZONE_EXPECTED_TIME",
   /** `overlap of 9am to 5pm in London`: one place has nothing to overlap with. */
   OVERLAP_NEEDS_TWO_ZONES: "OVERLAP_NEEDS_TWO_ZONES",
   /** `overlap of 9am to 9am in London and Paris`: hours that start where they end have no length. */
@@ -173,6 +181,48 @@ export function zoneConvertAtHandler(args: Value[], context?: LineExecutionConte
   const targets = namedZonesFrom(args, 4);
 
   const at = instantOfReading(day.year, day.month0, day.day, totalMinutes, source, calendar);
+  if (typeof at !== "number") return at;
+
+  const readings = targets.map((target) =>
+    formatTimeInZone(at, target.zoneRef, calendar) + dayShiftSuffix(at, target.zoneRef, source.zoneRef, calendar));
+  if (targets.length === 1) return stringValue(readings[0]);
+  return stringValue(targets.map((target, i) => `${target.label} ${readings[i]}`).join(", "));
+}
+
+/**
+ * `<time> <sourceZone> in <zone>, <zone> ...` for a time the reader holds in a
+ * variable (`t London in Tokyo`, `t = 3pm`): the time's wall clock and day,
+ * read as the source zone's, in each target zone.
+ *
+ * Arguments: `[time, sourceZoneRef, sourceLabel, ...(zoneRef, label) per
+ * target]`. The wall clock is read in the engine's own zone, which is the
+ * zone `3pm` and every other time of day is written in, so `t London` with
+ * `t = 3pm` names the same moment as `3pm London`, and it answers as
+ * {@link zoneConvertAtHandler} does, down to the day shift and the refusal of
+ * a skipped or repeated reading. Seconds are not carried: a zone conversion
+ * answers to the minute.
+ *
+ * A time that failed or is still loading is passed through as it came;
+ * anything else that is not a time is refused by name.
+ */
+export function zoneConvertNamedHandler(args: Value[], context?: LineExecutionContext): Value {
+  const time = args[0];
+  if (time === undefined) return errorValue(TimezoneErrorCodes.TIME_ZONE_EXPECTED_TIME, "A zone after a name converts the time of day it holds, and there was no time before the zone.");
+  if (time.type === ValueType.Error || time.type === ValueType.Pending) return time;
+  if (time.type !== ValueType.Datetime) {
+    return errorValue(
+      TimezoneErrorCodes.TIME_ZONE_EXPECTED_TIME,
+      `A zone after a name converts the time of day it holds, as in "t London in Tokyo" with t = 3pm, and this holds ${valueKindName(time)}.`,
+    );
+  }
+  const calendar = calendarOf(context);
+  const f = calendar.fields(time.toNumber());
+  if (!Number.isFinite(f.year)) {
+    return errorValue(TimezoneErrorCodes.TIME_ZONE_EXPECTED_TIME, "A zone after a name converts the time of day it holds, and this time is outside the calendar's range.");
+  }
+  const source: NamedZone = { zoneRef: args[1].value as string, label: args[2].value as string };
+  const targets = namedZonesFrom(args, 3);
+  const at = instantOfReading(f.year, f.month0, f.day, f.hour * 60 + f.minute, source, calendar);
   if (typeof at !== "number") return at;
 
   const readings = targets.map((target) =>
