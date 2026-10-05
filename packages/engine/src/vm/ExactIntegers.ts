@@ -30,7 +30,7 @@
  *   bits, so an exact power here never needs more than a dozen squarings.
  */
 
-import { Value, ValueType, numberValue, numberValueRational } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueRational, type IpCidrData } from "@solve-js/vm/Value";
 import { rational, rationalNeg } from "@solve-js/symbolic";
 
 /**
@@ -178,7 +178,15 @@ export function exactGcdOrLcm(a: Value, b: Value, which: "gcd" | "lcm"): Value |
  * gave 0x20000000000000.
  */
 export function baseConversionOperand(v: Value): number | bigint {
-    if (v.type === ValueType.BigInt) return v.value as bigint;
+    // A value already written in a base keeps the bigint it holds past the
+    // safe range: through toNumber(), `(2^100 + 1) in binary as hex` rounded
+    // to the nearest double and lost its final 1.
+    if (typeof v.value === "bigint" && (v.type === ValueType.BigInt || v.type === ValueType.Hex)) return v.value;
+    // An IPv6 address converts from its 128 bits, which no double holds.
+    if (v.type === ValueType.IpCidr) {
+        const addr6 = (v.value as IpCidrData).addr6;
+        if (addr6 !== undefined) return addr6;
+    }
     const r = v.rational;
     if (r !== undefined && r.d === 1n && !Number.isSafeInteger(v.value as number)) return r.n;
     return v.toNumber();

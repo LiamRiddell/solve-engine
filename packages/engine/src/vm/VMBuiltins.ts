@@ -2,11 +2,11 @@ import { Value, ValueType, numberValue, boolValue, hexValue, uomValue, errorValu
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, describeQuantity, valueKindName } from "@solve-js/vm/VMConversion";
+import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, describeQuantity, valueKindName, isIpv6Value, ipv6Refused, colourRefused } from "@solve-js/vm/VMConversion";
 import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact, valueInUnit, moneyForCount } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixPower, symbolicToEntry, rowMajorToColumnMajor, dotProduct } from "@solve-js/vm/MatrixOps";
-import { floatOf } from "@solve-js/vm/PlainNumberForms";
+import { floatOf, intOfText } from "@solve-js/vm/PlainNumberForms";
 import { labelQuantity } from "@solve-js/vm/UnitLabels";
 import type { AsConverter, AsConverterMatch } from "@solve-js/vm/AsConverterRegistry";
 export type { AsConverter, AsConverterMatch } from "@solve-js/vm/AsConverterRegistry";
@@ -746,13 +746,123 @@ export function datetimeArgumentRefused(fnIdx: number, args: readonly Value[]): 
 }
 
 /**
+ * The builtins that read an IPv6 address as it is: `hex` and `bin`, which
+ * write out its 128 bits exactly, and those in {@link TAKES_DATETIME}, which
+ * word their own refusal for a value with no numeric reading.
+ */
+const TAKES_IPV6: ReadonlySet<number> = new Set([...TAKES_DATETIME, 48, 49]);
+
+/**
+ * The refusal for a builtin given an IPv6 address, or null (issue #748).
+ *
+ * An IPv6 address has 128 bits, more than a double holds exactly, so its
+ * `toNumber()` reports NaN, and every numeric builtin reads its arguments
+ * through that: `round(fe80::1)` would have answered NaN. The builtin refuses
+ * by name instead and points at `as int`, the address's exact whole number.
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments.
+ * @returns The refusal, or null when no argument is an IPv6 address or the
+ * builtin reads one.
+ */
+export function ipv6ArgumentRefused(fnIdx: number, args: readonly Value[]): Value | null {
+    if (TAKES_IPV6.has(fnIdx)) return null;
+    for (const arg of args) {
+        if (!isIpv6Value(arg)) continue;
+        const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+        return ipv6Refused(name === "" ? "used in this calculation" : `given to ${name}`);
+    }
+    return null;
+}
+
+/**
+ * The builtins that read a text argument as text: the algebra verbs, which
+ * are handed the name of an unknown (`solve`, `der`, `integral`, `taylor`);
+ * the phrase forms handed a unit's name (`in minutes and seconds`, a rate's
+ * denominator, a savings goal's period, a count's label); `float` and `int`,
+ * which read text that is a number and word their own refusal; and those in
+ * {@link TAKES_DATETIME}, which word their own refusal for a value with no
+ * numeric reading.
+ */
+const TAKES_TEXT: ReadonlySet<number> = new Set([...TAKES_DATETIME, 50, 69, 70, 71, 72, 94, 95, 100, 115]);
+
+/**
+ * The builtins that read a colour as it is: none of the numeric ones do (the
+ * colour functions are the colour package's own), so only those in
+ * {@link TAKES_DATETIME}, which word their own refusal.
+ */
+const TAKES_COLOUR: ReadonlySet<number> = TAKES_DATETIME;
+
+/**
+ * The refusal for a numeric builtin given text, or null.
+ *
+ * Every numeric builtin reads its arguments through `toNumber()`, which reads
+ * text through `parseFloat`: `sqrt("abc")` answered 0, `round("3.5")` answered
+ * 4 and `gcd("a", 4)` answered 4, the text's leading digits or 0 passed off as
+ * its value. Arithmetic already refuses text (`TEXT_ARITHMETIC`), and a builtin
+ * now does the same, pointing at `as number` for text that holds a number.
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments.
+ */
+export function textArgumentRefused(fnIdx: number, args: readonly Value[]): Value | null {
+    if (TAKES_TEXT.has(fnIdx)) return null;
+    for (const arg of args) {
+        if (arg.type !== ValueType.String) continue;
+        const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+        return errorValue(
+            "TEXT_ARITHMETIC",
+            `${name === "" ? "This calculation" : name} takes a number, not text. To use a number held as text, convert it first with "as number".`,
+        );
+    }
+    return null;
+}
+
+/**
+ * The refusal for a builtin given a colour, or null: a colour has three
+ * channels and no one number, and its `toNumber()` of 0 made `sqrt(#ff0000)`
+ * answer 0 (see colourRefused()).
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments.
+ */
+export function colourArgumentRefused(fnIdx: number, args: readonly Value[]): Value | null {
+    if (TAKES_COLOUR.has(fnIdx)) return null;
+    for (const arg of args) {
+        if (arg.type !== ValueType.Colour) continue;
+        const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+        return colourRefused(name === "" ? "used in this calculation" : `given to ${name}`);
+    }
+    return null;
+}
+
+/**
+ * The one refusal a builtin's arguments can carry before it runs, or null:
+ * a date or time, an IPv6 address, a colour or text where the builtin reads a
+ * number. The single check the VM makes at `CALL_BUILTIN`, so each numeric
+ * builtin is spared a type test of its own and the dispatch loop a check per
+ * kind.
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments, in any order (the first offending one is named).
+ */
+export function builtinArgumentRefused(fnIdx: number, args: readonly Value[]): Value | null {
+    return datetimeArgumentRefused(fnIdx, args)
+        ?? ipv6ArgumentRefused(fnIdx, args)
+        ?? colourArgumentRefused(fnIdx, args)
+        ?? textArgumentRefused(fnIdx, args);
+}
+
+/**
  * Whether a reader calls this builtin by its name (`round(...)`, `sqrt(...)`),
  * so a message may use it. The rest are reached through a phrase (`to 2 dp`,
  * `3d6`), and their names (`roundToPlaces`) are the engine's, not the reader's.
- * The ranges follow FunctionCallParselet's name map and the symbolic verbs.
+ * The ranges follow FunctionCallParselet's name map and the symbolic verbs;
+ * `ln`, the two-argument `log` and `float` (113 to 115) are called by name too,
+ * and a refusal given `ln("abc")` said "This calculation" before they were.
  */
-function calledByName(fnIdx: number): boolean {
-    return (fnIdx <= 79 && fnIdx !== 37) || (fnIdx >= 87 && fnIdx <= 92) || (fnIdx >= 109 && fnIdx <= 112);
+export function calledByName(fnIdx: number): boolean {
+    return (fnIdx >= 0 && fnIdx <= 79 && fnIdx !== 37) || (fnIdx >= 87 && fnIdx <= 92) || (fnIdx >= 109 && fnIdx <= 115);
 }
 
 /**
@@ -1125,7 +1235,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // from the Converters package's `x as number` (TO_NUMBER opcode),
     // which only strips a unit/percentage wrapper and keeps any decimal
     // part (e.g. "5.7 as number" -> 5.7), int() additionally truncates.
-    50: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
+    // Text is read only when it spells a number whole; see intOfText().
+    50: (args) => args[0].type === ValueType.String ? intOfText(args[0].value as string) : wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
 
     // ── Finance (packages/finance/) ──────────────────────────────────────
     // All finance builtins preserve the principal/amount argument's Uom

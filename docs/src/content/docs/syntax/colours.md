@@ -188,3 +188,25 @@ written, so `#ff0000` and `rgb(255, 0, 0)` are the same colour:
 ```solve
 #ff0000 == rgb(255, 0, 0) // true
 ```
+
+## A colour is not a number
+
+A colour is three channels (how much red, green and blue it has) plus its
+opacity, so it has no single number to add, round or put in order. Arithmetic on
+a colour, a numeric function given one, an order such as `<`, and a conversion to
+a form of a number (`as %`, `as number`, `in binary`) are refused by name rather
+than answered as though the colour were zero. The colour functions above are the
+way to change a colour, and a channel read out as a number takes arithmetic like
+any other number:
+
+```solve
+#ff0000 + 2 // A colour cannot be added: it is three channels (red, green and blue), not one number. To use one channel as a number, read it out first, as in red(#3366cc).
+sqrt(#ff0000) // A colour cannot be given to sqrt: it is three channels (red, green and blue), not one number. To use one channel as a number, read it out first, as in red(#3366cc).
+#ff0000 < 3 // A colour cannot be put in order: it is three channels (red, green and blue), not one number. To use one channel as a number, read it out first, as in red(#3366cc).
+red(#3366cc) + 1 // 52
+lighten(#3366cc, 20%) // #85a3e0
+```
+
+Equality is the one comparison a colour has: `==` and `!=` compare the
+channels, as above, and a colour is never equal to a number, so
+`#000000 == 0` is false.

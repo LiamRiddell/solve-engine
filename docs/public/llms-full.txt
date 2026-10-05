@@ -917,6 +917,7 @@ sha256("hello") // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9
 
 ```
 hosts in 192.168.1.0/24 // 254
+network of 2001:db8:85a3::8a2e:370:7334/64 // 2001:db8:85a3::
 ```
 
 ```
@@ -1228,6 +1229,14 @@ wcagLevel(#ffffff, #cccccc) // Fail
 
 ```
 #ff0000 == rgb(255, 0, 0) // true
+```
+
+```
+#ff0000 + 2 // A colour cannot be added: it is three channels (red, green and blue), not one number. To use one channel as a number, read it out first, as in red(#3366cc).
+sqrt(#ff0000) // A colour cannot be given to sqrt: it is three channels (red, green and blue), not one number. To use one channel as a number, read it out first, as in red(#3366cc).
+#ff0000 < 3 // A colour cannot be put in order: it is three channels (red, green and blue), not one number. To use one channel as a number, read it out first, as in red(#3366cc).
+red(#3366cc) + 1 // 52
+lighten(#3366cc, 20%) // #85a3e0
 ```
 
 ## complex
@@ -3015,20 +3024,66 @@ https://liamriddell.github.io/solve-engine/syntax/networking/
 hosts in 192.168.1.0/24 // 254
 netmask of /24 // 255.255.255.0
 broadcast of 192.168.1.0/24 // 192.168.1.255
+network of 192.168.1.10/24 // 192.168.1.0
+last address of 192.168.1.10/24 // 192.168.1.255
 192.168.1.10 in 10.0.0.0/8 // false
 10.0.0.0/8 as int // 167,772,160
 ```
 
 ```
-fe80::1 // "fe80::1" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
-2001:db8::/32 // "2001:db8::/32" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
-::ffff:192.168.1.1 // "::ffff:192.168.1.1" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
-fe80::1 + 2 // "fe80::1" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
+192.168.1.0/24 == 192.168.1.0/25 // false
+192.168.1.0/24 == 192.168.1.0/24 // true
+192.168.1.0/24 != 192.168.1.0/25 // true
+192.168.1.1 == 192.168.1.1/32 // false
+192.168.1.1 == 3232235777 // false
+192.168.1.1 as int == 3232235777 // true
+```
+
+```
+2001:0DB8:0000:0000:0000:ff00:0042:8329 // 2001:db8::ff00:42:8329
+fe80:0:0:0:0:0:0:1 // fe80::1
+2001:db8:0:0:1:0:0:1 // 2001:db8::1:0:0:1
+fe80::1 == fe80:0:0:0:0:0:0:1 // true
+```
+
+```
+hosts in 2001:db8::/64 // 18446744073709551616
+netmask of /64 // ffff:ffff:ffff:ffff::
+netmask of 2001:db8::/32 // ffff:ffff::
+network of 2001:db8:85a3::8a2e:370:7334/64 // 2001:db8:85a3::
+last address of 2001:db8::/32 // 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff
+2001:db8::5 in 2001:db8::/32 // true
+2001:db9::1 in 2001:db8::/32 // false
+```
+
+```
+broadcast of 2001:db8::/32 // An IPv6 block has no broadcast address: IPv6 reaches a group of machines another way (multicast). For the block's last address, write "last address of".
+```
+
+```
+::ffff:192.168.1.1 // ::ffff:192.168.1.1
+::ffff:c0a8:101 // ::ffff:192.168.1.1
+64:ff9b::192.0.2.33 // 64:ff9b::c000:221
+fe80::1%eth0 // fe80::1%eth0
+fe80::1%eth0 in fe80::/10 // true
+::/0 // ::/0
+```
+
+```
+fe80::1 as int // 338288524927261089654018896841347694593
+fe80::1 in hex // 0xFE800000000000000000000000000001
+::1 as int // 1
+```
+
+```
+fe80::1 + 2 // An IPv6 address cannot be added: its 128 bits are more than a number holds exactly. For the address as one whole number, write "as int".
+fe80::1 as int + 2 // 338288524927261089654018896841347694595
 ```
 
 ```
 Note: 5 // 5
 note::5 // 5
+cafe::1 // cafe::1
 ```
 
 ## nth-weekday
@@ -3098,6 +3153,12 @@ hex(-255) // -0xFF
 255.7 as hex // 0xFF
 ```
 
+```
+(2^100 + 1) in binary as hex // 0x10000000000000000000000001
+(2^100 + 1) in hex in octal // 0o2000000000000000000000000000000001
+(2^100 + 1) in hex as number // 1,267,650,600,228,229,401,496,703,205,377
+```
+
 ## number-functions
 
 https://liamriddell.github.io/solve-engine/syntax/number-functions/
@@ -3121,6 +3182,13 @@ lcm of 4 and 6 // 12
 ```
 max(1 km, 500 m) // 1.00 km
 max(25/12/2026, 1/1/2027) // Friday, January 1, 2027
+```
+
+```
+sqrt("abc") // sqrt takes a number, not text. To use a number held as text, convert it first with "as number".
+round("3.5") // round takes a number, not text. To use a number held as text, convert it first with "as number".
+sqrt("16" as number) // 4
+int("42.9") // 42
 ```
 
 ```

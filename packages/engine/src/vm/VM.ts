@@ -1,5 +1,5 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, dateOutOfRange, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, dateOutOfRange, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData, type DisplayBase } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-js/symbolic";
@@ -7,7 +7,7 @@ import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } f
 import { resolveStoredFormulaIn } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
 import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues } from "@solve-js/vm/MatrixOps";
-import { listFromCells, listCellValue, needsUnitCells, unitListArithmetic, listConverted, unitListCompare } from "@solve-js/vm/MatrixUnits";
+import { listFromCells, listCellValue, needsUnitCells, unitListArithmetic, listConverted } from "@solve-js/vm/MatrixUnits";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -15,7 +15,8 @@ import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js
 import { CoreErrorCodes, DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions, datetimeArgumentRefused } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, builtinArgumentRefused } from "@solve-js/vm/VMBuiltins";
+import { valuesEqual, valuesOrdered } from "@solve-js/vm/Comparisons";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { QueryClient } from "@tanstack/query-core";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
@@ -25,7 +26,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { safeText } from "@solve-js/parser/ParseMessages";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, valueKindName } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -36,7 +37,7 @@ import type { ScopeId } from "@solve-js/vm/CellScope";
 import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } from "@solve-js/vm/QuantityPowers";
 import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf, rateThroughQuantity, unitQuotientUnsupported } from "@solve-js/vm/UnitAlgebra";
 import { rateForm } from "@solve-js/uom/RateForms";
-import { bigIntPow, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
+import { bigIntPow, baseConversionOperand, exactIntegerValue } from "@solve-js/vm/ExactIntegers";
 import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
@@ -1027,7 +1028,8 @@ function builtinAt(ref: number): ((args: Value[], context?: LineExecutionContext
 function rateOver(args: Value[], rateIndex: number, context: LineExecutionContext | undefined): Value {
     const fault = faultedIn(args);
     if (fault) return fault;
-    const refused = datetimeArgumentRefused(rateIndex, args);
+    // The unit is text by construction, so only the value is checked.
+    const refused = builtinArgumentRefused(rateIndex, args.slice(0, 1));
     if (refused) return refused;
     if (args[0].type === ValueType.Symbolic && !SYMBOLIC_NATIVE_BUILTINS.has(rateIndex)) return symbolicBuiltin(rateIndex, args);
     const fn = builtinAt(rateIndex);
@@ -2002,6 +2004,48 @@ function remainder(l: Value, r: Value): Value {
             ? `${a} mod 0 has no value: nothing is left over from a division by zero, because it never ends.`
             : `${a} mod ${b} has no value: an infinite number has no remainder.`,
     );
+}
+
+/**
+ * A value as a plain number, for `as number`: an IPv6 address is its exact
+ * 128-bit whole number, a value written in a base past the safe range keeps
+ * every digit (`(2^100 + 1) in hex as number` rounded to the nearest double
+ * through toNumber()), and a colour, three channels with no one number, is
+ * refused by name (see colourRefused()). Text is read before this, by
+ * numberFromText().
+ *
+ * @param v - The value, already checked for a fault.
+ */
+function numberOf(v: Value): Value {
+    if (isIpv6Value(v)) return ipv6WholeNumber(v);
+    if (v.type === ValueType.Colour) return colourRefused("read as one number");
+    if (v.type === ValueType.Hex && typeof v.value === "bigint") return exactIntegerValue(v.value);
+    return numberValue(v.toNumber());
+}
+
+/**
+ * A value written in base 16, 2 or 8, for `as hex`, `in binary` and `in octal`.
+ *
+ * A colour already has a hex reading, so `#3366cc as rgb as hex` round-trips
+ * with its channels intact rather than collapsing through toNumber() (0 for a
+ * colour); in binary or octal it has none, and `#ff0000 in binary` answered
+ * `0b0`, so those are refused by name (see colourRefused()). A bigint keeps its
+ * bigint, exactly as ADD/SUB/MUL/DIV do: `12345678901234567890n as hex`
+ * rendered 0xAB54A98CEB1F0800 while the value ends 0AD2, because toNumber()
+ * rounded it first. An exact integer past the safe range, an IPv6 address and
+ * a value already written in another base convert from their own digits
+ * likewise (see baseConversionOperand()).
+ *
+ * @param v - The value, already checked for a fault.
+ * @param base - The base to write it in.
+ */
+function inBase(v: Value, base: DisplayBase): Value {
+    if (v.type === ValueType.Colour) {
+        if (base !== "hex") return colourRefused(base === "bin" ? "written in binary" : "written in octal");
+        const c = v.value as ColourData;
+        return colourValue({ r: c.r, g: c.g, b: c.b, a: c.a, format: "hex" });
+    }
+    return hexValue(baseConversionOperand(v), base);
 }
 
 /**
@@ -3985,6 +4029,9 @@ export function executeBytecode(
           }
           // A moment has no power; see datetimeArithmeticRefused().
           if (l.type === ValueType.Datetime || r.type === ValueType.Datetime) { stack.push(datetimeArithmeticRefused()); break; }
+          // Nor has an IPv6 address or a colour; see hasNoNumber().
+          const expIpv6 = noNumberArithmeticRefused(l, r);
+          if (expIpv6) { stack.push(expIpv6); break; }
           // A Matrix operand means matrix exponentiation, which is repeated
           // matrix multiplication and not the element-wise Math.pow the rest
           // of this case does. Falling through was the same silent-zero shape
@@ -4070,6 +4117,9 @@ export function executeBytecode(
           if (negFault) { stack.push(negFault); break; }
           // A moment has no negative; see datetimeArithmeticRefused().
           if (v.type === ValueType.Datetime) { stack.push(datetimeArithmeticRefused("neg")); break; }
+          // Nor has an IPv6 address or a colour; see hasNoNumber().
+          const negOpaque = noNumberRefused(v, "negated");
+          if (negOpaque) { stack.push(negOpaque); break; }
           carry = v.sources;
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
           // Negating money keeps it exact: "-$0.10" is exactly "-$0.10".
@@ -4105,8 +4155,9 @@ export function executeBytecode(
           if (posFault) { stack.push(posFault); break; }
           carry = v.sources;
           // Unary plus is a no-op, so money keeps its exact decimal too, and a
-          // list is itself rather than the zero its toNumber() reports.
-          if (v.type === ValueType.Matrix) stack.push(v);
+          // list, an IPv6 address or a colour is itself rather than the reading
+          // its toNumber() reports (zero for a list, none for an address).
+          if (v.type === ValueType.Matrix || hasNoNumber(v)) stack.push(v);
           else if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(v.toNumber(), v.unit!, v.exact));
           else if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
           // Unary plus is a no-op, so it has to leave the type alone too.
@@ -4146,12 +4197,16 @@ export function executeBytecode(
         //     its own faulted-operand check for the reason that function
         //     documents: a bit pattern read off an Error or a Pending is the
         //     bit pattern of zero, and `(5 kg to m) & 1` answered 0 with
-        //     nothing to say it had not been asked a real question.
+        //     nothing to say it had not been asked a real question. An IPv6
+        //     address and a colour are refused the same way, since neither
+        //     toNumber() has bits to give (see hasNoNumber()).
         // ═══════════════════════════════════════════════════════════════
         case OpCode.LSHIFT: {
           const r = safePop(stack), l = safePop(stack);
           const shiftFault = faultedOperand(l, r);
           if (shiftFault) { stack.push(shiftFault); break; }
+          const shiftIpv6 = noNumberArithmeticRefused(l, r);
+          if (shiftIpv6) { stack.push(shiftIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             // Bounded, unlike the plain-number path below, which cannot grow:
             // a 32-bit shift is 32 bits whatever it is asked for. See
@@ -4166,6 +4221,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const rshiftFault = faultedOperand(l, r);
           if (rshiftFault) { stack.push(rshiftFault); break; }
+          const rshiftIpv6 = noNumberArithmeticRefused(l, r);
+          if (rshiftIpv6) { stack.push(rshiftIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntShift(l, r, -1));
           } else {
@@ -4181,6 +4238,8 @@ export function executeBytecode(
           // a large number. Both operands go through the 32-bit path.
           const urshiftFault = faultedOperand(l, r);
           if (urshiftFault) { stack.push(urshiftFault); break; }
+          const urshiftIpv6 = noNumberArithmeticRefused(l, r);
+          if (urshiftIpv6) { stack.push(urshiftIpv6); break; }
           stack.push(numberValue(l.toNumber() >>> r.toNumber()));
           break;
         }
@@ -4188,6 +4247,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const andFault = faultedOperand(l, r);
           if (andFault) { stack.push(andFault); break; }
+          const andIpv6 = noNumberArithmeticRefused(l, r);
+          if (andIpv6) { stack.push(andIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) & toBigIntOperand(r)));
           } else {
@@ -4199,6 +4260,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const orFault = faultedOperand(l, r);
           if (orFault) { stack.push(orFault); break; }
+          const orIpv6 = noNumberArithmeticRefused(l, r);
+          if (orIpv6) { stack.push(orIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) | toBigIntOperand(r)));
           } else {
@@ -4210,6 +4273,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const xorFault = faultedOperand(l, r);
           if (xorFault) { stack.push(xorFault); break; }
+          const xorIpv6 = noNumberArithmeticRefused(l, r);
+          if (xorIpv6) { stack.push(xorIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) ^ toBigIntOperand(r)));
           } else {
@@ -4221,6 +4286,8 @@ export function executeBytecode(
           const v = safePop(stack);
           const notFault = faultedOperand(v);
           if (notFault) { stack.push(notFault); break; }
+          const notOpaque = noNumberRefused(v, "used in this arithmetic");
+          if (notOpaque) { stack.push(notOpaque); break; }
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(~(v.value as bigint)));
           else stack.push(numberValue(~v.toNumber()));
           break;
@@ -4255,210 +4322,67 @@ export function executeBytecode(
         case OpCode.EQ: {
           const r = safePop(stack), l = safePop(stack);
           // The plain case first: two bare numbers compare as doubles, which
-          // is what the Number arm below does once every helper has declined.
+          // is what valuesEqual() does once every other reading has declined.
           // A comparison reads the centre of a measurement, so only the
           // rational and exact-decimal sidecars have to be absent for the
           // double compare to be the right answer. Where one is present the
-          // branch below decides on it, so "0.1 + 0.2 == 0.3" is true.
+          // helper decides on it, so "0.1 + 0.2 == 0.3" is true. Everything
+          // else is decided in vm/Comparisons.ts, out of this loop.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) === (r.value as number)));
             break;
           }
-          const eqFault = faultedOperand(l, r);
-          if (eqFault) { stack.push(eqFault); break; }
-          // Equal fractions are equal on the value, not on whichever doubles
-          // they rounded to: "1/49 * 49 == 1" is true. Gated on a rational being
-          // present, so "1 == 1" keeps its double compare below.
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp === 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) === (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            // Comparing through toNumber() rounds a bigint to the nearest
-            // double first, so two giants a single digit apart landed on the
-            // same double and this answered true. See compareBigIntOperands().
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() === r.toNumber() : cmp === 0));
-          } else if (l.type === ValueType.String && r.type === ValueType.String) {
-            // Two strings compare as strings. Through toNumber() every
-            // non-numeric string reads as 0, so `"a" == "b"` answered true.
-            stack.push(boolValue((l.value as string) === (r.value as string)));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { equal, sameMeasure } = compareUom(l, r);
-            stack.push(boolValue(sameMeasure && equal));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a === b));
-          } else if (l.type === ValueType.Colour || r.type === ValueType.Colour) {
-            // A colour equals only another colour with the same canonical
-            // channels, so `#ff0000 == rgb(255,0,0)` is true regardless of
-            // format. A colour and a non-colour are never equal: NOT via
-            // toNumber() (0 for a colour), which would make `#000000 == 0` true,
-            // exactly the coercion fault this repo guards against.
-            if (l.type === ValueType.Colour && r.type === ValueType.Colour) {
-              const a = l.value as ColourData, b = r.value as ColourData;
-              stack.push(boolValue(a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a));
-            } else {
-              stack.push(boolValue(false));
-            }
-          } else {
-            stack.push(boolValue(l.toNumber() === r.toNumber()));
-          }
+          stack.push(valuesEqual(l, r, false));
           break;
         }
         case OpCode.NEQ: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in EQ.
+          // The plain case first, as in EQ; the rest in vm/Comparisons.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) !== (r.value as number)));
             break;
           }
-          const neqFault = faultedOperand(l, r);
-          if (neqFault) { stack.push(neqFault); break; }
-          // The negation of EQ's rational branch, fraction for fraction.
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp !== 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) !== (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            // The negation of EQ's bigint branch above, digit for digit.
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() !== r.toNumber() : cmp !== 0));
-          } else if (l.type === ValueType.String && r.type === ValueType.String) {
-            stack.push(boolValue((l.value as string) !== (r.value as string)));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { equal, sameMeasure } = compareUom(l, r);
-            stack.push(boolValue(!sameMeasure || !equal));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a !== b));
-          } else if (l.type === ValueType.Colour || r.type === ValueType.Colour) {
-            // The negation of EQ's colour branch: two colours differ by channel,
-            // and a colour and a non-colour are always unequal.
-            if (l.type === ValueType.Colour && r.type === ValueType.Colour) {
-              const a = l.value as ColourData, b = r.value as ColourData;
-              stack.push(boolValue(!(a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a)));
-            } else {
-              stack.push(boolValue(true));
-            }
-          } else {
-            stack.push(boolValue(l.toNumber() !== r.toNumber()));
-          }
+          stack.push(valuesEqual(l, r, true));
           break;
         }
         case OpCode.LT: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in EQ.
+          // The plain case first, as in EQ; the rest in vm/Comparisons.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) < (r.value as number)));
             break;
           }
-          const ltFault = faultedOperand(l, r);
-          if (ltFault) { stack.push(ltFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp < 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) < (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            // Digit-exact, for the reason given on EQ's matching branch.
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() < r.toNumber() : cmp < 0));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { lv, rv, equal, sameMeasure } = compareUom(l, r);
-            stack.push(sameMeasure ? boolValue(!equal && lv < rv) : incomparableUnitsError(l, r));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a < b));
-          } else {
-            stack.push(boolValue(l.toNumber() < r.toNumber()));
-          }
+          stack.push(valuesOrdered(l, r, 0));
           break;
         }
         case OpCode.LTE: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in EQ.
+          // The plain case first, as in EQ; the rest in vm/Comparisons.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) <= (r.value as number)));
             break;
           }
-          const lteFault = faultedOperand(l, r);
-          if (lteFault) { stack.push(lteFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp <= 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) <= (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() <= r.toNumber() : cmp <= 0));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { lv, rv, equal, sameMeasure } = compareUom(l, r);
-            stack.push(sameMeasure ? boolValue(equal || lv <= rv) : incomparableUnitsError(l, r));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a <= b));
-          } else {
-            stack.push(boolValue(l.toNumber() <= r.toNumber()));
-          }
+          stack.push(valuesOrdered(l, r, 1));
           break;
         }
         case OpCode.GT: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in EQ.
+          // The plain case first, as in EQ; the rest in vm/Comparisons.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) > (r.value as number)));
             break;
           }
-          const gtFault = faultedOperand(l, r);
-          if (gtFault) { stack.push(gtFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp > 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) > (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() > r.toNumber() : cmp > 0));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { lv, rv, equal, sameMeasure } = compareUom(l, r);
-            stack.push(sameMeasure ? boolValue(!equal && lv > rv) : incomparableUnitsError(l, r));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a > b));
-          } else {
-            stack.push(boolValue(l.toNumber() > r.toNumber()));
-          }
+          stack.push(valuesOrdered(l, r, 2));
           break;
         }
         case OpCode.GTE: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in EQ.
+          // The plain case first, as in EQ; the rest in vm/Comparisons.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) >= (r.value as number)));
             break;
           }
-          const gteFault = faultedOperand(l, r);
-          if (gteFault) { stack.push(gteFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
-            const cmp = compareRationalOperands(l, r);
-            if (cmp !== null) { stack.push(boolValue(cmp >= 0)); break; }
-          }
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(boolValue((l.value as number) >= (r.value as number)));
-          } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
-            const cmp = compareBigIntOperands(l, r);
-            stack.push(boolValue(cmp === null ? l.toNumber() >= r.toNumber() : cmp >= 0));
-          } else if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
-            const { lv, rv, equal, sameMeasure } = compareUom(l, r);
-            stack.push(sameMeasure ? boolValue(equal || lv >= rv) : incomparableUnitsError(l, r));
-          } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
-            stack.push(unitListCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a >= b));
-          } else {
-            stack.push(boolValue(l.toNumber() >= r.toNumber()));
-          }
+          stack.push(valuesOrdered(l, r, 3));
           break;
         }
 
@@ -4581,10 +4505,11 @@ export function executeBytecode(
           // here covers all ~90 of them; see faultedOperand() in vm/Value.ts.
           const builtinArgFault = faultedIn(args);
           if (builtinArgFault) { stack.push(builtinArgFault); break; }
-          // A date or time has no size for a numeric builtin to read; see
-          // datetimeArgumentRefused() in vm/VMBuiltins.ts.
-          const builtinDatetime = datetimeArgumentRefused(fnIdx, args);
-          if (builtinDatetime) { stack.push(builtinDatetime); break; }
+          // A date or time, an IPv6 address, a colour and text have no number
+          // for a numeric builtin to read; see builtinArgumentRefused() in
+          // vm/VMBuiltins.ts, one call for every kind.
+          const builtinRefused = builtinArgumentRefused(fnIdx, args);
+          if (builtinRefused) { stack.push(builtinRefused); break; }
           carry = sourcesOfValues(args);
           const fn = builtinFunctions[fnIdx];
           if (fn) {
@@ -4795,26 +4720,15 @@ export function executeBytecode(
             break;
           }
           carry = v.sources;
-          stack.push(numberValue(v.toNumber()));
+          stack.push(numberOf(v));
           break;
         }
         case OpCode.TO_HEX: {
           const v = safePop(stack);
           const toHexFault = faultedOperand(v);
           if (toHexFault) { stack.push(toHexFault); break; }
-          // A colour already has a hex reading, so `#3366cc as rgb as hex` should
-          // round-trip rather than collapse through toNumber() (which is 0 for a
-          // colour). Re-tag its display format to hex, leaving channels intact.
-          if (v.type === ValueType.Colour) {
-            const c = v.value as ColourData;
-            stack.push(colourValue({ r: c.r, g: c.g, b: c.b, a: c.a, format: "hex" }));
-            break;
-          }
-          // A bigint keeps its bigint, exactly as ADD/SUB/MUL/DIV do:
-          // `12345678901234567890n as hex` rendered 0xAB54A98CEB1F0800 while
-          // the value ends 0AD2, because toNumber() rounded it first. An exact
-          // integer past the safe range converts from its own digits likewise.
-          stack.push(hexValue(baseConversionOperand(v)));
+          // A colour keeps its channels and a bigint its digits; see inBase().
+          stack.push(inBase(v, "hex"));
           break;
         }
         case OpCode.TO_PERCENTAGE: {
@@ -4823,6 +4737,8 @@ export function executeBytecode(
           if (toPercentageFault) { stack.push(toPercentageFault); break; }
           const toPercentageDate = datetimeConversionRefused(v, "a percentage");
           if (toPercentageDate) { stack.push(toPercentageDate); break; }
+          const toPercentageOpaque = noNumberRefused(v, "written as a percentage");
+          if (toPercentageOpaque) { stack.push(toPercentageOpaque); break; }
           carry = v.sources;
           // A proportion on the parts-per scale; see toPercentage().
           stack.push(toPercentage(v));
@@ -4834,6 +4750,8 @@ export function executeBytecode(
           if (toFractionFault) { stack.push(toFractionFault); break; }
           const toFractionDate = datetimeConversionRefused(v, "a fraction");
           if (toFractionDate) { stack.push(toFractionDate); break; }
+          const toFractionOpaque = noNumberRefused(v, "written as a fraction");
+          if (toFractionOpaque) { stack.push(toFractionOpaque); break; }
           // The exact fraction where the value has one, the guess otherwise;
           // see fractionString().
           stack.push(stringValue(fractionString(v)));
@@ -4855,6 +4773,8 @@ export function executeBytecode(
           if (toSciFault) { stack.push(toSciFault); break; }
           const toSciDate = datetimeConversionRefused(v, "scientific notation");
           if (toSciDate) { stack.push(toSciDate); break; }
+          const toSciOpaque = noNumberRefused(v, "written in scientific notation");
+          if (toSciOpaque) { stack.push(toSciOpaque); break; }
           stack.push(stringValue(toScientificString(v.toNumber())));
           break;
         }
@@ -4864,14 +4784,14 @@ export function executeBytecode(
           const v = safePop(stack);
           const toBinaryFault = faultedOperand(v);
           if (toBinaryFault) { stack.push(toBinaryFault); break; }
-          stack.push(hexValue(baseConversionOperand(v), "bin"));
+          stack.push(inBase(v, "bin"));
           break;
         }
         case OpCode.TO_OCTAL: {
           const v = safePop(stack);
           const toOctalFault = faultedOperand(v);
           if (toOctalFault) { stack.push(toOctalFault); break; }
-          stack.push(hexValue(baseConversionOperand(v), "oct"));
+          stack.push(inBase(v, "oct"));
           break;
         }
         case OpCode.CALL_AS_CONVERTER: {

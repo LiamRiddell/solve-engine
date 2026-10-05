@@ -1,6 +1,7 @@
 import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData, type IpCidrData, type UnitLabel } from "@solve-js/vm/Value";
 import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { formatIp } from "@solve-js/packages/ip/IpMath";
+import { formatIpv6 } from "@solve-js/packages/ip/Ipv6Math";
 import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
 import { autoFormatIntegerOrFloat, compactParts, tooSmallToPrintText } from "@solve-js/utilities/Number";
@@ -1011,10 +1012,15 @@ function formatUnit(value: number, unit: string | undefined): string {
  * per share.
  */
 /**
- * An IP/CIDR as text: the dotted quad, plus `/prefix` when present, or a bare
- * `/prefix` when there is no address (`netmask of /24` before it resolves).
+ * An IP/CIDR as text: the dotted quad, or for IPv6 the RFC 5952 text with its
+ * `%zone`, plus `/prefix` when present, or a bare `/prefix` when there is no
+ * address (`netmask of /24` before it resolves).
  */
 function formatIpCidr(data: IpCidrData): string {
+	if (data.addr6 !== undefined) {
+		const zoned = data.zone === undefined ? formatIpv6(data.addr6) : `${formatIpv6(data.addr6)}%${data.zone}`;
+		return data.prefix === undefined ? zoned : `${zoned}/${data.prefix}`;
+	}
 	if (data.addr === undefined) return `/${data.prefix}`;
 	const dotted = formatIp(data.addr);
 	return data.prefix === undefined ? dotted : `${dotted}/${data.prefix}`;
