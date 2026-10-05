@@ -18,3 +18,5 @@ The boundary: only the text is affected. A number below 1e21 was already written
 ## Verification
 
 `packages/engine/__tests__/hardening/LargeDoubleDigitsReadNoFormatter.spec.ts` (14 tests), `Issue735_moneyDigitCeiling.spec.ts`, and the fast suite.
+
+On top of main, the full suite ran 30,590 tests in 816 suites, all passing but 4 skipped, and `npm run test:temporal` passed its 3,527 tests.
