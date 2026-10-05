@@ -5,7 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { parseCollectionExpr, emitInvoke } from "../MapReduceShared";
+import { parseCollectionExpr, emitInvoke, callHasOwnComma, parseElementFold } from "../MapReduceShared";
 
 /**
  * `sum(elementExpr, collection)`, parse-time sugar for
@@ -25,6 +25,15 @@ export class SumParselet implements PrefixParselet {
 
   parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
     parser.consume("LPAREN");
+
+    // `sum(1:3)`, one argument: the collection's own elements added up. The
+    // range inside the brackets is already a range, not a clock time (see
+    // isInsideRangeContext), so without this the one-argument form read the
+    // range's start as the element expression and stopped at its colon.
+    if (!callHasOwnComma(parser)) {
+      parseElementFold(parser, builder, OpCode.ADD, 0);
+      return;
+    }
 
     const bodyBuilder = new BytecodeBuilder(builder.pluginIndexMap);
     bodyBuilder.emitOpcode(OpCode.LOAD_VAR);

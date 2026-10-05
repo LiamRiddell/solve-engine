@@ -87,6 +87,28 @@ a charge that applies only above some amount.
 if 5 > 3 then 100 else 200 // 100
 ```
 
+## Conversions beside a comparison
+
+A conversion changes how a value is shown or which unit it is in: `as hex`,
+`in binary`, `in m`. Written on either side of a comparison, it belongs to that
+side, so the comparison is made between the two converted values and the line
+reads the way it is said:
+
+```solve
+255 in hex == 0xff in hex // true
+5 km in m == 5000 m // true
+0xff in hex != 255 in binary // false
+```
+
+The boundary: a conversion written after the right-hand side is that side's,
+not the comparison's. To convert the true or false a comparison answers, put
+the comparison in brackets:
+
+```solve
+5 > 3 as number // true
+(5 > 3) as number // 1
+```
+
 ## Checks
 
 A `check` line states a comparison the note must keep true, and becomes an error

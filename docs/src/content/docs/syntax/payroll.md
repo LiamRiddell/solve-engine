@@ -148,6 +148,23 @@ hourly for 45000 // 23.44
 hourly for $45,000 // $23.44
 ```
 
+## Beside a sum or a comparison
+
+`after tax` takes the whole sum written before it as the salary, so a pay rise
+added to a salary is taxed together with it. A comparison is not part of the
+salary: in `£50,000 after tax > £30,000` the take-home is compared with £30,000,
+and a [check](/syntax/checks/) reads the two sides the same way.
+
+```solve
+£50,000 + £2,000 after tax // £40,717.40
+£50,000 after tax > £30,000 // true
+check £50,000 after tax > £30,000 // ✓
+check £30,000 < £50,000 per month after tax // check failed: £30,000.00 is not less than £3,293.30
+```
+
+The same holds for `per month after tax` and for a rate you state
+(`after 20% tax`).
+
 ## Which figures these are
 
 The bands are the full HMRC figures for **England, Wales and Northern Ireland**,

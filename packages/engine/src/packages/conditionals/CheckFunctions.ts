@@ -18,6 +18,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { DEFAULT_FORMATTING_SETTINGS, type FormattingSettings } from "@solve-js/format/FormattingSettings";
 import { decimalCompare } from "@solve-js/decimal";
 import { convertRate } from "@solve-js/uom/UomConverter";
+import { valuesEqual, valuesOrdered, hasExactSide, type Order } from "@solve-js/vm/Comparisons";
 
 /** The relative gap two values may differ by and still be equal: a conversion's rounding. */
 const EQUAL_TOLERANCE = 1e-12;
@@ -73,7 +74,7 @@ function exactOrder(left: Value, right: Value): -1 | 0 | 1 | null {
 		}
 		return null;
 	}
-	if (left.rational !== undefined || right.rational !== undefined || left.exact !== undefined || right.exact !== undefined) {
+	if (hasExactSide(left, right)) {
 		const order = compareRationalOperands(left, right);
 		if (order !== null) return order;
 	}
@@ -126,9 +127,9 @@ function finiteMagnitude(v: Value): number {
 	return Number.isFinite(n) ? n : 0;
 }
 
-/** Whether a value has a number a check can compare: an `n` whole number is one, compared on its digits by {@link exactOrder}. */
+/** Whether a value has a number a check can compare: an `n` whole number and a number written in a base are, each compared on its digits by {@link exactOrder}. */
 function numeric(v: Value): boolean {
-	return v.type === ValueType.Number || v.type === ValueType.Uom || v.type === ValueType.Percentage || v.type === ValueType.Datetime || v.type === ValueType.BigInt;
+	return v.type === ValueType.Number || v.type === ValueType.Uom || v.type === ValueType.Percentage || v.type === ValueType.Datetime || v.type === ValueType.BigInt || v.type === ValueType.Hex;
 }
 
 /**
@@ -183,6 +184,67 @@ export function writtenPrecisionMargin(right: Value, rightInLeftUnit: number): n
 	return Math.abs(half * (rightInLeftUnit / written));
 }
 
+/** The ordering operators a check reads, numbered as the comparison opcodes number them. */
+const CHECK_ORDERS: ReadonlyMap<string, Order> = new Map<string, Order>([["<", 0], ["<=", 1], [">", 2], [">=", 3]]);
+
+/** A failed ordering check's reason, by operator, with the two sides filled in. */
+function orderFailure(op: string, l: string, r: string): string {
+	switch (op) {
+		case "<": return `${l} is not less than ${r}`;
+		case "<=": return `${l} is more than ${r}`;
+		case ">": return `${l} is not more than ${r}`;
+		default: return `${l} is less than ${r}`;
+	}
+}
+
+/**
+ * A check between two colours or two IP values, decided the way `==`, `!=`
+ * and the ordering operators decide it, or null for any other pair.
+ *
+ * A colour or an address is not a number, so the numeric check refused both
+ * with "cannot be compared" while `#ff0000 == rgb(255, 0, 0)` and
+ * `192.168.1.0/24 != 192.168.1.0/25` answered. Equality is the operators' own
+ * (see valuesEqual()): two colours on their channels, two IP values on family,
+ * address, prefix and zone. Ordering is the operators' too (see
+ * valuesOrdered()): an IPv4 address orders by its 32 bits and an IPv6 address
+ * by its 128, and two addresses of different families, which the operators
+ * refuse, are refused here by name. A colour has no order, and a tolerance or
+ * `≈` has no meaning between two values that are either the same or not, so
+ * each is refused.
+ *
+ * @param left - The left side of the check.
+ * @param right - The right side.
+ * @param op - The comparison, as the check parselet passes it.
+ * @param tolerance - The `within` clause, when one was written.
+ * @returns A tick, a CHECK_FAILED naming both sides, a CHECK_INCOMPARABLE, or null.
+ */
+export function identityCheck(left: Value, right: Value, op: string, tolerance?: Value): Value | null {
+	const colours = left.type === ValueType.Colour && right.type === ValueType.Colour;
+	const addresses = left.type === ValueType.IpCidr && right.type === ValueType.IpCidr;
+	if (!colours && !addresses) return null;
+	const kind = colours ? "two colours" : "two IP addresses";
+	if (op === "≈" || tolerance !== undefined) {
+		const asked = tolerance !== undefined ? "a tolerance" : op;
+		return errorValue("CHECK_INCOMPARABLE", `check: ${kind} are either the same or not, with no margin between them, so they are compared with == or !=, not with ${asked}`);
+	}
+	if (op === "==" || op === "!=") {
+		const same = valuesEqual(left, right, false).value === true;
+		if (same === (op === "==")) return stringValue("✓");
+		return errorValue("CHECK_FAILED", `check failed: ${shown(left)} is ${same ? "equal" : "not equal"} to ${shown(right)}`);
+	}
+	const order = CHECK_ORDERS.get(op);
+	if (order === undefined) return errorValue("CHECK_EXPECTED_COMPARISON", `check: unknown comparison ${op}`);
+	if (colours) {
+		return errorValue("CHECK_INCOMPARABLE", `check: a colour has no order, so two colours can only be compared with == or !=, not ${op}`);
+	}
+	const holds = valuesOrdered(left, right, order);
+	if (holds.type !== ValueType.Boolean) {
+		return errorValue("CHECK_INCOMPARABLE", `check: an IPv4 and an IPv6 address have no order between them, so they can only be compared with == or !=, not ${op}`);
+	}
+	if (holds.value === true) return stringValue("✓");
+	return errorValue("CHECK_FAILED", `check failed: ${orderFailure(op, shown(left), shown(right))}`);
+}
+
 /**
  * `checkComparison(left, right, op, tolerance?)`: "✓" when the comparison
  * holds, a CHECK_FAILED error naming both sides when it does not.
@@ -210,6 +272,8 @@ export function checkComparison(args: Value[]): Value {
 		if (same === (op !== "!=")) return stringValue("✓");
 		return errorValue("CHECK_FAILED", `check failed: ${shown(left)} is ${same ? "equal" : "not equal"} to ${shown(right)}`);
 	}
+	const identity = identityCheck(left, right, op, tolerance);
+	if (identity !== null) return identity;
 	if (!numeric(left) || !numeric(right)) {
 		return errorValue("CHECK_INCOMPARABLE", `check: ${shown(left)} and ${shown(right)} cannot be compared`);
 	}

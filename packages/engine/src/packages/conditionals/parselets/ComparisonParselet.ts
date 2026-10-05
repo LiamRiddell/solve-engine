@@ -13,10 +13,14 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  * lexer/parser front end was missing (confirmed via full-repo grep this
  * session: no parselet claimed these tokens). One parameterized class
  * covers all six; the constructor picks which opcode to emit.
+ *
+ * They bind at `Comparison`, one step below the phrase operators at
+ * `Conditional`, so a conversion written on either side is that side's:
+ * `A in hex == B in hex` compares two hex values. See BindingPower.ts.
  */
 export class ComparisonParselet implements InfixParselet {
 	readonly category = "Conditionals";
-	readonly bindingPower = BindingPower.Conditional;
+	readonly bindingPower = BindingPower.Comparison;
 
 	constructor(private readonly opcode: OpCode) {}
 

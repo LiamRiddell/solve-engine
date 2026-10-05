@@ -137,7 +137,15 @@ combination(56, 23) // 3,167,295,784,216,200
 ```
 
 ```
-2^60 + 0.5 // 1,152,921,504,606,847,000
+9007199254740993.5 // 9,007,199,254,740,993.50
+9007199254740993.5 + 1 // 9,007,199,254,740,994.50
+9007199254740993.5 / 2 // 4,503,599,627,370,496.75
+9007199254740993.5 == 9007199254740994 // false
+2^60 + 0.5 // 1,152,921,504,606,846,976.50
+```
+
+```
+sqrt(2^106) + 0.5 // 9,007,199,254,740,992
 2^1024 // ∞
 (2^53 + 1) kg // 9,007,199,254,740,992.00 kg
 ```
@@ -1098,6 +1106,27 @@ check true == false // check failed: true is not equal to false
 ```
 
 ```
+check 255 in hex == 255 // ✓
+check 255 in binary == 0xff in octal // ✓
+check 1 km in m == 1000 m // ✓
+check 256 in hex == 255 // check failed: 0x100 is not equal to 255
+```
+
+```
+check #ff0000 == rgb(255, 0, 0) // ✓
+check #ff0000 != #00ff00 // ✓
+check 192.168.1.0/24 != 192.168.1.0/25 // ✓
+check fe80::1%eth0 == fe80::1 // check failed: fe80::1%eth0 is not equal to fe80::1
+```
+
+```
+check 192.168.1.1 < 192.168.1.2 // ✓
+check fe80::2 <= fe80::1 // check failed: fe80::2 is more than fe80::1
+check #ff0000 < #00ff00 // check: a colour has no order, so two colours can only be compared with == or !=, not <
+check 192.168.1.1 < fe80::1 // check: an IPv4 and an IPv6 address have no order between them, so they can only be compared with == or !=, not <
+```
+
+```
 check = 45
 check * 2 // 90
 ```
@@ -1122,6 +1151,13 @@ check 1 km == 1000 m // ✓
 :b = 4
 check :a^2 + :b^2 == 25 // ✓
 check :a^2 + :b^2 == 26 // ERROR: check failed: 25 is not equal to 26
+```
+
+```
+(one document)
+A = 255
+B = 0xff
+check A in hex == B in hex // ✓
 ```
 
 ```
@@ -1319,6 +1355,17 @@ not 5 // "not" works on true or false, and 5 is a number: compare it first, as i
 
 ```
 if 5 > 3 then 100 else 200 // 100
+```
+
+```
+255 in hex == 0xff in hex // true
+5 km in m == 5000 m // true
+0xff in hex != 255 in binary // false
+```
+
+```
+5 > 3 as number // true
+(5 > 3) as number // 1
 ```
 
 ```
@@ -2920,6 +2967,13 @@ reduce(max(acc, x), [3, 9, 4]) // 9
 sum(x, [10, 20, 30]) // 60
 prod(x, [2,3,4]) // 24
 sum(x, 0:4) // 10
+sum(x^2, 1:3) // 14
+```
+
+```
+sum(1:3) // 6
+sum([10, 20, 30]) // 60
+prod(1:5) // 120
 ```
 
 ## moles
@@ -3099,6 +3153,19 @@ note::5 // 5
 cafe::1 // cafe::1
 ```
 
+```
+(one document)
+lab = 192.168.1.0/24
+192.168.1.7 in lab // true
+10.0.0.1 in lab // false
+```
+
+```
+(one document)
+host = 192.168.1.5
+192.168.1.5 in host // ERROR: "in" expects a subnet on the right, e.g. 10.0.0.0/8
+```
+
 ## nth-weekday
 
 https://liamriddell.github.io/solve-engine/syntax/nth-weekday/
@@ -3162,6 +3229,13 @@ hex(255) + 1 // 256
 ```
 
 ```
+255 in hex == 0xff in hex // true
+255 in binary == 0xff in octal // true
+255 in hex == 256 in hex // false
+check 255 in hex == 255 // ✓
+```
+
+```
 hex(-255) // -0xFF
 255.7 as hex // 0xFF
 ```
@@ -3170,6 +3244,19 @@ hex(-255) // -0xFF
 (2^100 + 1) in binary as hex // 0x10000000000000000000000001
 (2^100 + 1) in hex in octal // 0o2000000000000000000000000000000001
 (2^100 + 1) in hex as number // 1,267,650,600,228,229,401,496,703,205,377
+```
+
+```
+(2^100 + 1) in hex + 1 // 1,267,650,600,228,229,401,496,703,205,378
+(2^100 + 1) in hex * 2 // 2,535,301,200,456,458,802,993,406,410,754
+((2^100 + 1) in hex) mod 10 // 7
+((2^100 + 1) in hex) > 2^100 // true
+```
+
+```
+(1/0) in hex // An infinite value has no digits to write in hex. An ordinary number past about 1.8e308 is infinite; a whole number written with n, as in 2n^4000, keeps every digit.
+2^4000 in binary as hex // An infinite value has no digits to write in binary. An ordinary number past about 1.8e308 is infinite; a whole number written with n, as in 2n^4000, keeps every digit.
+2n^200 in hex // 0x100000000000000000000000000000000000000000000000000
 ```
 
 ## number-functions
@@ -3650,6 +3737,13 @@ hourly for $45,000 // $23.44
 ```
 
 ```
+£50,000 + £2,000 after tax // £40,717.40
+£50,000 after tax > £30,000 // true
+check £50,000 after tax > £30,000 // ✓
+check £30,000 < £50,000 per month after tax // check failed: £30,000.00 is not less than £3,293.30
+```
+
+```
 (one document)
 salary = £50,000 // £50,000.00
 salary after tax // £39,519.60
@@ -4022,6 +4116,10 @@ https://liamriddell.github.io/solve-engine/syntax/ratios/
 ratio(1920, 1080) // 16:9
 ratio(4, 8) // 1:2
 ratio(2, 4, 6) // 1:2:3
+```
+
+```
+sum(1:10) // 55
 ```
 
 ## recurring-schedules

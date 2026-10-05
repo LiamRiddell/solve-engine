@@ -89,10 +89,18 @@ test("the lookup: a failed fetch settles to a coded error, never a number", asyn
 	engine.clear();
 });
 
-test("adversarial: a hostile place is refused by code before anything is fetched", () => {
+test("the lookup: a place held in a variable is refused by name, since it is known too late to fetch", () => {
+	const { engine, calls } = engineWithRainfall();
+	expectExpression(engine, ':where = "Oslo"').toEqual("Oslo");
+	expectExpression(engine, "rainfall(where)").toFailWith("STARTER_PLACE_NOT_QUOTED");
+	if (calls.length !== 0) throw new Error(`a variable's place was fetched: ${calls.join(", ")}`);
+	engine.clear();
+});
+
+test("adversarial: a hostile place is refused by code, and the host's fetch is never called", async () => {
 	const { engine, calls } = engineWithRainfall();
 	for (const place of ["../../etc/passwd", "a\\\\b", "x".repeat(200), "", "   "]) {
-		expectExpression(engine, `rainfall("${place}")`).toFailWith("STARTER_BAD_PLACE");
+		(await expectExpression(engine, `rainfall("${place}")`).settled()).toFailWith("STARTER_BAD_PLACE");
 	}
 	expectExpression(engine, "rainfall(42)").toFailWith("STARTER_BAD_PLACE");
 	// A line far past the engine's own length limit is refused before the
@@ -100,6 +108,14 @@ test("adversarial: a hostile place is refused by code before anything is fetched
 	expectExpression(engine, `rainfall("${"x".repeat(10_000)}")`).toFailWith("EXPRESSION_TOO_LONG");
 	if (calls.length !== 0) throw new Error(`a hostile place was fetched: ${calls.join(", ")}`);
 	engine.clear();
+});
+
+test("adversarial: a service that answers something other than a rainfall is a coded error", async () => {
+	for (const answer of [Number.NaN, -1, Number.POSITIVE_INFINITY]) {
+		const engine = createTestEngine(createStarterPackages({ fetchRainfall: async () => answer }));
+		(await expectExpression(engine, 'rainfall("Oslo")').settled()).toFailWith("STARTER_RAINFALL_FAILED");
+		engine.clear();
+	}
 });
 
 test("adversarial: prototype words are ordinary place names", async () => {

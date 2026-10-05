@@ -92,6 +92,63 @@ check (2 > 1) == (3 > 2) // ✓
 check true == false // check failed: true is not equal to false
 ```
 
+## Conversions on either side
+
+A side of a check can carry a conversion: a quantity put into another unit
+(`in m`), or a number shown in another base (`in hex`, `as binary`; see
+[number bases](/syntax/number-bases/)). The conversion belongs to the side it
+is written on, and the check compares what the two sides are, not how they are
+written. A number shown in hexadecimal is still that number, so it passes
+against the same value in decimal, as a kilometre shown in metres passes
+against 1,000 metres:
+
+```solve
+check 255 in hex == 255 // ✓
+check 255 in binary == 0xff in octal // ✓
+check 1 km in m == 1000 m // ✓
+check 256 in hex == 255 // check failed: 0x100 is not equal to 255
+```
+
+The same holds for values from the lines above:
+
+```solve-doc
+A = 255
+B = 0xff
+check A in hex == B in hex // ✓
+```
+
+## Colours and addresses
+
+A colour is three channels of light (red, green and blue), and an IP address
+is a number that names a machine on a network, often with a prefix (`/24`)
+that makes it a block of addresses. Neither is an amount, but either can be
+checked for being the same as another, and a check decides it the way `==`
+and `!=` do: two colours are equal when their channels are, however each was
+written, and two addresses when their family, address, prefix and zone all
+match.
+
+```solve
+check #ff0000 == rgb(255, 0, 0) // ✓
+check #ff0000 != #00ff00 // ✓
+check 192.168.1.0/24 != 192.168.1.0/25 // ✓
+check fe80::1%eth0 == fe80::1 // check failed: fe80::1%eth0 is not equal to fe80::1
+```
+
+Addresses of one family are in order, lowest first, as `<` puts them, so a
+check can ask whether one comes before another. A colour has no order, an IPv4
+and an IPv6 address have none between them, and a margin means nothing between
+two values that are either the same or not, so each of those is refused:
+
+```solve
+check 192.168.1.1 < 192.168.1.2 // ✓
+check fe80::2 <= fe80::1 // check failed: fe80::2 is more than fe80::1
+check #ff0000 < #00ff00 // check: a colour has no order, so two colours can only be compared with == or !=, not <
+check 192.168.1.1 < fe80::1 // check: an IPv4 and an IPv6 address have no order between them, so they can only be compared with == or !=, not <
+```
+
+A colour or an address against a number is still refused as incomparable: a
+check says something about two things of one kind.
+
 ## Checks among the other lines
 
 A check line is a statement about the numbers around it, not one of them, so a

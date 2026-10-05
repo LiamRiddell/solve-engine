@@ -353,7 +353,15 @@ right-associative operator, and at the operator's own power otherwise. The
 registry reports the declaration (`getAllInfix()` carries `associativity`), so
 a precedence table built from it says what the parser does.
 The named ladder (`Sum`, `Product`, `Exponent`, `Call`, and the rest) is what to
-pick a level from. Register it under `infixParselets` keyed by the operator's token
+pick a level from. Two neighbouring rungs matter for a phrase operator:
+`Comparison` (23) is where `==`, `<` and the other comparisons bind, and
+`Conditional` (24), one step tighter, is where the phrase operators bind
+(`as hex`, `to` as a percentage change, `is what % of`). An operator at
+`Conditional` is therefore read on its own side of a comparison:
+`255 in hex == 0xff in hex` compares the two hex values. Parse an operand at
+`Conditional` to stop before a comparison, and at `Comparison` to take in a
+phrase operator but stop at the comparison sign, which is how a `check` reads
+each of its sides. Register it under `infixParselets` keyed by the operator's token
 type. Arithmetic's `+` is the reference; currency's `in` and the conditionals'
 `==` are operators that read differently but hook in the same way.
 

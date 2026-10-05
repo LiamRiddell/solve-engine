@@ -60,18 +60,36 @@ range is exact:
 10^16 + 1 - 10^16 // 1
 ```
 
+A number typed with a decimal point keeps its digits too. Past the safe range a
+double holds no fraction at all, so `9007199254740993.5` would be the double
+9,007,199,254,740,994, and the half the reader typed would be gone. The engine
+reads a decimal written in plain digits exactly, and where a double is too
+coarse to hold the places shown, the digits come from that exact reading, and
+from exact arithmetic on it:
+
+```solve
+9007199254740993.5 // 9,007,199,254,740,993.50
+9007199254740993.5 + 1 // 9,007,199,254,740,994.50
+9007199254740993.5 / 2 // 4,503,599,627,370,496.75
+9007199254740993.5 == 9007199254740994 // false
+2^60 + 0.5 // 1,152,921,504,606,846,976.50
+```
+
 The other limits:
 
-- **A fractional part.** Only a whole-number result is kept exact, so a sum with
-  a decimal in it is a double.
+- **A result with no exact reading.** A square root, a power with a fractional
+  exponent or a logarithm has no exact decimal, so its result is a double, and so
+  is arithmetic on it.
 - **Past the largest double.** A double has no finite value beyond about
   1.8 × 10^308, and the answer there is infinity, as it always was.
 - **A unit or a percentage.** A quantity with a unit, and a percentage of a
   number, read the nearest double, typed digits included (`9007199254740993 m`
-  is 9,007,199,254,740,992.00 m).
+  is 9,007,199,254,740,992.00 m, and `9007199254740993.5 m` is
+  9,007,199,254,740,994.00 m). Money is the exception: an amount of money keeps
+  its exact decimal at any size.
 
 ```solve
-2^60 + 0.5 // 1,152,921,504,606,847,000
+sqrt(2^106) + 0.5 // 9,007,199,254,740,992
 2^1024 // ∞
 (2^53 + 1) kg // 9,007,199,254,740,992.00 kg
 ```
