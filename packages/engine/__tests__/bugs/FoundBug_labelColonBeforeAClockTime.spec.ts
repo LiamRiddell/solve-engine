@@ -106,8 +106,6 @@ function fuses(rule: NormalizerRule, line: string, numberIndex = 0): boolean {
 	return rule.match(list, pos, undefined as never) !== null;
 }
 
-const TODAY_AT = /^\w+day, \w+ \d+, \d{4}, /;
-
 describe("the lines that exposed it", () => {
 	test("a label whose name ends on a number answers its figure when the pair is also a time", () => {
 		expect(outcome("Item 2: 45")).toBe("45");
@@ -121,7 +119,7 @@ describe("the lines that exposed it", () => {
 
 	test("the other time rules leave the label's colon alone too", () => {
 		// Lap time: `1: 9:30` was read as one three-field duration.
-		expect(outcome("Day 1: 9:30")).toMatch(new RegExp(`${TODAY_AT.source}9:30:00 AM$`));
+		expect(outcome("Day 1: 9:30")).toBe("9:30:00 AM");
 		expect(outcome("Shift 2: 9:30 to 17:00")).toBe("450 minutes");
 		// Timecode, pace, and a bare hour with am or pm after the figure.
 		expect(outcome("Scene 1: 2:03:04")).toBe("7,384.00 s");

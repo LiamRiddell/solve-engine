@@ -12,10 +12,10 @@ The time rules join a number, a colon and a number into one literal (`9:30`, `1:
 | `Room 4: 12` | `Expected an operator or the end of the line, but found "4:12"` | `12` |
 | `Week 12: 30` | `Expected an operator or the end of the line, but found "12:30"` | `30` |
 | `Weeks 1-2: 40` | `Expected an operator or the end of the line, but found "1"` | `40` |
-| `Day 1: 9:30` | `Expected an operator or the end of the line, but found "1:9:30"` | `Thursday, October 1, 2026, 9:30:00 AM` |
-| `Item 2: 4 pm` | `Expected an operator or the end of the line, but found "2:4pm"` | `Thursday, October 1, 2026, 4:00:00 PM` |
-| `9: 30` | `Thursday, October 1, 2026, 9:30:00 AM` | `Thursday, October 1, 2026, 9:30:00 AM` (unchanged) |
-| `x = 5: 6` | `Thursday, October 1, 2026, 5:06:00 AM` | `Thursday, October 1, 2026, 5:06:00 AM` (unchanged) |
+| `Day 1: 9:30` | `Expected an operator or the end of the line, but found "1:9:30"` | `9:30:00 AM` |
+| `Item 2: 4 pm` | `Expected an operator or the end of the line, but found "2:4pm"` | `4:00:00 PM` |
+| `9: 30` | `9:30:00 AM` | `9:30:00 AM` (unchanged) |
+| `x = 5: 6` | `5:06:00 AM` | `5:06:00 AM` (unchanged) |
 | `Week 12: 75` | `75` | `75` (unchanged) |
 
 The boundary: a spaced pair with no name before it is still a time, since nothing is being named. No documented time is written with a space after its colon, so `9: 30`, `x = 5: 6` and `2*3: 4` read as they did. A word that leads into a time (`at`, `before`, `until`, `the`) is no name, so `before 9: 30` keeps its time. And a colon that touches both numbers is a time whatever stands before it: `Item 2:45` is still refused, as the word `Item` beside the time 2:45, since nothing in that spelling says the colon is a label's.

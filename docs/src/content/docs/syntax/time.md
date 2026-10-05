@@ -61,8 +61,8 @@ belongs to a [label](/syntax/labels/) instead, so `Room 4: 12` is the label
 
 ```solve-doc
 Room 4: 12 // 12
-Day 1: 9:30 // Wednesday, March 11, 2026, 9:30:00 AM
-9: 30 // Wednesday, March 11, 2026, 9:30:00 AM
+Day 1: 9:30 // 9:30:00 AM
+9: 30 // 9:30:00 AM
 ```
 
 Midnight at the start of the day is `0:00`, and the last minute is `23:59`. The

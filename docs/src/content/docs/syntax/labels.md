@@ -62,7 +62,7 @@ number, `9: 30` is still half past nine:
 ```solve-doc
 Room 4: 12 // 12
 Item 2:45 // ERROR: Expected an operator or the end of the line, but found "2:45"
-9: 30 // Wednesday, March 11, 2026, 9:30:00 AM
+9: 30 // 9:30:00 AM
 ```
 
 A name here is a word with only the numbers and joining marks (`-`, `/`) of a

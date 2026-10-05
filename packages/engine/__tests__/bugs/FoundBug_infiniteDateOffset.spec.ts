@@ -9,12 +9,11 @@ import type { Value } from "@solve-js/vm/Value";
  * calendar (`1e10 days from 2024-01-01`). A date moved by an infinite or
  * out-of-range length has no day to land on.
  *
- * Not fixed here: pull request #832 (the dates batch) refuses any date made
+ * Fixed by pull request #832 (the dates batch), which refuses any date made
  * past the range a calendar holds, or from no number at all, with
  * `DATE_OUT_OF_RANGE` where the date is made (`datetimeValue`), which covers
- * each of these. Fixing it a second time on the offset path would conflict
- * with that change. Each line is pinned as failing, one assertion apiece, so
- * the merge of #832 turns them green and they move to the passing set.
+ * each of these. Each line was pinned as failing until #832 merged, and now
+ * passes.
  */
 
 /** The error code a value carries, or `none`. */
@@ -24,43 +23,43 @@ const codeOf = (value: Value): string => (value.isError() ? String(value.errorCo
 const lineCode = (line: string): string => codeOf(newTrackedEngine().evaluateExpression(line));
 
 describe("a date moved past the calendar is refused by name (#832)", () => {
-	test.failing("∞ days from today", () => {
+	test("∞ days from today", () => {
 		expect(lineCode("∞ days from today")).toBe("DATE_OUT_OF_RANGE");
 	});
 
-	test.failing("∞ days from a date", () => {
+	test("∞ days from a date", () => {
 		expect(lineCode("∞ days from 2024-01-01")).toBe("DATE_OUT_OF_RANGE");
 	});
 
-	test.failing("-∞ days from a date", () => {
+	test("-∞ days from a date", () => {
 		expect(lineCode("-∞ days from 2024-01-01")).toBe("DATE_OUT_OF_RANGE");
 	});
 
-	test.failing("today + ∞ days", () => {
+	test("today + ∞ days", () => {
 		expect(lineCode("today + ∞ days")).toBe("DATE_OUT_OF_RANGE");
 	});
 
-	test.failing("a date less ∞ days", () => {
+	test("a date less ∞ days", () => {
 		expect(lineCode("2024-01-01 - ∞ days")).toBe("DATE_OUT_OF_RANGE");
 	});
 
-	test.failing("∞ hours from a date", () => {
+	test("∞ hours from a date", () => {
 		expect(lineCode("∞ hours from 2024-01-01")).toBe("DATE_OUT_OF_RANGE");
 	});
 
-	test.failing("a finite offset past the calendar", () => {
+	test("a finite offset past the calendar", () => {
 		expect(lineCode("1e10 days from 2024-01-01")).toBe("DATE_OUT_OF_RANGE");
 	});
 
-	test.failing("through evaluateLine", () => {
+	test("through evaluateLine", () => {
 		expect(codeOf(newTrackedEngine().evaluateLine(1, "∞ days from today"))).toBe("DATE_OUT_OF_RANGE");
 	});
 
-	test.failing("through parseDocument", () => {
+	test("through parseDocument", () => {
 		expect(newTrackedEngine().parseDocument("d = ∞ days from 2024-01-01").lines[0].result?.errorCode).toBe("DATE_OUT_OF_RANGE");
 	});
 
-	test.failing("through evaluateDocument", () => {
+	test("through evaluateDocument", () => {
 		expect(evaluateDocument(newTrackedEngine(), "d = ∞ days from 2024-01-01").lines[0].result?.errorCode).toBe("DATE_OUT_OF_RANGE");
 	});
 });
