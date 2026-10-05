@@ -3955,6 +3955,10 @@ https://liamriddell.github.io/solve-engine/syntax/rates-and-speeds/
 ```
 
 ```
+10 knots * 2 hours // 20.00 nmi
+```
+
+```
 60 km/h in miles per hour // 37.28 miles/hour
 60 km/h to miles per hour // 37.28 miles/hour
 $20/hour in $/day // $480.00/day
