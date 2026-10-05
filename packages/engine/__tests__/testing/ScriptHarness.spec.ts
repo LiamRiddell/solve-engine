@@ -83,7 +83,9 @@ describe("runScript and callExport", () => {
 		expect(callExport("remeasure-benchmarks.mjs", "median", [[1, 2, 3]])).toBe(2);
 		// A value crosses as JSON, so a rule's test function is dropped and its name kept.
 		expect(callExport<{ name: string; test?: unknown }[]>("check-message-style.mjs", "RULES").map((r) => [r.name, r.test])).toContainEqual(["em-dash", undefined]);
-		expect(callExport<{ file: string }[]>("check-message-style.mjs", "PENDING").length).toBeGreaterThan(0);
+		// An empty array crosses as one, not as nothing: the pending list is empty
+		// once every message it waited for is reworded.
+		expect(callExport<{ file: string }[]>("check-message-style.mjs", "PENDING")).toEqual([]);
 	});
 
 	test("callExport carries large and hostile arguments intact", () => {

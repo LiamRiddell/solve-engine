@@ -17,9 +17,9 @@ import { formatValue } from "@solve-js/format/FormatEngine";
  *
  * A date that carries a zone now steps its days and months on that zone's
  * calendar (`calendar/ZonedSteps.ts`); hours stay elapsed time, as they always
- * were. The boundary: workdays still walk the backend's calendar, pinned below,
- * because the workday walk is being reshaped by #832 (weekend shapes) and the
- * zone belongs in it after that lands. Displaying a zoned date past the range a
+ * were. The boundary: workdays still walk the backend's calendar, pinned below:
+ * #832 reshaped the workday walk for weekend shapes but did not move it onto a
+ * date's zone. Displaying a zoned date past the range a
  * calendar holds, the other half of this report, threw a raw `RangeError`;
  * #832 refuses such a date where it is made (`DATE_OUT_OF_RANGE`), which the
  * test below asserts.
@@ -71,7 +71,7 @@ describe("the reported case: a day on a zoned date is a day on that zone's clock
 	});
 
 	// Workdays walk the backend's calendar still; see this file's header.
-	test.failing("a workday on a zoned date is counted on that zone's calendar (after #832)", () => {
+	test.failing("a workday on a zoned date is counted on that zone's calendar", () => {
 		expect(new Set(ZONES.map((zone) => on(zone, "2024-11-02 12:00 in New York + 3 workdays"))).size).toBe(1);
 	});
 

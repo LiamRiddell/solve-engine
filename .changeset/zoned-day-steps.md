@@ -15,7 +15,7 @@ A day is a calendar step, not a fixed 24 hours: adding one keeps the time the cl
 
 Hours and minutes stay elapsed time, which is what a duration in hours means, and a date with no zone steps the engine's own calendar as it did. The date arithmetic page gains the proven examples.
 
-The boundary. Working days still walk the engine's own calendar, since the workday walk is being reshaped for configurable weekends in #832 and the zone belongs in it once that lands; the spec pins the case as a `test.failing`. The other half of this report, a zoned date past the range a calendar holds throwing a raw `RangeError` where it is displayed, is fixed by #832, which refuses such a date where it is made (`DATE_OUT_OF_RANGE`), and the spec asserts that refusal.
+The boundary. Working days still walk the engine's own calendar rather than the zone's: #832 reshaped the workday walk for configurable weekends but did not move it onto a date's zone, so the spec pins that case as a `test.failing`. The other half of this report, a zoned date past the range a calendar holds throwing a raw `RangeError` where it is displayed, is fixed by #832, which refuses such a date where it is made (`DATE_OUT_OF_RANGE`), and the spec asserts that refusal.
 
 ## Verification
 
