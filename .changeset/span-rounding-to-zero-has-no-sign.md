@@ -17,3 +17,5 @@ The boundary: a span of half a second or more still rounds to a whole second and
 ## Verification
 
 `packages/engine/__tests__/format/FormatMsDuration.spec.ts` calls the formatter directly at zero, negative zero, a millisecond either side and the half-second boundary, and evaluates `now - now` fifty times. `FoundBug_dateDifferenceInDays.spec.ts` passes again.
+
+On top of main, the full suite ran 31,617 tests in 823 suites, all passing but 4 skipped, and `npm run test:temporal` passed its 3,666 tests.
