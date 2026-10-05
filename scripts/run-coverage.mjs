@@ -17,7 +17,9 @@
  *
  * A failing test in any shard fails the run, after every shard has finished,
  * so one log shows all of them. `SOLVE_COVERAGE_SHARDS` sets the count
- * (default 3: three 4 GB processes fit a 16 GB runner with room to spare).
+ * (default 2). Three were tried first and the runner, with 16 GB, was shut down
+ * 43 minutes in: three 4 GB heaps plus the coverage each holds leave too little
+ * room, so two run side by side, and the workflow's limit is raised to match.
  *
  * Usage:
  *   node scripts/run-coverage.mjs
@@ -42,7 +44,7 @@ const require = createRequire(import.meta.url);
 /** The shard count from the environment, refusing anything but a small whole number. */
 function shardCount() {
 	const raw = process.env.SOLVE_COVERAGE_SHARDS;
-	if (raw === undefined || raw === "") return 3;
+	if (raw === undefined || raw === "") return 2;
 	const n = Number(raw);
 	if (!Number.isInteger(n) || n < 1 || n > 16) {
 		console.error(`SOLVE_COVERAGE_SHARDS is ${JSON.stringify(raw)}: give a whole number from 1 to 16.`);

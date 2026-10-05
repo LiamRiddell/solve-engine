@@ -60,14 +60,15 @@ request, because the per-file coverage conversion makes the run several times
 slower than the suite itself. `npm run test:coverage` is the same check
 locally; run it for a change that removes tests.
 
-Coverage is measured in shards. `scripts/run-coverage.mjs` starts three Jest
-processes side by side, each running a third of the spec files with
-`--shard`, and each writes its raw counts without checking any threshold,
-because a third of the specs covers only part of the code. The script then
-adds the three sets of counts together and checks the floor once, on the
+Coverage is measured in shards. `scripts/run-coverage.mjs` starts two Jest
+processes side by side, each running half of the spec files with `--shard`,
+and each writes its raw counts without checking any threshold, because half
+of the specs covers only part of the code. The script then adds the two sets
+of counts together and checks the floor once, on the
 whole suite's figures, so the number is the same one a single run would give.
-`SOLVE_COVERAGE_SHARDS` changes the count (a machine with less memory can use
-one or two). A single run had grown to 80 to 90 minutes, against the
+`SOLVE_COVERAGE_SHARDS` changes the count; each shard is a 4 GB process, so
+three did not fit the 16 GB runner, which was shut down part-way through, and
+a machine with less memory can use one. A single run had grown to 80 to 90 minutes, against the
 workflow's 90-minute limit, and about half the daily runs were cancelled
 before the floor was measured (#890).
 
