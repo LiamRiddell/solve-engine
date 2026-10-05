@@ -5,6 +5,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { Token } from "@solve-js/lexer/Token";
 import type { InfixParselet, PrefixParselet } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The three web forms, read straight from the tokens the normalizer left.
@@ -67,7 +68,7 @@ export class DimensionsParselet implements PrefixParselet {
 		const { width, height } = sidesOf(token);
 		pushNumber(builder, width);
 		pushNumber(builder, height);
-		builder.emitPluginCall("aspectRatio", 2);
+		emitBuiltinPluginCall(builder, "aspectRatio", 2);
 	}
 }
 
@@ -144,7 +145,7 @@ export class ResizeParselet implements PrefixParselet {
 		pushNumber(builder, height);
 		pushNumber(builder, Number(target.value));
 		pushString(builder, side);
-		builder.emitPluginCall("resizeDimensions", 4);
+		emitBuiltinPluginCall(builder, "resizeDimensions", 4);
 	}
 }
 
@@ -161,7 +162,7 @@ export class RootFontSizeParselet implements InfixParselet {
 
 	parse(_parser: Parser, _left: Token, token: Token, builder: BytecodeBuilder): void {
 		pushNumber(builder, Number(token.value));
-		builder.emitPluginCall("atRootFontSize", 2);
+		emitBuiltinPluginCall(builder, "atRootFontSize", 2);
 	}
 }
 
@@ -186,6 +187,6 @@ export class PixelDensityParselet implements InfixParselet {
 			});
 		}
 		pushNumber(builder, Number(token.value));
-		builder.emitPluginCall("atPixelDensity", 2);
+		emitBuiltinPluginCall(builder, "atPixelDensity", 2);
 	}
 }

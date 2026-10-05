@@ -21,6 +21,20 @@ total: 5 + 3 // 8
 Groceries: 45 // 45
 ```
 
+The expression after the colon is read exactly as it would be on a line of its
+own, colons of its own included. A range inside a call, the `1000:1002` of
+`total(1000:1002)` (the whole numbers from 1,000 to 1,002), keeps its meaning
+after a label: a label stands at the start of the line, never inside a bracket,
+so a colon inside one is never taken for the label's. That line used to be
+refused as the time of day "1000:1002".
+
+```solve
+Total: total(1000:1002) // 3,003
+Total: total(1,000:1,002) // 3,003
+Cost: total(10:12) // 33
+Squares: sum(x^2, 1:3) // 14
+```
+
 One letter is a word too, so `x: 3` is a label, the way `A: 40` and `B: 55`
 label a ledger. The label is only a name for the figure: it never reads or
 changes a variable called the same, so with `x = 2` above it, `x: 3` is 3 and
@@ -76,9 +90,16 @@ with whatever followed: `1 + 24:00` used to answer 0. So the text before the
 colon is refused, with what it is instead, when it is:
 
 - **Part of a time.** A colon between two numbers belongs to a clock time, so a
-  number that starts the line or follows an operator is an operand, and a pair
-  that is no real time (`24:00`, a seconds field of 99) is refused as one. A
-  number that follows a word, as in `Week 12`, is part of the name.
+  number that starts the line, follows an operator or follows a label's colon
+  is an operand, and a pair that is no real time (`24:00`, a seconds field of
+  99) is refused as one. A number that follows a word, as in `Week 12`, is part
+  of the name.
+- **A figure in another script's digits.** Numbers are read in the digits 0 to
+  9 only. A figure written in another script's digits (Arabic-Indic `٢٤`,
+  Devanagari `२४`, fullwidth `１２`) is not read as a number, and stood where a
+  number would start, it is not a name either: `٢٤:00` is the time it looks
+  like. It is refused by name, spelled in 0 to 9. After a word it is part of
+  the name, as a number is (`Week ٢: 5`).
 - **A choice written with `?` and `:`.** There is no such operator; the refusal
   spells the line as the `if ... then ... else` the engine reads (see
   [conditionals](/syntax/conditionals/)).
@@ -90,10 +111,55 @@ colon is refused, with what it is instead, when it is:
 ```solve-doc
 1 + 24:00 // ERROR: "24:00" is not a valid time
 1:23:99 // ERROR: "1:23:99" is not a valid time
+Total: 24:00 // ERROR: "24:00" is not a valid time
+Total: 1000:1002 // ERROR: "1000:1002" is not a valid time
 true ? 25 : 30 // ERROR: There is no choice written with "?" and ":": write if true then 25 else 30
 a > b: 1 // ERROR: "a > b" before the colon is a comparison, not a label: a label names the figure in words, and a choice is written if ... then ... else
 (1+2): 5 // ERROR: "(1+2)" before the colon is a calculation, not a label: a label names the figure in words
 ```
+
+The figure after a label is the start of the expression, so `Total: 24:00` is
+the time 24:00 and is refused as `24:00` alone is. It used to be read as a second
+label, `24`, and answered 0, and `Total: 1000:1002` answered 1,002. A pair like
+`1000:1002` is no time, and at the start of an expression it is no range either
+(a range is read only as the list of `sum`, `prod`, `map` or `reduce`), so it is
+refused in the same words as on a line of its own; `Total: sum(1000:1002)` adds
+the range up.
+
+A figure in another script's digits used to be read as a label, since the
+engine reads such a figure as a word: `٢٤:00` answered the `00` after the
+colon, 0, and `Total: ٢٤:00` did the same. The line is now refused by name,
+with the figure written in the digits the engine reads, so retyping it gives
+the answer:
+
+```solve-doc
+٢٤:00 // ERROR: "٢٤" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 24
+Total: ٢٤:00 // ERROR: "٢٤" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 24
+Start: ٩:٣٠ // ERROR: "٩" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 9
+Week ٢: 5 // 5
+```
+
+The boundary: only a figure that stands before a colon, where a label would
+otherwise swallow it, is refused this way. The same figure elsewhere on a line
+is a word the engine does not know, and is refused as one (`٢٤ + 1` names `٢٤`
+as an undefined name), so no line answers a number for digits the engine
+cannot read. Reading those digits as numbers is a larger change to how a line
+is read, and is not made here.
+
+When the expression after a label cannot be worked out, the line says what is
+wrong with the expression, in the words that expression gets on a line of its
+own. It used to report only that the label's colon was unexpected, which is true
+of the line but says nothing a reader can act on.
+
+```solve-doc
+Total: average(10:12) // ERROR: In average(...), 10:12 is a clock time, not a range, and a time cannot be averaged: a colon between two numbers is a range only as the list of sum, prod, map or reduce. To average numbers, list them with commas, as in average(1, 2, 3).
+Total: (1 + 2 // ERROR: The line ends where ")" was expected
+Rent: $1200 + // ERROR: The line ends after "+", where a value was expected
+```
+
+A colon followed by `=` keeps the line's own wording, since `x := 5` is an
+assignment written another language's way, and that refusal says to assign
+with `=` on its own.
 
 The boundary: arithmetic between words stays a label (`Food + drink`,
 `Year-end`, `Q1/Q2`), since that is how ledgers name things and the figure after

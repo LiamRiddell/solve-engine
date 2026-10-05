@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `crypto("BTC")`: the coin symbol, read as a literal inside the parentheses and
@@ -20,6 +21,6 @@ export class CryptoCallParselet implements PrefixParselet {
 		parser.consume("RPAREN");
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(coin);
-		builder.emitPluginCall(this.fn, 1);
+		emitBuiltinPluginCall(builder, this.fn, 1);
 	}
 }

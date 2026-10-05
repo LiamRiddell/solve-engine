@@ -65,6 +65,10 @@ export const CoreErrorCodes = {
   USER_FUNCTION_NO_PARAMS: "USER_FUNCTION_NO_PARAMS",
   /** A function definition whose body reaches live data (weather, stocks, a currency rate). Refused when it is defined, since a function body must be synchronous. */
   FUNCTION_BODY_MUST_BE_SYNCHRONOUS: "FUNCTION_BODY_MUST_BE_SYNCHRONOUS",
+  /** A function definition whose body reads other lines (`f(x) = x + prev`, `x + line 1`, a total above, a tag or a table column). Refused when it is defined, since a body runs wherever it is called, with no document lines to read; the value is passed in as an argument instead. */
+  FUNCTION_BODY_READS_LINES: "FUNCTION_BODY_READS_LINES",
+  /** A held expression that reads other lines (`map(x + prev, 1:3)`, `sum(x + line 1, 1:3)`, `plot x + prev from 0 to 1`, `der(x^2 + prev, x)`). Refused when the line is read, since the expression is worked out away from the line, with no lines to read; the message says to name the line's value first (`p = prev`) and use the name. */
+  HELD_EXPRESSION_READS_LINES: "HELD_EXPRESSION_READS_LINES",
   /** One line defining more functions than a compiled program can index. A safety limit, of the same kind as `TOO_MANY_NUMERIC_CONSTANTS`. */
   TOO_MANY_FUNCTION_DEFINITIONS: "TOO_MANY_FUNCTION_DEFINITIONS",
   /** One line with more `map` or `reduce` bodies than a compiled program can index. A safety limit, of the same kind as `TOO_MANY_FUNCTION_DEFINITIONS`. */
@@ -253,6 +257,8 @@ export const CoreErrorCodes = {
   TERNARY_UNSUPPORTED: "TERNARY_UNSUPPORTED",
   /** Text before a colon that is a comparison, an assignment or a calculation with no word in it (`a > b: 1`, `(1+2): 5`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. */
   LABEL_NOT_A_NAME: "LABEL_NOT_A_NAME",
+  /** A figure in digits from another script (`٢٤:00`, `Total: ٢٤:00`, Arabic-Indic for 24) standing before a colon where a number would be an operand. Numbers are read in the digits 0 to 9 only, and the labelled-line fallback used to take the figure as a label and answer with what followed the colon. The message spells the figure in 0 to 9. */
+  OTHER_SCRIPT_DIGITS: "OTHER_SCRIPT_DIGITS",
   /** A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. */
   NETWORK_DISABLED: "NETWORK_DISABLED",
 
@@ -496,6 +502,18 @@ export const CoreErrorCodes = {
   NON_INTEGER_RANGE_BOUND: "NON_INTEGER_RANGE_BOUND",
   /** A range whose first bound is above its second (`5:1`). The message names each bound as written, with the number it came to, and suggests the other order. */
   DESCENDING_RANGE: "DESCENDING_RANGE",
+  /** A number in a call written like a grouped range bound whose group is not three digits (`sum(1,0000:1)`, `sum(1,00:1)`): refused by the lexer, since it is neither one bound nor plainly two arguments. The message says a space after the comma gives two. */
+  RANGE_BOUND_GROUP_MALFORMED: "RANGE_BOUND_GROUP_MALFORMED",
+  /** A whole-number colon pair no clock reads, written as the first of several arguments to `sum`, `total`, `prod`, `map` or `reduce` (`sum(100:200, 50)`): a range is read only as the last argument. Refused by the normaliser; the message says where the range goes. */
+  RANGE_BEFORE_ANOTHER_ARGUMENT: "RANGE_BEFORE_ANOTHER_ARGUMENT",
+  /** A list rounded (`to 2 dp`, `to 3 sf`, `round`, `ceil`, `floor`) that holds a cell with no number to round: a true or false, or a formula with an unknown. */
+  LIST_ROUNDING_NON_NUMERIC: "LIST_ROUNDING_NON_NUMERIC",
+  /** A list of several numbers written as one: in scientific notation, as a fraction or a percentage, or in hex, binary or octal (`[1234, 5678] as sci`). Each value is converted on its own. */
+  LIST_CONVERSION_UNSUPPORTED: "LIST_CONVERSION_UNSUPPORTED",
+  /** A list of several numbers given to a builtin that reads each argument as one number and has no answer for each cell (`gcd([4, 6], 2)`, `root(3, [8, 27])`, `atan2([1, 2], 1)`, `isprime([2, 4])`). The message points at `map`. */
+  LIST_ARGUMENT_UNSUPPORTED: "LIST_ARGUMENT_UNSUPPORTED",
+  /** A list given to a function of one number that is worked out for each cell (`sqrt`, `sin`, `ln`, `fact`), when a cell is not a number (a true or false, a formula with an unknown), when a cell has no real answer (`sqrt([4, -9])`), or when the answers come in different units. */
+  LIST_CELL_UNSUPPORTED: "LIST_CELL_UNSUPPORTED",
   /** A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. */
   COLLECTION_TOO_LARGE: "COLLECTION_TOO_LARGE",
   /** A list cell that is not a number or a quantity: a list inside a list, text, a date. */

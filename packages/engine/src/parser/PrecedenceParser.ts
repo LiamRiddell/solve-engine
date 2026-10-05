@@ -946,6 +946,19 @@ export class PrecedenceParser {
     this.setBuilder(builder);
 
     const bodyProgram = bodyBuilder.build();
+    // A body that reads other lines (`f(x) = x + prev`, `x + line 1`) waits
+    // for nothing, so it is not refused as asynchronous: it is refused for
+    // what it is. A body is run wherever it is called, away from the line
+    // that wrote it, so there are no lines for it to read.
+    if (bodyProgram.hasAsync && bodyBuilder.readsDocument) {
+      throw ErrorFactory.parsing({
+        code: "FUNCTION_BODY_READS_LINES",
+        message: `"${nameToken.value}(...)"'s body reads other lines of the document, and a function body has no lines to read: pass the value in as an argument instead`,
+        suggestion: `Add a parameter for the line's value, ${nameToken.value}(${[...params, "v"].join(", ")}), and pass prev or line 1 to it when you call it`,
+        context: { name: nameToken.value },
+        span: this.spanOf(nameToken),
+      });
+    }
     if (bodyProgram.hasAsync) {
       // v1 scope decision: a function body calling an async plugin
       // (weather, stocks, currency, ...) isn't supported yet, propagating

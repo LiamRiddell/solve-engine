@@ -16,6 +16,8 @@ import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
 import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
+import { roundEachCell, isManyCellList } from "@solve-js/vm/ListRounding";
+import { applyEachCell, listArgumentRefused } from "@solve-js/vm/ListArguments";
 import { apartSymbolic } from "@solve-js/symbolic/PartialFractions";
 import { differentiate } from "@solve-js/symbolic/Derivative";
 import { integrate } from "@solve-js/symbolic/Integral";
@@ -457,6 +459,30 @@ function roundToPlaces(source: Value, places: number): Value {
     return withPlaces(source, roundHalfAwayFromZero(scaled) / scale, p);
 }
 
+/** ceil(x) of one number or quantity, exact where the value carries an exact form. */
+function ceilOne(value: Value): Value {
+    return roundExactToWhole(value, "ceil") ?? keepUnit(value, Math.ceil(value.toNumber()));
+}
+
+/** int(x) of one number or quantity: the whole part, exact where the value carries an exact form. */
+function truncOne(value: Value): Value {
+    return roundExactToWhole(value, "trunc") ?? keepUnit(value, Math.trunc(value.toNumber()));
+}
+
+/** floor(x) of one number or quantity, exact where the value carries an exact form. */
+function floorOne(value: Value): Value {
+    return roundExactToWhole(value, "floor") ?? keepUnit(value, Math.floor(value.toNumber()));
+}
+
+/**
+ * round(x) of one number or quantity: the nearest whole number, a half away
+ * from zero as round(x, n) and `to N dp` round one (#584); see
+ * roundHalfAwayFromZero().
+ */
+function roundOne(value: Value): Value {
+    return roundExactToWhole(value, "round") ?? keepUnit(value, roundHalfAwayFromZero(value.toNumber()));
+}
+
 /**
  * Round a value to a number of significant figures, the way a measured value is
  * reported: `1234567 to 3 sf` is 1,230,000 and `0.0012345 to 2 sf` is 0.0012.
@@ -854,6 +880,79 @@ export function builtinArgumentRefused(fnIdx: number, args: readonly Value[]): V
 }
 
 /**
+ * The builtins of one number with an answer for each number, worked out for
+ * each cell of a list (`sqrt([4, 9])` is `[2, 3]`): the roots, the
+ * exponentials and logarithms, the trigonometric and hyperbolic functions and
+ * their inverses, `sign`, `trunc`, `fact`, the angle conversions, `fround` and
+ * `clz32`. Each takes exactly one argument.
+ */
+export const EACH_CELL_BUILTINS: ReadonlySet<number> = new Set([
+    0, 2, 3, 4, 5, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30,
+    33, 34, 35, 36, 62, 87, 88, 89, 90, 91, 92, 113,
+]);
+
+/**
+ * The builtins that read a list as it is, and so are never refused one: `abs`
+ * (a matrix's determinant, the `|a|` notation), the rounding family and `int`,
+ * which round a list cell by cell themselves, `min`, `max`, `hypot`, the
+ * aggregates and the statistics, which word their own refusal, `pow` (a
+ * square matrix's power), the matrix functions, the algebra verbs, `float`,
+ * which refuses a list by name, and the two phrase forms that carry a list
+ * through: `to N dp` and a count's unit (`[2, 3] days`). A rate, a split and
+ * `in minutes and seconds` read one number, so they are not here.
+ */
+export const TAKES_LIST: ReadonlySet<number> = new Set([
+    1, 6, 7, 8, 9, 10, 26, 31, 42, 43, 44, 45, 50, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 78, 79,
+    97, 101, 102, 103, 104, 105, 106, 107, 108, 115, 116,
+]);
+
+/**
+ * What a builtin answers when an argument is a list of several numbers, or
+ * null to call it as usual: the builtin worked out for each cell when it is
+ * one of {@link EACH_CELL_BUILTINS}, the refusal by name when it reads its
+ * arguments as single numbers, and null when it takes a list as it is
+ * ({@link TAKES_LIST}) or no argument is a list.
+ *
+ * Without this, every one-number builtin read a list through `toNumber()`,
+ * which is 0 for a matrix, and answered the result for 0: `sqrt([4, 9])` was 0.
+ *
+ * @param fnIdx - The builtin's index; each cell goes through {@link callBuiltin}.
+ * @param args - Its arguments, in call order.
+ * @param context - The line context, passed through to it.
+ * @returns The answer or refusal, or null.
+ */
+export function listBuiltinCall(fnIdx: number, args: readonly Value[], context?: LineExecutionContext): Value | null {
+    if (TAKES_LIST.has(fnIdx) || !args.some(isManyCellList)) return null;
+    const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+    if (EACH_CELL_BUILTINS.has(fnIdx) && args.length === 1) {
+        return applyEachCell(args[0], name, (cell) => callBuiltin(fnIdx, [cell], context));
+    }
+    return listArgumentRefused(name, args);
+}
+
+/** The registry's own entries by index, built on first use by {@link callBuiltin}. */
+let builtinsByIndex: Map<number, (args: Value[], context?: LineExecutionContext) => Value> | undefined;
+
+/**
+ * Call the builtin at `fnIdx`, or answer UNKNOWN_BUILTIN_FUNCTION when the
+ * registry holds none there. The entry is looked up in a map of the registry's
+ * own entries, not read off the object by index, so an index never reaches a
+ * property inherited from `Object.prototype` (CodeQL's unvalidated dynamic
+ * call, which an own-property check before the read did not satisfy).
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments, in call order.
+ * @param context - The line context, passed through to it.
+ * @returns What the builtin answers, or the refusal.
+ */
+export function callBuiltin(fnIdx: number, args: Value[], context?: LineExecutionContext): Value {
+    builtinsByIndex ??= new Map(Object.entries(builtinFunctions).map(([index, fn]) => [Number(index), fn]));
+    const entry = builtinsByIndex.get(fnIdx);
+    if (entry === undefined) return errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${fnIdx} is not registered`);
+    return entry(args, context);
+}
+
+/**
  * Whether a reader calls this builtin by its name (`round(...)`, `sqrt(...)`),
  * so a message may use it. The rest are reached through a phrase (`to 2 dp`,
  * `3d6`), and their names (`roundToPlaces`) are the engine's, not the reader's.
@@ -912,15 +1011,17 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         ?? numberValue(logToBase(args[0].toNumber(), args[1].toNumber())),
     113: (args) => quantityRefused("ln", args[0], false) ?? outsideDomain("ln", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
-    6: (args) => roundExactToWhole(args[0], "ceil") ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
-    7: (args) => roundExactToWhole(args[0], "floor") ?? keepUnit(args[0], Math.floor(args[0].toNumber())),
-    8: (args) =>
-        args.length >= 2
-            ? // round(x, n): round to n decimal places and display at that precision.
-              roundToPlaces(args[0], args[1].toNumber())
-            : // round(x): the nearest whole number, a half away from zero as
-              // round(x, n) and `to N dp` round one (#584); see roundHalfAwayFromZero().
-              roundExactToWhole(args[0], "round") ?? keepUnit(args[0], roundHalfAwayFromZero(args[0].toNumber())),
+    // A list is rounded cell by cell; see roundEachCell() in vm/ListRounding.ts.
+    6: (args) => roundEachCell(args[0], ceilOne, "rounded up") ?? ceilOne(args[0]),
+    7: (args) => roundEachCell(args[0], floorOne, "rounded down") ?? floorOne(args[0]),
+    8: (args) => {
+        if (args.length >= 2) {
+            // round(x, n): round to n decimal places and display at that precision.
+            const places = args[1].toNumber();
+            return roundEachCell(args[0], (cell) => roundToPlaces(cell, places), "rounded") ?? roundToPlaces(args[0], places);
+        }
+        return roundEachCell(args[0], roundOne, "rounded") ?? roundOne(args[0]);
+    },
     // min/max: see extremum() for why the winner is carried around as a Value
     // rather than as a running number.
     9: (args) => extremum(args, false),
@@ -1236,7 +1337,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // which only strips a unit/percentage wrapper and keeps any decimal
     // part (e.g. "5.7 as number" -> 5.7), int() additionally truncates.
     // Text is read only when it spells a number whole; see intOfText().
-    50: (args) => args[0].type === ValueType.String ? intOfText(args[0].value as string) : roundExactToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
+    // A list is cut to whole numbers cell by cell, as the rounding family is.
+    50: (args) => args[0].type === ValueType.String ? intOfText(args[0].value as string) : roundEachCell(args[0], truncOne, "cut to whole numbers") ?? truncOne(args[0]),
 
     // ── Finance (packages/finance/) ──────────────────────────────────────
     // All finance builtins preserve the principal/amount argument's Uom
@@ -1941,10 +2043,16 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // fractional part to round at all, and the round trip through 1e23 was
     // pure loss. Asking for fewer decimal places than a number has cannot
     // change it, so a value that is already whole is returned untouched.
-    97: (args) => roundToPlaces(args[0], args[1].toNumber()),
+    97: (args) => {
+        const places = args[1].toNumber();
+        return roundEachCell(args[0], (cell) => roundToPlaces(cell, places), "rounded") ?? roundToPlaces(args[0], places);
+    },
     // Not reachable by name, only through `<value> to <n> sf`; see
     // roundToSignificant() and converters/parselets/RoundingParselets.ts.
-    108: (args) => roundToSignificant(args[0], args[1].toNumber()),
+    108: (args) => {
+        const figures = args[1].toNumber();
+        return roundEachCell(args[0], (cell) => roundToSignificant(cell, figures), "rounded") ?? roundToSignificant(args[0], figures);
+    },
     // splitEach(amount, n): a per-person bill split, `split $180 between 4` and
     // `$120 + 18% split 3 ways`. Backs both split spellings (see
     // BillSplitParselets.ts). Money stays exact and the shares add back to the

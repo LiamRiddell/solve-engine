@@ -282,6 +282,44 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"solve(x = (X) * gravity, x)",
 		"$(X) * 1e-3",
 		"(X) * 1e-3 USD",
+		// A range bound with its thousands grouped in a call, and a synchronous
+		// plugin call in a map (FoundBug_groupedRangeBoundInACall,
+		// FoundBug_synchronousPluginCalls).
+		"sum(1,000:X)",
+		"sum(X:1,002)",
+		"map(erf(x), [X])",
+		"map(x + erf(X), 0:2)",
+		// A malformed group against a range's colon, a list whose cells take
+		// three significant digits together, the weekday asked with `of`, a
+		// body that reads another line, and a range total after a label
+		// (FoundBug_malformedRangeBoundGroup, FoundBug_listCellPrecision,
+		// FoundBug_weekdayOfInAFunctionBody, FoundBug_functionBodyReadsLines,
+		// FoundBug_labelledRangeTotal).
+		"sum(1,0000:X)",
+		"map(x * (X) px at 300 dpi, 1:2)",
+		"weekday of X",
+		"f(x) = x + (X) + prev",
+		"Total: total(X:1002)",
+		// A list rounded cell by cell and refused a one-number conversion, a
+		// time after a label, a label's own expression error, a held
+		// expression that reads a line, and a range before another argument
+		// (FoundBug_listRounding, FoundBug_labelColonTime,
+		// FoundBug_labelledRetryError, FoundBug_heldExpressionReadsLines,
+		// FoundBug_rangeBeforeAnotherArgument).
+		"[X, 0.006] to 4 dp",
+		"[X, 2] to 2 sf",
+		"[X, 2] as sci",
+		"Total: X:00",
+		"Total: average(X:12)",
+		"map(x + (X) + prev, 1:3)",
+		"sum(100:200, X)",
+		// A list given to a function of one number, worked for each cell or
+		// refused by name, and a figure in another script's digits before a
+		// colon (FoundBug_listBuiltins, FoundBug_otherScriptDigitsLabel).
+		"sqrt([X, 9])",
+		"gcd([X, 6], 2)",
+		"٢٤:X",
+		"Total: ٢X:00",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,

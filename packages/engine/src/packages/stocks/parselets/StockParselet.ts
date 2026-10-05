@@ -9,6 +9,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { stripQuotes } from "@solve-js/utilities/Strings";
 import { tryParseDatePhrase, type ParsedDatePhrase } from "../DatePhrase";
 import { STOCK_TICKER_TYPE } from "../normalizer/StockTickerNormalizerRule";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 interface DateSuffix {
 	field: "close" | "volume";
@@ -79,10 +80,10 @@ function emitStockQuery(
 	builder.emitOpcode(OpCode.PUSH_STRING);
 	if (!suffix) {
 		builder.emitString(ticker);
-		builder.emitPluginCall(currentFn, 1);
+		emitBuiltinPluginCall(builder, currentFn, 1);
 	} else {
 		builder.emitString(`${suffix.field}:${ticker}:${suffix.date.isoDate}`);
-		builder.emitPluginCall(historicalFn, 1);
+		emitBuiltinPluginCall(builder, historicalFn, 1);
 	}
 }
 

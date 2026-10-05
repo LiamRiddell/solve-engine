@@ -163,6 +163,14 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     "how many workdays between": "WORKDAYS_BETWEEN",
     "day of the week on": "WEEKDAY_ON",
     "weekday on": "WEEKDAY_ON",
+    // With `of`, as `month of` and `week number of` read. Without these,
+    // `weekday of 2026-10-01` was "Undefined variable: weekday", and so was a
+    // function written with it (`f(d) = weekday of d`), which was accepted and
+    // then failed at every call.
+    "day of the week of": "WEEKDAY_ON",
+    "day of week of": "WEEKDAY_ON",
+    "day of week on": "WEEKDAY_ON",
+    "weekday of": "WEEKDAY_ON",
     "current timestamp": "CURRENT_TIMESTAMP",
     "to date": "TO_DATE",
     "to timestamp": "TO_TIMESTAMP",

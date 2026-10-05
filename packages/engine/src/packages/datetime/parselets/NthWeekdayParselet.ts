@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 import { monthOf } from "../normalizer/MonthNameDateNormalizerRule";
 
 /**
@@ -43,12 +44,12 @@ export class NthWeekdayParselet implements PrefixParselet {
 			builder.emitOpcode(OpCode.DATE_NOW);
 			builder.emitOpcode(OpCode.PUSH_NUMBER);
 			builder.emitNumber(month - 1);
-			builder.emitPluginCall("monthThisYear", 2);
+			emitBuiltinPluginCall(builder, "monthThisYear", 2);
 		} else {
 			parser.parseExpression(BindingPower.Postfix, builder); // month anchor -> Datetime
 		}
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(token.value); // "<n>:<dow>" or "last:<dow>"
-		builder.emitPluginCall("nthWeekdayOfMonth", 2);
+		emitBuiltinPluginCall(builder, "nthWeekdayOfMonth", 2);
 	}
 }

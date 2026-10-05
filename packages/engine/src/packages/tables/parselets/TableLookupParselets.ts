@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** The plugin function an exact row lookup calls. */
 export const TABLE_ROW_LOOKUP_FN = "TABLE_ROW_LOOKUP";
@@ -118,7 +119,7 @@ export class TableLookupParselet implements PrefixParselet {
     parser.parseExpression(BindingPower.Product, builder);
 
     const bands = consumeAddress(parser, true);
-    builder.emitPluginCall(bands ? TABLE_BAND_LOOKUP_FN : TABLE_ROW_LOOKUP_FN, 2);
+    emitBuiltinPluginCall(builder, bands ? TABLE_BAND_LOOKUP_FN : TABLE_ROW_LOOKUP_FN, 2);
   }
 }
 
@@ -136,6 +137,6 @@ export class ThroughBandsParselet implements InfixParselet {
 
   parse(parser: Parser, _left: Token, _token: Token, builder: BytecodeBuilder): void {
     consumeAddress(parser, false);
-    builder.emitPluginCall(TABLE_THROUGH_BANDS_FN, 1);
+    emitBuiltinPluginCall(builder, TABLE_THROUGH_BANDS_FN, 1);
   }
 }

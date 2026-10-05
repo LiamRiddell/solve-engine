@@ -169,8 +169,8 @@ describe("adversarial", () => {
 
 	test("edge: the numeric edges as the year, CRLF", () => {
 		for (const line of fill("value of $100 in X assuming 3% inflation", NUMERIC_EDGES)) expectHonestLine(line, { allowNaN: true });
-		expect(outcome("value of $100 in 1/0 assuming 3% inflation")).toBe(`${A_YEAR_IS}, and this one is not a finite number`);
-		expect(outcome("value of $100 in 1e400 assuming 3% inflation")).toBe(`${A_YEAR_IS}, and this one is not a finite number`);
+		expect(outcome("value of $100 in 1/0 assuming 3% inflation")).toBe(`${A_YEAR_IS}, and this one is ∞`);
+		expect(outcome("value of $100 in 1e400 assuming 3% inflation")).toBe(`${A_YEAR_IS}, and this one is ∞`);
 		expect(outcome("value of $100 in 2^53 assuming 3% inflation")).toBe("$0.00");
 		const { batch, incremental } = both("value of $100 in 2030.5 assuming 3% inflation\r\nvalue of $100 in 2030 assuming 3% inflation\r\n");
 		expect(batch.slice(0, 2)).toEqual(["ERROR INFLATION_EXPECTED_YEAR", "= $88.85"]);

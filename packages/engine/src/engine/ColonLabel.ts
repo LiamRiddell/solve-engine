@@ -18,13 +18,19 @@
  *
  * - **A time of day the clock rules refused.** A colon between two numbers is
  *   a clock time's. When the number before it starts the line, or follows an
- *   operator, a bracket or a comma with the colon touching both numbers as a
- *   time is written, it is an operand and the pair is a time, so `24:00`,
- *   `1 + 24:00` and `9:30 + 24:00` are refused as times that do not exist. A
+ *   operator, a bracket, a comma or a label's colon with the colon touching
+ *   both numbers as a time is written, it is an operand and the pair is a
+ *   time, so `24:00`, `1 + 24:00`, `9:30 + 24:00` and `Total: 24:00` are
+ *   refused as times that do not exist. A
  *   clock time with a third field written straight after it, `1:23:99`, is one
  *   too: its seconds are out of range. A number that follows a word is part of
  *   a name (`Week 12: 75`, `Week 12:75`), and a colon with a space after it
  *   (`Score >= 90: 12`) is a label's, which the rules below then read.
+ * - **A figure in another script's digits.** The engine reads numbers in the
+ *   digits 0 to 9 only, and the lexer reads `٢٤` as a word, so `٢٤:00` was
+ *   the label `٢٤` and answered 0. A figure in operand position before the
+ *   colon, by the rule a number follows there, is refused by name and
+ *   spelled in 0 to 9 (`OTHER_SCRIPT_DIGITS`).
  * - **A choice written with `?` and `:`.** There is no such operator; a choice
  *   is `if ... then ... else`, and the refusal spells the reader's own line
  *   that way.
@@ -51,10 +57,16 @@ export interface ColonLabelFault {
 	readonly message: string;
 }
 
-/** Tokens after which a number is an operand, never part of a name. */
-const OPERAND_BEFORE: ReadonlySet<string> = new Set([
+/**
+ * Tokens after which a number is an operand, never part of a name. A label's
+ * colon is one: the figure after it starts an expression, so in
+ * `Total: 24:00` the `24` begins the answer and `24:00` is a time, where it
+ * was read as a second label `24` and the line answered 0.
+ */
+export const OPERAND_BEFORE: ReadonlySet<string> = new Set([
 	"PLUS", "MINUS", "STAR", "SLASH", "CARET", "EQUALS", "EQUALITY", "NEQ", "GT", "GTE", "LT", "LTE",
 	"LPAREN", "LBRACKET", "COMMA", "QUESTION", "PLUS_EQUALS", "MINUS_EQUALS", "STAR_EQUALS", "SLASH_EQUALS",
+	"COLON",
 ]);
 
 /**
@@ -145,12 +157,142 @@ export function timeAtColon(tokens: readonly Token[], colon: number): string | n
 	}
 	if (before.type !== "NUMBER") return null;
 	// A number that follows a word is part of a name (`Week 12: 75`); one that
-	// starts the line, or follows an operator, a bracket or a comma, is an
-	// operand, so the pair around the colon is a time.
+	// starts the line, or follows an operator, a bracket, a comma or a label's
+	// colon, is an operand, so the pair around the colon is a time.
 	const lead = tokens[colon - 2];
 	if (lead !== undefined && !OPERAND_BEFORE.has(lead.type)) return null;
 	if (lead !== undefined && (!touching(before, tokens[colon]) || !touching(tokens[colon], after))) return null;
 	return `${before.text}:${after.text}`;
+}
+
+/** One decimal digit of any script, as Unicode classes it. */
+const DECIMAL_DIGIT = /\p{Nd}/u;
+
+/**
+ * A figure written in digits from another script: decimal digits, at least
+ * one of them not 0 to 9 (Arabic-Indic `٢٤`, Devanagari `२४`, fullwidth
+ * `１２`, mathematical `𝟐𝟒`), with the Arabic decimal and thousands marks.
+ * The lexer reads such a figure as a word, since the engine reads numbers
+ * only in the digits 0 to 9.
+ */
+const OTHER_SCRIPT_FIGURE = /^(?=.*[^0-9٫٬])[\p{Nd}٫٬]+$/u;
+
+/** Invisible formatting characters (a zero-width space, a direction override), which a word can carry and a figure is read without. */
+const FORMAT_CHARACTERS = /\p{Cf}/gu;
+
+/**
+ * The value, 0 to 9, of one decimal digit of any script, or -1 for a
+ * character that is not one.
+ *
+ * Unicode keeps every script's digits in a run of ten from 0 to 9, and runs
+ * that touch (the five sets of mathematical digits) follow each other whole,
+ * so a digit's value is how far it sits from the start of its run, counted in
+ * tens. The walk back is at most a few runs long.
+ *
+ * @param digit - One character (a code point, which may be two UTF-16 units).
+ * @returns Its value, or -1.
+ */
+export function digitValue(digit: string): number {
+	const code = digit.codePointAt(0);
+	if (code === undefined || !DECIMAL_DIGIT.test(digit) || String.fromCodePoint(code) !== digit) return -1;
+	let start = code;
+	while (start > 0 && DECIMAL_DIGIT.test(String.fromCodePoint(start - 1))) start--;
+	return (code - start) % 10;
+}
+
+/**
+ * A figure in another script's digits written in the digits 0 to 9 (`٢٤` is
+ * `24`, `٢٫٥` is `2.5`), or null when the text is not such a figure: a word,
+ * or a figure already in 0 to 9. Invisible formatting characters in the text
+ * (a direction override, a zero-width space) are read past, since they change
+ * how a figure shows and not which figure it is.
+ *
+ * @param text - A token's text.
+ * @returns The figure in 0 to 9, or null.
+ */
+export function otherScriptFigure(text: string): string | null {
+	const shown = text.replace(FORMAT_CHARACTERS, "");
+	if (!OTHER_SCRIPT_FIGURE.test(shown)) return null;
+	let out = "";
+	for (const ch of shown) {
+		if (ch === "٫") out += ".";
+		else if (ch === "٬") out += ",";
+		else out += String(digitValue(ch));
+	}
+	return out;
+}
+
+/**
+ * The figure in another script's digits that stands as an operand before the
+ * colon at `colon`, or null. `written` is the figure as typed and `reading`
+ * is it in the digits 0 to 9.
+ *
+ * The figure is the run of tokens before the colon made of such figures and
+ * numbers in 0 to 9, ending in such a figure: `٢٤`, `2٤` (which the normaliser
+ * reads as a product, putting a multiplication with no text of the reader's
+ * between the two), and `٢` and `٤` with a zero-width space between them,
+ * which the lexer reads as two words. The rule for where it stands follows
+ * {@link timeAtColon}'s for a number: a figure that starts the line, or
+ * follows an operator, a bracket, a comma or a label's colon, is an operand,
+ * never part of a name, so `٢٤:00` and `Total: ٢٤:00` are the time they look
+ * like, written in digits the engine does not read. A figure after a word is
+ * part of the name, as a number is (`Week ٢: 5`).
+ *
+ * Linear in the length of the run.
+ *
+ * @param tokens - The line's normalised tokens.
+ * @param colon - The index of a COLON token, at least 1.
+ * @returns The figure, or null.
+ */
+export function otherScriptFigureAtColon(tokens: readonly Token[], colon: number): { written: string; reading: string } | null {
+	const last = tokens[colon - 1];
+	if (last === undefined || tokens[colon + 1] === undefined || otherScriptFigure(last.text) === null) return null;
+	const run: Token[] = [];
+	const readings: string[] = [];
+	let k = colon - 1;
+	for (; k >= 0; k--) {
+		const token = tokens[k];
+		const next = run[0];
+		// The multiplication the normaliser puts in `2٤` stands where the
+		// figure after it starts, and has no text of the reader's.
+		if (token.type === "STAR" && next !== undefined && token.offset === next.offset) continue;
+		const reading = token.type === "NUMBER" ? token.text : otherScriptFigure(token.text);
+		if (reading === null) break;
+		const gap = next !== undefined && tokenEnd(token) < next.offset ? " " : "";
+		run.unshift(token);
+		readings.unshift(`${reading}${gap}`);
+	}
+	const lead = tokens[k];
+	if (lead !== undefined && !OPERAND_BEFORE.has(lead.type)) return null;
+	const written = run.map((token, j) => (j + 1 < run.length && tokenEnd(token) < run[j + 1].offset ? `${token.text} ` : token.text)).join("");
+	return { written, reading: readings.join("") };
+}
+
+/**
+ * How many brackets, `(` or `[`, are still open at each token: the entry at
+ * `k` counts those opened before token `k` and not yet closed. A closing
+ * bracket with none open is ignored, so the count is never negative.
+ *
+ * A label stands at the top level of a line, never inside a bracket, so a
+ * colon whose count is above zero is not a label's: `Total: total(1000:1002)`
+ * has its label colon at the top and a range's colon inside the call. The
+ * label reading used to weigh the range's colon first (it walks from the
+ * right), read `1000:1002` as a time of day and refused the line, where the
+ * same call with no label answers 3,003.
+ *
+ * @param tokens - The line's normalised tokens.
+ * @returns One count per token, in line order.
+ */
+export function openBracketsAt(tokens: readonly Token[]): number[] {
+	const counts: number[] = new Array<number>(tokens.length);
+	let depth = 0;
+	for (let k = 0; k < tokens.length; k++) {
+		counts[k] = depth;
+		const type = tokens[k].type;
+		if (type === "LPAREN" || type === "LBRACKET") depth++;
+		else if ((type === "RPAREN" || type === "RBRACKET") && depth > 0) depth--;
+	}
+	return counts;
 }
 
 /**
@@ -175,6 +317,14 @@ export function colonLabelFault(tokens: readonly Token[], colon: number): ColonL
 
 	const time = timeAtColon(tokens, colon);
 	if (time !== null) return { code: "INVALID_TIME_LITERAL", message: `"${time}" is not a valid time` };
+
+	const figure = otherScriptFigureAtColon(tokens, colon);
+	if (figure !== null) {
+		return {
+			code: "OTHER_SCRIPT_DIGITS",
+			message: `"${quoted(figure.written)}" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in ${quoted(figure.reading)}`,
+		};
+	}
 
 	// Only the text since the previous colon is this colon's label: in
 	// `Note: a > b: 1` the label `Note` has already been set aside.
@@ -310,4 +460,29 @@ export function ternaryMessage(before: string | null, condition: string | null, 
 		code: "TERNARY_UNSUPPORTED",
 		message: `There is no choice written with "?" and ":": write ${written}`,
 	};
+}
+
+/**
+ * The error to report for a line that did not parse whole, when the parse
+ * stopped at a label's colon and the expression after the label was retried
+ * and failed as well: that retry's error, or undefined to keep the line's own.
+ *
+ * The line is then `<label>: <expression>`, and the expression's error is the
+ * specific one: `Total: average(10:12)` is refused because 10:12 is a clock
+ * time, which the reader can act on, where the whole line's error only said
+ * an operator was expected at the colon after `Total`. Two shapes keep the
+ * line's own error: a parse that stopped somewhere other than a colon, where
+ * the line is not a label's, and a colon followed by `=` (`x := 5`), whose
+ * own wording says to assign with `=` alone.
+ *
+ * @param leftover - The token the whole-line parse stopped at.
+ * @param next - The token after it, if any.
+ * @param retryError - The error the rightmost labelled retry raised, if one ran and failed.
+ * @returns The error to report, or undefined.
+ */
+export function labelledRetryError<E>(leftover: Pick<Token, "type">, next: Pick<Token, "type"> | undefined, retryError: E | undefined): E | undefined {
+	if (retryError === undefined) return undefined;
+	if (leftover.type !== "COLON") return undefined;
+	if (next?.type === "EQUALS") return undefined;
+	return retryError;
 }

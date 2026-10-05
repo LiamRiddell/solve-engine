@@ -51,6 +51,18 @@ zero, is left as a gap in the curve rather than breaking the whole plot. `plot`
 stays an ordinary word elsewhere, so `plot` remains usable as a variable name;
 only `plot` followed by an expression begins a plot.
 
+Because the expression is worked out at each step rather than on its own line,
+it has no lines above it to read: a reference to another line inside it, such
+as `prev`, is refused by name, as it is in a `map` (see
+[map, reduce and aggregates](/syntax/map-reduce-and-aggregates/#using-another-lines-value)).
+Give the value a name on a line above and plot with the name.
+
+```solve-doc
+p = 2 // 2
+plot x + prev from 0 to 1 // ERROR: plot's expression reads other lines of the document, and it is worked out away from the line, where there are no lines to read: give the line's value a name first, as in p = prev, and use p in the expression
+plot x + p from 0 to 1 // x + p over [0, 1]
+```
+
 ## The data, not the picture
 
 A `Chart` value carries everything a renderer needs and nothing it does not: the

@@ -332,3 +332,56 @@ variable named `x` defined elsewhere in the document.
 double(x) = x * 2
 double(5) // 10
 ```
+
+A function's formula can use any built-in that works its answer out from what
+it is given: the text functions, the hashes, colours, image sizes, statistics
+and the rest. So a function can shout a word, fingerprint a string or lighten a
+colour, and it is called like any other:
+
+```solve-doc
+shout(s) = upper(s)
+shout("hello") // HELLO
+fingerprint(t) = sha256(t)
+fingerprint("hello") // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+paler(c) = lighten(c, 10%)
+paler(#336699) // #407fbf
+printed(p) = p at 300 dpi in mm
+printed(4000px) // 338.67 mm
+```
+
+A formula can use the same phrases a line can: a percentage of a value, a
+conversion, a date question. Each is read in the function's formula as it is on
+a line of its own.
+
+```solve-doc
+discount(x) = 15% of x
+discount(200) // 30
+day(d) = weekday of d
+day(2026-12-25) // Friday
+far(d) = d in km
+far(5000 m) // 5.00 km
+```
+
+The boundary is a value the formula would have to fetch, or find elsewhere in
+the note. A function is worked out away from the line that wrote it, each time
+it is called, so neither can be part of one, and each is refused when the
+function is defined, with its own reason. A lookup that waits for the network
+(the weather, a share price, an exchange rate on a past date) is refused as a
+call that waits for data. A reference to another line (`prev`, `line 1`, a
+total above, a section, a tag or a table column) waits for nothing, but a
+function has no lines of its own to read, so it is refused for that, and the
+refusal says to pass the value in: `f(x) = x + prev` is refused with "a
+function body has no lines to read: pass the value in as an argument instead".
+Work the value out on a line of its own, or give the function a parameter for
+it and pass `prev` or `line 1` when you call it:
+
+```solve-doc
+bump(x, v) = x + v
+10
+bump(2, prev) // 12
+```
+
+The expression of a `map`, `reduce`, `sum` or `prod`, a plot and the algebra
+verbs is held the same way, and refuses a reference to another line for the
+same reason (see
+[map, reduce and aggregates](/syntax/map-reduce-and-aggregates/#using-another-lines-value)).

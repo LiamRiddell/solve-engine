@@ -26,7 +26,7 @@ export class ReduceParselet implements PrefixParselet {
   parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
     parser.consume("LPAREN");
 
-    const transform = parseTransform(parser, builder);
+    const transform = parseTransform(parser, builder, "reduce");
     parser.consume("COMMA");
 
     parseCollectionExpr(parser, builder);

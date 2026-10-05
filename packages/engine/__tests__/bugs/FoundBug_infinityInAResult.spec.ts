@@ -113,15 +113,10 @@ describe("the lines that exposed it", () => {
 		["sum((1/0):3)", "A range's bounds must be whole numbers, got \"∞:3\"."],
 		["∞ as words", "∞ cannot be written as words"],
 		["binompdf(10, 0.5, 1/0)", "binompdf: the number of successes must be a whole number, but was ∞"],
+		["inflationAdjust(£100, 1/0, 2020)", "the year of an inflation question is a plain whole number, such as 1990, and this one is ∞"],
 		["fuel for 300 miles at (1/0) UK mpg", "∞ UK mpg is not an economy a trip can be worked out from"],
 	])("the message for %s names ∞", (line, message) => {
 		expect(shown(line)).toBe(message);
-	});
-
-	test("an inflation year that is no finite number is refused as a year, in plain words", () => {
-		// The year is read as a plain whole number before any index is consulted
-		// (FoundBug_inflationYear.spec.ts), so the refusal says what the year is.
-		expect(shown("inflationAdjust(£100, 1/0, 2020)")).toBe("the year of an inflation question is a plain whole number, such as 1990, and this one is not a finite number");
 	});
 
 	test("a column total, a total above and a solved formula that overflow, through both passes", () => {

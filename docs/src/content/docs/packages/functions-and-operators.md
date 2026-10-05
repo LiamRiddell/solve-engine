@@ -405,8 +405,9 @@ Several forms compile part of a line on its own and run it more than once: the
 expression of `solve`, `der` and `integral`, a function body (`f(x) = ...`), a
 map or reduce transform and a plot. Those cannot pause halfway for data to
 arrive, so each refuses a marked call outright, with
-`SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`, `FUNCTION_BODY_MUST_BE_SYNCHRONOUS` or
-its own code, whatever the handler does.
+`SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`, `FUNCTION_BODY_MUST_BE_SYNCHRONOUS`
+or its own code (`FUNCTION_BODY_READS_LINES` and `HELD_EXPRESSION_READS_LINES`
+for a call emitted with `readsDocument`), whatever the handler does.
 
 So a value your parselet already knows when the line is read, a constant above
 all, is not a plugin call. Emit it as a number, the way the built-in `pi` is:
@@ -452,6 +453,50 @@ The bytes emitted are the same as any call's; only the mark differs, so a
 function body (`f(m) = m * gravity`), a map or reduce transform and a plot take
 the call. This is how the constants package attaches `gravity`'s unit. The
 option's type is `PluginCallOptions`, exported from `solve-engine/parser`.
+
+Every built-in package whose handler answers at once emits its calls this way:
+the text functions (`f(s) = upper(s)`), the hashes (`sha256`), colours, image
+and screen sizes, IP addresses, statistics, dates and time zones, payroll and
+the rest. Two kinds keep the mark on purpose. A lookup that waits for the
+network (weather, stocks, crypto, the knowledge lookups, an exchange rate on a
+past date) cannot answer in a function body, which is worked out at once. A
+call that reads other lines of the note (`prev`, `line 1`, the totals of a
+section, a tag or a table column, goal seek, what-if) does not wait, but a held
+expression is run away from the line that wrote it, where there is no document
+to read, so it is refused there too. Leave `synchronous` off for either kind in
+your own package.
+
+A call of the second kind says so with the other option, `readsDocument`. The
+call still marks the line, so every held expression still refuses it, but each
+one then refuses it for the reason that applies rather than as a call that
+waits for the weather: a function body with `FUNCTION_BODY_READS_LINES` ("a
+function body has no lines to read: pass the value in as an argument
+instead"), and the expression of `map`, `reduce`, `sum`, `prod`, a plot,
+`solve`, `der`, `integral`, `limit` and `taylor` with
+`HELD_EXPRESSION_READS_LINES`, which tells the reader to name the line's value
+first (`p = prev`) and use the name. A handler of yours that reads other lines
+through its context should be emitted this way:
+
+```ts
+import type { PrefixParselet } from "solve-engine/parser";
+
+const previousRowParselet: PrefixParselet = {
+  category: "Lines",
+  parse(_parser, _token, builder) {
+    builder.emitPluginCall("previousRow", 0, { readsDocument: true });
+  },
+};
+```
+
+`readsDocument` is ignored beside `synchronous`, since a call that reads other
+lines is never one a held expression can take. Builder code can ask whether
+anything it has emitted reads the document since its last reset through
+`builder.readsDocument`. A parselet of your own that holds an expression (it
+compiles part of the line into a builder of its own, to run once for each
+item, say) asks this of that builder after `build()`, and when the program
+`hasAsync` and the builder `readsDocument`, refuses the line for reading other
+lines before it refuses it as one that waits, which is the order the built-in
+held forms check in.
 
 The contract is yours to keep: a handler marked `synchronous` must return a
 `Value`, never a promise. One that breaks it is caught as the line runs: on a

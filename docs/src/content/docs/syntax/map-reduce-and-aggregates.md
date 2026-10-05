@@ -50,8 +50,79 @@ sum(x, [9:30, 10:15]) // ERROR: A date or time cannot be a cell of a list: each 
 sum(x, [1 hour, 30 min]) // 1.50 hours
 ```
 
+A range is the list, so it is always the last argument, and a range followed by
+more values is not a form: `sum(100:200, 50)` does not add 50 to the whole
+numbers from 100 to 200. A pair that can only be a range (whole numbers counting
+up, with no clock's shape of an hour and two-digit minutes) is refused by name
+there, and the refusal gives the call that answers, with the other values added
+outside it. It used to be refused as the time "100:200", which named something
+the line never meant. A pair that is a real time, such as `sum(10:12, 5)`, is
+still a time, and one in a clock's shape, such as `sum(24:30, 1)`, is still
+refused as a time.
+
+```solve-doc
+sum(100:200, 50) // ERROR: In sum(...), 100:200 is a range, and a range is read only as the last argument, the list sum works through. To add other numbers in as well, write them outside the call: sum(100:200) + 50.
+sum(100:200) + 50 // 15,200
+map(100:200, 5) // ERROR: In map(...), 100:200 is a range, and a range is read only as the last argument, the list map works through. Write the expression first and the range last, as in map(x * 2, 100:200).
+```
+
 Slicing a matrix, `m[0:1, 0:1]`, keeps its ranges: there the brackets follow a
 name, and pick a range of its rows and a range of its columns.
+
+### Large bounds
+
+A large number is easier to read with its thousands grouped, `1,000`, and a
+range's bound can be written that way. Inside a call's brackets a comma usually
+separates one argument from the next (so `max(1,000, 2)` is the largest of 1, 0
+and 2, see [amounts inside a call](/syntax/currency/#amounts-inside-a-call)), but
+a comma between digits straight against a range's colon is read as grouping, since
+nobody writes a range as starting at `000` and a colon after three digits is
+never a clock time. So `sum(1,000:2,000)` is the range from one thousand to two
+thousand, and `sum(1,000:1)`, a range that counts down, is refused by name
+rather than read as `1` and the range `000:1`:
+
+```solve
+sum(1,000:2,000) // 1,501,500
+sum(1,000:1,005) // 6,015
+map(x * 2, 1,000:1,002) // [2,000, 2,002, 2,004]
+sum(1,000:1) // A range's min (1000) cannot be greater than its max (1). Did you mean "1:1000"?
+```
+
+The second bound is grouped when the first cannot be the hour of a clock time:
+three or more digits (`100:1,000`), a name or a bracket. After a short first
+bound, as in `sum(1:2,000)`, the comma still separates, because `1:2` could be a
+time. The boundary is the reading the rule cannot tell apart: `sum(1,100:200)`
+is the range from 1,100 down to 200, and refused, not the element form adding 1
+for each of 100 to 200. To mean two arguments, put a space after the comma:
+
+```solve
+sum(1, 100:200) // 101
+max(1,000, 2) // 2
+```
+
+A grouping comma always has exactly three digits after it, so a comma straight
+against the colon with any other number of digits after it is neither a grouped
+bound nor plainly two arguments. `sum(1,0000:1)` could be the mistyped bound
+10,000 or the two values `1` and `0000:1`, and it used to be read as the second
+without a word and answered 2. It is refused by name instead, and the refusal
+says how to write two values: put a space after the comma.
+
+```solve-doc
+sum(1,0000:1) // ERROR: "1,0000" is not a number: a grouping comma needs exactly three digits after it. To give two values, put a space after the comma: 1, 0000.
+sum(12,3456:1) // ERROR: "12,3456" is not a number: a grouping comma needs exactly three digits after it. To give two values, put a space after the comma: 12, 3456.
+sum(1, 0000:1) // 2
+```
+
+The refusal covers a run of two digits, or of four or more, against the colon.
+Two shapes keep the separator reading, because that is how two values are
+written: a single digit (`sum(1,1:3)` adds 1 for each of 1, 2 and 3) and two
+digits followed by two more after the colon, which may be a clock time
+(`max(9:00,17:30)`).
+
+```solve
+sum(1,1:3) // 3
+sum(1,12:30) // 19
+```
 
 ## Map
 
@@ -165,3 +236,28 @@ prod(5) // prod multiplies together the items of a list or a range, such as [1, 
 map(x * 2, 5) // map works through the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number.
 sum(1, 2, 3) // 6
 ```
+
+## Using another line's value
+
+The expression of `map`, `reduce`, `sum` and `prod` is not worked out on the
+line where it is written: it is held and worked out once for each element,
+away from the document, so it has no lines above it to read. A reference to
+another line inside it, `prev`, `line 1`, `total above`, a tag or a table
+column, is refused by name, and the refusal says how to write it: give the
+line's value a name on a line of its own, and use the name in the expression.
+
+```solve-doc
+5 // 5
+map(x + prev, 1:3) // ERROR: map's expression reads other lines of the document, and it is worked out away from the line, where there are no lines to read: give the line's value a name first, as in p = prev, and use p in the expression
+p = 5 // 5
+map(x + p, 1:3) // [6, 7, 8]
+sum(x + p, 1:3) // 21
+```
+
+These used to be refused as though they reached live data, "no
+weather/stocks/currency calls", which named something the line never did. A
+function body (`f(x) = x + prev`) is refused the same way, for the same reason
+(see [variables](/syntax/variables/)), and so are a plot's expression and the
+expression of `der`, `solve` and `integral`. The boundary: an expression that
+does reach live data, a weather or price lookup, keeps its own refusal, since
+it waits for the network rather than for the document.

@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** The words a reader puts between the two counts, none of which the arithmetic needs. */
 const SERVING_WORDS = new Set(["servings", "serving", "serves", "people", "portions", "portion"]);
@@ -32,6 +33,6 @@ export class ScaleServingsParselet implements PrefixParselet {
 		}
 		parser.consume("TO");
 		parser.parseExpression(BindingPower.Prefix, builder);
-		builder.emitPluginCall("recipeScalingFactor", 2);
+		emitBuiltinPluginCall(builder, "recipeScalingFactor", 2);
 	}
 }

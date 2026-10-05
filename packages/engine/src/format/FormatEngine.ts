@@ -5,7 +5,7 @@ import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { formatIpv6 } from "@solve-js/packages/ip/Ipv6Math";
 import { decimalCompare, decimalDivide, decimalFromInteger, decimalRound, decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
-import { autoFormatIntegerOrFloat, compactParts, fixedDecimalText, nonFiniteText, shortestText, tooSmallToPrintText } from "@solve-js/utilities/Number";
+import { autoFormatIntegerOrFloat, compactParts, fixedDecimalText, hiddenDigitsText, nonFiniteText, shortestText, tooSmallToPrintText } from "@solve-js/utilities/Number";
 import { localCalendarName, localClockTime, localCurrencyPlacement, localDayShift, localZoneDifference, localisesWords, withLocalUnitName } from "./LocaleWords";
 import { clockInZone, dayShiftWords, zoneDifferenceMinutes, zoneDifferenceText } from "@solve-js/vm/ZoneAnswers";
 import { getMeasure } from "@solve-js/uom/UomConverter";
@@ -14,6 +14,7 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { isIso4217 } from "@solve-js/uom/Iso4217";
 import { isCryptoCurrency, moneyDisplayPlaces, trimFractionZeros, type MoneyPlaces } from "@solve-js/uom/CurrencyMinorUnits";
 import { matAt } from "@solve-js/vm/MatrixOps";
+import { cellDecimal } from "@solve-js/vm/ListRounding";
 import { formatSymbolic, type Rational, type SymbolicNode } from "@solve-js/symbolic";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 import { decodeFixedOffsetMinutes, isFixedOffset, isNamedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
@@ -714,7 +715,7 @@ export function localiseFixedDecimal(fixed: string, loc: string, useGrouping: bo
   return `${sign}${integerText}${decimalMark(loc)}${localiseDigits(fraction, loc)}`;
 }
 
-function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean, explicitPlaces?: number, label?: UnitLabel): string {
+function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean, explicitPlaces?: number, label?: UnitLabel, significantBelowOne?: boolean): string {
   // A quantity with a name of its own is written under that name, counted in
   // it (`= 6 sprints` for twelve weeks); money keeps its symbol. See
   // Value.unitLabel.
@@ -767,7 +768,12 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   // significant digits instead, in exponent form once the zeros stop being
   // countable. Not for an explicit `to N dp`, which asked for those places.
   // Money has its own rule, in formatMoney.
-  const tooSmall = explicitPlaces === undefined ? tooSmallToPrintText(value, dp, loc) : undefined;
+  // A list cell below one whose places would hide its digits, in a list that
+  // already shows a cell to three significant digits, takes the same form, so
+  // the cells read alike (see listTakesSignificantForm).
+  const tooSmall = explicitPlaces !== undefined
+    ? undefined
+    : (significantBelowOne === true ? hiddenDigitsText(value, dp, loc) : undefined) ?? tooSmallToPrintText(value, dp, loc);
   const compact = explicitPlaces === undefined ? compactText(value, settings) : undefined;
 
   let formatted: string;
@@ -967,12 +973,80 @@ function formatMoney(value: number, money: MoneyUnit, places: MoneyPlaces, exact
   return `${amount}${per}`;
 }
 
-function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings, unit?: string, locale?: ILocale): string {
+/**
+ * Whether the cells of a list below one are written to three significant
+ * digits together: true when at least one shown cell is a magnitude its
+ * place budget would round to zero, the cell {@link tooSmallToPrintText} writes
+ * that way.
+ *
+ * Each cell was formatted on its own, so `map(x px at 300 dpi, 1:2)` showed
+ * `[0.00333 in, 0.01 in]`: the first cell rounds away at two places and took
+ * three significant digits, the second (0.00667) did not round away and was
+ * cut to two places, so the two cells of one list read to different
+ * precisions. Once one cell needs the significant form, every cell below one
+ * whose places would hide its digits takes it too (see hiddenDigitsText in
+ * utilities/Number.ts): `[0.00333 in, 0.00667 in]`. A cell the places show in
+ * full keeps them (`[0.001, 0.5]` is `[0.001, 0.50]`), a cell of one or more
+ * keeps the place budget, and money keeps its currency's places (a cent is the
+ * precision of an amount), so a money list is never switched.
+ *
+ * @param m - The matrix being written.
+ * @param settings - The resolved formatting settings, for each cell's place budget.
+ * @param rows - How many rows are shown.
+ * @param cols - How many columns are shown.
+ */
+export function listTakesSignificantForm(m: MatrixData, settings: FormattingSettings, rows: number, cols: number): boolean {
+  if (m.unit !== undefined && moneyUnitOf(m.unit) !== undefined) return false;
+  const dp = m.unit !== undefined ? settings.unitOfMeasurementResult.decimalPlaces : settings.floatResult.decimalPlaces;
+  const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
+  const shownRows = Math.min(rows, m.rows);
+  const shownCols = Math.min(cols, m.cols);
+  for (let r = 0; r < shownRows; r++) {
+    for (let c = 0; c < shownCols; c++) {
+      const entry = matAt(m, r, c);
+      if (typeof entry === "number" && tooSmallToPrintText(entry, dp, loc) !== undefined) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The places a list's cell at `row`, `col` is shown to, when the list was
+ * rounded (see MatrixData.places), or undefined for the ordinary form.
+ */
+function cellPlacesAt(m: MatrixData, row: number, col: number): number | undefined {
+  return m.places?.[row + col * m.rows];
+}
+
+/**
+ * A rounded list cell written to the places its rounding set, as the same
+ * number rounded on its own line is: `0.0010` for `0.001` at four places, with
+ * the digits taken from the cell's decimal (see cellDecimal), so twenty places
+ * of 0.1 are 0.1 and zeros, not the double's tail.
+ *
+ * @param entry - The cell's number.
+ * @param places - The places it was rounded to.
+ * @param settings - The resolved formatting settings.
+ * @param unit - The list's unit, if any.
+ * @param locale - The display locale.
+ */
+function formatRoundedCell(entry: number, places: number, settings: FormattingSettings, unit: string | undefined, locale: ILocale): string {
+  const exact = cellDecimal(entry);
+  const text = unit === undefined
+    ? formatNumber(entry, locale, settings, places, exact)
+    : formatUom(entry, unit, locale, settings, exact, undefined, places);
+  return text.startsWith(locale.display.resultPrefix) ? text.slice(locale.display.resultPrefix.length) : text;
+}
+
+function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings, unit?: string, locale?: ILocale, significantBelowOne?: boolean, places?: number): string {
   if (typeof entry === "boolean") return entry ? "true" : "false";
+  if (places !== undefined && typeof entry === "number" && Number.isFinite(entry)) {
+    return formatRoundedCell(entry, places, settings, unit, locale ?? getLocale(settings.numberResult.decimalSeparatorLocale || "en"));
+  }
   // A cell of a list with a unit is written as the quantity it stands for, so
   // `[1 km, 500 m]` shows as `[1.00 km, 0.50 km]` and money as money (#745).
   if (unit !== undefined && locale !== undefined && typeof entry === "number") {
-    const quantity = formatUom(entry, unit, locale, settings);
+    const quantity = formatUom(entry, unit, locale, settings, undefined, undefined, undefined, undefined, significantBelowOne);
     return quantity.startsWith(locale.display.resultPrefix) ? quantity.slice(locale.display.resultPrefix.length) : quantity;
   }
   if (typeof entry === "object" && entry !== null) return formatSymbolic(entry);
@@ -984,6 +1058,13 @@ function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings, uni
   // below the budget is shown to three significant digits, as a plain number
   // is, rather than as a zero: `[1e-6, 1]` was `[0.00, 1]`.
   const shown = entry === 0 ? 0 : entry;
+  // A cell below one whose places would hide its digits, in a list that
+  // already shows a cell to three significant digits, is shown that way too;
+  // see listTakesSignificantForm.
+  if (significantBelowOne === true) {
+    const significant = hiddenDigitsText(shown, dp, loc || "en-US");
+    if (significant !== undefined) return significant;
+  }
   return tooSmallToPrintText(shown, dp, loc || "en-US") ?? autoFormatIntegerOrFloat(shown, dp, sep, loc, settings.floatResult.trimTrailingZeros === true);
 }
 
@@ -1053,11 +1134,12 @@ function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettin
   if (preview.kind === "shape") return `${locale.display.resultPrefix}[${m.rows}x${m.cols} matrix]`;
   const shownRows = preview.kind === "rows" ? preview.shown : preview.kind === "elements" && m.cols === 1 ? preview.shown : m.rows;
   const shownCols = preview.kind === "elements" && m.rows === 1 ? preview.shown : m.cols;
+  const significant = listTakesSignificantForm(m, settings, shownRows, shownCols);
   const rows: string[] = [];
   for (let r = 0; r < shownRows; r++) {
     const cells: string[] = [];
     for (let c = 0; c < shownCols; c++) {
-      cells.push(formatMatrixEntry(matAt(m, r, c), settings, m.unit, locale));
+      cells.push(formatMatrixEntry(matAt(m, r, c), settings, m.unit, locale, significant, cellPlacesAt(m, r, c)));
     }
     rows.push(cells.join(", "));
   }
@@ -1095,11 +1177,12 @@ export function formatMatrixAligned(m: MatrixData, settings?: FormattingOverride
   const shownRows = preview.kind === "rows" ? preview.shown : preview.kind === "elements" && m.cols === 1 ? preview.shown : m.rows;
   const shownCols = preview.kind === "elements" && m.rows === 1 ? preview.shown : m.cols;
   const locale = getLocale(us.numberResult.decimalSeparatorLocale || "en");
+  const significant = listTakesSignificantForm(m, us, shownRows, shownCols);
   const cells: string[][] = [];
   for (let r = 0; r < shownRows; r++) {
     const row: string[] = [];
     for (let c = 0; c < shownCols; c++) {
-      row.push(formatMatrixEntry(matAt(m, r, c), us, m.unit, locale));
+      row.push(formatMatrixEntry(matAt(m, r, c), us, m.unit, locale, significant, cellPlacesAt(m, r, c)));
     }
     cells.push(row);
   }

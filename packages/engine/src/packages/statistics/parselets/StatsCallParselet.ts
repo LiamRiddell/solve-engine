@@ -5,6 +5,7 @@ import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { STATISTICS_CALL_FUNCTIONS } from "../StatisticsFunctionNames";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The parenthesised call form of a statistics function: `correlation([a], [b])`,
@@ -36,6 +37,6 @@ export class StatsCallParselet implements PrefixParselet {
 		}
 		parser.consume("RPAREN");
 
-		builder.emitPluginCall(pluginName, argCount);
+		emitBuiltinPluginCall(builder, pluginName, argCount);
 	}
 }

@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { readOverrides } from "./WhatIfParselet";
 import { SCENARIO_DECLARE_FN_NAME, SCENARIO_READ_FN_NAME } from "../ScenarioPluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `scenario <name> with <name> = <value> [and <name> = <value> ...]`, a named
@@ -23,7 +24,7 @@ export class ScenarioDeclarationParselet implements PrefixParselet {
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(token.value);
 		const count = readOverrides(parser, builder, `scenario ${token.value} with growth = 8%`, "A scenario");
-		builder.emitPluginCall(SCENARIO_DECLARE_FN_NAME, 1 + count * 2);
+		emitBuiltinPluginCall(builder, SCENARIO_DECLARE_FN_NAME, 1 + count * 2);
 	}
 }
 
@@ -44,6 +45,6 @@ export class ScenarioReadParselet implements PrefixParselet {
 		builder.emitNumber(line === "deleted" ? -1 : parseInt(line, 10));
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(name);
-		builder.emitPluginCall(SCENARIO_READ_FN_NAME, 2);
+		emitBuiltinPluginCall(builder, SCENARIO_READ_FN_NAME, 2);
 	}
 }

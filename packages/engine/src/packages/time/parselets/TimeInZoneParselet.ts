@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { tryConsumeZoneReference } from "./shared/ZoneReference";
 import { nextIsOnClause } from "./shared/OnDate";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * `time in <city>` -> that zone's current wall-clock time. `date in
@@ -41,7 +42,7 @@ export function timeOrDateInZoneParselet(pluginFnName: string): PrefixParselet {
       }
       builder.emitOpcode(OpCode.PUSH_STRING);
       builder.emitString(zone.zoneRef);
-      builder.emitPluginCall(pluginFnName, 1);
+      emitBuiltinPluginCall(builder, pluginFnName, 1);
     },
   };
 }

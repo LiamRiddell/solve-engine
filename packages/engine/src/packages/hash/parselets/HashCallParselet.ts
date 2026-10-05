@@ -5,6 +5,7 @@ import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { HASH_CALL_FUNCTIONS } from "../HashPluginFunctions";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /**
  * The parenthesised call form of a hash: `sha256("hi")`, `crc32("hi")`.
@@ -35,6 +36,6 @@ export class HashCallParselet implements PrefixParselet {
 		}
 		parser.consume("RPAREN");
 
-		builder.emitPluginCall(pluginName, argCount);
+		emitBuiltinPluginCall(builder, pluginName, argCount);
 	}
 }

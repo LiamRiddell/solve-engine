@@ -4,6 +4,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { readGeoAngle } from "@solve-js/lexer/GeoAngleLiteral";
+import { emitBuiltinPluginCall } from "@solve-js/packages/SynchronousPluginFunctions";
 
 /** Whether a token is an angle literal carrying a compass letter. */
 function hasCompassLetter(token: Token | undefined): boolean {
@@ -77,12 +78,12 @@ export class GeoAngleParselet implements PrefixParselet {
 				builder.emitString(token.value);
 				builder.emitOpcode(OpCode.PUSH_STRING);
 				builder.emitString(partner.value);
-				builder.emitPluginCall("geoPlaceFromAngles", 2);
+				emitBuiltinPluginCall(builder, "geoPlaceFromAngles", 2);
 				return;
 			}
 		}
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(token.value);
-		builder.emitPluginCall("geoAngle", 1);
+		emitBuiltinPluginCall(builder, "geoAngle", 1);
 	}
 }

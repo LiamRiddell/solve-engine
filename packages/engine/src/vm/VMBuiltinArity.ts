@@ -201,6 +201,19 @@ export function builtinFunctionNames(): string[] {
 }
 
 /**
+ * The arity entry the table itself holds for `index`, or undefined. Read as an
+ * own property, so an index the table does not hold never finds one inherited
+ * from `Object.prototype`: before, a planted `Object.prototype[250]` turned an
+ * unregistered builtin into "() takes undefined arguments".
+ *
+ * @param index - The builtin's index.
+ * @returns Its arity entry, or undefined.
+ */
+function arityAt(index: number): BuiltinArity | undefined {
+  return Object.prototype.hasOwnProperty.call(BUILTIN_ARITY, index) ? BUILTIN_ARITY[index] : undefined;
+}
+
+/**
  * The name of the builtin at `index`, as its arity error spells it
  * (`sqrt`, `presentValue`, `loanRepayment`).
  *
@@ -211,7 +224,7 @@ export function builtinFunctionNames(): string[] {
  * @returns The name, or an empty string for an index this table does not list.
  */
 export function builtinFunctionName(index: number): string {
-  return BUILTIN_ARITY[index]?.name ?? "";
+  return arityAt(index)?.name ?? "";
 }
 
 /**
@@ -227,7 +240,7 @@ export function builtinFunctionName(index: number): string {
  * builtin index working rather than making this table a gate on extensibility.
  */
 export function builtinArityError(index: number, argCount: number): EngineError | undefined {
-  const arity = BUILTIN_ARITY[index];
+  const arity = arityAt(index);
   if (arity === undefined) return undefined;
   if (argCount >= arity.min && argCount <= arity.max) return undefined;
 

@@ -7,6 +7,7 @@
 import { Value, ValueType, errorValue } from "@solve-js/vm/Value";
 import { describeQuantity } from "@solve-js/vm/VMConversion";
 import { safeText } from "@solve-js/parser/ParseMessages";
+import { nonFiniteText } from "@solve-js/utilities/Number";
 import { type PriceIndex, priceIndexFor, indexRatio, yearOutsideIndex } from "./PriceIndices";
 
 /** The amounts an index is bundled for, in the reader's words, for the refusals. */
@@ -153,7 +154,9 @@ export function inflationYear(value: Value | undefined): number | Value {
     || (value.type === ValueType.Uom && value.unit === undefined);
   if (!plain) return errorValue("INFLATION_EXPECTED_YEAR", `${A_YEAR_IS}, and this one is ${describeNotAYear(value)}`);
   const year = value.toNumber();
-  if (!Number.isFinite(year)) return errorValue("INFLATION_EXPECTED_YEAR", `${A_YEAR_IS}, and this one is not a finite number`);
+  // An infinity is named as the reader sees it (`∞`), and NaN, which a reader
+  // never wrote, as what it is.
+  if (!Number.isFinite(year)) return errorValue("INFLATION_EXPECTED_YEAR", `${A_YEAR_IS}, and this one is ${Number.isNaN(year) ? "not a number" : nonFiniteText(year)}`);
   if (!Number.isInteger(year)) return errorValue("INFLATION_EXPECTED_YEAR", `${A_YEAR_IS}, and ${String(year)} is not a whole number`);
   // `-0` is the year 0, which the index then refuses as out of range.
   return year + 0;

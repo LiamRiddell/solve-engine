@@ -16,7 +16,7 @@ import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js
 import { CoreErrorCodes, DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions, builtinArgumentRefused, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, builtinArgumentRefused, listBuiltinCall, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { valuesEqual, valuesOrdered } from "@solve-js/vm/Comparisons";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { QueryClient } from "@tanstack/query-core";
@@ -29,6 +29,7 @@ import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/Engi
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { safeText } from "@solve-js/parser/ParseMessages";
 import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageRefusal, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused, bigBaseArithmetic } from "@solve-js/vm/VMConversion";
+import { listConversionRefused } from "@solve-js/vm/ListRounding";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -1039,7 +1040,8 @@ function rateOver(args: Value[], rateIndex: number, context: LineExecutionContex
     if (refused) return refused;
     if (args[0].type === ValueType.Symbolic && !SYMBOLIC_NATIVE_BUILTINS.has(rateIndex)) return symbolicBuiltin(rateIndex, args);
     const fn = builtinAt(rateIndex);
-    return fn === undefined ? errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${rateIndex} is not registered`) : fn(args, context);
+    if (fn === undefined) return errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${rateIndex} is not registered`);
+    return listBuiltinCall(rateIndex, args, context) ?? fn(args, context);
 }
 
 /**
@@ -2128,13 +2130,15 @@ function negatedPlain(v: Value): Value {
  * 128-bit whole number, a value written in a base past the safe range keeps
  * every digit (`(2^100 + 1) in hex as number` rounded to the nearest double
  * through toNumber()), and a colour, three channels with no one number, is
- * refused by name (see colourRefused()). Text is read before this, by
- * numberFromText().
+ * refused by name (see colourRefused()), as is a list of several numbers (see
+ * listConversionRefused()). Text is read before this, by numberFromText().
  *
  * @param v - The value, already checked for a fault.
  */
 function numberOf(v: Value): Value {
     if (isIpv6Value(v)) return ipv6WholeNumber(v);
+    const list = listConversionRefused(v, "read as one number");
+    if (list !== null) return list;
     if (v.type === ValueType.Colour) return colourRefused("read as one number");
     if (v.type === ValueType.Hex && typeof v.value === "bigint") return wholeFromBase(v.value);
     return numberValue(v.toNumber());
@@ -4714,9 +4718,23 @@ export function executeBytecode(
           const builtinRefused = builtinArgumentRefused(fnIdx, args);
           if (builtinRefused) { stack.push(builtinRefused); break; }
           carry = sourcesOfValues(args);
-          const fn = builtinFunctions[fnIdx];
+          // Read as the registry's own entry and checked to be a function, so
+          // an index from the bytecode never reaches an inherited property or
+          // calls something that is not a builtin (CodeQL's unvalidated dynamic
+          // call, raised once the call went on to listBuiltinCall()).
+          const entry = Object.prototype.hasOwnProperty.call(builtinFunctions, fnIdx) ? builtinFunctions[fnIdx] : undefined;
+          const fn = typeof entry === "function" ? entry : undefined;
           if (fn) {
             const ordered = args.reverse();
+            // A list is worked out for each number, or refused by name, where
+            // the builtin reads one number; see listBuiltinCall() in
+            // vm/VMBuiltins.ts.
+            const listed = listBuiltinCall(fnIdx, ordered, context);
+            if (listed) {
+              stack.push(listed);
+              if (observeCall !== undefined) observeCall({ kind: "builtin", index: fnIdx, name: "", args: ordered, result: listed });
+              break;
+            }
             // One dispatch point covers all ~60 builtins. Each of their
             // implementations reads args[n].toNumber(), which reports 0 for a
             // symbolic operand, so routing here is what stops `sqrt(x)` from
@@ -4936,6 +4954,8 @@ export function executeBytecode(
           const toHexFault = faultedOperand(v);
           if (toHexFault) { stack.push(toHexFault); break; }
           if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
+          const toHexList = listConversionRefused(v, "written in hex");
+          if (toHexList) { stack.push(toHexList); break; }
           // A colour keeps its channels and a bigint its digits; see inBase().
           stack.push(inBase(v, "hex"));
           break;
@@ -4947,7 +4967,7 @@ export function executeBytecode(
           if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toPercentageDate = datetimeConversionRefused(v, "a percentage");
           if (toPercentageDate) { stack.push(toPercentageDate); break; }
-          const toPercentageOpaque = noNumberRefused(v, "written as a percentage");
+          const toPercentageOpaque = noNumberRefused(v, "written as a percentage") ?? listConversionRefused(v, "written as a percentage");
           if (toPercentageOpaque) { stack.push(toPercentageOpaque); break; }
           carry = v.sources;
           // A proportion on the parts-per scale; see toPercentage().
@@ -4961,7 +4981,7 @@ export function executeBytecode(
           if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toFractionDate = datetimeConversionRefused(v, "a fraction");
           if (toFractionDate) { stack.push(toFractionDate); break; }
-          const toFractionOpaque = noNumberRefused(v, "written as a fraction");
+          const toFractionOpaque = noNumberRefused(v, "written as a fraction") ?? listConversionRefused(v, "written as a fraction");
           if (toFractionOpaque) { stack.push(toFractionOpaque); break; }
           // The exact fraction where the value has one, the guess otherwise;
           // see fractionString().
@@ -4985,7 +5005,7 @@ export function executeBytecode(
           if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
           const toSciDate = datetimeConversionRefused(v, "scientific notation");
           if (toSciDate) { stack.push(toSciDate); break; }
-          const toSciOpaque = noNumberRefused(v, "written in scientific notation");
+          const toSciOpaque = noNumberRefused(v, "written in scientific notation") ?? listConversionRefused(v, "written in scientific notation");
           if (toSciOpaque) { stack.push(toSciOpaque); break; }
           stack.push(stringValue(toScientificString(v.toNumber())));
           break;
@@ -4997,6 +5017,8 @@ export function executeBytecode(
           const toBinaryFault = faultedOperand(v);
           if (toBinaryFault) { stack.push(toBinaryFault); break; }
           if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
+          const toBinaryList = listConversionRefused(v, "written in binary");
+          if (toBinaryList) { stack.push(toBinaryList); break; }
           stack.push(inBase(v, "bin"));
           break;
         }
@@ -5005,6 +5027,8 @@ export function executeBytecode(
           const toOctalFault = faultedOperand(v);
           if (toOctalFault) { stack.push(toOctalFault); break; }
           if (v.type === ValueType.Symbolic) throwUnknownAmount(v, vm);
+          const toOctalList = listConversionRefused(v, "written in octal");
+          if (toOctalList) { stack.push(toOctalList); break; }
           stack.push(inBase(v, "oct"));
           break;
         }

@@ -7,6 +7,7 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { parseCollectionExpr, emitInvoke, callHasOwnComma, parseElementFold } from "../MapReduceShared";
 import { ReduceForm } from "@solve-js/vm/MatrixOps";
+import { heldExpressionReadsLines } from "@solve-js/parser/HeldExpression";
 
 /**
  * `sum(elementExpr, collection)`, parse-time sugar for
@@ -43,6 +44,8 @@ export class SumParselet implements PrefixParselet {
     parser.setBuilder(builder);
     bodyBuilder.emitOpcode(OpCode.ADD);
     const bodyProgram = bodyBuilder.build();
+    const readsLines = heldExpressionReadsLines(bodyProgram, bodyBuilder, "sum");
+    if (readsLines !== null) throw readsLines;
     if (bodyProgram.hasAsync) {
       throw ErrorFactory.parsing(
         "MAP_REDUCE_TRANSFORM_MUST_BE_SYNCHRONOUS",
