@@ -19,3 +19,5 @@ The boundary: only the container changed. The keys, the values and their order a
 `FoundBug_phraseListingPrototypeWords.spec.ts` holds 6 tests: ordinary phrases, an empty trie with nothing inherited, every word in `PROTOTYPE_WORDS` registered alone and as `<word> of` with `expectPrototypeUntouched`, a hostile token type, a JSON round trip, and the engine's built-in listing. Five of the six fail with the plain object literal restored. `PhraseTrie.spec.ts` still passes.
 
 Gates run: `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:changeset`, and the normaliser suite.
+
+On top of main, the full suite ran 33,251 tests in 839 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,740 tests.

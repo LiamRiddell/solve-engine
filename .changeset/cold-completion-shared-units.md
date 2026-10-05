@@ -30,3 +30,5 @@ The boundary: nothing a reader is offered is different, in content or in order. 
 The language-service suites, the #771 completion spec, `CompletionBucketsSortedOnce.spec.ts`, the engine footprint spec (a 50-line document on a fresh engine under 786,432 bytes) and the `languageServiceBenchmarks` suite pass.
 
 The fast suite (`npm run test:ci`, run with the worktree path let through its ignore list) ran 30,114 tests in 812 suites: 30,109 passed and 5 were skipped. `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:error-codes`, `lint:docs`, `lint:cheatsheet`, `lint:sidebar`, `lint:changeset`, the proven docs examples, the hardening and integration suites and the `allocationBenchmarks` suite passed.
+
+On top of main, the full suite ran 33,251 tests in 839 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,740 tests.

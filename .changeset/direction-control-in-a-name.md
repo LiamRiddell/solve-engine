@@ -26,3 +26,5 @@ The boundary: text keeps these characters, since a right-to-left script needs th
 `FoundBug_internalNamesInRefusals.spec.ts` pinned `<U+202E>foo + 1` as `Undefined variable: <U+202E>foo`, the old reading; it now expects the refusal.
 
 Gates run: `npm run typecheck`, `typecheck:tests` (no new errors), `lint`, `lint:comments`, `lint:messages`, `lint:error-codes`, `lint:docs`, `lint:changeset`, `lint:cheatsheet`, `lint:sidebar`; the docs, hardening, integration, errors, lexer, normaliser and language suites passed. The fast suite ran 31,107 tests in 818 suites: 31,101 passed, 5 were skipped, and the one failure was the pinned line above, updated and passing since. `npm run verify` and the bundled-consumer contract were not run.
+
+On top of main, the full suite ran 33,251 tests in 839 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,740 tests.
