@@ -8,7 +8,9 @@ name: Coverage
 # one of over twenty. A pull-request gate that slow is one people route
 # around, so the floor lives here instead. As the suite grew the single run
 # reached 80 to 90 minutes and half the daily runs were cancelled at the limit
-# (#890), so the limit is now 150 minutes. Shards run side by side on this
+# (#890). By October 2026 one process took about 12 seconds a spec file over
+# some 890 files, near three hours, almost all of it the per-file coverage
+# conversion, so the limit is now 300 minutes (the platform allows 360). Shards run side by side on this
 # runner were tried and were slower, not faster (they contend for its memory
 # and cores), so `npm run test:coverage` (`scripts/run-coverage.mjs`) runs one
 # process here and checks the floor on its coverage. It fails the run when coverage
@@ -30,7 +32,7 @@ jobs:
     # Pinned rather than ubuntu-latest, like every other job here.
     runs-on: ubuntu-24.04
     # Generous, because the point of measuring here is that it is slow.
-    timeout-minutes: 150
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -72,7 +74,7 @@ jobs:
           title="The scheduled coverage run did not pass"
 
           if [ "${RESULT}" = "cancelled" ]; then
-            what="was cancelled, most likely at its 150-minute limit, so the coverage floor was not measured"
+            what="was cancelled, most likely at its 300-minute limit, so the coverage floor was not measured"
           else
             what="ended with the result \`${RESULT}\`: the floor was missed, or the suite failed before it could be measured"
           fi

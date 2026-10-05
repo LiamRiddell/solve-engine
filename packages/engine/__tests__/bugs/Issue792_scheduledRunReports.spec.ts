@@ -94,7 +94,7 @@ describe.each([
 
 describe("coverage.yml's note", () => {
 	test("says a cancelled run did not measure the floor", () => {
-		expect(report("coverage.yml", { RESULT: "cancelled" }).body).toContain("was cancelled, most likely at its 90-minute limit, so the coverage floor was not measured");
+		expect(report("coverage.yml", { RESULT: "cancelled" }).body).toContain("was cancelled, most likely at its 300-minute limit, so the coverage floor was not measured");
 	});
 
 	test("says what a failure means, and how to reproduce it", () => {

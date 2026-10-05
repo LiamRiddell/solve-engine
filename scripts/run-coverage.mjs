@@ -5,7 +5,9 @@
  * Measured whole and single-threaded, the run had grown to between 80 and 90
  * minutes against the workflow's 90-minute limit, and about half the daily
  * runs were cancelled with the floor unmeasured (#890). The workflow's limit is
- * now 150 minutes, and the run is one process by default. Several processes
+ * now 300 minutes, since by October 2026 the run took about 12 seconds a spec
+ * file over some 890 files, near three hours, and the run is one process by
+ * default. Several processes
  * side by side were tried on the CI runner and were slower, not faster: three
  * ran it out of memory 43 minutes in, and with two, one shard alone took over
  * two hours, since each process converts coverage for every source file it

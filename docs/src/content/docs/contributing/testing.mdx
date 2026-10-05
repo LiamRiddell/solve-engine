@@ -62,7 +62,9 @@ locally; run it for a change that removes tests.
 
 A single run had grown to 80 to 90 minutes, against the workflow's 90-minute
 limit, and about half the daily runs were cancelled before the floor was
-measured (#890), so the workflow now allows 150 minutes. The run goes through
+measured (#890). The cost is about 12 seconds a spec file, nearly all of it
+the per-file coverage conversion, which comes to near three hours over the
+whole suite, so the workflow now allows 300 minutes. The run goes through
 `scripts/run-coverage.mjs`, which can split the spec files into shards with
 Jest's `--shard`, run them side by side, add their counts together and check
 the floor once on the whole suite's figures. On the CI runner it runs one
