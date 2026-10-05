@@ -15,7 +15,7 @@ Days, weeks and months on a zoned date already stepped the zone's calendar, but 
 
 The walk is handed the date the zone's calendar shows, and the zone's wall-clock time is put back on the date it lands on, the way the day and month steps keep it, so a change of clocks in between moves neither the day nor the time. The weekend, the host's holidays and the offset limits are the walk's own and are read on that date: a holiday on 4 November moves the first line to the Tuesday. `working days between` reads each zoned end as the day its own zone shows, and the spoken form keeps the date's zone and grain, as `+ 3 workdays` does.
 
-The boundary: a date with no zone is counted on the engine's calendar as before, so every unzoned answer is unchanged. The fix closes the case the zoned day steps' spec held as a known failure.
+The boundary: a date with no zone is counted on the engine's calendar as before, so every unzoned answer is unchanged. The case the zoned day steps' spec held as a known failure (`test.failing`) now passes and asserts the answer.
 
 ## Verification
 
