@@ -2031,6 +2031,11 @@ today - 1 week // Wednesday, March 4, 2026, 12:00:00 PM
 2024-01-31 12:00 in Tokyo + 1 month // Thursday, February 29, 2024, 12:00:00 PM
 ```
 
+```
+2024-11-01 23:30 in New York + 1 workday // Monday, November 4, 2024, 11:30:00 PM
+3 working days after 2024-11-02 12:00 in New York // Wednesday, November 6, 2024, 12:00:00 PM
+```
+
 ## date-differences
 
 https://liamriddell.github.io/solve-engine/syntax/date-differences/
@@ -7381,4 +7386,10 @@ how many workdays between 2026-09-01 and 2026-09-30 // 22
 2026-09-26 is a business day // false
 2026-09-28 is a workday // true
 2026-09-28 is a weekday // true
+```
+
+```
+2024-11-01 23:30 in New York + 1 workday // Monday, November 4, 2024, 11:30:00 PM
+2024-11-01 23:30 in Tokyo - 1 workday // Thursday, October 31, 2024, 11:30:00 PM
+working days between (2024-11-01 23:30 in New York) and (2024-11-04 00:30 in Tokyo) // 2
 ```

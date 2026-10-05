@@ -17,9 +17,9 @@ import { formatValue } from "@solve-js/format/FormatEngine";
  *
  * A date that carries a zone now steps its days and months on that zone's
  * calendar (`calendar/ZonedSteps.ts`); hours stay elapsed time, as they always
- * were. The boundary: workdays still walk the backend's calendar, pinned below:
- * #832 reshaped the workday walk for weekend shapes but did not move it onto a
- * date's zone. Displaying a zoned date past the range a
+ * were. Workdays follow the zone's calendar too, since a later change moved
+ * the workday walk onto it (FoundBug_zonedWorkdays.spec.ts). Displaying a
+ * zoned date past the range a
  * calendar holds, the other half of this report, threw a raw `RangeError`;
  * #832 refuses such a date where it is made (`DATE_OUT_OF_RANGE`), which the
  * test below asserts.
@@ -70,9 +70,10 @@ describe("the reported case: a day on a zoned date is a day on that zone's clock
 		expect(on("Europe/London", "2024-10-26 12:00 + 1 day")).toBe("= Sunday, October 27, 2024, 12:00:00 PM");
 	});
 
-	// Workdays walk the backend's calendar still; see this file's header.
-	test.failing("a workday on a zoned date is counted on that zone's calendar", () => {
-		expect(new Set(ZONES.map((zone) => on(zone, "2024-11-02 12:00 in New York + 3 workdays"))).size).toBe(1);
+	// Held as a known failure until the workday walk moved onto the zone's
+	// calendar; FoundBug_zonedWorkdays.spec.ts covers it in full.
+	test("a workday on a zoned date is counted on that zone's calendar", () => {
+		expect(everywhere("2024-11-02 12:00 in New York + 3 workdays")).toBe("= Wednesday, November 6, 2024, 12:00:00 PM");
 	});
 
 	// The display half of the report, fixed where the date is made by #832.

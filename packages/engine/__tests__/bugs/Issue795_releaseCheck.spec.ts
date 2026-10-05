@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "@jest/globals";
 import * as crypto from "node:crypto";
+import { spawnSync } from "node:child_process";
+import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROTOTYPE_WORDS, expectPrototypeUntouched } from "@tools/adversarial";
@@ -185,5 +187,95 @@ describe("adversarial", () => {
 	test("edge: an empty changeset body gives an empty summary, not a crash", () => {
 		const pending = callExport<{ summary: string }[]>("release-check.mjs", "pendingChangesets", [{ "e.md": "---\n\"solve-engine\": patch\n---\n" }]);
 		expect(pending).toEqual([{ file: "e.md", bump: "patch", summary: "" }]);
+	});
+});
+
+/**
+ * A directory of stand-in programs, each a Node script behind a shell wrapper
+ * (a `.cmd` on Windows), to put first on the PATH of a run.
+ */
+function fakeBin(programs: Record<string, string>): string {
+	const files: Record<string, string> = {};
+	for (const [name, body] of Object.entries(programs)) {
+		files[`${name}.js`] = `const args = process.argv.slice(2);\n${body}\n`;
+		files[name] = `#!/bin/sh\nexec node "$(dirname "$0")/${name}.js" "$@"\n`;
+		files[`${name}.cmd`] = `@node "%~dp0${name}.js" %*\r\n`;
+	}
+	const dir = tempTree(files);
+	for (const name of Object.keys(programs)) fs.chmodSync(path.join(dir, name), 0o755);
+	return dir;
+}
+
+/** The environment with `dir` first on the PATH, under whatever case the platform spells PATH. */
+function withPath(dir: string): Record<string, string> {
+	const key = Object.keys(process.env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
+	return { [key]: `${dir}${path.delimiter}${process.env[key] ?? ""}` };
+}
+
+/** An npm whose `view` answers with two versions and whose every other command fails. */
+const FAKE_NPM = `if (args[0] === "view") { process.stdout.write(JSON.stringify({ versions: ["2.39.0", "2.40.0"], "dist-tags": { latest: "2.40.0" } })); process.exit(0); }
+process.stderr.write("fake npm: " + args.join(" ") + " failed\\n");
+process.exit(1);`;
+
+describe("gh and npm that do not answer", () => {
+	test("gh signed in but failing is unknown, never an all-clear", () => {
+		const bin = fakeBin({ npm: FAKE_NPM, gh: `process.exit(args[0] === "auth" ? 0 : 1);` });
+		const result = runScript("release-check.mjs", [`--root=${checkout({})}`, "--skip-version"], { env: withPath(bin) });
+		expect(result.status).toBe(0);
+		expect(result.out).toContain("GitHub releases unknown: gh release list failed.");
+		expect(result.out).toContain("unknown: gh run list failed, so the publish runs were not read.");
+		expect(result.out).not.toContain("every GitHub release is on npm.");
+		expect(result.out).not.toContain("none queued, waiting or in progress.");
+		expect(result.out).not.toContain("no cancelled release runs.");
+	});
+
+	test("gh answering something that is not a list is unknown too", () => {
+		const bin = fakeBin({ npm: FAKE_NPM, gh: `if (args[0] === "auth") process.exit(0);
+process.stdout.write(args[0] === "release" ? "not json" : JSON.stringify({ total: 0 }));` });
+		const result = runScript("release-check.mjs", [`--root=${checkout({})}`, "--skip-version"], { env: withPath(bin) });
+		expect(result.out).toContain("GitHub releases unknown");
+		expect(result.out).toContain("unknown: gh run list failed");
+		expect(result.out).not.toMatch(/TypeError|is not a function/);
+	});
+
+	test("gh installed but signed out is named as skipped", () => {
+		const bin = fakeBin({ npm: FAKE_NPM, gh: `process.exit(args[0] === "--version" ? 0 : 1);` });
+		const result = runScript("release-check.mjs", [`--root=${checkout({})}`, "--skip-version"], { env: withPath(bin) });
+		expect(result.out).toContain("GitHub releases skipped: gh is not installed or not signed in.");
+		expect(result.out).toContain("2. Publish runs\n  skipped: gh is not installed or not signed in.");
+	});
+
+	test("gh signed in and answering reports what it found", () => {
+		const bin = fakeBin({ npm: FAKE_NPM, gh: `if (args[0] === "auth") process.exit(0);
+if (args[0] === "release") process.stdout.write(JSON.stringify([{ tagName: "solve-engine@2.39.1", isDraft: false }, { tagName: "solve-engine@2.40.0", isDraft: false }, null]));
+else process.stdout.write(JSON.stringify([{ databaseId: 7, status: "completed", conclusion: "cancelled", event: "release", displayTitle: "solve-engine 2.39.1", createdAt: "2026-09-23", url: "u" }, null]));` });
+		const result = runScript("release-check.mjs", [`--root=${checkout({})}`, "--skip-version"], { env: withPath(bin) });
+		expect(result.out).toContain("a GitHub release and not on npm: solve-engine@2.39.1");
+		expect(result.out).toContain("release runs that were cancelled (a re-run publishes that version):\n    7  2026-09-23  solve-engine 2.39.1  u");
+	});
+
+	test("realistic: an install that fails in the throwaway worktree is reported, and the worktree is removed", () => {
+		const root = checkout({ "a.md": patch });
+		const git = (...args: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
+		expect(git("init", "-q").status).toBe(0);
+		expect(git("add", "-A").status).toBe(0);
+		expect(git("commit", "-q", "-m", "fixture").status).toBe(0);
+		const tmpBefore = new Set(fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("solve-release-check-")));
+		const bin = fakeBin({ npm: FAKE_NPM, gh: `process.exit(1);` });
+		const result = runScript("release-check.mjs", [`--root=${root}`], { env: withPath(bin) });
+		expect(result.status).toBe(0);
+		expect(result.out).toContain("npm ci failed in the worktree:");
+		expect(result.out).toContain("fake npm: ci --ignore-scripts --no-audit --no-fund failed");
+		const trees = git("worktree", "list", "--porcelain").stdout.split("\n").filter((l) => l.startsWith("worktree "));
+		expect(trees).toHaveLength(1);
+		const leftOver = fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("solve-release-check-") && !tmpBefore.has(n));
+		expect(leftOver).toEqual([]);
+	});
+
+	test("security: runCommand refuses an argument a shell would read as more than text", () => {
+		for (const arg of ["a b", "x;y", "$(id)", "`id`", "a|b", "a&b", ">f", "\"q\"", "%PATH%", "line\nbreak", ""]) {
+			expect(() => callExport("release-check.mjs", "runCommand", ["git", ["status", arg]])).toThrow(/runs only plain arguments/);
+		}
+		expect(() => callExport("release-check.mjs", "runCommand", ["git x", ["status"]])).toThrow(/runs only plain arguments/);
 	});
 });
