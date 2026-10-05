@@ -116,16 +116,13 @@ export const DATE_OFFSET_PART_TYPE = "DATE_OFFSET_PART";
 
 /**
  * The fused connector a token stands for (`from`, `after`, `before`), or
- * undefined when it is not one.
- *
- * Read from {@link CONNECTORS}' own properties only: a plain lookup handed
- * `5 days constructor 3` the inherited `Object` function as a token type, and
- * the line threw a raw `TypeError` instead of a parse error.
+ * undefined when it is not one, or there is no token: {@link offsetConnectorOf}
+ * for a place that may be past the end of the line. A word naming an inherited
+ * property (`5 days constructor 3`) is not a connector, since that lookup reads
+ * the map's own entries only.
  */
 export function connectorAt(token: Token | undefined): "DATE_OFFSET_AFTER" | "DATE_OFFSET_BEFORE" | undefined {
-	if (token === undefined) return undefined;
-	const key = token.type === "IDENT" ? (token.value ?? "").toLowerCase() : token.type;
-	return Object.prototype.hasOwnProperty.call(CONNECTORS, key) ? CONNECTORS[key] : undefined;
+	return token === undefined ? undefined : offsetConnectorOf(token);
 }
 
 /**
