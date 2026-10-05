@@ -1,0 +1,26 @@
+---
+"solve-engine": patch
+---
+
+A figure with an invisible character in it before a colon is refused by name: a right-to-left override before `24:00` says so, where it answered `0`
+
+The lexer reads every character past ASCII as part of a word, so an invisible character written against a number (a direction override or mark, a zero-width joiner, a word joiner, a soft hyphen) makes it a word. A line that does not parse whole is retried with the text before a colon set aside as a label, so `<U+202E>24:00` was the label `<U+202E>24` and answered the `00` after it, and `<U+202E>9:30`, `Total: <U+202E>24:00` and `<U+200D>24:00` did the same (found in testing). Elsewhere the same word is refused: a direction control in a name, a number or a unit is `DIRECTION_CONTROL_IN_NAME`. A figure in 0 to 9 holding such a character, standing before the colon where a number would be an operand (the rule `timeAtColon` follows), is now refused by name (`hiddenFigureAtColon` in `engine/ColonLabel.ts`): a direction control with the refusal any name holding one gets, any other invisible character with `INVISIBLE_CHARACTER_IN_NUMBER`, the character written as its code point so the reader can find and delete it.
+
+| line | before | now |
+| --- | --- | --- |
+| `<U+202E>24:00` | `0` | "<U+202E>24" holds U+202E (right-to-left override), an invisible character that changes the direction text is shown in, so it would not read as what it is. A name, a number or a unit cannot hold one: delete it and type the word again. |
+| `<U+200F>24:00` | `0` | "<U+200F>24" holds U+200F (right-to-left mark), an invisible character that changes the direction text is shown in, so it would not read as what it is. A name, a number or a unit cannot hold one: delete it and type the word again. |
+| `<U+202E>9:30` | `30` | "<U+202E>9" holds U+202E (right-to-left override), an invisible character that changes the direction text is shown in, so it would not read as what it is. A name, a number or a unit cannot hold one: delete it and type the word again. |
+| `<U+200D>24:00` | `0` | "<U+200D>24" holds U+200D (zero width joiner), an invisible character, so it is read as a word and not as the number 24. A number cannot hold one: delete it and type the number again. |
+| `Rent<U+200F>: 5` | `5` | `5` |
+| `Tot<U+202E>al: 5` | `5` | `5` |
+
+Here `<U+202E>` stands for the invisible character itself, typed in the line.
+
+The boundary, kept from the direction-control rule: a label of words keeps these characters, since a label is text and a right-to-left label needs the direction marks to show correctly, and a figure after a word is part of the name (`Week <U+202E>12: 5` is 5). An override left open in a label (`Tot<U+202E>al: 5`) also changes how the figure after the colon is shown; refusing it would refuse labels that are legitimate today, so it is left for a separate decision. The zero-width space and the byte-order mark were already read as spaces, so a time with one in front is the time it looks like.
+
+## Verification
+
+`FoundBug_hiddenFigureLabel.spec.ts` holds 45 tests: the lines that exposed it through `evaluateExpression` and `evaluateLine` (every direction control, before a time, after a label's colon, after an operator, inside brackets, with a space after the colon; the zero-width joiner and non-joiner, the word joiner, a soft hyphen, the invisible operators and the Mongolian vowel separator, and a character between two digits), the zero-width space and byte-order mark read as spaces, labels of words kept, the refusals the same characters already had elsewhere, both document passes agreeing; unit tests of `hiddenFigure` (the character at either end or inside, decimals, thousands and an exponent, a word, only the character, another script's digits, markup, prototype words, an astral character, ten thousand digits), `figureRunAtColon` and `hiddenFigureAtColon` (the line's start, after an operator and a label's colon, a figure split across a word and a number, the normaliser's product, after a word, no token after the colon, a plain number, a long figure quoted short); the adversarial cases (prototype words with an override as a label and as a variable with `Object.prototype` unchanged, a thousand digits, deep brackets, five hundred lines, every text edge before the figure and after the colon, markup after it, a value from the line above with a check and a section around it, an edit that deletes the character, the other colon refusals unchanged, zero, a negative, the last minute of a day, every numeric edge, CRLF, a trailing newline and padding). The pin in `FoundBug_otherScriptDigitsLabel.spec.ts` turned red with the fix and is now a passing test. `AdversarialFeatureSweep.spec.ts` gains `<U+202E>X:00` and `<U+200D>X:00`. Gates run: `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:messages`, `lint:changeset`, `lint:error-codes`, `lint:docs`, `lint:cheatsheet`, `lint:sidebar`, the docs example specs, batch AC's and AD's found-bug specs, the hardening and integration specs, and the whole fast suite.
+
+On top of main, the full suite ran 37,299 tests in 887 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,839 tests.

@@ -16,6 +16,7 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isKnownUnit } from "@solve-js/lexer/units";
 import { numberText } from "@solve-js/utilities/Number";
+import { percentText } from "@solve-js/vm/PercentText";
 
 /**
  * The provenance record of the exchange rate an operation between two
@@ -215,9 +216,13 @@ export function nonNumericOperand(values: readonly Value[], verb: string): Value
  * built from rate-dependent lines can say it is rate-dependent too. Undefined
  * when nothing in the list came from a live figure.
  */
-export function unifyQuantities(values: readonly Value[], verb: string): { magnitudes: number[]; unit: string | undefined; sources: readonly ValueSource[] | undefined } | Value {
+export function unifyQuantities(values: readonly Value[], verb: string): { magnitudes: number[]; unit: string | undefined; sources: readonly ValueSource[] | undefined; percent: boolean } | Value {
     const nonNumeric = nonNumericOperand(values, verb);
     if (nonNumeric) return nonNumeric;
+    // A set of percentages is answered as a percentage, and a set mixing one
+    // with anything else is refused by name; see percentageOperands().
+    const percent = percentageOperands(values, verb);
+    if (percent instanceof Value) return percent;
     const magnitudes: number[] = new Array(values.length);
     let sources = sourcesOfValues(values);
     let anchor: Value | undefined;
@@ -247,7 +252,94 @@ export function unifyQuantities(values: readonly Value[], verb: string): { magni
         const rate = currencyRateSources(anchor, v);
         if (rate !== undefined) sources = combineSources(sources, rate);
     }
-    return { magnitudes, unit: anchor?.unit, sources };
+    return { magnitudes, unit: anchor?.unit, sources, percent };
+}
+
+/**
+ * Whether an aggregate's operands are percentages: all of them, none, or some.
+ *
+ * A percentage is held as its fraction, so `sum(10%, 20%)` added 0.1 and 0.2
+ * and answered 0.30, a plain number where the reader wrote percentages, and
+ * `sum(10%, 100)` added 0.1 to 100. Percentages alone are proportions of one
+ * whole, and their total, mean or largest is a proportion too, so the caller
+ * answers it as a percentage. A percentage beside a number or a quantity has
+ * no reading both share (`100 + 10%` is 110, `10% + 100` is 10,010%, and a
+ * set has no order to choose between them), so the set is refused by name
+ * rather than answered with the fraction.
+ *
+ * @param values - The aggregate's operands, already found to be numeric.
+ * @param verb - What the aggregate does, completing "cannot be ..." in the refusal.
+ * @returns True when every operand is a percentage, false when none is (or
+ * there are none), or the `AGGREGATE_PERCENTAGE_MIXED` refusal when some are.
+ */
+export function percentageOperands(values: readonly Value[], verb: string): boolean | Value {
+    let percentage: Value | undefined;
+    let other: Value | undefined;
+    for (const v of values) {
+        if (v.type === ValueType.Percentage) percentage ??= v;
+        else other ??= v;
+        if (percentage !== undefined && other !== undefined) return percentageMixRefused(percentage, other, verb);
+    }
+    return percentage !== undefined;
+}
+
+/**
+ * Whether a line's value can be one of the figures a document aggregate
+ * gathers (a line range, `total above`, a section, a tag): a number, a
+ * quantity, or a percentage. A set of percentages totals to a percentage, and
+ * a set mixing one with anything else is refused by {@link unifyQuantities},
+ * as the comma forms refuse it.
+ *
+ * @param v - The line's value, after a number in a base is read as its number.
+ */
+export function isAggregateFigure(v: Value): boolean {
+    return v.type === ValueType.Number || v.type === ValueType.Uom || v.type === ValueType.Percentage;
+}
+
+/**
+ * The refusal for a set mixing a percentage with a value that is not one.
+ *
+ * Names the percentage as written and the kind of the other value, and gives
+ * the two ways to say what was meant: every value a percentage, or the
+ * percentage written as its fraction. Adding names the third, a share of an
+ * amount, which is `100 + 10%` rather than a member of the set.
+ *
+ * @param percentage - The first percentage in the set.
+ * @param other - The first value in the set that is not a percentage.
+ * @param verb - What the aggregate does ("added", "averaged", "compared").
+ * @returns The `AGGREGATE_PERCENTAGE_MIXED` error Value.
+ */
+export function percentageMixRefused(percentage: Value, other: Value, verb: string): Value {
+    const fraction = percentage.toNumber();
+    const written = Number.isFinite(fraction * 100) ? `${percentText(fraction)}%` : undefined;
+    const kind = other.type === ValueType.Boolean ? "a true or false value" : valueKindName(other);
+    const together = /\btogether$/.test(verb) ? verb : `${verb} together`;
+    const named = written === undefined ? "A percentage" : `A percentage (${written})`;
+    const asNumber = written === undefined ? "" : `, or write ${written} as the number ${numberText(fraction)}`;
+    const share = verb === "added" ? "; to raise an amount by a percentage, write it as 100 + 10%" : "";
+    return errorValue(
+        "AGGREGATE_PERCENTAGE_MIXED",
+        `${named} and ${kind} cannot be ${together}: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage${asNumber}${share}.`,
+    );
+}
+
+/**
+ * An aggregate of percentages, answered as a percentage.
+ *
+ * The fraction is what the aggregate worked out from the percentages' own
+ * fractions (0.3 for `sum(10%, 20%)`). A fraction a double holds but a hundred
+ * times of it does not, as a total of two percentages near the largest double
+ * can be, is refused as `1e308 as %` is; see {@link percentageRefusal}.
+ *
+ * @param fraction - The answer as a fraction.
+ * @param sources - The provenance the operands carried, if any.
+ * @returns The percentage, or the refusal for one too large to write.
+ */
+export function percentageAnswer(fraction: number, sources?: readonly ValueSource[]): Value {
+    if (!Number.isFinite(fraction * 100)) return percentageRefusal(numberValue(fraction), fraction);
+    const answer = percentageValue(fraction);
+    if (sources !== undefined) answer.sources = sources;
+    return answer;
 }
 
 /** A kind ("a bracketed list") at the start of a sentence ("A bracketed list"). */

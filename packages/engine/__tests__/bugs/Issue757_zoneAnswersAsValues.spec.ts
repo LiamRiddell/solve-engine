@@ -8,7 +8,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
-import { Value, ValueType, datetimeValue, stringValue, uomValue } from "@solve-js/vm/Value";
+import { Value, ValueType, copyZoneDifference, datetimeValue, stringValue, uomValue } from "@solve-js/vm/Value";
 import {
 	clockInZone, dayShiftOf, dayShiftWords, describeMinutes, fieldsShownIn, isZoneTime, noonOnDay, shownZone,
 	zoneAnswerEqualsText, zoneAnswerJoinedText, zoneAnswerText, zoneDifferenceMinutes, zoneDifferenceText, zoneTimeText,
@@ -309,6 +309,25 @@ describe("the host surface", () => {
 		});
 		expect(value("time difference between London and Tokyo").toJSON()).toEqual({
 			type: ValueType.Uom, value: 8, unit: "hours", zoneDifference: { from: "London", to: "Tokyo" },
+		});
+	});
+
+	test("toJSON keeps the day a dated gap was measured on", () => {
+		expect(value("time difference between London and Tokyo on 2026-03-10").toJSON()).toEqual({
+			type: ValueType.Uom, value: 9, unit: "hours", zoneDifference: { from: "London", to: "Tokyo", on: "March 10, 2026" },
+		});
+	});
+
+	test("copyZoneDifference keeps the day only when there is one, and shares nothing", () => {
+		const dated = { from: "London", to: "Tokyo", on: "March 10, 2026" };
+		const copy = copyZoneDifference(dated);
+		expect(copy).toEqual(dated);
+		expect(copy).not.toBe(dated);
+		expect(Object.keys(copyZoneDifference({ from: "London", to: "Tokyo" }))).toEqual(["from", "to"]);
+		expect(Object.keys(copyZoneDifference({ from: "London", to: "Tokyo", on: undefined }))).toEqual(["from", "to"]);
+		expect(copyZoneDifference({ from: "", to: "", on: "" })).toEqual({ from: "", to: "", on: "" });
+		expectPrototypeUntouched(() => {
+			expect(copyZoneDifference({ from: "__proto__", to: "constructor", on: "toString" })).toEqual({ from: "__proto__", to: "constructor", on: "toString" });
 		});
 	});
 

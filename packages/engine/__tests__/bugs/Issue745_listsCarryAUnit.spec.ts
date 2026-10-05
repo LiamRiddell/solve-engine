@@ -111,6 +111,13 @@ describe("what a list with a unit does", () => {
 		expect(show("-[1, 2]")).toBe("[-1, -2]");
 		expect(show("[true, false]")).toBe("[true, false]");
 	});
+
+	// A percentage was refused beside a list with a unit; it is now a share of
+	// each cell, as it is of one quantity (FoundBug_listPercentage).
+	test("a percentage is a share of each cell", () => {
+		expect(show("[1 km, 2 km] + 10%")).toBe("[1.10 km, 2.20 km]");
+		expect(show("10% of [1 km, 2 km]")).toBe("[0.10 km, 0.20 km]");
+	});
 });
 
 describe("what is refused by name", () => {
@@ -123,7 +130,6 @@ describe("what is refused by name", () => {
 		["[1 km, 2 km] * 3 m", "MATRIX_UNIT_OPERATION_UNSUPPORTED"],
 		["[1, 2] / 1 km", "MATRIX_UNIT_OPERATION_UNSUPPORTED"],
 		["10 / [1 km, 2 km]", "MATRIX_UNIT_OPERATION_UNSUPPORTED"],
-		["[1 km, 2 km] + 10%", "MATRIX_UNIT_OPERATION_UNSUPPORTED"],
 		["det([1 km, 2 km; 3 km, 4 km])", "MATRIX_UNIT_ALGEBRA"],
 		["inv([1 km, 2 km; 3 km, 4 km])", "MATRIX_UNIT_ALGEBRA"],
 		["[1 km, 2 km; 3 km, 4 km] * [1 km, 2 km; 3 km, 4 km]", "MATRIX_UNIT_ALGEBRA"],

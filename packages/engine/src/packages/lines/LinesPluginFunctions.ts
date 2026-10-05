@@ -1,9 +1,9 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
 import { isCheckLine } from "@solve-js/packages/conditionals/CheckFunctions";
 import { isScenarioDeclarationText } from "@solve-js/packages/whatif/ScenarioText";
-import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
+import { nonNumericKind, unifyQuantities, percentageAnswer, isAggregateFigure } from "@solve-js/vm/VMConversion";
 import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
-import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
+import { exactDecimalTotal, percentTotal } from "@solve-js/vm/ExactDecimals";
 import { numberOfBase } from "@solve-js/vm/ExactIntegers";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { lineValueProblem as checkLineValue, noDocument as requireContext } from "@solve-js/vm/LineReads";
@@ -127,6 +127,9 @@ function combineQuantities(values: Value[], isAverage: boolean): Value {
   if (exact !== null) return withSources(exact, sourcesOfValues(values));
   const unified = unifyQuantities(values, isAverage ? "averaged" : "added");
   if (unified instanceof Value) return unified;
+  // A column of percentages totals to a percentage, as `sum(10%, 20%)` does,
+  // formed in base ten as that is (see percentTotal()).
+  if (unified.percent) return percentageAnswer(percentTotal(unified.magnitudes, isAverage), unified.sources);
   const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
   const result = isAverage ? sum / values.length : sum;
   if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
@@ -176,7 +179,7 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
     if (err) return err;
     // A number written in a base is added as the number it is.
     const figure = numberOfBase(v!);
-    if (figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
+    if (!isAggregateFigure(figure)) {
       return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value, so it cannot be included in a sum, total or average range`);
     }
     values.push(figure);
@@ -273,7 +276,7 @@ function aggregateAbove(context: LineExecutionContext, mode: AboveMode): Value {
     if (err) return err;
     // A number written in a base is added as the number it is.
     const figure = numberOfBase(v!);
-    if (figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
+    if (!isAggregateFigure(figure)) {
       return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value, so it cannot be included in an "above" aggregation`);
     }
     values.push(figure);
@@ -306,12 +309,15 @@ function combineAbove(values: Value[], mode: AboveMode): Value {
   if (mode === "median") {
     const sorted = [...cells].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
-    result = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    // The midpoint of two percentages is their mean, formed in base ten.
+    if (sorted.length % 2 === 0) result = unified.percent ? percentTotal([sorted[mid - 1], sorted[mid]], true) : (sorted[mid - 1] + sorted[mid]) / 2;
+    else result = sorted[mid];
   } else {
     // Folded, not spread: a long column spread into Math.max overflows the stack.
     result = cells[0];
     for (const n of cells) result = mode === "min" ? Math.min(result, n) : Math.max(result, n);
   }
+  if (unified.percent) return percentageAnswer(result, unified.sources);
   if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
   const combined = withSources(uomValue(result, unified.unit), unified.sources);
   if (values.every((v) => v.datetimeSpan === true)) combined.datetimeSpan = true;
@@ -577,7 +583,7 @@ function aggregateSection(context: LineExecutionContext, name: string, mode: Sec
     // line that is not a number still counts; only sum and average add.
     // A number written in a base is added as the number it is.
     const figure = numberOfBase(v!);
-    if (mode !== "count" && figure.type !== ValueType.Number && figure.type !== ValueType.Uom) {
+    if (mode !== "count" && !isAggregateFigure(figure)) {
       return sectionNonNumeric(v!, n, open.name, verb);
     }
     values.push(figure);

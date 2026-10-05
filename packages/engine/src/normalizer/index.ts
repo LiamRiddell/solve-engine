@@ -44,7 +44,7 @@ export { PhraseTrie } from "./PhraseTrie";
 //#endregion
 
 //#region Exports, Rule types and interfaces
-export type { NormalizerRule, NormalizerMatch, TokenFusion } from "./NormalizerRule";
+export type { NormalizerRule, NormalizerMatch, TokenFusion, NormalizerEnvironment } from "./NormalizerRule";
 //#endregion
 
 //#region Exports, Built-in rules

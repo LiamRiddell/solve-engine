@@ -255,10 +255,12 @@ export const CoreErrorCodes = {
   INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
   /** A choice written `condition ? value : other` (`true ? 25 : 30`). There is no such operator; the message spells the line as `if ... then ... else`. Raised by the labelled-line fallback, which used to read `true ? 25` as a label and answer 30. */
   TERNARY_UNSUPPORTED: "TERNARY_UNSUPPORTED",
-  /** Text before a colon that is a comparison, an assignment or a calculation with no word in it (`a > b: 1`, `(1+2): 5`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. */
+  /** Text before a colon that is a comparison, an assignment, or a calculation or bracketed figure with no word in it (`a > b: 1`, `(1+2): 5`, `(24):00`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. */
   LABEL_NOT_A_NAME: "LABEL_NOT_A_NAME",
   /** A figure in digits from another script (`٢٤:00`, `Total: ٢٤:00`, Arabic-Indic for 24) standing before a colon where a number would be an operand. Numbers are read in the digits 0 to 9 only, and the labelled-line fallback used to take the figure as a label and answer with what followed the colon. The message spells the figure in 0 to 9. */
   OTHER_SCRIPT_DIGITS: "OTHER_SCRIPT_DIGITS",
+  /** A figure in 0 to 9 holding an invisible character that is not a direction control (a zero-width joiner or non-joiner, a word joiner, a soft hyphen), standing before a colon where a number would be an operand (`<U+200D>24:00`). The character makes the figure a word, which the labelled-line fallback used to take as a label and answer with what followed the colon. The message names the character by its code point; the reader deletes it. A direction control in the same place is `DIRECTION_CONTROL_IN_NAME`. */
+  INVISIBLE_CHARACTER_IN_NUMBER: "INVISIBLE_CHARACTER_IN_NUMBER",
   /** A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. */
   NETWORK_DISABLED: "NETWORK_DISABLED",
 
@@ -372,7 +374,7 @@ export const CoreErrorCodes = {
   UNIT_AFTER_UNIT: "UNIT_AFTER_UNIT",
   /** An exponent carrying a unit, as in `2^(3 m)`. The message shows where the unit goes instead. */
   UNIT_IN_EXPONENT: "UNIT_IN_EXPONENT",
-  /** A quantity raised to a power that has no unit, as in `2s^2`, or a unit written with a power the table does not spell. Only a length squared or cubed has one. */
+  /** A quantity raised to a power that has no unit, as in `2s^2`, or a unit written with a power the table does not spell. Only a length squared or cubed has one. A variance of quantities other than lengths, or of percentages, is refused with it too. */
   UNIT_POWER_UNSUPPORTED: "UNIT_POWER_UNSUPPORTED",
   /** A square or cube root of a quantity whose root has no unit, as in `sqrt(4 m)`, or of a negative area. */
   UNIT_ROOT_UNSUPPORTED: "UNIT_ROOT_UNSUPPORTED",
@@ -460,6 +462,8 @@ export const CoreErrorCodes = {
   STATISTIC_NOT_FINITE: "STATISTIC_NOT_FINITE",
   /** A list aggregate (`total of`, `average of`, a line range) meeting something that is not a number or a quantity. The message names what it found. */
   AGGREGATE_NON_NUMERIC: "AGGREGATE_NON_NUMERIC",
+  /** An aggregate (`sum(10%, 100)`, `average of 10%, 5 m`, `max(10%, 0.5)`, `total above` over a column) meeting a percentage beside a value that is not one. Percentages alone answer a percentage (`sum(10%, 20%)` is 30%); the message names the percentage and the kind of the other value, and gives the percentage as the number it stands for. */
+  AGGREGATE_PERCENTAGE_MIXED: "AGGREGATE_PERCENTAGE_MIXED",
   /** A value written as a percentage that is not a proportion, such as a length. */
   PERCENTAGE_OF_QUANTITY: "PERCENTAGE_OF_QUANTITY",
   /** A value written as a percentage that is not a finite number: an infinity a division by zero gave (`1/0 as %`), or a value that is no number at all. */
@@ -512,8 +516,12 @@ export const CoreErrorCodes = {
   LIST_CONVERSION_UNSUPPORTED: "LIST_CONVERSION_UNSUPPORTED",
   /** A list of several numbers given to a builtin that reads each argument as one number and has no answer for each cell (`gcd([4, 6], 2)`, `root(3, [8, 27])`, `atan2([1, 2], 1)`, `isprime([2, 4])`). The message points at `map`. */
   LIST_ARGUMENT_UNSUPPORTED: "LIST_ARGUMENT_UNSUPPORTED",
-  /** A list given to a function of one number that is worked out for each cell (`sqrt`, `sin`, `ln`, `fact`), when a cell is not a number (a true or false, a formula with an unknown), when a cell has no real answer (`sqrt([4, -9])`), or when the answers come in different units. */
+  /** A list given to a function of one number that is worked out for each cell (`sqrt`, `sin`, `ln`, `fact`), or added to or taken from a percentage (`[true, 2] + 10%`), when a cell is not a number (a true or false, a formula with an unknown), when a cell has no real answer (`sqrt([4, -9])`), or when the answers come in different units. */
   LIST_CELL_UNSUPPORTED: "LIST_CELL_UNSUPPORTED",
+  /** A percentage written before a plain list with `+` or `-` (`10% + [100, 200]`), or a percentage as a cell of a plain list (`[10%, 20%]`, `map(x%, [10, 20])`). A list holds plain numbers, so it would keep the percentage as its fraction and add 0.1 where 10% was meant; the message gives the forms that work, `[100, 200] + 10%` or the fractions `[0.1, 0.2]`. */
+  LIST_PERCENTAGE_UNSUPPORTED: "LIST_PERCENTAGE_UNSUPPORTED",
+  /** A list as the condition of an `if` (`if [1, 2] > 0 then 1 else 2`), where one true or false is needed. A list compared with a value answers once per cell, so the message points at one cell (`v[0] > 5`) or at `map` to choose for each cell. */
+  LIST_CONDITION_UNSUPPORTED: "LIST_CONDITION_UNSUPPORTED",
   /** A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. */
   COLLECTION_TOO_LARGE: "COLLECTION_TOO_LARGE",
   /** A list cell that is not a number or a quantity: a list inside a list, text, a date. */

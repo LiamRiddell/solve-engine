@@ -123,8 +123,8 @@ rule that keeps its reading single:
 The list holds the answers in the first answer's unit, since a list carries one
 unit (see [lists and units](/syntax/vectors-and-matrices/#lists-and-units)): a
 sweep of a money line lists money, a quantity lists its quantities, converting a
-later answer in another unit of the same measure, and a percentage lists as its
-fraction. Answers in two measures have no one unit and stop the sweep by name.
+later answer in another unit of the same measure. Answers in two measures have
+no one unit and stop the sweep by name.
 
 ```solve-doc
 price = $100                                   // $100.00
@@ -141,6 +141,30 @@ length * width                                 // 6.00 m²
 line 3 for length from 1 m to 3 m step 50 cm   // [3.00 m², 4.50 m², 6.00 m², 7.50 m², 9.00 m²]
 line 3 for length from 1 m to 2 m step 30 cm   // [3.00 m², 3.90 m², 4.80 m², 5.70 m²]
 ```
+
+### Sweeping a line that answers a percentage
+
+A list holds plain numbers, not percentages, so a sweep of a line whose answer
+is a percentage would show each share as its fraction: 10% as 0.10. That reads
+as a number nobody meant, so the sweep is refused by name at the first step
+that answers one, as a list with a percentage in it is (see
+[a percentage and a list](/syntax/percentages/#a-percentage-and-a-list)). To
+sweep it, add a line that gives the answer as a number, such as its percentage
+points (the percentage times 100), and sweep that line instead:
+
+```solve-doc
+rate = 10%                                     // 10.00%
+rate * rate                                    // 1.00%
+line 2 for rate from 10% to 30% step 10%       // ERROR: With rate at 10%, line 2 answers 1%, a percentage, and a sweep lists its answers in a list, which holds plain numbers, not percentages. To sweep it, add a line that gives the answer as a number, such as "line 2 * 100" for its percentage points, and sweep that line.
+line 2 * 100                                   // 1
+line 4 for rate from 10% to 30% step 10%       // [1, 4, 9]
+```
+
+The boundary: only the line's answer is refused. A percentage as the swept
+input is how a sweep is most often written, and a line that turns it into a
+number or an amount, such as the mortgage payment above, sweeps as before. A
+sweep of a line holding the rate itself used to list its fractions,
+`[0.10, 0.20, 0.30]`.
 
 ### Sweeping a date
 
@@ -299,7 +323,8 @@ The rest, in words:
   and it still needs its variable on the target line itself.
 - A sweep steps numbers, percentages, quantities and dates. A date sweep steps
   by the calendar, so a step in working days is refused, and a line whose answer
-  is a date cannot be swept, since a list holds numbers and quantities.
+  is a date or a percentage cannot be swept, since a list holds numbers and
+  quantities.
 
 A host asks the same question from code, over the whole note, with
 `engine.whatIf(text, { deposit: 150000 })`; see

@@ -31,10 +31,13 @@ grid is easier to read; the two are the same matrix.
 
 Each cell holds one number, a `true` or `false`, or an unknown. A list inside a
 list, a piece of text or a date has no place in a cell, so the literal is refused
-rather than storing it as a zero:
+rather than storing it as a zero. A percentage is refused too: a cell is a plain
+number, so it would keep only the fraction (0.1 for 10%) and lose the meaning
+"a share of something" (see [a percentage and a list](/syntax/percentages/#a-percentage-and-a-list)):
 
 ```solve-doc
 [(1, 2), 3] // ERROR: A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3].
+[1, 7%] // ERROR: A list holds plain numbers, so it cannot hold 7% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.07 for 7%).
 ```
 
 ## Lists and units
@@ -92,8 +95,7 @@ neither is an amount in the list's unit:
 The boundary: a list carries one unit, so an operation whose cells would come
 out in different units, or in a unit made from two, is refused rather than
 answered in plain numbers. Multiplying a list of quantities by another quantity
-(`[1 m, 2 m] * 3 m`), dividing a number by one, and adding a percentage to one
-(write the factor as a number instead) are refused by name. So is matrix
+(`[1 m, 2 m] * 3 m`) and dividing a number by one are refused by name. So is matrix
 algebra on quantities (a determinant, an inverse, a matrix product or power, a
 dot product), whose answer would be in a power of the unit; write the list
 without its unit to work on the amounts. A formula cell (an unknown) has no
@@ -118,6 +120,61 @@ are added together.
 ```solve
 [1,2,3] * 10 // [10, 20, 30]
 [1,2,3] + [10,20,30] // [11, 22, 33]
+```
+
+A percentage is a share of each element, as it is of one number, so a 10%
+rise on a list raises every element by a tenth of itself, and a list with a
+unit keeps it (see [a percentage and a list](/syntax/percentages/#a-percentage-and-a-list)):
+
+```solve
+[100, 200] + 10% // [110, 220]
+[1 km, 2 km] + 10% // [1.10 km, 2.20 km]
+10% of [1 km, 2 km] // [0.10 km, 0.20 km]
+```
+
+## Comparing a list
+
+A comparison asks a yes-or-no question, such as "is this more than 150?" (see
+[conditionals](/syntax/conditionals/)). Asked of a list, it is asked of each
+element, the same element-wise way arithmetic works, so the answer is a list of
+`true` and `false` in the list's shape, one answer per element. It is how a
+column of readings is checked against a limit. The other side can be one value
+or a second list of the same shape, and a list with a unit compares each
+element as the quantity it is, converting where the units differ.
+
+```solve
+[100, 200] > 150 // [false, true]
+[100, 200] == 100 // [true, false]
+150 < [100, 200] // [false, true]
+[1, 2] > [0, 3] // [true, false]
+[1 km, 2 km] > 1500 m // [false, true]
+[$100, $200] <= $150 // [true, false]
+```
+
+Lists of answers combine element by element with `and`, `or` and `not`, and
+`sum` counts the `true` answers, since each counts as 1:
+
+```solve
+([1, 2, 3] > 1) and ([1, 2, 3] < 3) // [false, true, false]
+not ([1, 2] > 1) // [true, false]
+not [true, false] // [false, true]
+sum([12, 18, 25] > 15) // 2
+```
+
+The boundary: each element is compared as it would be on a line of its own, so
+a length beside a mass is refused for the whole list, as it is for one length,
+and two lists of different shapes are refused. A list of answers is not one
+answer, so a list where one `true` or `false` is needed, the condition of an
+`if`, is refused by name; compare one element, or let `map` choose for each
+element. A [check](/syntax/checks/) gives one verdict, so it refuses a list in
+the same way. These used to give one wrong answer for the whole list:
+`[100, 200] < 5` was `true` and `[100, 200] > 5` was `false`, because the list
+was read as the number 0.
+
+```solve
+[1 km, 2 km] > 1 kg // length and mass cannot be compared
+if [1, 2] > 0 then 1 else 2 // "if" needs one true or false, and this is a list of 2 cells. Compare one cell, as in v[0] > 5, or choose for each cell with map, as in map(if x > 5 then 1 else 0, v).
+map(if x > 150 then 1 else 0, [100, 200]) // [0, 1]
 ```
 
 ## Functions of a list

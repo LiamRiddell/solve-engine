@@ -3,7 +3,7 @@ import { numberText, shortestText } from "@solve-js/utilities/Number";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, describeQuantity, valueKindName, isIpv6Value, ipv6Refused, colourRefused } from "@solve-js/vm/VMConversion";
+import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, percentageOperands, percentageAnswer, describeQuantity, valueKindName, isIpv6Value, ipv6Refused, colourRefused } from "@solve-js/vm/VMConversion";
 import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact, valueInUnit, moneyForCount } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixPower, symbolicToEntry, rowMajorToColumnMajor, dotProduct } from "@solve-js/vm/MatrixOps";
@@ -40,7 +40,7 @@ import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } fr
 import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan, loanTermsRefused, rateAtOrBelowMinusHundred, compoundingRefused } from "@solve-js/vm/FinanceFormulas";
 import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, valueInBase, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
-import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
+import { exactDecimalPower, exactDecimalTotal, percentTotal, percentSum, percentWeightedMean, absExactDecimal, roundExactToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
 
 /**
  * A duration in seconds, shown in the largest whole time unit that keeps the
@@ -341,6 +341,10 @@ function extremum(args: Value[], wantLargest: boolean): Value {
     }
     const nonNumeric = nonNumericOperand(args, "compared");
     if (nonNumeric) return nonNumeric;
+    // `max(10%, 20%)` is 20%, the percentage itself, where the magnitude path
+    // answered its fraction; a percentage beside a number is refused.
+    const percent = percentageOperands(args, "compared");
+    if (percent instanceof Value) return percent;
     let best: Value | undefined;
     let hasNaN = false;
     for (const a of args) {
@@ -369,7 +373,7 @@ function extremum(args: Value[], wantLargest: boolean): Value {
     }
     if (hasNaN) return numberValue(NaN);
     if (best === undefined) return numberValue(wantLargest ? -Infinity : Infinity);
-    if (best.type === ValueType.Uom) return best;
+    if (best.type === ValueType.Uom || best.type === ValueType.Percentage) return best;
     // The winner keeps its exact decimal, so `max(0.1, 0.2) + 0.1 == 0.3`.
     const winner = numberValue(best.toNumber());
     if (best.type === ValueType.Number && best.exact !== undefined) winner.exact = best.exact;
@@ -384,7 +388,9 @@ function extremum(args: Value[], wantLargest: boolean): Value {
  * read a whole list in one unit, so `total of $4.99, $12.50` keeps the
  * currency the list opened in.
  */
-function quantity(magnitude: number, unit: string | undefined, sources?: readonly ValueSource[]): Value {
+function quantity(magnitude: number, unit: string | undefined, sources?: readonly ValueSource[], percent = false): Value {
+    // A set of percentages answers a percentage; see percentageOperands().
+    if (percent) return percentageAnswer(magnitude, sources);
     return withSources(unit === undefined ? numberValue(magnitude) : uomValue(magnitude, unit), sources);
 }
 
@@ -694,6 +700,15 @@ export function spreadStatistic(args: readonly Value[], verb: string, sample: bo
         );
     }
     const squared = variance(unified.magnitudes, sample);
+    // The spread of percentages is a percentage; their variance would be in
+    // percent squared, which is no percentage, so it is refused as a quantity's is.
+    if (unified.percent) {
+        if (root) return percentageAnswer(Math.sqrt(squared), unified.sources);
+        return errorValue(
+            "UNIT_POWER_UNSUPPORTED",
+            "A variance of percentages would be in percent squared, which is not a percentage. The standard deviation is the same spread as a percentage.",
+        );
+    }
     const unit = unified.unit;
     if (root || unit === undefined) return quantity(root ? Math.sqrt(squared) : squared, unit, unified.sources);
     if (getMeasure(unit) !== "length") {
@@ -1067,6 +1082,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const sides = unifyQuantities(args, "combined in a hypotenuse");
         if (sides instanceof Value) return sides;
         const length = Math.hypot(...sides.magnitudes);
+        if (sides.percent) return percentageAnswer(length);
         return sides.unit !== undefined ? uomValue(length, sides.unit) : numberValue(length);
     },
     27: (args) => quantitiesRefused("imul", args) ?? numberValue(Math.imul(args[0].toNumber(), args[1].toNumber())),
@@ -1262,8 +1278,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (exactMean !== null) return exactMean;
         const unified = unifyQuantities(args, "averaged");
         if (unified instanceof Value) return unified;
+        // A mean of percentages is formed in base ten, as a mean of decimals is.
+        if (unified.percent) return quantity(percentTotal(unified.magnitudes, true), undefined, unified.sources, true);
         const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
-        return quantity(sum / unified.magnitudes.length, unified.unit, unified.sources);
+        return quantity(sum / unified.magnitudes.length, unified.unit, unified.sources, unified.percent);
     },
     // median(...), middle value; average of the two middle values for an
     // even argument count.
@@ -1273,10 +1291,13 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (unified instanceof Value) return unified;
         const sorted = unified.magnitudes.slice().sort((a, b) => a - b);
         const mid = Math.floor(sorted.length / 2);
+        // The midpoint of two percentages is their mean, formed in base ten.
+        const midpoint = (a: number, b: number): number => unified.percent ? percentTotal([a, b], true) : (a + b) / 2;
         return quantity(
-            sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid],
+            sorted.length % 2 === 0 ? midpoint(sorted[mid - 1], sorted[mid]) : sorted[mid],
             unified.unit,
             unified.sources,
+            unified.percent,
         );
     },
     // total(...), sum of any number of arguments.
@@ -1287,7 +1308,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (exactTotal !== null) return exactTotal;
         const unified = unifyQuantities(args, "added");
         if (unified instanceof Value) return unified;
-        return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit, unified.sources);
+        // A total of percentages is formed in base ten, so `sum(10%, 20%) == 30%`.
+        if (unified.percent) return quantity(percentTotal(unified.magnitudes, false), undefined, unified.sources, true);
+        return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit, unified.sources, unified.percent);
     },
     // count(...), number of arguments passed.
     45: (args) => numberValue(args.length),
@@ -2121,7 +2144,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const unified = unifyQuantities(args, "compared");
         if (unified instanceof Value) return unified;
         const nums = unified.magnitudes;
-        return quantity(Math.max(...nums) - Math.min(...nums), unified.unit);
+        const largest = Math.max(...nums), smallest = Math.min(...nums);
+        // The spread of percentages is a difference of two, formed in base ten.
+        return quantity(unified.percent ? percentSum(largest, smallest, -1) : largest - smallest, unified.unit, undefined, unified.percent);
     },
     // mode: the most frequent value. A tie is broken by first appearance, so the
     // result is deterministic for the same list. Quantities are read in the
@@ -2131,13 +2156,18 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (args.length === 0) return numberValue(0);
         const unified = unifyQuantities(args, "counted for a mode");
         if (unified instanceof Value) return unified;
-        return quantity(modeOf(unified.magnitudes, unified.unit !== undefined), unified.unit, unified.sources);
+        return quantity(modeOf(unified.magnitudes, unified.unit !== undefined), unified.unit, unified.sources, unified.percent);
     },
     // weighted average: the arguments arrive interleaved [v1, w1, v2, w2, ...]
     // from WeightedAverageParselet, which has already rejected any value with no
     // weight. Weights are normalised by their own total, so they need not sum to
     // 1 or 100%. See issue #185.
     107: (args) => {
+        // The values, not the weights, say what the average is of: a mean of
+        // percentages is a percentage, and a percentage among plain values is
+        // refused, as `average of` refuses it. Weights may be percentages.
+        const percent = percentageOperands(args.filter((_, i) => i % 2 === 0), "averaged");
+        if (percent instanceof Value) return percent;
         let weightedSum = 0;
         let weightTotal = 0;
         for (let i = 0; i + 1 < args.length; i += 2) {
@@ -2149,6 +2179,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (weightTotal === 0) {
             return errorValue("WEIGHTED_AVERAGE_ZERO_WEIGHT", "weighted average: the weights sum to zero, so there is nothing to divide by");
         }
+        // Formed in base ten, so `weighted average of 10% at 1, 20% at 3` is 17.5%.
+        if (percent) return percentageAnswer(percentWeightedMean(args.map((a) => a.toNumber()), weightedSum / weightTotal));
         return numberValue(weightedSum / weightTotal);
     },
     // Number theory (#514), over exact integers; see vm/NumberTheory.ts.

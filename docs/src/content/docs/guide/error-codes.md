@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 566 codes, grouped below by the part
+ship. The engine and its built-in packages ship 571 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -187,8 +187,9 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `UNKNOWN_SAVINGS_PERIOD` | thrown | A savings-goal contribution period that is not one of daily/weekly/monthly/yearly (`how long to save $X at $Y <period>`). Names the accepted set. |
 | `INVALID_TIME_LITERAL` | thrown | Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. |
 | `TERNARY_UNSUPPORTED` | either | A choice written `condition ? value : other` (`true ? 25 : 30`). There is no such operator; the message spells the line as `if ... then ... else`. Raised by the labelled-line fallback, which used to read `true ? 25` as a label and answer 30. |
-| `LABEL_NOT_A_NAME` | either | Text before a colon that is a comparison, an assignment or a calculation with no word in it (`a > b: 1`, `(1+2): 5`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. |
+| `LABEL_NOT_A_NAME` | either | Text before a colon that is a comparison, an assignment, or a calculation or bracketed figure with no word in it (`a > b: 1`, `(1+2): 5`, `(24):00`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. |
 | `OTHER_SCRIPT_DIGITS` | either | A figure in digits from another script (`٢٤:00`, `Total: ٢٤:00`, Arabic-Indic for 24) standing before a colon where a number would be an operand. Numbers are read in the digits 0 to 9 only, and the labelled-line fallback used to take the figure as a label and answer with what followed the colon. The message spells the figure in 0 to 9. |
+| `INVISIBLE_CHARACTER_IN_NUMBER` | either | A figure in 0 to 9 holding an invisible character that is not a direction control (a zero-width joiner or non-joiner, a word joiner, a soft hyphen), standing before a colon where a number would be an operand (`<U+200D>24:00`). The character makes the figure a word, which the labelled-line fallback used to take as a label and answer with what followed the colon. The message names the character by its code point; the reader deletes it. A direction control in the same place is `DIRECTION_CONTROL_IN_NAME`. |
 | `NETWORK_DISABLED` | as a value | A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. |
 
 **What-if**
@@ -290,7 +291,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `UNKNOWN_UNIT` | as a value | A conversion or a unit named something that is not a unit (`5 km in mies`). The message offers the nearest spellings where there are any. |
 | `UNIT_AFTER_UNIT` | as a value | A quantity followed by a second unit, as in `5 kg m`: two units side by side are not a unit. The message suggests `in` for a conversion. |
 | `UNIT_IN_EXPONENT` | as a value | An exponent carrying a unit, as in `2^(3 m)`. The message shows where the unit goes instead. |
-| `UNIT_POWER_UNSUPPORTED` | either | A quantity raised to a power that has no unit, as in `2s^2`, or a unit written with a power the table does not spell. Only a length squared or cubed has one. |
+| `UNIT_POWER_UNSUPPORTED` | either | A quantity raised to a power that has no unit, as in `2s^2`, or a unit written with a power the table does not spell. Only a length squared or cubed has one. A variance of quantities other than lengths, or of percentages, is refused with it too. |
 | `UNIT_ROOT_UNSUPPORTED` | as a value | A square or cube root of a quantity whose root has no unit, as in `sqrt(4 m)`, or of a negative area. |
 | `UNIT_PRODUCT_UNSUPPORTED` | as a value | Two quantities multiplied into something that is not a unit, as in `$5 * $3`. Lengths multiply into an area or a volume. |
 | `UNIT_QUOTIENT_UNSUPPORTED` | as a value | Two quantities divided into something that is not a unit: nothing cancels and the result would be a rate of a rate. |
@@ -338,6 +339,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `WEIGHTED_AVERAGE_ZERO_WEIGHT` | as a value | A weighted average whose weights add up to zero. |
 | `STATISTIC_NOT_FINITE` | as a value | A standard deviation or variance of a list holding an infinity. |
 | `AGGREGATE_NON_NUMERIC` | as a value | A list aggregate (`total of`, `average of`, a line range) meeting something that is not a number or a quantity. The message names what it found. |
+| `AGGREGATE_PERCENTAGE_MIXED` | as a value | An aggregate (`sum(10%, 100)`, `average of 10%, 5 m`, `max(10%, 0.5)`, `total above` over a column) meeting a percentage beside a value that is not one. Percentages alone answer a percentage (`sum(10%, 20%)` is 30%); the message names the percentage and the kind of the other value, and gives the percentage as the number it stands for. |
 | `PERCENTAGE_OF_QUANTITY` | as a value | A value written as a percentage that is not a proportion, such as a length. |
 | `PERCENTAGE_NOT_FINITE` | as a value | A value written as a percentage that is not a finite number: an infinity a division by zero gave (`1/0 as %`), or a value that is no number at all. |
 | `PERCENTAGE_OVERFLOW` | as a value | A value written as a percentage that is too large for its percentage, a hundred times it, to be held, as in `1e308 as %`, or that is itself past the largest number that can be held, as in `2^2000 as %`. |
@@ -368,7 +370,9 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `LIST_ROUNDING_NON_NUMERIC` | as a value | A list rounded (`to 2 dp`, `to 3 sf`, `round`, `ceil`, `floor`) that holds a cell with no number to round: a true or false, or a formula with an unknown. |
 | `LIST_CONVERSION_UNSUPPORTED` | as a value | A list of several numbers written as one: in scientific notation, as a fraction or a percentage, or in hex, binary or octal (`[1234, 5678] as sci`). Each value is converted on its own. |
 | `LIST_ARGUMENT_UNSUPPORTED` | as a value | A list of several numbers given to a builtin that reads each argument as one number and has no answer for each cell (`gcd([4, 6], 2)`, `root(3, [8, 27])`, `atan2([1, 2], 1)`, `isprime([2, 4])`). The message points at `map`. |
-| `LIST_CELL_UNSUPPORTED` | as a value | A list given to a function of one number that is worked out for each cell (`sqrt`, `sin`, `ln`, `fact`), when a cell is not a number (a true or false, a formula with an unknown), when a cell has no real answer (`sqrt([4, -9])`), or when the answers come in different units. |
+| `LIST_CELL_UNSUPPORTED` | as a value | A list given to a function of one number that is worked out for each cell (`sqrt`, `sin`, `ln`, `fact`), or added to or taken from a percentage (`[true, 2] + 10%`), when a cell is not a number (a true or false, a formula with an unknown), when a cell has no real answer (`sqrt([4, -9])`), or when the answers come in different units. |
+| `LIST_PERCENTAGE_UNSUPPORTED` | as a value | A percentage written before a plain list with `+` or `-` (`10% + [100, 200]`), or a percentage as a cell of a plain list (`[10%, 20%]`, `map(x%, [10, 20])`). A list holds plain numbers, so it would keep the percentage as its fraction and add 0.1 where 10% was meant; the message gives the forms that work, `[100, 200] + 10%` or the fractions `[0.1, 0.2]`. |
+| `LIST_CONDITION_UNSUPPORTED` | as a value | A list as the condition of an `if` (`if [1, 2] > 0 then 1 else 2`), where one true or false is needed. A list compared with a value answers once per cell, so the message points at one cell (`v[0] > 5`) or at `map` to choose for each cell. |
 | `COLLECTION_TOO_LARGE` | as a value | A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. |
 | `MATRIX_CELL_NON_NUMERIC` | as a value | A list cell that is not a number or a quantity: a list inside a list, text, a date. |
 | `MATRIX_CELL_UNITS_DIFFER` | as a value | A list whose cells are quantities of different measures (`[1 km, 2 kg]`), or money in two currencies with no rate between them: a list holds one unit. |
@@ -1188,6 +1192,7 @@ In the package as `ERROR_CODE_CATALOGUES.WhatIfErrorCodes`.
 | `SWEEP_OVER_BUDGET` | as a value | A sweep whose steps together reached a limit on the work one evaluation may do. |
 | `SWEEP_STEP_FAILED` | as a value | A sweep one of whose steps failed. The message names the input value and the failure. |
 | `SWEEP_ANSWER_NOT_NUMERIC` | as a value | A sweep one of whose answers is not a number or a quantity, which is all a sweep lists. |
+| `SWEEP_ANSWER_PERCENTAGE` | as a value | A sweep of a line that answers a percentage, which a list (a row of plain numbers) cannot hold. |
 | `SWEEP_DATE_STEP_NOT_DURATION` | as a value | A sweep between two dates whose step is not a length of time (`step 5`), or is working days. |
 | `SCENARIO_UNKNOWN` | as a value | `line N under bull` with no `scenario bull with ...` line above it. |
 | `SCENARIO_DUPLICATE` | as a value | `line N under bull` where two lines above both declare a scenario named `bull`. |

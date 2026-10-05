@@ -9,6 +9,7 @@ import { resolveStoredFormulaIn } from "@solve-js/vm/StoredFormula";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
 import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToValues, ReduceForm, reduceFormCall } from "@solve-js/vm/MatrixOps";
 import { listFromCells, listCellValue, needsUnitCells, unitListArithmetic, listConverted } from "@solve-js/vm/MatrixUnits";
+import { percentageMeetsList, type PercentageCell } from "@solve-js/vm/ListPercentage";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -18,6 +19,7 @@ import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, builtinArgumentRefused, listBuiltinCall, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { valuesEqual, valuesOrdered } from "@solve-js/vm/Comparisons";
+import { listConditionRefused, answersCellByCell, isListOfAnswers, type CellComparison } from "@solve-js/vm/ListComparison";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { QueryClient } from "@tanstack/query-core";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
@@ -42,7 +44,8 @@ import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf, rateThroug
 import { rateForm } from "@solve-js/uom/RateForms";
 import { bigIntPow, exactWholeLiteral, valueInBase, bigBaseInteger, wholeFromBase } from "@solve-js/vm/ExactIntegers";
 import { indeterminateQuotient, infiniteResult, zeroDivisorQuotient } from "@solve-js/vm/IndeterminateQuotient";
-import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
+import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal, percentSum } from "@solve-js/vm/ExactDecimals";
+import { percentageTimesPercentage, percentageOverNumber, percentageToPower } from "@solve-js/vm/PercentArithmetic";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { WeekShape } from "@solve-js/calendar/WeekShape";
@@ -1400,7 +1403,9 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
         // Number/Percentage make sense here; anything else (a date, a matrix)
         // falls through to the ordinary error path.
         if (r.type !== ValueType.Percentage && r.type !== ValueType.Number) return null;
-        const fraction = l.toNumber() + sign * r.toNumber();
+        // Formed in base ten, so `10% + 20%` holds the double `30%` does and
+        // `10% + 20% == 30%` is true. See percentSum().
+        const fraction = percentSum(l.toNumber(), r.toNumber(), sign);
         // `50% + 1e308` is a fraction a double holds, but not a hundred times
         // it, so it is refused as `1e308 as %` is; see toPercentage().
         if (!Number.isFinite(fraction * 100)) return percentageRefusal(l.divisionByZero === true ? l : r, fraction);
@@ -1431,6 +1436,39 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
     // stays exact via the base-ten scaling factor.
     if (l.type === ValueType.Uom && l.unit !== undefined) return scaleMoneyByPercent(l, l.unit, r.toNumber(), sign);
     return null;
+}
+
+/** {@link combinePercentage} for `+`, as one cell of a list meets a percentage. */
+const addPercentageCell: PercentageCell = (a, b) => combinePercentage(a, b, 1);
+
+/** {@link combinePercentage} for `-`, as one cell of a list meets a percentage. */
+const subtractPercentageCell: PercentageCell = (a, b) => combinePercentage(a, b, -1);
+
+/**
+ * `+` or `-` with a list on at least one side, worked cell by cell, or null
+ * for the general path (two plain lists, a plain list and a plain number).
+ *
+ * A percentage is a share of each cell, by the rule one number follows, so
+ * `[100, 200] + 10%` is `[110, 220]`; the general path read the percentage as
+ * its bare fraction and answered `[100.10, 200.10]` (see vm/ListPercentage.ts).
+ * A list that carries a unit, or a plain list meeting a quantity, keeps the
+ * unit (#745, see vm/MatrixUnits.ts).
+ *
+ * @param l - The left operand.
+ * @param r - The right operand; at least one of the two is a list.
+ * @param sign - `1` for `+`, `-1` for `-`.
+ */
+function listAddOrSubtract(l: Value, r: Value, sign: 1 | -1): Value | null {
+    // `and` compiles to ADD, and between two answers it is the conjunction
+    // (`true and false` is false), so a list of answers beside an answer, or
+    // two of them, join cell by cell: `([1, 2] > 1) and true` is
+    // [false, true], where adding the cells as 1 and 0 gave [1, 2].
+    if (sign === 1 && (l.type === ValueType.Boolean || isListOfAnswers(l)) && (r.type === ValueType.Boolean || isListOfAnswers(r))) {
+        return answersCellByCell(l, r, BOTH_TRUE);
+    }
+    const shared = percentageMeetsList(l, r, sign, sign === 1 ? addPercentageCell : subtractPercentageCell);
+    if (shared !== null) return shared;
+    return needsUnitCells(l, r) ? unitListArithmetic(sign === 1 ? "add" : "sub", l, r) : null;
 }
 
 /**
@@ -1491,7 +1529,8 @@ function multiplyMoneyByScalarExact(l: Value, r: Value): Value | null {
  * An exact product with a scalar, or null: money times a number or a
  * percentage (see {@link multiplyMoneyByScalarExact}), or a plain number times a
  * percentage, `10% of 0.1`, which is exact for the same reason (see
- * vm/ExactDecimals.ts). Every other multiply keeps its own path. One call from
+ * vm/ExactDecimals.ts), or a percentage times a percentage, which is a
+ * percentage (see vm/PercentArithmetic.ts). Every other multiply keeps its own path. One call from
  * MUL, so the dispatch loop does not grow (see the note on the size of
  * `executeBytecode` above the opcode bodies kept out of it).
  */
@@ -1500,16 +1539,19 @@ function multiplyScalarExact(l: Value, r: Value): Value | null {
     if (money !== null) return money;
     if (l.type === ValueType.Percentage && r.type === ValueType.Number) return multiplyByPercentExact(r, l.toNumber());
     if (r.type === ValueType.Percentage && l.type === ValueType.Number) return multiplyByPercentExact(l, r.toNumber());
-    return null;
+    // A share of a share is a share: `10% * 20%` is 2%. See vm/PercentArithmetic.ts.
+    return percentageTimesPercentage(l, r);
 }
 
 /**
  * What DIV asks before anything else on its general path, as
  * {@link multiplyPrelude} does for MUL: the quantity refusal, then a percentage
- * and an uncertain number (see {@link dividePercentWithUncertainty}).
+ * and an uncertain number (see {@link dividePercentWithUncertainty}), then a
+ * percentage over a plain number, which is a percentage (`10% / 2` is 5%, see
+ * vm/PercentArithmetic.ts).
  */
 function dividePrelude(l: Value, r: Value): Value | null {
-    return quantityOperandRefused(l, r, "div") ?? timecodeOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r);
+    return quantityOperandRefused(l, r, "div") ?? timecodeOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r) ?? percentageOverNumber(l, r);
 }
 
 /**
@@ -1752,18 +1794,20 @@ function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Valu
             `A date or time moves by a length of time, such as 5 days, 2 weeks or 3 hours, not by ${what}.`,
         );
     }
-    let moved: Value;
+    let movedMs: number;
     try {
-        moved = datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm, date.zone), date.grain, date.zone, date.timeAnchor);
+        movedMs = shiftDatetime(date.toNumber(), duration, sign, vm, date.zone);
     } catch (e) {
         // A calendar backend throws a RangeError for a day past its range,
         // where the arithmetic itself is sound: the answer is only too far.
         if (e instanceof RangeError) return dateOutOfRange();
         throw e;
     }
+    const moved = datetimeValue(movedMs, date.grain, date.zone, date.timeAnchor);
     // A time of day keeps how finely it is written, so a time in a zone moved
-    // by an hour still reads to the minute (#757).
-    if (date.timePrecision !== undefined) moved.timePrecision = date.timePrecision;
+    // by an hour still reads to the minute (#757). A day past the calendar's
+    // range is the refusal, which has no precision to keep.
+    if (date.timePrecision !== undefined && moved.type === ValueType.Datetime) moved.timePrecision = date.timePrecision;
     return moved;
 }
 
@@ -1924,6 +1968,13 @@ function isTruthy(value: Value): boolean {
     if (value.type === ValueType.Boolean) return value.value as boolean;
     return value.toNumber() !== 0;
 }
+
+/** `&&` for one pair of list cells, by the truthiness one pair of values has. */
+const BOTH_TRUTHY: CellComparison = (l, r) => boolValue(isTruthy(l) && isTruthy(r));
+/** `||` for one pair of list cells, by the truthiness one pair of values has. */
+const EITHER_TRUTHY: CellComparison = (l, r) => boolValue(isTruthy(l) || isTruthy(r));
+/** The word `and` between two answers, for one pair of list cells: both must be true, as `true and false` is false. */
+const BOTH_TRUE: CellComparison = (l, r) => boolValue(l.value === true && r.value === true);
 
 /**
  * The answer a conversion gives when the two units measure different things.
@@ -2100,14 +2151,16 @@ function remainder(l: Value, r: Value): Value {
 
 /**
  * The EXP opcode's answer for a pair no earlier branch took: the double power,
- * except for a value written in a base past 2^53, which is raised on its
- * whole number (see bigBaseArithmetic()). Kept out of the dispatch loop.
+ * except for a percentage raised to a number, which is a percentage (`10% ^ 2`
+ * is 1%, see vm/PercentArithmetic.ts), and a value written in a base past
+ * 2^53, which is raised on its whole number (see bigBaseArithmetic()). Kept
+ * out of the dispatch loop.
  *
  * @param l - The base, already checked for a fault.
  * @param r - The exponent.
  */
 function plainPower(l: Value, r: Value): Value {
-    return bigBaseArithmetic(l, r, "pow") ?? numberValue(power(l.toNumber(), r.toNumber()));
+    return percentageToPower(l, r) ?? bigBaseArithmetic(l, r, "pow") ?? numberValue(power(l.toNumber(), r.toNumber()));
 }
 
 /**
@@ -3761,9 +3814,13 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         case OpCode.ADD: {
           const r = safePop(stack), l = safePop(stack);
-          // A list that carries a unit, or a plain list meeting a quantity, is
-          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
-          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("add", l, r)); break; }
+          // A list meeting a percentage, a list that carries a unit, or a plain
+          // list meeting a quantity, is worked cell by cell. One type test on
+          // the plain path. See listAddOrSubtract().
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) {
+            const listSum = listAddOrSubtract(l, r, 1);
+            if (listSum !== null) { stack.push(listSum); break; }
+          }
           // The plain case first. Two bare numbers with no sidecar are the
           // overwhelming majority of additions, and every helper below would
           // decline them one call at a time. A Number is never a faulted
@@ -3878,9 +3935,11 @@ export function executeBytecode(
         }
         case OpCode.SUB: {
           const r = safePop(stack), l = safePop(stack);
-          // A list that carries a unit, or a plain list meeting a quantity, is
-          // worked cell by cell with the unit (#745). See vm/MatrixUnits.ts.
-          if ((l.type === ValueType.Matrix || r.type === ValueType.Matrix) && needsUnitCells(l, r)) { stack.push(unitListArithmetic("sub", l, r)); break; }
+          // As in ADD: a list meeting a percentage or a unit, cell by cell.
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) {
+            const listDifference = listAddOrSubtract(l, r, -1);
+            if (listDifference !== null) { stack.push(listDifference); break; }
+          }
           // The plain case first, as in ADD, exact past the safe range as ADD is.
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined
@@ -4606,6 +4665,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const andLogicFault = faultedOperand(l, r);
           if (andLogicFault) { stack.push(andLogicFault); break; }
+          // A list of answers joins cell by cell (see vm/ListComparison.ts).
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) { stack.push(answersCellByCell(l, r, BOTH_TRUTHY)!); break; }
           stack.push(boolValue(isTruthy(l) && isTruthy(r)));
           break;
         }
@@ -4613,6 +4674,7 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const orLogicFault = faultedOperand(l, r);
           if (orLogicFault) { stack.push(orLogicFault); break; }
+          if (l.type === ValueType.Matrix || r.type === ValueType.Matrix) { stack.push(answersCellByCell(l, r, EITHER_TRUTHY)!); break; }
           stack.push(boolValue(isTruthy(l) || isTruthy(r)));
           break;
         }
@@ -4633,6 +4695,8 @@ export function executeBytecode(
           // asked about. A faulted condition selects nothing, so it stands.
           const conditionFault = faultedOperand(condition);
           if (conditionFault) { stack.push(conditionFault); break; }
+          // A list of answers picks no one branch (see vm/ListComparison.ts).
+          if (condition.type === ValueType.Matrix) { stack.push(listConditionRefused(condition, "if")); break; }
           stack.push(isTruthy(condition) ? thenVal : elseVal);
           break;
         }

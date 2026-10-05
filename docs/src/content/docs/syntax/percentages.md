@@ -276,6 +276,86 @@ percentage, and is refused:
 5 km as % // A length is not a proportion, so it has no percentage: only a number, a ratio or a parts-per quantity (ppm, permille) can be written as one.
 ```
 
+## A percentage and a list
+
+A list (a row of numbers in square brackets, see
+[vectors and matrices](/syntax/vectors-and-matrices/)) is a set of values
+worked on together, such as a column of prices. A percentage added to a list,
+or taken from one, is a share of each value in it, exactly as it is of one
+number: a 10% rise on a list of prices raises every price by a tenth of
+itself. A list of quantities or money keeps its unit.
+
+```solve
+[100, 200] + 10% // [110, 220]
+[100, 200] - 10% // [90, 180]
+[100 m, 200 m] + 10% // [110.00 m, 220.00 m]
+[$100, $200] - 10% // [$90.00, $180.00]
+```
+
+Every other way of writing a percentage of a value works on a list the same
+way, value by value: `of`, a discount or markup, multiplying and dividing.
+
+```solve
+10% of [100, 200] // [10, 20]
+15% off [$80, $120] // [$68.00, $102.00]
+20% on [50 kg, 60 kg] // [60.00 kg, 72.00 kg]
+[100 m, 200 m] * 10% // [10.00 m, 20.00 m]
+```
+
+Each value is worked out as it would be on a line of its own, so money stays
+exact to the cent, and a percentage held in a variable reads the same way:
+
+```solve-doc
+prices = [$19.99, $5.00] // [$19.99, $5.00]
+vat = 20% // 20.00%
+prices + vat // [$23.99, $6.00]
+```
+
+The boundary: a percentage written before a plain list with `+` or `-` is
+refused by name. For one number, `10% + 100` is the percentage 10,010%, and a
+list holds plain numbers, not percentages, so the answer would be shown as
+fractions nobody meant. The refusal gives the order that adds the percentage
+to each value. Before a list of quantities or money, a percentage reads as it
+does before one amount (`10% + $5` is $5.50), so there it is answered. These
+answers used to be wrong: `[100, 200] + 10%` added 0.1 to each value and
+answered `[100.10, 200.10]`, and a list with a unit refused a percentage.
+
+```solve
+10% + [100, 200] // A percentage plus a list would be a list of percentages, and a list holds plain numbers. To add the percentage to each number, write the list first, as in [100, 200] + 10%.
+10% + [$100, $200] // [$110.00, $220.00]
+```
+
+A percentage cannot be a value inside a list either. A list holds plain
+numbers, so `[10%, 20%]` would keep each percentage as its fraction, 0.1 and
+0.2, and adding that list to prices would add 0.1 and 0.2 rather than a tenth
+and a fifth. A list with a percentage in it is refused by name, with the two
+forms that say what was meant: one percentage outside the list, applied to
+every value, or the fractions written as numbers. To raise each price by its
+own share, work the amounts out and add them as a list.
+
+```solve
+[10%, 20%] // A list holds plain numbers, so it cannot hold 10% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.1 for 10%).
+[100, 200] + [10%, 20%] // A list holds plain numbers, so it cannot hold 10% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.1 for 10%).
+[100, 200] + [10, 40] // [110, 240]
+[0.1, 0.2] // [0.10, 0.20]
+```
+
+The boundary: the refusal covers every way a list is made, so `map(x%, [10,
+20])` is refused as the literal is, and a sum, an average or a product of such a
+list never runs. These used to answer with the fractions: `[10%, 20%]` was
+`[0.10, 0.20]`, `sum([10%, 20%])` was 0.30 rather than 30%, and `[100, 200] +
+[10%, 20%]` was `[100.10, 200.20]`.
+
+To add up or average percentages, list them with commas rather than brackets,
+or put each on a line of its own and total the lines: a set of percentages
+answers a percentage, and a percentage beside a plain number is refused by name
+(see [a list of percentages](/syntax/statistics/#a-list-of-percentages)).
+
+```solve
+sum(10%, 20%) // 30.00%
+average of 10%, 20% // 15.00%
+```
+
 ## A percentage as a multiplier
 
 A multiplier is the number a value is multiplied by to apply a change: a 20%
@@ -289,6 +369,100 @@ one, with an `x` after it. The conversion is read by `CONVERTERS_PACKAGE`, which
 150% as multiplier // 2.5x
 0.5 as multiplier // 0.5x
 ```
+
+## Multiplying and dividing percentages
+
+A percentage times a plain number takes that share of the number, as `of`
+does: `50% * 30` is half of 30. Times an amount of money or a quantity, it is
+that share of the amount, in its unit.
+
+```solve
+50% * 30 // 15
+100 * 40% // 40
+10% * $5 // $0.50
+```
+
+A share of a share is itself a share: ten per cent of twenty per cent is two
+per cent. So a percentage times a percentage is a percentage, with `*`, with
+`of` and with `product of`. Dividing a percentage by a number divides the
+share, which is how a yearly rate becomes a monthly one, and a power of a
+percentage is the share taken that many times over.
+
+```solve
+10% * 20% // 2.00%
+10% of 20% // 2.00%
+product of 10%, 20% and 50% // 1.00%
+6% / 12 // 0.50%
+10% ^ 2 // 1.00%
+```
+
+The answer goes on working as a percentage, so a monthly rate found this way
+raises an amount by that share:
+
+```solve-doc
+rate = 6% // 6.00%
+monthly = rate / 12 // 0.50%
+$1000 + monthly // $1,005.00
+$1000 * monthly // $5.00
+```
+
+A percentage over a percentage is how many times one share goes into the
+other, a plain ratio, and a number over a percentage is a plain number:
+
+```solve
+10% / 20% // 0.50
+200 / 10% // 2,000
+```
+
+The boundary: `10% * 2` is 0.2, a tenth of 2, not 20%. A percentage times a
+number is always read as a share of the number, since that is what `100 * 40%`
+means and the engine cannot tell the two apart by size. To double a rate, add
+it to itself, or write the answer as a percentage with `as %`. A percentage
+over zero has no finite share and is refused, and `10% ^ -1` is read as
+`1 / 10%`, a plain 10. A measurement with an
+[uncertainty](/syntax/uncertainty/) keeps its own arithmetic, so
+`10% / (2 +/- 0.1)` is a plain 0.05 ± 0.0025. These used to be plain numbers:
+`10% * 20%` and `product of 10%, 20%` were 0.02, `10% / 2` was 0.05 and
+`10% ^ 2` was 0.01, so a monthly rate added to an amount was added as a bare
+fraction rather than as a share of it.
+
+```solve
+10% * 2 // 0.20
+10% + 10% // 20.00%
+(10% * 2) as % // 20.00%
+10% / 0 // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
+```
+
+## Percentages that add up exactly
+
+A computer holds most numbers in binary, where a tenth has no exact form, so
+adding 0.1 and 0.2 that way lands a hair past 0.3 (see
+[decimals](/syntax/decimals/)). A percentage is a decimal too, and its sums,
+differences, products, quotients and powers, its totals and its averages are
+worked out from the decimals as written. So a total of percentages equals the
+percentage it shows, and a check of it agrees with `==`:
+
+```solve
+10% + 20% == 30% // true
+sum(10%, 20%) == 30% // true
+30% - 10% == 20% // true
+10% * 20% == 2% // true
+(average of 10%, 20%, 30%) == 20% // true
+```
+
+```solve-doc
+10% // 10.00%
+20% // 20.00%
+total above // 30.00%
+check line 3 == 30% // ✓
+```
+
+The boundary: this covers a percentage written with up to fifteen significant
+digits, which is every one a person types. A percentage worked out from a
+fraction with no end, such as `(1/3) as %`, and a standard deviation of
+percentages are floating point, as a plain number's are. These used to be
+false: `10% + 20% == 30%` and `sum(10%, 20%) == 30%`, while `check 10% + 20%
+== 30%` passed.
 
 ## What it does not cover
 

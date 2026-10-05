@@ -67,7 +67,7 @@ describe("everything with a numeric reading still answers", () => {
 	test.each([
 		["total of 1, 2, 3", "= 6"],
 		["total of true, 2", "= 3"],
-		["total of 10%, 20%", "= 0.30"],
+		["total of 10%, 20%", "= 30.00%"],
 		["total of 5 kg, 2 kg", "= 7.00 kg"],
 		["total of 0x10, 1", "= 17"],
 		["total of 5n, 1", "= 6"],
