@@ -194,6 +194,12 @@ describe("rotation", () => {
 		expect(shown("50 Hz in rpm")).toBe("= 3,000.00 rpm");
 	});
 
+	test("a turning speed for a time is a plain count of turns, as any frequency for a time is (#737)", () => {
+		expect(shown("3000 rpm * 2 min")).toBe("= 6,000");
+		expect(shown("2 min * 3000 rpm")).toBe("= 6,000");
+		expect(shown("50 Hz * 1 s")).toBe("= 50");
+	});
+
 	test("a revolution is the table's full turn, while turn itself stays English", () => {
 		expect(UNIT_TABLE.revolution).toBe(UNIT_TABLE.turn);
 		expect(UNIT_TABLE.revolutions).toBe(UNIT_TABLE.turns);

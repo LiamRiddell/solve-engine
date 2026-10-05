@@ -53,7 +53,7 @@ import { checkEngineVersionCompatibility } from "@solve-js/api/EngineVersionComp
 import { ENGINE_VERSION } from "@solve-js/constants/version";
 import { isFastPathToken } from "@solve-js/parser/BindingPower";
 import { TokenTypes } from "@solve-js/lexer/Token";
-import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import { builtinTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import { normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 import type { ParsedLine } from "@solve-js/types/ParsingResult";
@@ -809,7 +809,7 @@ export class PackageAssertion {
 			...Object.keys(pkg.infixParselets ?? {}),
 		].filter((type) => !builtinTypes.has(type)));
 		for (const type of ownTypes) {
-			if (pkg.tokenCategories?.[type] === undefined && getTokenCategory(type) === undefined) {
+			if (pkg.tokenCategories?.[type] === undefined && builtinTokenCategory(type) === undefined) {
 				problems.push(`its token "${type}" has no tokenCategories entry, so an editor cannot colour it`);
 			}
 		}

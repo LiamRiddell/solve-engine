@@ -8,6 +8,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { FAST_PATH_PREFIX_TOKENS, isFastPathToken } from "@solve-js/parser/BindingPower";
 import { expectPackage, ExpectationError } from "@solve-js/testing";
+import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { numberValue } from "@solve-js/vm/Value";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
@@ -232,6 +233,32 @@ describe("expectPackage(...).toBeWellFormed()", () => {
 			pluginFunctions: { double: (args) => numberValue(args[0].toNumber() * 2) },
 		});
 		expect(message).toContain('its token "TWICEC_KW" has no tokenCategories entry');
+	});
+
+	test("a category only in the deprecated module table still counts as none, since no engine reads that table", () => {
+		registerTokenCategory("TWICED_KW", "function");
+		try {
+			const message = problemsOf({
+				name: "doubler-d",
+				lexerVocabulary: { keywords: { twiced: "TWICED_KW" } },
+				prefixParselets: { TWICED_KW: doubleParselet },
+				pluginFunctions: { double: (args) => numberValue(args[0].toNumber() * 2) },
+			});
+			expect(message).toContain('its token "TWICED_KW" has no tokenCategories entry');
+		} finally {
+			unregisterTokenCategory("TWICED_KW");
+		}
+	});
+
+	test("a token named like an Object.prototype property has no category from the built-in table", () => {
+		for (const word of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+			const message = problemsOf({
+				name: `proto-${word}`,
+				lexerVocabulary: { keywords: { [`kw${word.toLowerCase()}`]: word } },
+				prefixParselets: { [word]: seven },
+			});
+			expect(message).toContain(`its token "${word}" has no tokenCategories entry`);
+		}
 	});
 
 	test("each fast-path token claimed in turn", () => {

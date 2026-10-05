@@ -53,13 +53,13 @@ export function cookingConvertHandler(args: Value[]): Value {
   if (!isMassOrVolume(sourceMeasure)) {
     return errorValue(
       "COOKING_CONVERSION_UNSUPPORTED_UNIT",
-      `"${sourceUnit}" is not a recognized mass or volume unit`,
+      `"${sourceUnit}" is not a recognised mass or volume unit`,
     );
   }
   if (!isMassOrVolume(targetMeasure)) {
     return errorValue(
       "COOKING_CONVERSION_UNSUPPORTED_UNIT",
-      `"${targetUnitText}" is not a recognized mass or volume unit`,
+      `"${targetUnitText}" is not a recognised mass or volume unit`,
     );
   }
 

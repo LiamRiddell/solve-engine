@@ -107,10 +107,17 @@ A single revolution is an angle, written `revolution` or `revolutions`.
 2 revolutions in rad // 12.57 rad
 ```
 
+A turning speed is a frequency, so for a length of time it is a plain count of
+turns, as any frequency for a time is (see
+[derived units](/syntax/derived-units/#speed-acceleration-and-frequency)):
+
+```solve
+3000 rpm * 2 min // 6,000
+```
+
 The boundary: the word `turn` is not read as a revolution, because it is ordinary
-English (`take turns`, `turn 3 times`). A turning speed is a frequency rather
-than a rate over a time, and a frequency and a time do not multiply here, so
-`3000 rpm * 2 min` is refused rather than counted as 6,000 revolutions.
+English (`take turns`, `turn 3 times`). The count is a plain number rather than
+an angle in revolutions, since a frequency counts repetitions of anything.
 
 ## Adding and comparing rates
 

@@ -6,7 +6,11 @@ name: Coverage
 # coverage for every loaded source file once per spec file: single-threaded on
 # a two-core runner that turned the two and a half minute full-suite job into
 # one of over twenty. A pull-request gate that slow is one people route
-# around, so the floor lives here instead. It fails the run when coverage
+# around, so the floor lives here instead. As the suite grew the single run
+# reached 80 to 90 minutes and half the daily runs were cancelled at the limit
+# (#890), so `npm run test:coverage` now runs three shards side by side, one
+# 4 GB process each on the runner's four cores and 16 GB, and checks the floor
+# once on their merged coverage (`scripts/run-coverage.mjs`). It fails the run when coverage
 # falls under the thresholds in `jest.coverage.config.cjs`, which sit a few
 # points beneath the value measured when they were set, so a real drop shows
 # within a day and ordinary churn never trips it. `npm run test:coverage` is

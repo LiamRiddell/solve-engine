@@ -11,6 +11,7 @@ The unit algebra knew force, energy, power, pressure and voltage, but not speed,
 | `9.81 m/s^2 * 3 s` | error: acceleration and duration cannot be multiplied | 29.43 m/s |
 | `100 km/h / 10 s` | error: km/h per s is a rate of a rate | 2.78 m/s² |
 | `10 Hz * 2 s` | error: frequency and duration cannot be multiplied | 20 |
+| `3000 rpm * 2 min` | error: frequency and duration cannot be multiplied | 6,000 |
 | `10 Hz in /s` | 10.00 Hz/s | 10.00 /s |
 | `100 W / 20 V` | 5.00 W/V | 5.00 A |
 | `20 N / 2 m/s^2` | 10.00 N/mps2 | 10.00 kg |
@@ -19,7 +20,7 @@ The unit algebra knew force, energy, power, pressure and voltage, but not speed,
 
 The results convert (`9.81 m/s^2 * 3 s in mph` is 65.83 mph), a speed worked out from an acceleration in feet stays in feet (`3 ft/s^2 * 2 s` is 6.00 ft/s), and a frequency converts to and from any count per unit of time (`600 /min in Hz` is 10.00 Hz). A refusal that meets an acceleration names it `m/s²`, where several named the internal `mps2`.
 
-The boundary: a speed, a time or a mass is only built this way when one side is already a speed, an acceleration or a frequency, so two plain quantities keep the reader's units (`90 km / 3 days` is still a rate in kilometres per day, and `120 mi / 60 mph` 2 hours). A price per hour over a time is still a rate of a rate, refused by name. Momentum (`100 kg * 10 m/s`), angular speed (`rpm`) and torque are not covered, and the ohm and the charge are left to the electrical units work (#706). The named derived units page gains a section on speed, acceleration and frequency, and the multiplying and dividing units page loses the speed-over-time refusal it documented.
+The boundary: a speed, a time or a mass is only built this way when one side is already a speed, an acceleration or a frequency, so two plain quantities keep the reader's units (`90 km / 3 days` is still a rate in kilometres per day, and `120 mi / 60 mph` 2 hours). A price per hour over a time is still a rate of a rate, refused by name. A turning speed in `rpm` is a frequency, so for a time it is a plain count of turns rather than an angle. Momentum (`100 kg * 10 m/s`) and torque are not covered, and the ohm and the charge are left to the electrical units work (#706). The named derived units page gains a section on speed, acceleration and frequency, and the multiplying and dividing units page loses the speed-over-time refusal it documented.
 
 ## Verification
 

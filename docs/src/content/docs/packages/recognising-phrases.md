@@ -287,6 +287,10 @@ export const inConverterRule: NormalizerRule = {
 };
 ```
 
+The environment's type is `NormalizerEnvironment`, exported from
+`solve-engine/normalizer` beside `NormalizerRule`, for a helper that takes it
+apart from a rule.
+
 Today the environment carries the engine's `as` converters, as the built-in
 rule that reads `99 in roman` as `99 as roman` needs them. Every field is
 optional, and a normaliser built on its own, with no engine behind it, hands an

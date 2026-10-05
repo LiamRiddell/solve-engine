@@ -209,8 +209,27 @@ describe("fetchCityWeather — REAL Open-Meteo network call", () => {
 		async () => {
 			// This one keeps asserting offline. The point of the test is that a
 			// location which does not exist produces a rejection rather than
-			// invented weather, and that holds however the lookup failed. Only
-			// the specific reason needs the API to be up.
+			// invented weather. Without the live flag the run must not touch the
+			// network (a real request left an idle socket that failed the suite
+			// after the test had passed), so the geocoder's own answer for an
+			// unknown name, a body with no results, is served by a stub.
+			if (!LIVE_NETWORK) {
+				const realFetch = globalThis.fetch;
+				const requested: string[] = [];
+				globalThis.fetch = (async (input: string | URL | Request) => {
+					requested.push(String(input));
+					return new Response(JSON.stringify({ generationtime_ms: 0.4 }), { status: 200 });
+				}) as typeof fetch;
+				try {
+					await expect(fetchCityWeather("Zzznotarealplacexyz123", new AbortController().signal)).rejects.toThrow(/No location found/);
+				} finally {
+					globalThis.fetch = realFetch;
+				}
+				expect(requested).toHaveLength(1);
+				expect(requested[0]).toContain("geocoding-api.open-meteo.com");
+				return;
+			}
+
 			const attempt = fetchCityWeather("Zzznotarealplacexyz123", new AbortController().signal);
 			// .then(onFulfilled, onRejected): a successful resolve here is
 			// itself the bug (thrown synchronously from onFulfilled, which

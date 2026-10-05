@@ -13,36 +13,46 @@ import { REPO_ROOT, callExport, removeTempTrees, runScript, tempTree } from "@to
  * `errorValue`, `lineMessage`, `ErrorFactory`, `new EngineError` and
  * `console.warn`/`console.error` with the TypeScript parser and holds them to
  * the house voice. The flagged messages outside the files other changes own
- * are reworded; the ones those changes own (#836, #736) are listed as pending,
- * and an entry that stops matching fails the lint.
- *
- * The boundary: `35 mpg uk in l/100km` answering with a cooking error is
- * #736's to fix (it reads `mpg uk` as imperial mpg), so it is not pinned here.
+ * are reworded; the ones other changes owned (#836, #736) waited on a pending
+ * list, and an entry that stops matching fails the lint. Both are reworded
+ * now, so the real list is empty and the mechanism is tested against a
+ * fixture list passed with `--pending`.
  */
 
 afterEach(removeTempTrees);
 
 const EM = String.fromCodePoint(0x2014);
 
-/** Lint one fixture engine source file and return the outcome. */
+/**
+ * A pending list for the fixture tests, so the mechanism is tested whether or
+ * not the real list holds anything: it is empty once every message it waited
+ * for has been reworded.
+ */
+const FIXTURE_PENDING = [
+	{ file: "packages/engine/src/packages/uom/parselets/CookingPluginFunctions.ts", includes: "is not a recognized", owner: "#736" },
+];
+
+/** Lint one fixture engine source file, against {@link FIXTURE_PENDING}, and return the outcome. */
 function lint(source: string, file = "packages/engine/src/vm/Fixture.ts", extra: Record<string, string> = {}) {
-	const root = tempTree({ [file]: source, ...extra });
-	return runScript("check-message-style.mjs", [`--root=${root}`]);
+	const root = tempTree({ [file]: source, "pending.json": JSON.stringify(FIXTURE_PENDING), ...extra });
+	return runScript("check-message-style.mjs", [`--root=${root}`, `--pending=${path.join(root, "pending.json")}`]);
 }
 
 type Finding = { rule: string; hit: string; line: number; text: string; whole: string };
 const findings = (source: string) => callExport<Finding[]>("check-message-style.mjs", "findViolations", ["fixture.ts", source]);
 
 describe("the real engine source", () => {
-	test("is clean, with only the messages other changes own pending", () => {
+	test("is clean, with nothing pending", () => {
 		const result = runScript("check-message-style.mjs");
 		expect(result.out).toMatch(/Messages follow the house voice across \d+ file\(s\)/);
 		expect(result.status).toBe(0);
 	});
 
 	test("every pending entry names an issue and a file that exists", () => {
+		// Empty once every message it waited for is reworded (#836 and #736 are
+		// in), which is the state the list is meant to reach.
 		const pending = callExport<{ file: string; includes: string; owner: string }[]>("check-message-style.mjs", "PENDING");
-		expect(pending.length).toBeGreaterThan(0);
+		expect(Array.isArray(pending)).toBe(true);
 		for (const p of pending) {
 			expect(p.owner).toMatch(/^#\d+$/);
 			expect(fs.existsSync(path.join(REPO_ROOT, p.file))).toBe(true);
@@ -212,6 +222,46 @@ describe("adversarial: realistic breakage", () => {
 		const result = lint(`export const v = () => errorValue("X", "a ${EM} b"\n`);
 		expect(result.out).not.toMatch(/TypeError|RangeError/);
 		expect(result.status).toBe(1);
+	});
+
+	test("a pending list that is missing, not an array, or holds a bad entry ends the run with one line, never a stack", () => {
+		const source = `errorValue("X", "a ${EM} b");\n`;
+		const cases: [string, string | null, RegExp][] = [
+			["missing", null, /^Cannot read the pending list .*missing\.json/m],
+			["not-json", "{", /^Cannot read the pending list .*not-json\.json/m],
+			["an-object", "{}", /must be an array of \{ file, includes, owner \}/],
+			["a-null-entry", "[null]", /^Pending entry 0 in .* needs a file/m],
+			["no-owner", JSON.stringify([{ file: "packages/engine/src/a.ts", includes: "a" }]), /^Pending entry 0 in /m],
+			["a-number-to-match", JSON.stringify([{ file: "packages/engine/src/a.ts", includes: 5, owner: "#1" }]), /^Pending entry 0 in /m],
+		];
+		for (const [name, contents, message] of cases) {
+			const tree: Record<string, string> = { "packages/engine/src/a.ts": source };
+			if (contents !== null) tree[`${name}.json`] = contents;
+			const root = tempTree(tree);
+			const result = runScript("check-message-style.mjs", [`--root=${root}`, `--pending=${path.join(root, `${name}.json`)}`]);
+			expect(result.status).toBe(1);
+			expect(result.out).toMatch(message);
+			expect(result.out).not.toMatch(/^\s+at /m);
+		}
+	});
+
+	test("a blank part to match is refused, since it is in every message and would exempt the whole file", () => {
+		for (const includes of ["", "   "]) {
+			const root = tempTree({
+				"packages/engine/src/a.ts": `errorValue("X", "a ${EM} b");\n`,
+				"pending.json": JSON.stringify([{ file: "packages/engine/src/a.ts", includes, owner: "#1" }]),
+			});
+			const result = runScript("check-message-style.mjs", [`--root=${root}`, `--pending=${path.join(root, "pending.json")}`]);
+			expect(result.status).toBe(1);
+			expect(result.out).toContain("(not blank)");
+			expect(result.out).not.toContain("Messages follow the house voice");
+		}
+	});
+
+	test("a stale entry read from a file names that file, not the script", () => {
+		const result = lint("export const v = 1;\n", "packages/engine/src/packages/uom/parselets/CookingPluginFunctions.ts");
+		expect(result.out).toMatch(/matches no message any more\. Delete it from .*pending\.json\./);
+		expect(result.out).not.toContain("Delete it from scripts/check-message-style.mjs");
 	});
 
 	test("the reworded lines are answered honestly", () => {

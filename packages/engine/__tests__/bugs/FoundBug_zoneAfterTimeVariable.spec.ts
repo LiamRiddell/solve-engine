@@ -9,6 +9,8 @@ import { ZONE_LOOKUP } from "@solve-js/packages/time/timezones/CityZones";
 import { Value, ValueType, datetimeValue, errorValue, numberValue, pendingValue, stringValue } from "@solve-js/vm/Value";
 import { tokenTypeId, type Token } from "@solve-js/lexer/Token";
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
+import { dateCalendarInZone } from "@solve-js/calendar/DateCalendar";
+import type { LineExecutionContext } from "@solve-js/vm/VM";
 
 /**
  * Found bug: `t = 3pm` then `t London in rio de janeiro` answered a cooking
@@ -148,8 +150,13 @@ describe("zoneConvertNamedHandler", () => {
 
 	test("a skipped wall-clock reading is refused as the clock-time form refuses it", () => {
 		// 1:30am in London on 29 March 2026 does not happen: the clocks go forward.
-		const skipped = datetimeValue(new Date(2026, 2, 29, 1, 30).getTime());
-		expect(at(skipped, "Tokyo").errorCode).toBe(newTrackedEngine().evaluateExpression("1:30am London on 29 March 2026 in Tokyo").errorCode);
+		// Built and read on a UTC calendar, since on a host in London the reading
+		// would already have moved on to 2:30am before the handler saw it.
+		const utc = { calendar: dateCalendarInZone("UTC") } as unknown as LineExecutionContext;
+		const skipped = datetimeValue(Date.UTC(2026, 2, 29, 1, 30));
+		const refused = zoneConvertNamedHandler([skipped, stringValue(london), stringValue("London"), stringValue(tokyo), stringValue("Tokyo")], utc);
+		expect(refused.errorCode).toBeDefined();
+		expect(refused.errorCode).toBe(newTrackedEngine().evaluateExpression("1:30am London on 29 March 2026 in Tokyo").errorCode);
 	});
 });
 

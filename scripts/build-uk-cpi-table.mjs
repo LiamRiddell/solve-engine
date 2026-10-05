@@ -490,7 +490,7 @@ export async function build(args) {
 export async function run(args) {
 	try {
 		const { text, out, existing } = await build(args);
-		const relative = path.relative(REPO, out);
+		const relative = path.relative(REPO, out).split(path.sep).join("/");
 		if (option(args, "check")) {
 			if (text !== existing) {
 				console.error(`${relative} is not what scripts/build-uk-cpi-table.mjs generates. Run npm run data:cpi.`);

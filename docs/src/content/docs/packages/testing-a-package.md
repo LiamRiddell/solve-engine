@@ -214,7 +214,8 @@ reports every problem at once:
 - no parselet claims a token the parser reads itself, such as `NUMBER`, `IDENT`
   or `+`, where it would never run;
 - every token type of its own has a `tokenCategories` entry, so an editor can
-  colour it;
+  colour it (a category set only through the deprecated `registerTokenCategory`
+  does not count, since no engine reads that table);
 - a keyword, operator, phrase or call is not keyed to one token while its
   parselet waits for another (`twice` making `DOUBLE_KW` beside a parselet
   for `DOUBLE`);

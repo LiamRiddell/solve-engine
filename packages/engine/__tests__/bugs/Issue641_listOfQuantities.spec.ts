@@ -50,6 +50,10 @@ describe("two units of one measure are read in the first (#745)", () => {
 		["[1 km; 500 m]", "= [1.00 km; 0.50 km]"],
 		["[1 km, 2 km, 500 m]", "= [1.00 km, 2.00 km, 0.50 km]"],
 		["[1 km, 500 m in km]", "= [1.00 km, 0.50 km]"],
+		// Two speeds are one measure since two rates of one kind convert (the
+		// found-bugs batch that made `10 m/s + 36 km/h` add), so a list of them
+		// is read in the first cell's unit rather than refused.
+		["[1 km/h, 2 mph]", "= [1.00 km/h, 3.22 km/h]"],
 	])("%s", (line, expected) => {
 		expect(shown(line)).toBe(expected);
 	});
