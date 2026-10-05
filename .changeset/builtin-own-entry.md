@@ -16,3 +16,5 @@ The boundary: this is the lookup alone. Which builtin an index names, and what e
 ## Verification
 
 `VmStackContract.spec.ts` gains 2 tests and `FoundBug_listBuiltins.spec.ts` 1, a unit test of `callBuiltin` with an ordinary, unregistered, negative, NaN and planted index: the planted function is not called and the unregistered index is refused by its own code, and the arity table ignores a planted entry while `sqrt` still reads its own. Gates run: `npm run typecheck`, `typecheck:tests`, `lint`, `lint:comments`, `lint:docs`, and the VM, error-code and list-builtin specs.
+
+On top of main, the full suite ran 36,308 tests in 879 suites, all passing but 5 skipped, and `npm run test:temporal` passed its 3,803 tests.
