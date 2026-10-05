@@ -133,8 +133,15 @@ while 24 hours after it is 11 in the morning:
 
 Weeks, fortnights, months and years step the zone's calendar the same way, and
 a month that runs out of days lands on its last one. Hours and minutes stay
-elapsed time, which is what a duration in hours means. Working days are the one
-step still counted on the engine's own calendar rather than the date's zone.
+elapsed time, which is what a duration in hours means. Working days are counted
+on the zone's calendar too: half past eleven on a Friday night in New York is
+still Friday there, though it is already Saturday in London, so the next working
+day is the Monday:
+
+```solve
+2024-11-01 23:30 in New York + 1 workday // Monday, November 4, 2024, 11:30:00 PM
+3 working days after 2024-11-02 12:00 in New York // Wednesday, November 6, 2024, 12:00:00 PM
+```
 
 For a span that skips weekends and holidays, `30 working days from 3 March 2026`
 is the sibling form; see [working days](/syntax/working-days/).

@@ -79,6 +79,24 @@ weekend` ask the second. The answer is `true` or `false`.
 The day of the week a date falls on, its month and its week number are on
 [weekdays and week numbers](/syntax/weekdays-and-week-numbers/).
 
+## A date in another zone
+
+A date written in a zone (see [time zones](/syntax/time-zones/)) is counted on
+that zone's calendar, wherever the engine itself runs. Late on a Friday in New
+York is already Saturday in Europe, and a working day counted on the European
+calendar would land on a Sunday; counted on New York's, it is the Monday, at the
+same time of day. `working days between` reads each zoned end as the day its
+own zone shows.
+
+```solve
+2024-11-01 23:30 in New York + 1 workday // Monday, November 4, 2024, 11:30:00 PM
+2024-11-01 23:30 in Tokyo - 1 workday // Thursday, October 31, 2024, 11:30:00 PM
+working days between (2024-11-01 23:30 in New York) and (2024-11-04 00:30 in Tokyo) // 2
+```
+
+The weekend and the holidays are the engine's own (see below), read on the
+zone's calendar: a holiday on 4 November moves that first line to the Tuesday.
+
 ## Public holidays
 
 Holidays cannot be worked out from a date the way a weekend can: they depend on
