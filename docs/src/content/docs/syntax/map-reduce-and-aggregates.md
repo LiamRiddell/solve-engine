@@ -15,13 +15,43 @@ or a largest-so-far is kept by hand.
 
 A range is `start:end`, the whole numbers from the start to the end, inclusive at
 both ends. A colon between two numbers means a range only where a list is
-expected: as the list `map`, `reduce`, `sum` and `prod` work through. Anywhere
+expected: as the list `map`, `reduce`, `sum` (or `total`, its synonym) and
+`prod` work through. Anywhere
 else it is a clock time, because that reading is far more common in a document:
 a bare `0:3`, `(0:3)`, and `max(9:30, 10:15)`, which compares two times of day.
 
 ```solve
 map(10*x, 0:3) // [0, 10, 20, 30]
 ```
+
+Only the list is read as a range. The expression before it is worked out once
+for each element, so it is never a range itself, and a colon there is a clock
+time: `sum(9:30, 10:15)` is two times of day, the same as `total(9:30, 10:15)`,
+and both are refused by name, since a time of day is a moment rather than an
+amount to add up. A length of time adds up as a quantity.
+
+```solve-doc
+sum(9:30, 10:15) // ERROR: A date or time cannot be added: only numbers and quantities can.
+total(9:30, 10:15) // ERROR: A date or time cannot be added: only numbers and quantities can.
+sum(2 hours, 3 hours) // 5 hours
+sum(x, 1:3) // 6
+```
+
+The same holds for `prod`, `map` and `reduce`: their first argument is the
+expression, so `prod(9:30, 10:15)` multiplies a time of day and is refused by
+name. A list written in square brackets is not a range either. Its items are
+values, so a colon pair inside it is a clock time, and a list holds numbers, so
+a list of times is refused as one. Write the range without the brackets,
+`sum(1:3)`, to add up whole numbers.
+
+```solve-doc
+prod(9:30, 10:15) // ERROR: A date or time cannot be multiplied: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.
+sum(x, [9:30, 10:15]) // ERROR: A date or time cannot be a cell of a list: each cell holds one number.
+sum(x, [1 hour, 30 min]) // 1.50 hours
+```
+
+Slicing a matrix, `m[0:1, 0:1]`, keeps its ranges: there the brackets follow a
+name, and pick a range of its rows and a range of its columns.
 
 ## Map
 
@@ -74,6 +104,41 @@ sum([10, 20, 30]) // 60
 prod(1:5) // 120
 ```
 
+`total` is another name for `sum`, the word a spreadsheet or a receipt uses,
+and with a single list it reads the same way: a range or a bracketed list
+inside `total(...)` is added up. With commas, `total(1, 2, 3)` adds the values
+one by one, as `sum(1, 2, 3)` does, and over lines `total(line 1 : line 3)`
+adds a span of the document (see [line references](/syntax/line-references/)).
+The element form, `sum(x^2, 1:3)`, is `sum`'s alone.
+
+```solve
+total(1:3) // 6
+total([10, 20, 30]) // 60
+total(1, 2, 3) // 6
+```
+
+With two arguments, `sum` has two readings: the element form, an expression
+worked out for each item of a list, and two values added up. It is the element
+form when the second argument is written as a list or a range, or when the first
+uses `x`, the name that stands for each item. Otherwise the first argument would
+be the same for every item, so `sum(a, b)` of two names from the lines above, or
+of a name and a number, adds the two values, as `total(a, b)` does.
+
+```solve-doc
+price = $5 // $5.00
+fee = $7 // $7.00
+sum(price, fee) // $12.00
+sum(price, 2) // $7.00
+xs = [1, 2, 3] // [1, 2, 3]
+sum(x * 2, xs) // 12
+```
+
+The boundary: `x` always stands for the item, so `sum(x, y)` is the element form
+even where a line above defines `x`, and adding a value named `x` to another is
+written `total(x, y)` or `x + y`. A name that holds a list is not written as one,
+so `sum(a, xs)` is the two values added, and refused as `total(a, xs)` is,
+since a list is not one value; `sum(x, xs) + a` adds a value to the list's sum.
+
 A single argument has to be a list: a range, a bracketed list, or a name holding
 one. `sum(5)` is refused, because there is nothing to add it to, and the refusal
 says so in the words of the call typed; a run of plain values is written with
@@ -81,6 +146,18 @@ commas, `sum(1, 2, 3)`. `prod`, `map` and `reduce` refuse a single value the
 same way, each naming what it does with a list. A range counts up in whole
 numbers, so `sum(3:1)` and `sum(1.5:3)` are refused by name rather than read
 another way.
+
+The refusal of a range that counts down names each bound as it was written,
+with the number it came to when that differs, since a bound can be worked out
+from a sum. In `total(1 + 24:00)` the colon is the range's, so its bounds are
+`1 + 24` and `00`, not the time 24:00, and the refusal says so in the reader's
+own text rather than as two numbers nobody typed:
+
+```solve-doc
+sum(5:1) // ERROR: A range's min (5) cannot be greater than its max (1). Did you mean "1:5"?
+total(1 + 24:00) // ERROR: A range's min (1 + 24, which is 25) cannot be greater than its max (00, which is 0). Did you mean "0:25"?
+total(2*3:1) // ERROR: A range's min (2*3, which is 6) cannot be greater than its max (1). Did you mean "1:6"?
+```
 
 ```solve
 sum(5) // sum adds up the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number; to add values one by one, list them, as in sum(5, 6).

@@ -4,6 +4,7 @@ import { errorValue, isRateUnit, splitRateUnit, uomValue, Value, ValueType } fro
 import { describeMeasure } from "@solve-js/vm/VMConversion";
 import { isFuelEconomyUnit, litresForTrip } from "./TripCost";
 import { TripFuelParselet } from "./parselets/TripFuelParselet";
+import { numberText } from "@solve-js/utilities/Number";
 
 /** Error codes this package answers with. Each names something a driver can correct. */
 export const TravelErrorCodes = {
@@ -38,7 +39,7 @@ function litresOrFault(distance: Value, economy: Value): { litres: number } | { 
 		return {
 			fault: errorValue(
 				TravelErrorCodes.TRIP_EXPECTED_ECONOMY,
-				`${economy.toNumber()} ${economy.unit} is not an economy a trip can be worked out from`,
+				`${numberText(economy.toNumber())} ${economy.unit} is not an economy a trip can be worked out from`,
 			),
 		};
 	}

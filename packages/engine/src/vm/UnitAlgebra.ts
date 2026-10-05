@@ -307,10 +307,11 @@ export function refuseLikeProduct(l: Value, r: Value): Value | undefined {
 	const left = describeMeasure(l.unit);
 	const alike = l.unit === r.unit || (left !== undefined && left === describeMeasure(r.unit));
 	if (!alike) return undefined;
-	const noun = left ?? l.unit;
+	const noun = left ?? unitForMessage(l.unit);
 	// A timecode is named as one: its unit, `timecode@30`, is internal (#759).
-	const leftName = timecodeUnitPhrase(l.unit)?.replace(/^a/, "A") ?? `A quantity in ${l.unit}`;
-	const rightName = timecodeUnitPhrase(r.unit) ?? `one in ${r.unit}`;
+	// So is the acceleration's `mps2`, which the reader wrote `m/s²`.
+	const leftName = timecodeUnitPhrase(l.unit)?.replace(/^a/, "A") ?? `A quantity in ${unitForMessage(l.unit)}`;
+	const rightName = timecodeUnitPhrase(r.unit) ?? `one in ${unitForMessage(r.unit)}`;
 	return errorValue(
 		"UNIT_PRODUCT_UNSUPPORTED",
 		`${leftName} times ${rightName} has no unit: ${noun} times ${noun} is not a unit. Lengths multiply into an area or a volume, and no other quantity squares into one.`,

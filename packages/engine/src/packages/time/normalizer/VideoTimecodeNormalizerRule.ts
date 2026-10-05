@@ -1,6 +1,7 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { isInsideRangeContext } from "@solve-js/normalizer/BuiltinNormalizerRules";
+import { isLabelColon } from "@solve-js/packages/time/normalizer/LabelColon";
 
 /**
  * Fuses a video-timecode literal, `HH:MM:SS:FF`, always THREE colons
@@ -43,6 +44,8 @@ export function videoTimecodeNormalizerRule(priority = 75): NormalizerRule {
       if (s?.type !== "NUMBER") return null;
       if (c3?.type !== "COLON") return null;
       if (f?.type !== "NUMBER") return null;
+      // `Scene 1: 2:03:04` is a label and a time, not one timecode (see LabelColon).
+      if (isLabelColon(tokens, pos)) return null;
 
       // See ClockTimeNormalizerRule's identical guard, a video timecode
       // inside `[...]` has no legitimate meaning; reserved for matrix ranges.

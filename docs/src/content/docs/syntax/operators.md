@@ -180,6 +180,22 @@ is the root of sixteen plus nine, and `2√3` is two times the root of three.
 1/∞ // 0
 ```
 
+An infinity is written `∞` wherever it appears, with a unit or a currency as
+much as on its own: dividing a distance by zero, or multiplying one past about
+1.8e308, the largest number that can be held, gives `∞ km`, and it converts
+like any other distance. It is never written as JavaScript's own word for it,
+`Infinity`, which a note could not read back.
+
+```solve
+∞ km // ∞ km
+-∞ m // -∞ m
+5 km / 0 // ∞ km
+1e308 * 10 km // ∞ km
+∞ km in m // ∞ m
+$1e308 * 10 // $∞
+1 / 0 as sci // ∞
+```
+
 `π` is pi only while nothing in the note is named `π`, so a note that already
 uses it as a variable keeps its own value. The word `infinity` is not read, since
 it is ordinary English in a line of prose.

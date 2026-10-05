@@ -71,7 +71,7 @@ describe("cross-pipeline consistency: diagnostic path vs. lean path", () => {
   test("=> general simplify mode", () => {
     const { diagnostic, lean } = compareLastLine(["1+2+b+3+b =>"]);
     expect(diagnostic).toBe(lean);
-    expect(diagnostic).toBe("2b+6");
+    expect(diagnostic).toBe("2*b+6");
   });
 
   test("=> with an exponent", () => {

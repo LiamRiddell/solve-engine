@@ -1,6 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, dateOutOfRange, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData, type DisplayBase } from "@solve-js/vm/Value";
-import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
+import { decimalFromLiteral, decimalFromExponentLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
+import { nonFiniteText, numberText } from "@solve-js/utilities/Number";
 import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, unknownNameIn, symbolicPercentChange, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
@@ -47,6 +48,7 @@ import type { WeekShape } from "@solve-js/calendar/WeekShape";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
 import { fieldsShownIn, noonOnDay, shownZone, zoneAnswerJoinedText } from "@solve-js/vm/ZoneAnswers";
+import { descendingRangeMessage } from "@solve-js/vm/RangeBounds";
 import { addZonedCalendarDays, addZonedCalendarMonths } from "@solve-js/calendar/ZonedSteps";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { LineTrace } from "@solve-js/explain/Explanation";
@@ -2034,14 +2036,35 @@ const bigIntRemainder = (a: bigint, b: bigint): bigint => {
  * exact base-ten value in the `exact` sidecar, with the nearest double in
  * `value`, so it reads as an ordinary Number everywhere except where it meets
  * money. A literal with no point is a whole number past 2^53, which keeps its
- * exact integer instead (see parser/WholeLiteral.ts). Kept out of the dispatch
- * loop, which has to stay under V8's optimisation ceiling.
+ * exact integer instead (see parser/WholeLiteral.ts). An exponent-form
+ * literal (`1e-3`) keeps its exact value as the point form does, so `$1e-3`
+ * rounds to the cent as `$0.001` does; see {@link exponentLiteralValue}. Kept
+ * out of the dispatch loop, which has to stay under V8's optimisation ceiling.
  */
 function exactLiteralValue(text: string): Value {
+  if (text.indexOf("e") !== -1 || text.indexOf("E") !== -1) return exponentLiteralValue(text);
   const whole = text.indexOf(".") === -1 ? exactWholeLiteral(text) : null;
   if (whole !== null) return whole;
   const dec = decimalFromLiteral(text);
   return numberValueExact(decimalToNumber(dec), dec);
+}
+
+/**
+ * The Value an exponent-form literal pushes: its nearest double, with its
+ * exact decimal beside it when the double holds the same amount. A literal
+ * whose double overflowed to infinity or underflowed to zero (`1e309`,
+ * `1e-330`), or whose exponent is past the limit, is the plain double alone,
+ * as it always was: an exact value there would let arithmetic answer what the
+ * number itself cannot.
+ *
+ * @param text - The literal, normalized (`1.5e2`, `-2.5E-3`).
+ * @returns A Number Value.
+ */
+export function exponentLiteralValue(text: string): Value {
+  const n = Number(text);
+  const dec = decimalFromExponentLiteral(text);
+  if (dec === null || !Number.isFinite(n) || (n === 0 && dec.coef !== 0n)) return numberValue(n);
+  return numberValueExact(n, dec);
 }
 
 /**
@@ -2068,8 +2091,8 @@ function remainder(l: Value, r: Value): Value {
     return errorValue(
         "REMAINDER_UNDEFINED",
         b === 0
-            ? `${a} mod 0 has no value: nothing is left over from a division by zero, because it never ends.`
-            : `${a} mod ${b} has no value: an infinite number has no remainder.`,
+            ? `${numberText(a)} mod 0 has no value: nothing is left over from a division by zero, because it never ends.`
+            : `${numberText(a)} mod ${numberText(b)} has no value: an infinite number has no remainder.`,
     );
 }
 
@@ -2439,8 +2462,8 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
  * an unreadably large denominator.
  */
 function toFractionString(n: number): string {
-    if (Number.isNaN(n)) return "NaN";
-    if (!isFinite(n)) return n > 0 ? "Infinity" : "-Infinity";
+    const nonFinite = nonFiniteText(n);
+    if (nonFinite !== undefined) return nonFinite;
     const negative = n < 0;
     const abs = Math.abs(n);
     const whole = Math.floor(abs);
@@ -2513,15 +2536,20 @@ function fractionString(v: Value): string {
 function toMultiplierString(value: Value): string {
     const n = value.toNumber();
     const multiple = value.type === ValueType.Percentage ? 1 + n : n;
-    return `${Math.round(multiple * 1e6) / 1e6}x`;
+    // Rounding to six places multiplies by a million first, which overflows
+    // past about 1.8e302; such a multiple has no places to round anyway.
+    const rounded = Math.round(multiple * 1e6) / 1e6;
+    return `${numberText(Number.isFinite(rounded) ? rounded : multiple)}x`;
 }
 
 /** Scientific notation with trailing mantissa zeros trimmed ("1.50e+6" -> "1.5e+6"). */
 function toScientificString(n: number): string {
     // An infinity or a NaN has no mantissa and no exponent, so splitting on
     // "e" gave back one piece and the second was undefined: "0/0 as sci"
-    // rendered the string "NaNeundefined".
-    if (!Number.isFinite(n)) return String(n);
+    // rendered the string "NaNeundefined". It is written as the engine
+    // writes it, `∞` rather than JavaScript's `Infinity`.
+    const nonFinite = nonFiniteText(n);
+    if (nonFinite !== undefined) return nonFinite;
     if (n === 0) return "0e+0";
     const [mantissa, exponent] = n.toExponential().split("e");
     const trimmed = mantissa.includes(".") ? mantissa.replace(/0+$/, "").replace(/\.$/, "") : mantissa;
@@ -2834,8 +2862,15 @@ function matrixIndex2(stack: Value[]): void {
     stack.push(listCellValue(m, cell));
 }
 
-/** A range literal, `0:3` (RANGE_NEW), moved out of the dispatch loop. */
-function rangeLiteral(stack: Value[]): void {
+/**
+ * A range literal, `0:3` (RANGE_NEW, or RANGE_NEW_WRITTEN with each side's
+ * source text), moved out of the dispatch loop.
+ *
+ * @param stack - The VM stack, holding the two bounds.
+ * @param minWritten - The first side as the reader wrote it, or "".
+ * @param maxWritten - The second side as the reader wrote it, or "".
+ */
+function rangeLiteral(stack: Value[], minWritten = "", maxWritten = ""): void {
     const maxVal = safePop(stack), minVal = safePop(stack);
     const rangeFault = faultedOperand(minVal, maxVal);
     if (rangeFault) { stack.push(rangeFault); return; }
@@ -2846,14 +2881,11 @@ function rangeLiteral(stack: Value[]): void {
     const min = minVal.value as number;
     const max = maxVal.value as number;
     if (!Number.isInteger(min) || !Number.isInteger(max)) {
-      stack.push(errorValue("NON_INTEGER_RANGE_BOUND", `A range's bounds must be whole numbers, got "${min}:${max}".`));
+      stack.push(errorValue("NON_INTEGER_RANGE_BOUND", `A range's bounds must be whole numbers, got "${numberText(min)}:${numberText(max)}".`));
       return;
     }
     if (min > max) {
-      stack.push(errorValue(
-        "DESCENDING_RANGE",
-        `A range's min (${min}) cannot be greater than its max (${max}). Did you mean "${max}:${min}"?`,
-      ));
+      stack.push(errorValue("DESCENDING_RANGE", descendingRangeMessage(min, max, minWritten, maxWritten)));
       return;
     }
     stack.push(rangeValue(min, max));
@@ -5346,6 +5378,13 @@ export function executeBytecode(
 
         case OpCode.RANGE_NEW: {
           rangeLiteral(stack);
+          break;
+        }
+
+        case OpCode.RANGE_NEW_WRITTEN: {
+          const minWritten = poolString(opcodes, ip++, strings, op, "range start as written");
+          const maxWritten = poolString(opcodes, ip++, strings, op, "range end as written");
+          rangeLiteral(stack, minWritten, maxWritten);
           break;
         }
 

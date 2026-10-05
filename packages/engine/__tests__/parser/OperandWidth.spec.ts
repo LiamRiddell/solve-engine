@@ -168,6 +168,8 @@ const COMPILED_CORPUS: readonly string[] = [
 	"10 to 20",
 	// A unit spelling after a slash that may name a variable: RATE_OR_DIVIDE (#642).
 	"100 / t",
+	// A range whose sides are more than plain numbers keeps their text: RANGE_NEW_WRITTEN.
+	"sum(x, 2*3:1)", "[1,2,3;4,5,6][1+1:1, 1]",
 ];
 
 /**

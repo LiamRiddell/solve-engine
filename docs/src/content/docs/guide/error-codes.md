@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 554 codes, grouped below by the part
+ship. The engine and its built-in packages ship 557 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -145,7 +145,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `SYMBOLIC_NODE_LIMIT_EXCEEDED` | thrown | A tree exceeding `SYMBOLIC_MAX_NODES` entering the simplifier. |
 | `SYMBOLIC_FORMULA_VALUE_UNSUPPORTED` | as a value | A name holding a formula written before one of its unknowns had a value (`y = x + 1` above `x = $5`), read after that unknown was given money, a quantity in a unit, a date or text, which the formula cannot take. Returned by the read rather than a formula mixing the value with the unknown (#732). |
 | `SYMBOLIC_UNSUPPORTED_FUNCTION` | as a value | A builtin with no symbolic reading (`min`, `random`, the finance block, ...) applied to an expression still containing an unknown. Returned rather than computing against `toNumber()`'s placeholder zero. |
-| `SYMBOLIC_FACTOR_LIMIT_EXCEEDED` | thrown | The rational-root search exceeding `FACTOR_MAX_ROOT_CANDIDATES`. The candidate set is the product of two divisor sets, so a highly-composite coefficient escapes quickly. |
+| `SYMBOLIC_FACTOR_LIMIT_EXCEEDED` | thrown | `factor` of a cubic or higher whose rational roots cannot be searched: a coefficient too long a fraction to list its divisors (`factor(x^3 - pi)`), or a candidate set past `FACTOR_MAX_ROOT_CANDIDATES`. A quadratic is decided by its discriminant instead and never raises it. |
 | `SYMBOLIC_SOLVE_UNSUPPORTED` | as a value | An equation outside what the solver attempts: above the degree ceiling, non-linear in the unknown while another unknown is present, or not a polynomial and not evaluable numerically either (another unknown in it, an imaginary constant, a function with no numeric form). A non-polynomial equation in one unknown is solved numerically instead (see `symbolic/NumericSolve.ts`). |
 | `SYMBOLIC_SOLVE_INCOMPLETE` | as a value | Some but not all of an equation's roots were found. Reported rather than returned, because a partial list of roots looks exactly like a complete one. |
 | `SYMBOLIC_SOLVE_NO_ROOT_FOUND` | as a value | A numerically solved equation whose two sides never cross in the range searched. Not "no solution": a search that found nothing has not shown there is nothing, and the message names the range and what the search cannot see. |
@@ -184,6 +184,8 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `COMPOUND_ASSIGN_ASYNC_UNSUPPORTED` | thrown | A running total (`+= / -=`) whose right-hand side calls an async plugin (weather/stocks/currency). The same v1 scope restriction as the `"=>"` and user-function bodies. |
 | `UNKNOWN_SAVINGS_PERIOD` | thrown | A savings-goal contribution period that is not one of daily/weekly/monthly/yearly (`how long to save $X at $Y <period>`). Names the accepted set. |
 | `INVALID_TIME_LITERAL` | thrown | Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. |
+| `TERNARY_UNSUPPORTED` | either | A choice written `condition ? value : other` (`true ? 25 : 30`). There is no such operator; the message spells the line as `if ... then ... else`. Raised by the labelled-line fallback, which used to read `true ? 25` as a label and answer 30. |
+| `LABEL_NOT_A_NAME` | either | Text before a colon that is a comparison, an assignment or a calculation with no word in it (`a > b: 1`, `(1+2): 5`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. |
 | `NETWORK_DISABLED` | as a value | A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. |
 
 **What-if**
@@ -357,7 +359,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | --- | --- | --- |
 | `INVALID_RANGE_BOUND` | as a value | A range (`0:3`) whose bounds are not plain numbers. |
 | `NON_INTEGER_RANGE_BOUND` | as a value | A range whose bounds are not whole numbers (`0.5:3`). |
-| `DESCENDING_RANGE` | as a value | A range whose first bound is above its second (`5:1`). The message suggests the other order. |
+| `DESCENDING_RANGE` | as a value | A range whose first bound is above its second (`5:1`). The message names each bound as written, with the number it came to, and suggests the other order. |
 | `COLLECTION_TOO_LARGE` | as a value | A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. |
 | `MATRIX_CELL_NON_NUMERIC` | as a value | A list cell that is not a number or a quantity: a list inside a list, text, a date. |
 | `MATRIX_CELL_UNITS_DIFFER` | as a value | A list whose cells are quantities of different measures (`[1 km, 2 kg]`), or money in two currencies with no rate between them: a list holds one unit. |
@@ -705,7 +707,8 @@ In the package as `ERROR_CODE_CATALOGUES.FinanceErrorCodes`.
 | `INFLATION_EXPECTED_USD` | either | `<amount> in <year> dollars` of an amount in another currency that has its own index: the phrase asks for dollars. |
 | `INFLATION_EXPECTED_CURRENCY` | either | `<amount> in <year> pounds` or `in <year> euros` of an amount in another currency that has its own index: the phrase asks for that currency. |
 | `INFLATION_NO_INDEX` | as a value | An inflation adjustment of an amount no bundled price index measures: a currency without one, a quantity that is not money, or a bare number. |
-| `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. |
+| `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`, as in `what is $300 and $50 from 2003`. |
+| `INFLATION_EXPECTED_YEAR` | as a value | The year of an inflation question that is not a plain whole number: money, a quantity, a date or a fraction, as in `what is $100 from 1990.5`. |
 | `INFLATION_EXPECTED_INFLATION_WORD` | thrown | `assuming <rate>%` not followed by the word `inflation`. |
 | `SAVINGS_GOAL_SYNTAX` | thrown | `how much per month to reach <target>` followed by neither `in` nor `over` and the time the saving runs for. |
 | `UNKNOWN_COMPOUNDING_INTERVAL` | thrown | `compounding <interval>` naming an interval the package does not know. The message lists the ones it does. |
@@ -818,7 +821,7 @@ In the package as `ERROR_CODE_CATALOGUES.MathPhrasesErrorCodes`.
 | Code | Arrives | When it arises |
 | --- | --- | --- |
 | `AGGREGATE_CALL_EMPTY` | thrown | An aggregate call with nothing inside, as in `mean()`, refused rather than answered 0. |
-| `AGGREGATE_CALL_RANGE` | thrown | An aggregate call whose only argument is written like a range (`average(1:3)`, `mean(1:3)`, `total(1:3)`), which outside `sum`, `prod`, `map` and `reduce` is a clock time. |
+| `AGGREGATE_CALL_RANGE` | thrown | An aggregate call whose only argument is written like a range (`average(1:3)`, `mean(1:3)`, `median(1:3)`), which outside `sum` (and its synonym `total`), `prod`, `map` and `reduce` is a clock time. |
 | `AGGREGATE_NAME_RESERVED` | thrown | A function of the reader's own defined under an aggregate's name (`mean`, `median`, `stdev`), which a call would never reach. |
 | `CLAMP_EXPECTED_BETWEEN_OR_FROM` | thrown | `clamp <value>` followed by neither `between` nor `from`. |
 | `REMAINDER_EXPECTED_DIVIDED_BY` | thrown | `remainder of <a>` not followed by `divided by` or `/`. |

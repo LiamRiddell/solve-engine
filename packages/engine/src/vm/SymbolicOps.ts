@@ -21,6 +21,7 @@ import { solveForVariable, type SolveOutcome } from "@solve-js/symbolic/Solve";
 import type { ApproximateRoot } from "@solve-js/symbolic/NumericRoots";
 import { solveNumerically, NUMERIC_ROOTS_MAX, type NumericSolveOutcome, type SearchRange } from "@solve-js/symbolic/NumericSolve";
 import { definiteIntegral } from "@solve-js/symbolic/DefiniteIntegral";
+import { unitForMessage } from "@solve-js/uom/UomConverter";
 import { evaluateConstant, describeNumber } from "@solve-js/symbolic/NumericEvaluate";
 import {
 	type SymbolicNode,
@@ -203,14 +204,18 @@ export function symbolicQuantityRefused(l: Value, r: Value): Value | null {
  * The refusal {@link symbolicQuantityRefused} gives, for a unit and the unknown
  * it would join.
  *
- * @param unit - The quantity's unit, as the engine spells it.
+ * @param unit - The quantity's unit, as the engine spells it; the message
+ * names it as the reader writes it (`m/s²`, not `mps2`).
  * @param name - The first unknown of the formula, or null when it has none to name.
+ * @returns An error Value with the code `SYMBOLIC_QUANTITY_OPERAND`.
  */
-function quantityRefusal(unit: string, name: string | null): Value {
+export function quantityRefusal(unit: string, name: string | null): Value {
 	const unknown = name === null ? "an unknown" : `"${name}"`;
+	// The engine stores an acceleration as `mps2`; the reader wrote `m/s²`.
+	const shown = unitForMessage(unit);
 	return errorValue(
 		"SYMBOLIC_QUANTITY_OPERAND",
-		`A formula keeps no units, so combining ${unknown} with an amount in ${unit} would drop the ${unit}. Give ${name === null ? "the unknown" : unknown} a value on a line above, or write the formula without the unit.`,
+		`A formula keeps no units, so combining ${unknown} with an amount in ${shown} would drop the ${shown}. Give ${name === null ? "the unknown" : unknown} a value on a line above, or write the formula without the unit.`,
 	);
 }
 
@@ -447,6 +452,10 @@ export function solveEquationValues(lhsValue: Value, rhsValue: Value, variable: 
 	// km` did; see symbolicQuantityRefused().
 	if (lhsValue.type === ValueType.Uom && lhsValue.unit !== undefined) return quantityRefusal(lhsValue.unit, variable);
 	if (rhsValue.type === ValueType.Uom && rhsValue.unit !== undefined) return quantityRefusal(rhsValue.unit, variable);
+	// A side that is already a refusal (`ans` at the top of a note, a line
+	// reference with nothing to read) says why better than "no exact value".
+	if (lhsValue.type === ValueType.Error) return lhsValue;
+	if (rhsValue.type === ValueType.Error) return rhsValue;
 	const lhs = valueToSymbolic(lhsValue);
 	const rhs = valueToSymbolic(rhsValue);
 	if (lhs === null || rhs === null) {

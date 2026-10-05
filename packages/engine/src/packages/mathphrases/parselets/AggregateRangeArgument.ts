@@ -38,7 +38,9 @@ export function rangeShapedArgument(parser: Parser): { readonly text: string; re
 			if (depth === 0) break;
 			depth--;
 		} else if (depth === 0 && t.type === "COMMA") return undefined;
-		else if (depth === 0 && t.type === "COLON") colon = true;
+		// A pair no clock reads (`24:30`) is fused to be refused as a time, and is
+		// still the colon the reader wrote between two numbers.
+		else if (depth === 0 && (t.type === "COLON" || t.type === "INVALID_CLOCK_TIME")) colon = true;
 		tokens.push(t);
 		if (i === SCAN_LIMIT - 1) return undefined;
 	}

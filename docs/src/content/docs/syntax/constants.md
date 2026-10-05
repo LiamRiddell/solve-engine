@@ -37,6 +37,47 @@ tau // 6.28
 golden ratio // 1.62
 ```
 
+Each is a number with a name, exactly as `pi` is, so it goes anywhere a number
+does. An amount written straight before one multiplies it, the way `2pi` is two
+times pi, and an equation or a function can hold one:
+
+```solve
+2tau // 12.57
+3 golden ratio // 4.85
+(1 + 1)tau // 12.57
+solve(x^2 = tau, x) // [-2.51, 2.51]
+solve(x^2 = 2tau, x) // [-3.54, 3.54]
+der(tau*x^2, x) // 12.5663706144x
+```
+
+A constant with a unit goes into a function or a map the same way, and the
+answer keeps its unit. A function here is a formula you name once and use
+again, `f(m) = m * gravity` read as "the weight of a mass m"; a map works an
+expression out for each item of a list.
+
+```solve-doc
+f(m) = m * gravity // f(m) defined
+f(70 kg) as N // 686.47 N
+```
+
+```solve
+map(x * gravity, [1, 2]) // [9.81 m/s², 19.61 m/s²]
+```
+
+The boundary is the dimensioned constants. A bare amount before `gravity` or
+`speed of light` is not read as a product, since `2 gravity` could as well mean
+two of something measured in gravities; write the `*`. And an equation, a
+derivative or an integral works on a formula, which is algebra on plain
+numbers and has nowhere to keep a unit, so a constant with a unit there is
+refused for its unit, and the line says which:
+
+```solve
+solve(x = gravity * 2, x) // A formula keeps no units, so combining "x" with an amount in m/s² would drop the m/s². Give "x" a value on a line above, or write the formula without the unit.
+```
+
+A constant in a unit the engine cannot write yet (`planck`, `avogadro`) is a
+plain number, so an equation takes it as it takes any number.
+
 ## Physical constants (values)
 
 These are precise scientific values. Avogadro's number is large enough to show

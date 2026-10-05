@@ -1,4 +1,5 @@
 import { Value, ValueType, numberValue, boolValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, splitValue, type MatrixData } from "@solve-js/vm/Value";
+import { numberText, shortestText } from "@solve-js/utilities/Number";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
@@ -30,7 +31,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 // link dangling, which is worse than an unused-import warning.
 // eslint-disable-next-line no-unused-vars
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
-import { adjustByCurrency } from "@solve-js/packages/finance/data/InflationAmount";
+import { adjustByCurrency, inflationYear, isYear } from "@solve-js/packages/finance/data/InflationAmount";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure, unitForMessage } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } from "@solve-js/vm/QuantityPowers";
@@ -240,7 +241,7 @@ function exactTangent(radians: number): Value {
  */
 function outsideDomain(name: string, x: number, inDomain: (x: number) => boolean, domain: string): Value | null {
     if (Number.isNaN(x) || inDomain(x)) return null;
-    return errorValue("FUNCTION_DOMAIN", `${name}(${x}) has no real value: ${name} is only defined for ${domain}.`);
+    return errorValue("FUNCTION_DOMAIN", `${name}(${shortestText(x)}) has no real value: ${name} is only defined for ${domain}.`);
 }
 
 /** Whether a number is a valid sine or cosine, the domain of the inverse functions. */
@@ -506,7 +507,7 @@ function notWholeCount(name: string, args: readonly Value[]): Value | null {
     for (const arg of args.slice(0, 2)) {
         const x = arg.toNumber();
         if (!Number.isInteger(x)) {
-            return errorValue("NOT_WHOLE_NUMBER", `${name} counts whole things: ${x} is not a whole number.`);
+            return errorValue("NOT_WHOLE_NUMBER", `${name} counts whole things: ${numberText(x)} is not a whole number.`);
         }
     }
     return null;
@@ -1413,8 +1414,13 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // packages/finance/parselets/InflationPluginFunctions.ts. The amount's
     // currency picks the index (US dollars, pounds, euros; #650, #756), and
     // any other amount is refused; see adjustByCurrency().
+    // Each year must be a plain whole number (see inflationYear()).
     60: (args) => {
-        const result = adjustByCurrency(args[0], args[1].toNumber(), args[2].toNumber());
+        const fromYear = inflationYear(args[1]);
+        if (!isYear(fromYear)) return fromYear;
+        const toYear = inflationYear(args[2]);
+        if (!isYear(toYear)) return toYear;
+        const result = adjustByCurrency(args[0], fromYear, toYear);
         if ("refused" in result) return result.refused;
         return args[0].type === ValueType.Uom ? uomValue(result.value, args[0].unit!) : numberValue(result.value);
     },
@@ -1468,7 +1474,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (factRefused !== null) return factRefused;
         const n = args[0].toNumber();
         if (!Number.isInteger(n) || n < 0) {
-            return errorValue("INVALID_FACTORIAL_INPUT", `A factorial is only defined for a whole number of zero or more, and ${n} is not one.`);
+            return errorValue("INVALID_FACTORIAL_INPUT", `A factorial is only defined for a whole number of zero or more, and ${numberText(n)} is not one.`);
         }
         if (n > 170) {
             return errorValue("FACTORIAL_OVERFLOW", `${n}! is too large to hold as a number: 170! is the largest factorial that fits.`);

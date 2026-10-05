@@ -13,7 +13,7 @@ A product of names, `a*x = b`, is stored as an equation on sight, because whethe
 | `a = 4`, `a*x = 10`, then `x =>` | `2.5` | `2.5` |
 | `a = [1, 2; 3, 4]`, `a*x = [60; 70]`, then `x =>` | `[-50.00; 55.00]` | `[-50.00; 55.00]` |
 
-The boundary: the arrow does not fall back to the formula on its own, since an arrow solves an equation for its one unknown and with `a` unknown this one has two. A factor that holds a plain number makes the line the scalar equation it also is, as before, so `:a = 2`, `a*b*x = 10`, `x =>` answers `10/(2b)` with the remaining factor kept as an unknown.
+The boundary: the arrow does not fall back to the formula on its own, since an arrow solves an equation for its one unknown and with `a` unknown this one has two. A factor that holds a plain number makes the line the scalar equation it also is, as before, so `:a = 2`, `a*b*x = 10`, `x =>` answers `10/(2*b)` with the remaining factor kept as an unknown (written after a `*`, since `b` is also the bit).
 
 ## Verification
 

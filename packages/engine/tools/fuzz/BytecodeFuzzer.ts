@@ -265,6 +265,7 @@ function nestedBodies(rng: Prng, options: Required<Pick<BytecodeFuzzOptions, "ma
 		() => opcodes.push(OpCode.BIND_UNKNOWN, operandByte(rng, anonymousBodies.length)),
 		() => opcodes.push(OpCode.PUSH_NUMBER, operandByte(rng, numbers.length)),
 		() => opcodes.push(OpCode.RANGE_NEW),
+		() => opcodes.push(OpCode.RANGE_NEW_WRITTEN, operandByte(rng, strings.length), operandByte(rng, strings.length)),
 		() => opcodes.push(OpCode.MAT_NEW, rng.int(8), rng.int(8)),
 	];
 	const steps = rng.range(2, 12);

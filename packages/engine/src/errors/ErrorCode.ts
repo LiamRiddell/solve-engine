@@ -179,7 +179,7 @@ export const CoreErrorCodes = {
   SYMBOLIC_FORMULA_VALUE_UNSUPPORTED: "SYMBOLIC_FORMULA_VALUE_UNSUPPORTED",
   /** A builtin with no symbolic reading (`min`, `random`, the finance block, ...) applied to an expression still containing an unknown. Returned rather than computing against `toNumber()`'s placeholder zero. */
   SYMBOLIC_UNSUPPORTED_FUNCTION: "SYMBOLIC_UNSUPPORTED_FUNCTION",
-  /** The rational-root search exceeding `FACTOR_MAX_ROOT_CANDIDATES`. The candidate set is the product of two divisor sets, so a highly-composite coefficient escapes quickly. */
+  /** `factor` of a cubic or higher whose rational roots cannot be searched: a coefficient too long a fraction to list its divisors (`factor(x^3 - pi)`), or a candidate set past `FACTOR_MAX_ROOT_CANDIDATES`. A quadratic is decided by its discriminant instead and never raises it. */
   SYMBOLIC_FACTOR_LIMIT_EXCEEDED: "SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
   /** An equation outside what the solver attempts: above the degree ceiling, non-linear in the unknown while another unknown is present, or not a polynomial and not evaluable numerically either (another unknown in it, an imaginary constant, a function with no numeric form). A non-polynomial equation in one unknown is solved numerically instead (see `symbolic/NumericSolve.ts`). */
   SYMBOLIC_SOLVE_UNSUPPORTED: "SYMBOLIC_SOLVE_UNSUPPORTED",
@@ -249,6 +249,10 @@ export const CoreErrorCodes = {
   UNKNOWN_SAVINGS_PERIOD: "UNKNOWN_SAVINGS_PERIOD",
   /** Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. */
   INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
+  /** A choice written `condition ? value : other` (`true ? 25 : 30`). There is no such operator; the message spells the line as `if ... then ... else`. Raised by the labelled-line fallback, which used to read `true ? 25` as a label and answer 30. */
+  TERNARY_UNSUPPORTED: "TERNARY_UNSUPPORTED",
+  /** Text before a colon that is a comparison, an assignment or a calculation with no word in it (`a > b: 1`, `(1+2): 5`), so not a label naming the figure after it. Raised by the labelled-line fallback, which used to answer with the figure whatever the text said. */
+  LABEL_NOT_A_NAME: "LABEL_NOT_A_NAME",
   /** A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. */
   NETWORK_DISABLED: "NETWORK_DISABLED",
 
@@ -490,7 +494,7 @@ export const CoreErrorCodes = {
   INVALID_RANGE_BOUND: "INVALID_RANGE_BOUND",
   /** A range whose bounds are not whole numbers (`0.5:3`). */
   NON_INTEGER_RANGE_BOUND: "NON_INTEGER_RANGE_BOUND",
-  /** A range whose first bound is above its second (`5:1`). The message suggests the other order. */
+  /** A range whose first bound is above its second (`5:1`). The message names each bound as written, with the number it came to, and suggests the other order. */
   DESCENDING_RANGE: "DESCENDING_RANGE",
   /** A list or range with more elements than `vm.maxCollectionSize` allows. A safety limit; the host may raise it. */
   COLLECTION_TOO_LARGE: "COLLECTION_TOO_LARGE",

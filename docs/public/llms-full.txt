@@ -684,7 +684,7 @@ integral(x^2, x, 0, 3) // 9
 ```
 
 ```
-1+2+b+3+b => // 2b+6
+1+2+x+3+x => // 2x+6
 ```
 
 ```
@@ -1460,6 +1460,12 @@ not = 3 // 3
 not + 1 // 4
 ```
 
+```
+(one document)
+true ? 25 : 30 // ERROR: There is no choice written with "?" and ":": write if true then 25 else 30
+if true then 25 else 30 // 25
+```
+
 ## constants
 
 https://liamriddell.github.io/solve-engine/syntax/constants/
@@ -1480,6 +1486,23 @@ golden ratio // 1.62
 ```
 
 ```
+2tau // 12.57
+3 golden ratio // 4.85
+(1 + 1)tau // 12.57
+solve(x^2 = tau, x) // [-2.51, 2.51]
+solve(x^2 = 2tau, x) // [-3.54, 3.54]
+der(tau*x^2, x) // 12.5663706144x
+```
+
+```
+map(x * gravity, [1, 2]) // [9.81 m/s², 19.61 m/s²]
+```
+
+```
+solve(x = gravity * 2, x) // A formula keeps no units, so combining "x" with an amount in m/s² would drop the m/s². Give "x" a value on a line above, or write the formula without the unit.
+```
+
+```
 avogadro // 602,214,076,000,000,000,000,000
 ```
 
@@ -1492,6 +1515,12 @@ boltzmann * 300 K // 4.14e-21 J
 planck * 5e14 // 3.31e-19
 avogadro * 2 // 1,204,428,152,000,000,000,000,000
 planck * 5e14 Hz // A constant measured in J·s and a quantity in Hz cannot be multiplied: the engine cannot spell J·s yet, so the answer would wrongly be in Hz. Leave the unit off the other side and read the result in the unit it should have.
+```
+
+```
+(one document)
+f(m) = m * gravity // f(m) defined
+f(70 kg) as N // 686.47 N
 ```
 
 ## converting-units
@@ -2113,6 +2142,18 @@ sqrt(2) * sqrt(2) == 2 // false
 ```
 
 ```
+[1e-6, 1] // [1e-6, 1]
+[0.001, 0.5] // [0.001, 0.50]
+0.004 ± 0.001 // 0.004 ± 0.001
+```
+
+```
+1e-320 / 2 // 5e-321
+1e-320 / 1e10 // 0
+1e-320 km / 1e10 // 0.00 km
+```
+
+```
 1 Hz in MHz as scientific // 1e-6
 1500000 as scientific // 1.5e+6
 0.25 as sci // 2.5e-1
@@ -2406,6 +2447,13 @@ factor(x^2+1) // x^2+1
 ```
 
 ```
+factor(x^2 - pi) // x^2-3.1415926536
+factor(x^2 - e) // x^2-2.7182818285
+factor(x^2 + pi*x) // x*(x+3.1415926536)
+factor((x - pi)^2) // (x-3.1415926536)^2
+```
+
+```
 factor(x^2-y^2) // (x-y)*(x+y)
 factor(x^3-8y^3) // (x-2y)*(x^2+2x*y+4y^2)
 factor(x^2+2x*y+y^2) // (x+y)^2
@@ -2414,6 +2462,12 @@ factor(a*x+a*y+b*x+b*y) // (a+b)*(x+y)
 
 ```
 factor(x^2+3x*y+y^2) // x^2+3x*y+y^2
+```
+
+```
+(one document)
+factor(x^3 - pi) // ERROR: This polynomial cannot be factored: a number in it is too long as a fraction (as pi and e are) to try every fraction that could be a root. solve finds its roots as decimals.
+solve(x^3 = pi, x) // [-0.7322959438-1.2683737808i, -0.7322959438+1.2683737808i, 1.46]
 ```
 
 ## fractions
@@ -2801,7 +2855,9 @@ $100 in 1965 dollars // $9.51
 
 ```
 what is $100 * 2 from 1990 // $506.78
+what is $300 + $50 from 2003 // $629.96
 what is ($300 + $50) from 2003 // $629.96
+what is $300 + $50 in 1990 worth in 2010 // $583.93
 ```
 
 ```
@@ -2850,6 +2906,45 @@ compound interest on 1000 over 3 years at -150% // ERROR: A rate of -150% cannot
 (one document)
 payment = monthly payment on 200000 over 25 years at 4% // 1,055.67
 payment * 12 // 12,668.08
+```
+
+```
+(one document)
+what is $300 and $50 from 2003 // ERROR: an inflation question names its year straight after the amount, as in what is $300 from 2003 or what is $300 in 1990 worth in 2010, and here "and" comes after the amount: to adjust a total, join the amounts with a plus sign, as in what is $300 + $50 from 2003
+```
+
+```
+(one document)
+what is $100 from 1990 + $5 // $258.39
+what is $100 from (1990 + 5) // $217.31
+year = 1990 // 1,990
+what is $100 from year // $253.39
+```
+
+```
+(one document)
+what is $100 from 1990.5 // ERROR: the year of an inflation question is a plain whole number, such as 1990, and 1990.5 is not a whole number
+what is $100 from $1990 // ERROR: the year of an inflation question is a plain whole number, such as 1990, and this one is money
+what was $100 worth in 1990 kg // ERROR: the year of an inflation question is a plain whole number, such as 1990, and this one is a mass
+```
+
+```
+(one document)
+what is $100 in 1990 + 5 worth in 2010 // ERROR: an inflation question between two years reads what is <amount> in <year> worth in <year>, and here "+" comes after the first year: a year is one number or name, so a year worked out goes in brackets, as in (1990 + 5)
+what is $100 in (1990 + 5) worth in 2010 // $143.08
+```
+
+```
+(one document)
+value of $100 in 2030 assuming 3% inflation // $88.85
+value of £100 in 2030 assuming 3% inflation // £88.85
+value of $100 in 2030 assuming 0% inflation // $100.00
+```
+
+```
+(one document)
+value of $100 in 2030.5 assuming 3% inflation // ERROR: the year of an inflation question is a plain whole number, such as 1990, and 2030.5 is not a whole number
+value of $100 in $2030 assuming 3% inflation // ERROR: the year of an inflation question is a plain whole number, such as 1990, and this one is money
 ```
 
 ## investments
@@ -2929,6 +3024,16 @@ Groceries: 45 // 45
 ```
 
 ```
+Week 12: 75 // 75
+Item 2: 45 // 45
+Weeks 1-2: 40 // 40
+Year-end: 5 // 5
+Food + drink: $40 // $40.00
+Done?: 5 // 5
+Orders over $100: 12 // 12
+```
+
+```
 Rent $1200 // $1,200.00
 Flight to Paris $450 // $450.00
 Petrol 40 l // 40.00 l
@@ -2940,6 +3045,22 @@ Fees 45 EUR // €45.00
 x = 2 // 2
 x:3 // 3
 x + 1 // 3
+```
+
+```
+(one document)
+Room 4: 12 // 12
+Item 2:45 // ERROR: Expected an operator or the end of the line, but found "2:45"
+9: 30 // 9:30:00 AM
+```
+
+```
+(one document)
+1 + 24:00 // ERROR: "24:00" is not a valid time
+1:23:99 // ERROR: "1:23:99" is not a valid time
+true ? 25 : 30 // ERROR: There is no choice written with "?" and ":": write if true then 25 else 30
+a > b: 1 // ERROR: "a > b" before the colon is a comparison, not a label: a label names the figure in words, and a choice is written if ... then ... else
+(1+2): 5 // ERROR: "(1+2)" before the colon is a calculation, not a label: a label names the figure in words
 ```
 
 ```
@@ -3117,10 +3238,48 @@ prod(1:5) // 120
 ```
 
 ```
+total(1:3) // 6
+total([10, 20, 30]) // 60
+total(1, 2, 3) // 6
+```
+
+```
 sum(5) // sum adds up the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number; to add values one by one, list them, as in sum(5, 6).
 prod(5) // prod multiplies together the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number.
 map(x * 2, 5) // map works through the items of a list or a range, such as [1, 2, 3] or 1:3, and this is a single number.
 sum(1, 2, 3) // 6
+```
+
+```
+(one document)
+sum(9:30, 10:15) // ERROR: A date or time cannot be added: only numbers and quantities can.
+total(9:30, 10:15) // ERROR: A date or time cannot be added: only numbers and quantities can.
+sum(2 hours, 3 hours) // 5 hours
+sum(x, 1:3) // 6
+```
+
+```
+(one document)
+prod(9:30, 10:15) // ERROR: A date or time cannot be multiplied: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.
+sum(x, [9:30, 10:15]) // ERROR: A date or time cannot be a cell of a list: each cell holds one number.
+sum(x, [1 hour, 30 min]) // 1.50 hours
+```
+
+```
+(one document)
+price = $5 // $5.00
+fee = $7 // $7.00
+sum(price, fee) // $12.00
+sum(price, 2) // $7.00
+xs = [1, 2, 3] // [1, 2, 3]
+sum(x * 2, xs) // 12
+```
+
+```
+(one document)
+sum(5:1) // ERROR: A range's min (5) cannot be greater than its max (1). Did you mean "1:5"?
+total(1 + 24:00) // ERROR: A range's min (1 + 24, which is 25) cannot be greater than its max (00, which is 0). Did you mean "0:25"?
+total(2*3:1) // ERROR: A range's min (2*3, which is 6) cannot be greater than its max (1). Did you mean "1:6"?
 ```
 
 ## moles
@@ -3155,6 +3314,16 @@ $0.70 * 1.10 // $0.77
 $1.005 // $1.01
 $2.675 // $2.68
 $0.10 + 15% // $0.12
+```
+
+```
+$1e-3 // $0.00
+$0.001 // $0.00
+$1.005e0 // $1.01
+$1.5e2 // $150.00
+1e-3 USD // $0.00
+£2.5e-2 // £0.03
+$1e-3 * 1000 // $1.00
 ```
 
 ```
@@ -3571,7 +3740,7 @@ asin(2) // ERROR: asin(2) has no real value: asin is only defined for numbers fr
 
 ```
 (one document)
-sin(1/0) // ERROR: sin(Infinity) has no real value: sin is only defined for finite angles.
+sin(1/0) // ERROR: sin(∞) has no real value: sin is only defined for finite angles.
 ```
 
 ## number-suffixes
@@ -3730,6 +3899,16 @@ subtract 3 // -3
 2√3 // 3.46
 2π // 6.28
 1/∞ // 0
+```
+
+```
+∞ km // ∞ km
+-∞ m // -∞ m
+5 km / 0 // ∞ km
+1e308 * 10 km // ∞ km
+∞ km in m // ∞ m
+$1e308 * 10 // $∞
+1 / 0 as sci // ∞
 ```
 
 ```
@@ -3940,6 +4119,13 @@ https://liamriddell.github.io/solve-engine/syntax/percentages/
 ```
 15 percent of 60 // 9
 0.25 as percent // 25.00%
+```
+
+```
+pi percent // 3.14%
+e percent of 200 // 5.44
+200 + pi percent // 206.28
+tau percent // 6.28%
 ```
 
 ```
@@ -4726,7 +4912,13 @@ solve(x + 10% = 220, x) // 200
 ```
 
 ```
+x + ans = 7 // A line reference needs a document to read, and an expression evaluated on its own has none
+```
+
+```
 solve(x^2-2=0, x) // [-sqrt(2), sqrt(2)]
+solve(3x^2 = 1, x) // [-sqrt(3)/3, sqrt(3)/3]
+solve(x^2 = 3.14159, x) // [-0.001*sqrt(3141590), 0.001*sqrt(3141590)]
 ```
 
 ```
@@ -4751,6 +4943,13 @@ solve(x^4-2x^2+3=0, x) // [-sqrt((sqrt(3)+1)/2)-sqrt((sqrt(3)-1)/2)*i, -sqrt((sq
 
 ```
 solve(x^3-3x+1=0, x) // [-1.88, 0.35, 1.53]
+```
+
+```
+solve(x^2 = pi, x) // [-1.77, 1.77]
+solve(2x^2 = e, x) // [-1.17, 1.17]
+solve(x^3 = pi, x) // [-0.7322959438-1.2683737808i, -0.7322959438+1.2683737808i, 1.46]
+sqrt(pi) to 10 dp // 1.7724538509
 ```
 
 ```
@@ -4807,6 +5006,14 @@ solve(a*x+b=0, x) // -b/a
 ```
 :factor = 1.5
 :factor * 2 // 3
+```
+
+```
+(one document)
+5 // 5
+x + ans = 7 // x stored as an equation: solve with "x =>"
+100 // 100
+x => // 2
 ```
 
 ```
@@ -4989,6 +5196,7 @@ clamp 15 between 1 and 10 // 10
 average(1:3) // ERROR: In average(...), 1:3 is a clock time, not a range, and a time cannot be averaged: a colon between two numbers is a range only as the list of sum, prod, map or reduce. To average numbers, list them with commas, as in average(1, 2, 3).
 average(1, 2, 3) // 2
 sum(1:3) // 6
+total(1:3) // 6
 ```
 
 ```
@@ -5039,7 +5247,7 @@ https://liamriddell.github.io/solve-engine/syntax/surveying-units/
 https://liamriddell.github.io/solve-engine/syntax/symbolic/
 
 ```
-1+2+b+3+b => // 2b+6
+1+2+x+3+x => // 2x+6
 ```
 
 ```
@@ -5069,6 +5277,20 @@ x/(1/y) => // x*y
 -x/-y => // x/y
 -(x^2) => // -(x^2)
 solve(salary/1200 * rate = net, rate) // 1200*net/salary
+```
+
+```
+1+2+b+3+b => // 2*b+6
+m + m => // 2*m
+k * 3 => // 3*k
+2*b => // 2*b
+2b // 2.00 b
+```
+
+```
+0.5/m // 0.50 /m
+0.5/(m) => // 0.5/(m)
+solve(b*m = 4, m) // 4/(b)
 ```
 
 ```
@@ -5559,6 +5781,23 @@ P1M in days // 30 days
 
 ```
 (one document)
+24:00 // ERROR: "24:00" is not a valid time
+1 + 24:00 // ERROR: "24:00" is not a valid time
+1:23:99 // ERROR: "1:23:99" is not a valid time
+(24:00) // ERROR: "24:00" is not a valid time
+max(9:60, 10:15) // ERROR: "9:60" is not a valid time
+total(24:00, 0:00) // ERROR: "24:00" is not a valid time
+```
+
+```
+(one document)
+Room 4: 12 // 12
+Day 1: 9:30 // 9:30:00 AM
+9: 30 // 9:30:00 AM
+```
+
+```
+(one document)
 hr = 2
 hr * 3 // 6
 $15/hr // $15.00/hr
@@ -6023,6 +6262,11 @@ https://liamriddell.github.io/solve-engine/syntax/uncertainty/
 (12.3 +/- 0.5) * 4 // 49.2 ± 2.0
 (10 +/- 1) + (20 +/- 2) // 30 ± 2.24
 (100 +/- 5) + 10% // 110 ± 5.5
+```
+
+```
+0.004 +/- 0.001 // 0.004 ± 0.001
+2e-6 +/- 1e-7 // 2e-6 ± 1e-7
 ```
 
 ```

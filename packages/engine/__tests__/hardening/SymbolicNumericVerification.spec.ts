@@ -1106,8 +1106,9 @@ describe("a printed algebraic answer re-reads as the value it printed", () => {
 		expect(formatSymbolic(symbolicResult(engine, "1/(2x) =>"))).toBe("1/(2x)");
 		expect(formatSymbolic(symbolicResult(engine, "1/(x*y) =>"))).toBe("1/(x*y)");
 		// A quotient under a quotient is turned over by the simplifier, so it
-		// reads plainly rather than relying on its brackets.
-		expect(formatSymbolic(symbolicResult(engine, "a/(b/c) =>"))).toBe("a*c/b");
+		// reads plainly rather than relying on its brackets. `b` is also the bit,
+		// and `/b` after an amount is "per bit", so it keeps a bracket of its own.
+		expect(formatSymbolic(symbolicResult(engine, "a/(b/c) =>"))).toBe("a*c/(b)");
 		engine.clear();
 	});
 });

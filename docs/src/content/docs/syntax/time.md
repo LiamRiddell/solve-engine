@@ -35,6 +35,41 @@ whole part alone:
 1.5:3 // ERROR: "1.5:3" is not a valid time
 ```
 
+A clock shows hours from 0 to 23 and minutes from 0 to 59, so a colon pair
+outside those (`24:00` for the end of a day, `9:60` as a slip of the finger) is
+no time any clock can show. It is refused by name, in the same words, whether it
+stands on its own line, in a sum, or inside brackets, a function call or a list.
+A third field after the minutes is seconds, which also run from 0 to 59, so
+`1:23:99` is refused the same way:
+
+```solve-doc
+24:00 // ERROR: "24:00" is not a valid time
+1 + 24:00 // ERROR: "24:00" is not a valid time
+1:23:99 // ERROR: "1:23:99" is not a valid time
+(24:00) // ERROR: "24:00" is not a valid time
+max(9:60, 10:15) // ERROR: "9:60" is not a valid time
+total(24:00, 0:00) // ERROR: "24:00" is not a valid time
+```
+
+Earlier versions read the text before such a colon as a
+[label](/syntax/labels/), so `1 + 24:00` answered 0 and `1:23:99` answered 99.
+
+A time's colon touches its minutes. After a name, a colon with a space after it
+belongs to a [label](/syntax/labels/) instead, so `Room 4: 12` is the label
+`Room 4` and the figure 12, and `Day 1: 9:30` is the label `Day 1` and the time
+9:30. A spaced pair with no name before it is still a time:
+
+```solve-doc
+Room 4: 12 // 12
+Day 1: 9:30 // 9:30:00 AM
+9: 30 // 9:30:00 AM
+```
+
+Midnight at the start of the day is `0:00`, and the last minute is `23:59`. The
+one place a colon between two numbers is not a time is the list that `sum`,
+`prod`, `map` or `reduce` works through, where `sum(24:30)` is the range of whole
+numbers from 24 to 30 (see [map, reduce and aggregates](/syntax/map-reduce-and-aggregates/)).
+
 A clock time is read as that time today. When adding or taking away a length of
 time carries it past midnight, the answer says how many days it has moved, the
 way the time-zone forms do:

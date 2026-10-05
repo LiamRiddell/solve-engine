@@ -3,8 +3,10 @@
  *
  * The conventions here match how the expressions are written rather than how
  * the tree is shaped: a coefficient juxtaposes its variable with no operator
- * (`2b`, not `2*b`), sums join with the correct sign (`2b+6` and `x-3`, never
- * `2b+-6`), and parentheses appear only where precedence genuinely needs them.
+ * (`2x`, not `2*x`), sums join with the correct sign (`2x+6` and `x-3`, never
+ * `2x+-6`), and parentheses appear only where precedence genuinely needs them.
+ * A name the number would read as a unit or a magnitude takes a `*` instead
+ * (`2*b`, since `2b` is two bits).
  *
  * This module does not simplify. Call `simplifySymbolic()` first for a
  * canonical, minimal rendering.
@@ -13,6 +15,8 @@
 import type { SymbolicNode } from "@solve-js/symbolic/SymbolicNode";
 import { type Rational, formatRational } from "@solve-js/symbolic/Rational";
 import { formatComplex } from "@solve-js/symbolic/Complex";
+import { isKnownUnit } from "@solve-js/lexer/units";
+import { isMagnitudeSuffix } from "@solve-js/packages/arithmetic/normalizer/LargeNumberSuffixNormalizerRule";
 
 /** Extracts `{coeff, name}` from a `const*var` or `var*const` shape, or `null` when `node` is not one. */
 function tryExtractCoeffVar(node: SymbolicNode & { kind: "mul" }): { coeff: Rational; name: string } | null {
@@ -120,13 +124,14 @@ function formatCoefficient(coeff: Rational, text: string): string {
  * reads as a subtraction) or a function call (`5sin(x)` does not parse), when
  * a zero would open a hexadecimal, binary or octal literal (`0x`), or when the
  * name opens with a letter a number can continue (`1200net` is the whole
- * number 1200n followed by `et`). A name that is also a unit (`2b`, `2m`) is
- * not detected here: the printer knows no units, and read back it is the unit.
+ * number 1200n followed by `et`), or when the name is also a unit or a
+ * magnitude (see {@link readsAsAmountWord}): `2b` reads back as two bits and
+ * `2k` as two thousand, so a name `b` or `k` is written `2*b` and `2*k`.
  *
  * @param coefficient - The number as written.
  * @param text - The term it multiplies.
  */
-function juxtaposes(coefficient: string, text: string): boolean {
+export function juxtaposes(coefficient: string, text: string): boolean {
 	const first = text[0];
 	if (first === undefined) return false;
 	if (first === "(") return true;
@@ -137,7 +142,42 @@ function juxtaposes(coefficient: string, text: string): boolean {
 	if (/[neE]/.test(first)) return false;
 	let i = 0;
 	while (i < text.length && !/[-+*/^(),\s]/.test(text[i])) i++;
-	return text[i] !== "(";
+	if (text[i] === "(") return false;
+	return !readsAsAmountWord(text.slice(0, i));
+}
+
+/**
+ * Whether a name written straight after a number is read as part of the
+ * amount rather than as the name: a unit (`b`, the bit; `m`, the metre;
+ * `km`), or a magnitude (`k`, `M`, `million`). `2b` is two bits, not two of
+ * `b`, so the printer writes such a name after a `*`, which reads back as
+ * written: a unit word with no amount of its own before it is a name.
+ *
+ * The boundary: a unit a document defines for itself, and a package unit
+ * outside the built-in table, are not known here.
+ *
+ * @param name - A name as the printer writes it.
+ * @returns True when a number written before it would read it as a unit or a magnitude.
+ */
+export function readsAsAmountWord(name: string): boolean {
+	if (name.length === 0) return false;
+	return isKnownUnit(name) || isMagnitudeSuffix(name);
+}
+
+/**
+ * Whether the text opens with a name that is also a unit (`m`, `m^2`, `km`),
+ * which after a `/` reads as "per" that unit rather than as a division by
+ * the unknown. A function call (`sqrt(m)`) opens with its own name, not the
+ * unit's.
+ *
+ * @param text - Rendered display text.
+ * @returns True when the leading name is a built-in unit.
+ */
+export function leadsWithUnitName(text: string): boolean {
+	let i = 0;
+	while (i < text.length && !/[-+*/^(),\s]/.test(text[i])) i++;
+	if (i === 0 || text[i] === "(") return false;
+	return isKnownUnit(text.slice(0, i));
 }
 
 /**
@@ -256,11 +296,14 @@ function formatFactor(node: SymbolicNode, depth: number): string {
 			//
 			// A minus, a fraction and an imaginary multiple are bracketed too:
 			// `x/-y*z` reads as (x/-y)*z, `x/1/3` as x/1 over 3 and `x/2i` as
-			// (x/2)*i.
+			// (x/2)*i. So is a name that is also a unit: `/m` after an amount is
+			// "per metre", so `0.5/m` reads as 0.5 per metre and `x/m` as x
+			// given a unit, where `0.5/(m)` is a half over the unknown.
 			const denominator = formatFactor(node.right, depth + 1);
 			const needsBrackets = node.right.kind === "mul" || node.right.kind === "div" || node.right.kind === "neg"
 				|| (node.right.kind === "const" && !isAtomic(node.right) && !denominator.startsWith("("))
-				|| (node.right.kind === "complex" && denominator !== "i" && !denominator.startsWith("("));
+				|| (node.right.kind === "complex" && denominator !== "i" && !denominator.startsWith("("))
+				|| leadsWithUnitName(denominator);
 			// Three numbers joined by two slashes read as a date (`x^2/3/27` is
 			// 2 March 2027), so a numerator ending in one number over another is
 			// bracketed before a denominator that starts with a digit.

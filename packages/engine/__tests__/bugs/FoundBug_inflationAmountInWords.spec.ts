@@ -73,11 +73,12 @@ describe("the lines that exposed it", () => {
 		expect(incremental).toEqual(batch);
 	});
 
-	test("the boundary: a typed star reads a name's value, and a sum still needs brackets", () => {
+	test("the boundary: a typed star reads a name's value, and a sum reads as its bracketed form", () => {
 		const { batch, incremental } = expectHonestDocument("apples = £2\nwhat is 100 * apples from 1990\nwhat is 100 apples from 1990");
 		expect(batch).toEqual(["= £2.00", "= £655.04", `ERROR ${REFUSED}`]);
 		expect(incremental).toEqual(batch);
-		expect(shown("what is $300 + $50 from 2003")).toContain('found "+"');
+		// A sum is read now, as its bracketed form is (see FoundBug_inflationAmountSum.spec.ts).
+		expect(shown("what is $300 + $50 from 2003")).toBe(shown("what is ($300 + $50) from 2003"));
 		expect(shown("what is 100 apples")).toBe("ERROR Undefined variable: apples");
 		expect(shown("$100 from 1990")).toContain('found "from"');
 	});

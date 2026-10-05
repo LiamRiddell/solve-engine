@@ -23,6 +23,7 @@ import { ExpressionEngine as Engine } from "@solve-js/engine/ExpressionEngine";
 import { numberValue, stringValue, ValueType, type Value } from "@solve-js/vm/Value";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { PROTOTYPE_WORDS, expectHonestLine, expectPrototypeUntouched } from "@tools/adversarial";
+import { numberText } from "@solve-js/utilities/Number";
 
 /**
  * Issue #710: four pieces of per-engine state lived in module scope, so two
@@ -38,7 +39,9 @@ import { PROTOTYPE_WORDS, expectHonestLine, expectPrototypeUntouched } from "@to
 
 /** A one-converter test package, `5 as shout` answering `5!`. */
 function shoutPackage(mark = "!"): IEnginePackage {
-	return { name: `shout${mark}`, asConverters: { shout: (v: Value) => stringValue(`${v.toNumber()}${mark}`) } };
+	// The number is written as the engine writes one, `∞` for an infinity, so
+	// the honesty sweep below reads this package's text as an engine's.
+	return { name: `shout${mark}`, asConverters: { shout: (v: Value) => stringValue(`${numberText(v.toNumber())}${mark}`) } };
 }
 
 function engineWith(...extra: IEnginePackage[]): ExpressionEngine {
