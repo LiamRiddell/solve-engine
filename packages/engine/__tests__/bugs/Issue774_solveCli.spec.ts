@@ -129,6 +129,8 @@ interface RunOutcome {
 	err: string;
 	/** How many times each engine the run built was cleared. */
 	clears: number[];
+	/** Every engine the run built, to read their own state afterwards. */
+	engines: ExpressionEngine[];
 	ms: number;
 }
 
@@ -140,9 +142,11 @@ async function solve(
 	let out = "";
 	let err = "";
 	const clears: number[] = [];
+	const engines: ExpressionEngine[] = [];
 	const kit: EngineKit = {
 		createEngine: (engineOptions) => {
 			const engine: ExpressionEngine = createEngine({ ...engineOptions, extraPackages: options.packages ?? [] });
+			engines.push(engine);
 			const index = clears.push(0) - 1;
 			const clear = engine.clear.bind(engine);
 			engine.clear = () => {
@@ -168,7 +172,7 @@ async function solve(
 	};
 	const started = Date.now();
 	const code = await run(argv, io, kit);
-	return { code, out, err, clears, ms: Date.now() - started };
+	return { code, out, err, clears, engines, ms: Date.now() - started };
 }
 
 /** The last row a run printed. */
@@ -901,24 +905,22 @@ describe("#774 live values and exiting", () => {
 	});
 
 	test("after a run, the query cache holds no timer that would keep Node running", async () => {
-		const timers = () => process.getActiveResourcesInfo().filter((kind) => kind === "Timeout").length;
-		await later(20);
-		const before = timers();
-		await solve(["lookup abcde"], { packages: [probePackage(slowLength(5))] });
-		await later(20);
-		expect(timers()).toBeLessThanOrEqual(before);
+		// Read from each engine's own cache rather than the process's timer
+		// count, which a timer left by an earlier suite in the same process can
+		// move either way while this one runs (CI read 3 against 2).
+		const r = await solve(["lookup abcde"], { packages: [probePackage(slowLength(5))] });
+		expect(r.engines.length).toBeGreaterThan(0);
+		for (const built of r.engines) expect(built.queryClient.getQueryCache().getAll()).toHaveLength(0);
 
-		// The control: the same lookup on an engine nobody clears leaves the
-		// cache's collection timer armed, which is what held Node open.
+		// The control: the same lookup on an engine nobody clears keeps its
+		// query in the cache, whose collection timer is what held Node open.
 		const kept = createEngine({ extraPackages: [probePackage(slowLength(5))] });
 		kept.getBatcher().onLineResult = () => {};
 		kept.evaluateExpression("lookup abcde");
 		await kept.settle();
-		await later(20);
-		expect(timers()).toBeGreaterThan(before);
+		expect(kept.queryClient.getQueryCache().getAll().length).toBeGreaterThan(0);
 		kept.clear();
-		await later(20);
-		expect(timers()).toBeLessThanOrEqual(before);
+		expect(kept.queryClient.getQueryCache().getAll()).toHaveLength(0);
 	});
 });
 
