@@ -904,7 +904,7 @@ export class Value {
 		if (this.zone !== undefined) out.zone = this.zone;
 		if (this.timeAnchor !== undefined) out.timeAnchor = this.timeAnchor;
 		if (this.timePrecision !== undefined) out.timePrecision = this.timePrecision;
-		if (this.zoneDifference !== undefined) out.zoneDifference = { from: this.zoneDifference.from, to: this.zoneDifference.to };
+		if (this.zoneDifference !== undefined) out.zoneDifference = copyZoneDifference(this.zoneDifference);
 		if (this.datetimeSpan !== undefined) out.datetimeSpan = this.datetimeSpan;
 		if (this.timedOut !== undefined) out.timedOut = this.timedOut;
 		if (this.sources !== undefined) out.sources = this.sources;

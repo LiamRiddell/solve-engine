@@ -1794,18 +1794,20 @@ function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Valu
             `A date or time moves by a length of time, such as 5 days, 2 weeks or 3 hours, not by ${what}.`,
         );
     }
-    let moved: Value;
+    let movedMs: number;
     try {
-        moved = datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm, date.zone), date.grain, date.zone, date.timeAnchor);
+        movedMs = shiftDatetime(date.toNumber(), duration, sign, vm, date.zone);
     } catch (e) {
         // A calendar backend throws a RangeError for a day past its range,
         // where the arithmetic itself is sound: the answer is only too far.
         if (e instanceof RangeError) return dateOutOfRange();
         throw e;
     }
+    const moved = datetimeValue(movedMs, date.grain, date.zone, date.timeAnchor);
     // A time of day keeps how finely it is written, so a time in a zone moved
-    // by an hour still reads to the minute (#757).
-    if (date.timePrecision !== undefined) moved.timePrecision = date.timePrecision;
+    // by an hour still reads to the minute (#757). A day past the calendar's
+    // range is the refusal, which has no precision to keep.
+    if (date.timePrecision !== undefined && moved.type === ValueType.Datetime) moved.timePrecision = date.timePrecision;
     return moved;
 }
 

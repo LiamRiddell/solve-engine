@@ -1180,6 +1180,11 @@ check "a " == "a" // check failed: "a " is not equal to "a"
 ```
 
 ```
+check [1, 2] > 0 // check: [1, 2] is a list, and a check gives one verdict, so it compares one value at a time: check one cell, as in check v[0] > 5
+check [1, 2][1] > 0 // ✓
+```
+
+```
 check 255 == "255" // check: "255" on the right is text and 255 is a number, so they cannot be compared. To read the text as a number, write "255" as number
 check (255 in hex) == "0xFF" // check: "0xFF" on the right is text and 0xFF is a number, so they cannot be compared. To read the text as a number, write "0xFF" as number
 check "255" as number == 255 // ✓
@@ -1418,6 +1423,13 @@ not 5 // "not" works on true or false, and 5 is a number: compare it first, as i
 ```
 
 ```
+not [true, false] // [false, true]
+not [1 > 0, 2 > 3] // [false, true]
+not [1, 2] // "not" works on true or false, and [1, 2] is a list: compare it first, as in not (x > 3).
+![1, 2] // "!" works on true or false, and [1, 2] is a list: compare it first, as in not (x > 3).
+```
+
+```
 "paid" == "paid" // true
 255 == "255" // false
 255 != "255" // true
@@ -1427,6 +1439,15 @@ not 5 // "not" works on true or false, and 5 is a number: compare it first, as i
 ```
 "5" > 3 // "5" on the left is text and the other side is a number, so they cannot be put in order. To read the text as a number, write "5" as number.
 "a" < "b" // Text has no order: two pieces of text can only be compared with == or !=, not <.
+```
+
+```
+[100, 200] > 150 // [false, true]
+[100, 200] > 150 and true // [false, true]
+```
+
+```
+if [100, 200] > 150 then 1 else 0 // "if" needs one true or false, and this is a list of 2 cells. Compare one cell, as in v[0] > 5, or choose for each cell with map, as in map(if x > 5 then 1 else 0, v).
 ```
 
 ```
@@ -2136,6 +2157,10 @@ if 0.1 + 0.2 == 0.3 then "equal" else "different" // equal
 ```
 (0.5 + 0.505) to 2 dp // 1.01
 (0.1 + 0.2) to 17 dp // 0.30000000000000000
+```
+
+```
+10% + 20% == 30% // true
 ```
 
 ```
@@ -3089,6 +3114,13 @@ Total: 1000:1002 // ERROR: "1000:1002" is not a valid time
 true ? 25 : 30 // ERROR: There is no choice written with "?" and ":": write if true then 25 else 30
 a > b: 1 // ERROR: "a > b" before the colon is a comparison, not a label: a label names the figure in words, and a choice is written if ... then ... else
 (1+2): 5 // ERROR: "(1+2)" before the colon is a calculation, not a label: a label names the figure in words
+(24):00 // ERROR: "(24)" before the colon is a calculation, not a label: a label names the figure in words
+Total (2026): 500 // 500
+```
+
+```
+(one document)
+‍24:00 // ERROR: "<U+200D>24" holds U+200D (zero width joiner), an invisible character, so it is read as a word and not as the number 24. A number cannot hold one: delete it and type the number again.
 ```
 
 ```
@@ -4341,14 +4373,102 @@ percent change from 50 to 75 // 50.00%
 ```
 
 ```
+[100, 200] + 10% // [110, 220]
+[100, 200] - 10% // [90, 180]
+[100 m, 200 m] + 10% // [110.00 m, 220.00 m]
+[$100, $200] - 10% // [$90.00, $180.00]
+```
+
+```
+10% of [100, 200] // [10, 20]
+15% off [$80, $120] // [$68.00, $102.00]
+20% on [50 kg, 60 kg] // [60.00 kg, 72.00 kg]
+[100 m, 200 m] * 10% // [10.00 m, 20.00 m]
+```
+
+```
+10% + [100, 200] // A percentage plus a list would be a list of percentages, and a list holds plain numbers. To add the percentage to each number, write the list first, as in [100, 200] + 10%.
+10% + [$100, $200] // [$110.00, $220.00]
+```
+
+```
+[10%, 20%] // A list holds plain numbers, so it cannot hold 10% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.1 for 10%).
+[100, 200] + [10%, 20%] // A list holds plain numbers, so it cannot hold 10% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.1 for 10%).
+[100, 200] + [10, 40] // [110, 240]
+[0.1, 0.2] // [0.10, 0.20]
+```
+
+```
+sum(10%, 20%) // 30.00%
+average of 10%, 20% // 15.00%
+```
+
+```
 20% as multiplier // 1.2x
 150% as multiplier // 2.5x
 0.5 as multiplier // 0.5x
 ```
 
 ```
+50% * 30 // 15
+100 * 40% // 40
+10% * $5 // $0.50
+```
+
+```
+10% * 20% // 2.00%
+10% of 20% // 2.00%
+product of 10%, 20% and 50% // 1.00%
+6% / 12 // 0.50%
+10% ^ 2 // 1.00%
+```
+
+```
+10% / 20% // 0.50
+200 / 10% // 2,000
+```
+
+```
+10% * 2 // 0.20
+10% + 10% // 20.00%
+(10% * 2) as % // 20.00%
+10% / 0 // This has no percentage: its value is not a finite number, which is what dividing by zero gives.
+```
+
+```
+10% + 20% == 30% // true
+sum(10%, 20%) == 30% // true
+30% - 10% == 20% // true
+10% * 20% == 2% // true
+(average of 10%, 20%, 30%) == 20% // true
+```
+
+```
 (one document)
 5 km as multiplier // ERROR: A multiplier is a plain number or a percentage, as in "0.5 as multiplier" or "50% as multiplier", not a length.
+```
+
+```
+(one document)
+prices = [$19.99, $5.00] // [$19.99, $5.00]
+vat = 20% // 20.00%
+prices + vat // [$23.99, $6.00]
+```
+
+```
+(one document)
+rate = 6% // 6.00%
+monthly = rate / 12 // 0.50%
+$1000 + monthly // $1,005.00
+$1000 * monthly // $5.00
+```
+
+```
+(one document)
+10% // 10.00%
+20% // 20.00%
+total above // 30.00%
+check line 3 == 30% // ✓
 ```
 
 ## pressure
@@ -5222,6 +5342,25 @@ total of 800 m, 1.2 km, 3 km // 5,000.00 m
 ```
 
 ```
+sum(10%, 20%) // 30.00%
+total of 10%, 20% // 30.00%
+average of 10%, 20% // 15.00%
+max(10%, 20%) // 20.00%
+median of 10%, 20%, 40% // 20.00%
+stdev of 10%, 20% // 5.00%
+```
+
+```
+product of 10%, 20% // 2.00%
+sum(10%, 20%) == 30% // true
+```
+
+```
+sum(10%, 100) // A percentage (10%) and a number cannot be added together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 10% as the number 0.1; to raise an amount by a percentage, write it as 100 + 10%.
+average of 10%, $5 // A percentage (10%) and an amount in USD cannot be averaged together: a percentage is a share of an amount, not an amount of its own. Write every value as a percentage, or write 10% as the number 0.1.
+```
+
+```
 standard deviation of 2, 4, 4, 4, 5, 5, 7, 9 // 2
 variance of 2, 4, 4, 4, 5, 5, 7, 9 // 4
 spread of 3, 7, 2, 9 // 7
@@ -5318,6 +5457,14 @@ total of 1, 2, 3 // 6
 3 km
 800 m
 total above // 5.00 km
+```
+
+```
+(one document)
+10% // 10.00%
+20% // 20.00%
+total above // 30.00%
+average above // 15.00%
 ```
 
 ```
@@ -6877,6 +7024,34 @@ det([1 km, 2 km; 3 km, 4 km]) // A determinant of a list in km is not covered: m
 ```
 
 ```
+[100, 200] + 10% // [110, 220]
+[1 km, 2 km] + 10% // [1.10 km, 2.20 km]
+10% of [1 km, 2 km] // [0.10 km, 0.20 km]
+```
+
+```
+[100, 200] > 150 // [false, true]
+[100, 200] == 100 // [true, false]
+150 < [100, 200] // [false, true]
+[1, 2] > [0, 3] // [true, false]
+[1 km, 2 km] > 1500 m // [false, true]
+[$100, $200] <= $150 // [true, false]
+```
+
+```
+([1, 2, 3] > 1) and ([1, 2, 3] < 3) // [false, true, false]
+not ([1, 2] > 1) // [true, false]
+not [true, false] // [false, true]
+sum([12, 18, 25] > 15) // 2
+```
+
+```
+[1 km, 2 km] > 1 kg // length and mass cannot be compared
+if [1, 2] > 0 then 1 else 2 // "if" needs one true or false, and this is a list of 2 cells. Compare one cell, as in v[0] > 5, or choose for each cell with map, as in map(if x > 5 then 1 else 0, v).
+map(if x > 150 then 1 else 0, [100, 200]) // [0, 1]
+```
+
+```
 sqrt([4, 9]) // [2, 3]
 sqrt([4, 9; 16, 25]) // [2, 3; 4, 5]
 sin([30 deg, 90 deg]) // [0.50, 1]
@@ -6920,6 +7095,7 @@ det([1,2;3,4]) // -2
 ```
 (one document)
 [(1, 2), 3] // ERROR: A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3].
+[1, 7%] // ERROR: A list holds plain numbers, so it cannot hold 7% as a percentage. To take a share of each number, put the percentage outside the list, as in [100, 200] + 10%; to keep the fraction, write it as a number (0.07 for 7%).
 ```
 
 ```
@@ -7087,6 +7263,15 @@ width = 3 m // 3.00 m
 length * width // 6.00 m²
 line 3 for length from 1 m to 3 m step 50 cm // [3.00 m², 4.50 m², 6.00 m², 7.50 m², 9.00 m²]
 line 3 for length from 1 m to 2 m step 30 cm // [3.00 m², 3.90 m², 4.80 m², 5.70 m²]
+```
+
+```
+(one document)
+rate = 10% // 10.00%
+rate * rate // 1.00%
+line 2 for rate from 10% to 30% step 10% // ERROR: With rate at 10%, line 2 answers 1%, a percentage, and a sweep lists its answers in a list, which holds plain numbers, not percentages. To sweep it, add a line that gives the answer as a number, such as "line 2 * 100" for its percentage points, and sweep that line.
+line 2 * 100 // 1
+line 4 for rate from 10% to 30% step 10% // [1, 4, 9]
 ```
 
 ```
