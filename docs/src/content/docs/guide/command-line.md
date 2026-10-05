@@ -289,9 +289,9 @@ each line as it is typed) and no watch mode (re-running when a file changes);
 a shell loop or an editor with the notepad covers both for now. The command is
 not yet on npm: publishing a new package name needs its own first release and
 its own entry in the publish workflow, which are a maintainer's step, so for now
-it runs from a checkout. A companion server for AI tools, on the same engine
-with the network off and a fresh engine per call, is planned as a separate
-package and is not part of this one.
+it runs from a checkout. The companion server for AI tools, on the same engine
+with the network off and a fresh engine per call, is a separate package:
+[the MCP server](/guide/mcp-server/).
 
 Deciding what is prose is the engine's reading, not a list of words: a line it
 cannot read is left out, so a typo that makes a line unreadable reads like a

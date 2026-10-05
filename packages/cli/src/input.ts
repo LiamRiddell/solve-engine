@@ -7,7 +7,7 @@
  * expression that is also the name of a file in the current directory.
  */
 
-import { closeSync, fstatSync, openSync, readSync, statSync, type Stats } from "node:fs";
+import { statSync, openSync, fstatSync, readSync, closeSync, type Stats } from "node:fs";
 import { quoted } from "./terminal";
 
 /** The largest document read, 16 MiB: far past any note, and well short of what would exhaust memory. */
@@ -73,11 +73,13 @@ export type ReadOutcome = { ok: true; text: string } | { ok: false; message: str
 /**
  * Reads a document file, refusing one that is too large or is not text.
  *
- * The file is opened once and both its size and its contents are read through
- * that one descriptor, so a file swapped or grown between the check and the
- * read cannot slip past it. The size is checked before anything is read, so a
- * very large file costs an `fstat`, not its contents in memory, and the read
- * itself stops one byte past the limit whatever the size said.
+ * The file is opened once and everything after goes through that descriptor:
+ * its size and kind are read with `fstat`, then at most one byte past the limit
+ * is read from it. Checking a path and then reading the path again left a
+ * window in which the file could be swapped for another (a link to a device, a
+ * larger file), and CodeQL reported the race. The size is checked before the
+ * read, so a very large file costs a `stat`, not its contents in memory, and a
+ * file that grows between the two is caught by the bounded read.
  *
  * @param path - The file, as the command line named it.
  * @param limit - The largest size accepted, in bytes.
@@ -87,8 +89,13 @@ export function readDocumentFile(path: string, limit: number = MAX_INPUT_BYTES):
 	let fd: number | undefined;
 	try {
 		fd = openSync(path, "r");
-		if (fstatSync(fd).size > limit) return { ok: false, message: tooLarge(quoted(path), limit) };
-		const bytes = readAtMost(fd, limit + 1);
+		const info = fstatSync(fd);
+		if (info.isDirectory()) return { ok: false, message: `${quoted(path)} is a directory. Give a document inside it.` };
+		if (!info.isFile()) {
+			return { ok: false, message: `${quoted(path)} is not a regular file (a device, a pipe or a socket). To read a stream, pipe it to solve - instead.` };
+		}
+		if (info.size > limit) return { ok: false, message: tooLarge(quoted(path), limit) };
+		const bytes = readBounded(fd, limit + 1);
 		if (bytes.length > limit) return { ok: false, message: tooLarge(quoted(path), limit) };
 		return decodeDocument(bytes, quoted(path));
 	} catch (error) {
@@ -101,34 +108,44 @@ export function readDocumentFile(path: string, limit: number = MAX_INPUT_BYTES):
 	}
 }
 
-/** The size of each read from a document file. */
-const READ_CHUNK_BYTES = 64 * 1024;
-
 /**
- * Reads from an open file until it ends or `most` bytes have arrived, so a
- * file that grows while it is read costs no more than `most` bytes.
+ * Reads from an open file until it ends or `most` bytes have been read.
  *
- * @param fd - The open file.
+ * @param fd - An open file descriptor.
  * @param most - The most bytes to read.
- * @returns The bytes read.
+ * @returns The bytes read, at most `most` of them.
  */
-export function readAtMost(fd: number, most: number): Uint8Array {
+export function readBounded(fd: number, most: number): Uint8Array {
 	const chunks: Uint8Array[] = [];
 	let total = 0;
+	const chunk = new Uint8Array(Math.min(Math.max(most, 1), 64 * 1024));
 	while (total < most) {
-		const chunk = new Uint8Array(Math.min(READ_CHUNK_BYTES, most - total));
-		const read = readSync(fd, chunk, 0, chunk.length, null);
+		const read = readSync(fd, chunk, 0, Math.min(chunk.length, most - total), null);
 		if (read === 0) break;
-		chunks.push(read === chunk.length ? chunk : chunk.subarray(0, read));
+		chunks.push(chunk.slice(0, read));
 		total += read;
 	}
-	const bytes = new Uint8Array(total);
+	return concatBytes(chunks, total);
+}
+
+/**
+ * Joins chunks of bytes into one array, with the web's `Uint8Array` rather
+ * than Node's `Buffer`, so the code around a host's reads stays portable.
+ *
+ * @param chunks - The chunks, in order.
+ * @param total - The bytes to keep from the start; the sum of the lengths unless fewer are wanted.
+ * @returns A new array of `total` bytes.
+ */
+export function concatBytes(chunks: readonly Uint8Array[], total: number = chunks.reduce((sum, c) => sum + c.length, 0)): Uint8Array {
+	const joined = new Uint8Array(Math.max(0, total));
 	let offset = 0;
 	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.length;
+		if (offset >= joined.length) break;
+		const part = chunk.length <= joined.length - offset ? chunk : chunk.subarray(0, joined.length - offset);
+		joined.set(part, offset);
+		offset += part.length;
 	}
-	return bytes;
+	return offset === joined.length ? joined : joined.slice(0, offset);
 }
 
 /** The message for an input past the size limit. */

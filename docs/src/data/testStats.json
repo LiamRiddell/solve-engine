@@ -1,7 +1,7 @@
 {
-  "tests": 26027,
-  "suites": 750,
-  "docExamples": 2532,
+  "tests": 26085,
+  "suites": 751,
+  "docExamples": 2534,
   "builtinPackages": 47,
   "runtimeDependencies": 1,
   "subpathExports": 19
