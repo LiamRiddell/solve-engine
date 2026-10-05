@@ -4,7 +4,7 @@ import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { djb2Hash } from "@solve-js/utilities/Hash";
 import { SegmentTree } from "@solve-js/engine/SegmentTree";
 import { DEFAULT_CONFIG } from "@solve-js/constants/Configuration";
-import { countLines, splitLines } from "@solve-js/utilities/Strings";
+import { countLines, hasLineBreak, splitLines } from "@solve-js/utilities/Strings";
 import { memberTagsOf } from "@solve-js/packages/tags/TagScanner";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { isPipeRow, isSeparatorRowText, pipeBlockAround } from "@solve-js/lexer/TableBlocks";
@@ -139,6 +139,33 @@ export interface ApplyChangesResult {
 	removed: number[];
 }
 
+
+/**
+ * The changes with every inserted text split at its line breaks, so a change
+ * inserts the lines a document holding the same text would have.
+ *
+ * A line ends at a CRLF pair, a line feed or a lone carriage return wherever
+ * the engine reads a document (see `utilities/Strings.splitLines`), and a
+ * host's change can carry one: a paste, or an editor that reports a changed
+ * line with its break. Taken as one line, `7\r8` stayed one line here while
+ * `setDocument` and `parseDocument` read two. A change whose texts hold no
+ * break comes back as it was, and so does the array when none does.
+ *
+ * @param changes - The transaction, as a host sent it.
+ * @returns The same changes, or copies with the texts split.
+ */
+export function splitInsertedLines(changes: readonly LineChange[]): LineChange[] {
+	if (!changes.some(insertsALineBreak)) return changes as LineChange[];
+	return changes.map((change) => insertsALineBreak(change)
+		? { ...change, insertLines: change.insertLines.flatMap((text) => (typeof text === "string" ? splitLines(text) : [text])) }
+		: change);
+}
+
+/** Whether any text `change` inserts holds a line break. */
+function insertsALineBreak(change: LineChange): boolean {
+	return Array.isArray(change.insertLines) && change.insertLines.some((text) => typeof text === "string" && hasLineBreak(text));
+}
+
 // ── DocumentModel ──────────────────────────────────────────────────────────
 
 /**
@@ -182,6 +209,19 @@ export class DocumentModel {
 	 */
 	get revision(): number {
 		return this._revision;
+	}
+
+	/** See {@link layoutRevision}. */
+	private _layoutRevision = 0;
+
+	/**
+	 * A count bumped by every change to which line sits at which position (a
+	 * new document, an insert or a delete), and by nothing else: an edit that
+	 * changes a line's text in place leaves it alone, where it moves
+	 * {@link revision}. For a caller keeping something ordered by position.
+	 */
+	get layoutRevision(): number {
+		return this._layoutRevision;
 	}
 
 	/**
@@ -232,6 +272,29 @@ export class DocumentModel {
 	 */
 	private tagIndex: Map<string, Set<number>> | null = null;
 
+	/** See {@link setStructuralEditor}. */
+	private structuralEditor: ((changes: LineChange[]) => void) | null = null;
+
+	/**
+	 * Who applies an edit that {@link editLine} finds changes the line count,
+	 * because its text holds a line break: `null` for {@link applyChanges}
+	 * itself. An evaluator over this model installs its own `applyTransaction`,
+	 * which applies the change and keeps its dependency graph and checkpoint
+	 * chain in step with the lines that moved; a direct `applyChanges` would
+	 * leave both describing the old positions. It takes itself off again when
+	 * disposed.
+	 *
+	 * @param editor - The function, or null for the model's own.
+	 */
+	setStructuralEditor(editor: ((changes: LineChange[]) => void) | null): void {
+		this.structuralEditor = editor;
+	}
+
+	/** The editor {@link setStructuralEditor} installed, or null; for an evaluator taking itself off. */
+	getStructuralEditor(): ((changes: LineChange[]) => void) | null {
+		return this.structuralEditor;
+	}
+
 	/**
 	 * Most lines this model will hold. See `constants/Configuration.ts`'s
 	 * `performance.maxDocumentLines`, which is where the default comes from and
@@ -279,6 +342,7 @@ export class DocumentModel {
 		this.lines.clear();
 		this.orderTree.clear();
 		this._revision++;
+		this._layoutRevision++;
 		this._positionCache = null;
 		this._orderedIds = null;
 		this.dirtyLineIds.clear();
@@ -340,6 +404,9 @@ export class DocumentModel {
 	applyChanges(changes: LineChange[]): ApplyChangesResult {
 		const inserted: number[] = [];
 		const removed: number[] = [];
+		// A break inside an inserted text makes more than one line of it.
+		changes = splitInsertedLines(changes);
+		this.assertChangesFit(changes);
 
 		// Sort descending by startLine so earlier changes don't shift later indices
 		const sorted = [...changes].sort((a, b) => b.startLine - a.startLine);
@@ -402,6 +469,7 @@ export class DocumentModel {
 		this._positionCache = null;
 		this._orderedIds = null;
 		this._revision++;
+		this._layoutRevision++;
 
 		for (const lineId of tableAnchors) {
 			const position = this.getLinePosition(lineId);
@@ -409,6 +477,36 @@ export class DocumentModel {
 		}
 
 		return { inserted, removed };
+	}
+
+	/**
+	 * Refuse changes that would leave the model holding more than
+	 * {@link maxLines}, before any of them is applied, as {@link setDocument}
+	 * refuses a document. A paste of a hundred thousand lines into one line
+	 * grew the model past its ceiling, since only a whole document was counted.
+	 *
+	 * The count is the one the changes leave: each inserts its lines and deletes
+	 * as many of its lines as the document has from its first line on.
+	 *
+	 * @param changes - The changes, with their texts already split at line breaks.
+	 * @throws `DOCUMENT_TOO_LARGE` when they do not fit. Recoverable: nothing has
+	 * changed yet.
+	 */
+	assertChangesFit(changes: readonly LineChange[]): void {
+		let count = this.lineCount;
+		for (const change of changes) {
+			const inserted = Array.isArray(change.insertLines) ? change.insertLines.length : 0;
+			const available = Math.max(0, this.lineCount - (Math.trunc(change.startLine) - 1));
+			const deleted = Math.min(Math.max(0, Math.trunc(change.deleteCount) || 0), available);
+			count += inserted - deleted;
+		}
+		if (count > this.maxLines) {
+			throw ErrorFactory.execution(
+				"DOCUMENT_TOO_LARGE",
+				`This document has more than ${this.maxLines.toLocaleString("en-US")} lines, which is the most the engine will hold at once`,
+				{ maxLines: this.maxLines },
+			);
+		}
 	}
 
 	/**
@@ -506,6 +604,18 @@ export class DocumentModel {
 	editLine(lineNumber: number, newText: string): boolean {
 		const state = this.getLineAt(lineNumber);
 		if (!state) return false;
+
+		// Text holding a line break is more than one line, as a document loaded
+		// with it has, so the edit replaces this line with those. That moves
+		// every line below, which is a structural edit; the evaluator that owns
+		// this model applies it (see setStructuralEditor), so its graph and
+		// checkpoints follow the lines to where they now are.
+		if (hasLineBreak(newText)) {
+			const change: LineChange = { startLine: lineNumber, deleteCount: 1, insertLines: splitLines(newText) };
+			if (this.structuralEditor !== null) this.structuralEditor([change]);
+			else this.applyChanges([change]);
+			return true;
+		}
 
 		// The hash is a fast pre-check, not the answer: djb2 gives `ab` and `bA`
 		// the same hash, so an edit from `total = ab * 2` to `total = bA * 2`
@@ -793,6 +903,31 @@ export class DocumentModel {
 		return false;
 	}
 
+	/**
+	 * Whether any line before `position` (1-based, exclusive) is dirty with text
+	 * that has never been compiled: a line just loaded or just edited, which
+	 * may define a name or be read by position and has no answer yet.
+	 *
+	 * The evaluator's viewport-only path asks this beside
+	 * {@link hasAnyDirtyVariableDefLineBefore}, which only knows a line is a
+	 * definition once it has been compiled: a viewport set on a document that
+	 * has never been evaluated found no dirty definition above it, ran the
+	 * lines in view alone, and `prev + 1` at its top reported the line above as
+	 * not evaluated. A line whose compiled program was evicted keeps its
+	 * expressions, so it does not count here, and blank lines never do.
+	 *
+	 * O(d log N) in the dirty lines, like {@link hasAnyDirtyLineBefore}.
+	 */
+	hasAnyUncompiledDirtyLineBefore(position: number): boolean {
+		for (const lineId of this.dirtyLineIds) {
+			const state = this.lines.get(lineId);
+			if (!state || state.isEmpty || state.expressions.length > 0) continue;
+			const pos = this.getLinePosition(lineId);
+			if (pos >= 1 && pos < position) return true;
+		}
+		return false;
+	}
+
 	/** Number of lines currently marked dirty. For diagnostics/tests. */
 	get dirtyCount(): number {
 		return this.dirtyLineIds.size;
@@ -994,6 +1129,7 @@ export class DocumentModel {
 		this.lines.clear();
 		this.orderTree.clear();
 		this._revision++;
+		this._layoutRevision++;
 		this._positionCache = null;
 		this._orderedIds = null;
 		this.nextLineId = 1;

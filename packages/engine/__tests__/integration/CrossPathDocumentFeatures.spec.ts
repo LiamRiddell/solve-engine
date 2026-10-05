@@ -1446,6 +1446,61 @@ describe("a reference to a line further down, across entry points and passes", (
   });
 });
 
+describe("a name defined below the line that reads it, across entry points and passes", () => {
+  // The name form of the forward reference above: a note read from the top has
+  // not defined `x` where `x * 2` stands above `x = 5`. The batch pass and the
+  // first incremental pass said so; from the second pass on a live editor read
+  // the value the last pass left in the VM and answered 10. Each line now reads
+  // the VM as a pass from the top leaves it at that line.
+  test.each([
+    [["x * 2", "x = 5"]],
+    [["x + 1", ":x = 5"]],
+    [["f(2)", "f(x) = x + 1"]],
+    [["y = x + 1", "x = 5", "y + x"]],
+    [[":x = 1", "x + 100", ":x = 99", "x + 100"]],
+  ])("%j: every pass of a live editor agrees with both document passes", (lines) => {
+    const settled = batch(lines);
+    expect(incremental(lines)).toEqual(settled);
+    for (const passes of [1, 2, 3]) expect(afterPasses(lines, passes)).toEqual(settled);
+  });
+
+  test("the single-expression path reads only the names it was given", () => {
+    const { threw, message } = single("x * 2");
+    expect(threw).toBe(true);
+    expect(message).toBe("Undefined variable: x");
+  });
+});
+
+describe("a viewport starting below line 1, across entry points", () => {
+  // The dirty lines above such a viewport were compiled without running, so a
+  // positional reader in view had nothing to read: `prev + 1` answered "Line 2
+  // has not been evaluated yet" where parseDocument answers 21. They run now.
+  const note = ["10", "20", "prev + 1", "line 1 * 3", "total above"];
+
+  test("the batch pass, the incremental pass and a first evaluate of lines 3 to 5 agree", () => {
+    const settled = batch(note);
+    expect(settled).toEqual(["10", "20", "21", "30", "81"]);
+    expect(incremental(note)).toEqual(settled);
+    const doc = new DocumentModel();
+    doc.setDocument(note.join("\n"));
+    const evaluator = new ThreeTierEvaluator(doc, newTrackedEngine());
+    try {
+      const view = evaluator.evaluate({ startLine: 3, endLine: 5 });
+      expect(view.lines.slice(2).map(readEvalLine)).toEqual(settled.slice(2));
+      const scroll = new ThreeTierEvaluator(doc, newTrackedEngine());
+      expect(scroll.setViewport({ startLine: 4, endLine: 5 }).lines.filter((l) => l.lineNumber >= 4).map(readEvalLine)).toEqual(settled.slice(3));
+      scroll.dispose();
+    } finally {
+      evaluator.dispose();
+    }
+  });
+
+  test("the single-expression path refuses the positional forms with a document error", () => {
+    expectNeedsDocument("prev + 1");
+    expectNeedsDocument("line 1 * 3");
+  });
+});
+
 describe("a lone carriage return across entry points", () => {
   // The batch pass's scan ends a line at a lone "\r" as it does at "\n" and
   // "\r\n"; the document model split on "\n" alone, so `5\r6` was two lines to
@@ -1556,12 +1611,18 @@ describe("names of several words across entry points (#743)", () => {
     expect(incremental(doc)).toEqual(answers);
   });
 
-  // The line above the definition is left out of the live-editor comparisons:
-  // from its second pass a live editor reads a name defined further down with
-  // the value the last pass left, one word or several (`x * 2` above `x = 5`
-  // answers 10 there, where a fresh pass says x is undefined). That predates
-  // names of several words and is not theirs to change.
+  // The line above the definition is in the live-editor comparisons too: a
+  // live editor used to read a name defined further down with the value the
+  // last pass left, from its second pass on, and now reads the note from the
+  // top on every pass (see the forward-reads block below).
   const below = ["hourly rate = $50", "hours = 8", "hourly rate * hours", "rate = 3", "hourly rate * rate"];
+
+  test("the line above the definition is two words in a live editor, on every pass", () => {
+    expect(afterPasses(doc, 3)).toEqual(batch(doc));
+    const edited = editThenEvaluate(doc, [[2, "hourly rate = $60"]]);
+    expect(edited.shown).toEqual(batch(edited.edited));
+    expect(edited.shown[0]).toMatch(/^ERROR: /);
+  });
 
   test("editing the definition re-keys every reader in a live editor, as a fresh pass reads it", () => {
     const renamed = editThenEvaluate(below, [[1, "hourly wage = $50"]]);

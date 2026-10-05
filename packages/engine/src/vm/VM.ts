@@ -43,6 +43,7 @@ import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { WeekShape } from "@solve-js/calendar/WeekShape";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
+import { addZonedCalendarDays, addZonedCalendarMonths } from "@solve-js/calendar/ZonedSteps";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { LineTrace } from "@solve-js/explain/Explanation";
 import { offsetRefusal, resolveUtcOffsetName } from "@solve-js/calendar/UtcOffset";
@@ -1655,8 +1656,12 @@ const MS_PER_DAY = 86_400_000;
  * in hours is elapsed time. "36 hours from now" means 36 hours of clock
  * ticking, across a daylight-saving transition included, which is exactly what
  * adding milliseconds does.
+ *
+ * A date read in a zone (`zone`, as `2024-11-02 12:00 in New York` carries
+ * one) steps its days and months on that zone's calendar, not the host's: see
+ * `calendar/ZonedSteps.ts`. Workdays still walk the backend's calendar.
  */
-function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): number {
+function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM, zone?: string): number {
     if (duration.type === ValueType.Uom && duration.unit !== undefined) {
         const unit = duration.unit;
         const amount = sign * duration.toNumber();
@@ -1665,6 +1670,21 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
         // only date offset whose cost grows with the offset, so it is the only
         // one that needs a configured ceiling. See addBusinessDays().
         if (isWorkdayUnit(unit)) return addBusinessDays(epochMs, amount, vm);
+
+        // A date read in a zone steps its months and whole days on that zone's
+        // calendar (calendar/ZonedSteps.ts); a date with no zone steps the
+        // backend's, through the shared vm/CalendarShift.ts.
+        if (zone !== undefined) {
+            const monthsPerUnit = CALENDAR_MONTHS_PER_UNIT[unit];
+            if (monthsPerUnit !== undefined) return addZonedCalendarMonths(epochMs, amount * monthsPerUnit, zone, vm.context.calendar, convertUnit(1, "month", "ms"));
+            // Measure first, for the reason extractDurationMs() gives below: a
+            // unit that is not a duration at all contributes nothing.
+            if (getMeasure(unit) === "time") {
+                let daysPerUnit = 0;
+                try { daysPerUnit = convertUnit(1, unit, "day"); } catch { /* Ignore */ }
+                if (Number.isInteger(daysPerUnit) && daysPerUnit >= 1) return addZonedCalendarDays(epochMs, amount * daysPerUnit, zone, vm.context.calendar);
+            }
+        }
 
         // Months, years and whole days step the calendar; see
         // vm/CalendarShift.ts. Everything else falls through to the linear path.
@@ -1717,7 +1737,7 @@ function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Valu
     }
     let moved: number;
     try {
-        moved = shiftDatetime(date.toNumber(), duration, sign, vm);
+        moved = shiftDatetime(date.toNumber(), duration, sign, vm, date.zone);
     } catch (e) {
         // A calendar backend throws a RangeError for a day past its range,
         // where the arithmetic itself is sound: the answer is only too far.

@@ -45,7 +45,7 @@ const CONVERSION_KEYWORDS: ReadonlySet<string> = new Set(["AS", "IN", "TO"]);
 export function monthOf(token: Token | undefined, before?: Token): number {
 	if (token === undefined || !MONTH_TOKEN_TYPES.has(token.type)) return 0;
 	if (token.type === "CONVERTER_NAME" && before !== undefined && CONVERSION_KEYWORDS.has(before.type)) return 0;
-	// Own keys only, through the Map below: `5 __proto__` found Object.prototype
+	// Own keys only, through the Map below: `5 __proto__` found the prototype
 	// here and was refused as a date whose month was undefined.
 	return MONTH_NUMBERS.get(lowerCased(token.text ?? token.value ?? "")) ?? 0;
 }

@@ -135,6 +135,10 @@ export class MultiWordNameTable {
 	/** Names whose last defining line let go of them during this pass. */
 	private readonly released = new Set<string>();
 	private longestName = 0;
+	/** Which names the line now being read may use, by their defining lines; null for every name. See {@link setVisibility}. */
+	private visible: ((definedByLineIds: ReadonlySet<number>) => boolean) | null = null;
+	/** Whether {@link match} passed over a name {@link visible} hid, since {@link takeHidden} last asked. */
+	private hidSome = false;
 
 	/** Whether no name is registered, the hot path's guard. */
 	get isEmpty(): boolean {
@@ -183,9 +187,55 @@ export class MultiWordNameTable {
 	 */
 	match(words: readonly string[]): number {
 		for (let length = Math.min(words.length, this.longestName); length >= 2; length--) {
-			if (this.owners.has(nameKey(words.slice(0, length)))) return length;
+			const lines = this.owners.get(nameKey(words.slice(0, length)));
+			if (lines === undefined) continue;
+			if (this.visible === null || this.visible(lines)) return length;
+			this.hidSome = true;
 		}
 		return 0;
+	}
+
+	/**
+	 * Limit {@link match} to the names a line may read, or lift the limit with
+	 * `null`. `visible` is given the ids of a name's defining lines and answers
+	 * whether the line now being read comes after one of them.
+	 *
+	 * The table holds every name the document defines, and a document read from
+	 * the top has defined only those above the line it is reading: `hourly rate
+	 * * 2` above `hourly rate = 5` is two words there, not the name. The
+	 * incremental evaluator keeps the table between passes, so it sets this for
+	 * the length of a pass to read each line as a pass from the top does.
+	 *
+	 * @param visible - The test, or null.
+	 */
+	setVisibility(visible: ((definedByLineIds: ReadonlySet<number>) => boolean) | null): void {
+		this.visible = visible;
+		this.hidSome = false;
+	}
+
+	/**
+	 * Whether a name of these words is registered and the line now being read
+	 * may not use it. False for a name not registered at all, and for every name
+	 * while no visibility test is set.
+	 *
+	 * @param name - The name's words, one space apart, as {@link nameKey} joins them.
+	 */
+	isHidden(name: string): boolean {
+		if (this.visible === null) return false;
+		const lines = this.owners.get(name);
+		return lines !== undefined && !this.visible(lines);
+	}
+
+	/**
+	 * Whether {@link match} has passed over a hidden name since this was last
+	 * asked, and start counting again. A program compiled while a name was
+	 * hidden reads its words apart, which is right only above the name's
+	 * definition, so the engine does not keep it for a line below.
+	 */
+	takeHidden(): boolean {
+		const hid = this.hidSome;
+		this.hidSome = false;
+		return hid;
 	}
 
 	/**

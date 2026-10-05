@@ -60,5 +60,27 @@ date against a number has neither reading, so it is refused.
 Two dates on a midnight are counted in calendar days, as `days between` counts
 them, so a change of clocks inside the span does not make it a day short.
 
+## A date in another zone
+
+A day is a step on the calendar, not a fixed 24 hours: on the night the clocks
+go back a day lasts 25 hours, and on the night they go forward 23. So adding a
+day to a date keeps the time its clock shows and moves the date, and a date
+written in a zone (see [time zones](/syntax/time-zones/)) moves on that zone's
+calendar, wherever the engine itself is running. New York's clocks went back
+on 3 November 2024, so a day after noon on the 2nd is noon on the 3rd there,
+while 24 hours after it is 11 in the morning:
+
+```solve
+2024-11-02 12:00 in New York + 1 day // Sunday, November 3, 2024, 12:00:00 PM
+2024-11-02 12:00 in New York + 24 hours // Sunday, November 3, 2024, 11:00:00 AM
+2024-10-30 09:00 in New York + 1 week // Wednesday, November 6, 2024, 9:00:00 AM
+2024-01-31 12:00 in Tokyo + 1 month // Thursday, February 29, 2024, 12:00:00 PM
+```
+
+Weeks, fortnights, months and years step the zone's calendar the same way, and
+a month that runs out of days lands on its last one. Hours and minutes stay
+elapsed time, which is what a duration in hours means. Working days are the one
+step still counted on the engine's own calendar rather than the date's zone.
+
 For a span that skips weekends and holidays, `30 working days from 3 March 2026`
 is the sibling form; see [working days](/syntax/working-days/).

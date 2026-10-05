@@ -50,6 +50,9 @@ const MONTH_NAMES: Record<string, number> = {
 	dec: 11, december: 11,
 };
 
+/** {@link MONTH_NAMES} as a `Map`: own keys only, so `constructor` names no month, and a lookup reads no global. */
+const MONTH_INDEX: ReadonlyMap<string, number> = new Map(Object.entries(MONTH_NAMES));
+
 /**
  * A date phrase recognised inside a stock query, normalised to ISO.
  *
@@ -162,8 +165,8 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 
 		// ── "12 April 2005", NUMBER IDENT [COMMA] NUMBER ──
 		const monthTok = parser.peek();
-		if (monthTok && monthTok.type === "IDENT" && Object.prototype.hasOwnProperty.call(MONTH_NAMES, monthTok.value.toLowerCase())) {
-			const monthIndex = MONTH_NAMES[monthTok.value.toLowerCase()];
+		if (monthTok && monthTok.type === "IDENT" && MONTH_INDEX.has(monthTok.value.toLowerCase())) {
+			const monthIndex = MONTH_INDEX.get(monthTok.value.toLowerCase())!;
 			parser.consume(); // month name
 			if (parser.peek()?.type === "COMMA") parser.consume();
 			const yearTok = parser.consume("NUMBER");
@@ -179,8 +182,8 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 	}
 
 	// ── "April 12, 2005" / "April 12 2005", IDENT NUMBER [COMMA] NUMBER ──
-	if (first.type === "IDENT" && Object.prototype.hasOwnProperty.call(MONTH_NAMES, first.value.toLowerCase())) {
-		const monthIndex = MONTH_NAMES[first.value.toLowerCase()];
+	if (first.type === "IDENT" && MONTH_INDEX.has(first.value.toLowerCase())) {
+		const monthIndex = MONTH_INDEX.get(first.value.toLowerCase())!;
 		parser.consume(); // month name
 		const dayTok = parser.consume("NUMBER");
 		if (parser.peek()?.type === "COMMA") parser.consume();
