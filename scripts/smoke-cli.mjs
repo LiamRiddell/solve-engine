@@ -79,7 +79,10 @@ check("a failed check exits 1", () => expectRun(solve(["check 1 == 2"]), 1, ""))
 check("an unknown option exits 2", () => expectRun(solve(["--bogus"]), 2, ""));
 check("an unknown --tz exits 2", () => expectRun(solve(["--tz", "Europe/Atlantis", "today"]), 2, ""));
 check("a directory exits 2", () => expectRun(solve([scratch]), 2, ""));
-check("a device exits 2", () => expectRun(solve(["/dev/zero"]), 2, ""));
+// Windows has no device path a stat reads, so the path would be read as an
+// expression; the CLI spec skips the same case there.
+if (process.platform === "win32") console.log("  skip  a device exits 2 (no device path on Windows)");
+else check("a device exits 2", () => expectRun(solve(["/dev/zero"]), 2, ""));
 check("--now and --tz pin the clock", () => expectRun(solve(["--now", "2026-01-01T09:00:00Z", "--tz", "Asia/Tokyo", "today"]), 0, "Thursday, January 1, 2026, 6:00:00 PM\n"));
 check("--seed repeats a roll", () => {
 	const a = solve(["--seed", "42", "roll(1, 1000000)"]);
