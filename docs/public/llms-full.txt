@@ -348,6 +348,11 @@ taylor(sin(x), x=0, 5) // x^5/120-x^3/6+x
 jacobian(x*y, x+y) // [y, x; 1, 1]
 ```
 
+```
+(one document)
+der(x^2 + prev, x) // ERROR: der's expression reads other lines of the document, and it is worked out away from the line, where there are no lines to read: give the line's value a name first, as in p = prev, and use p in the expression
+```
+
 ## cancelling-fractions
 
 https://liamriddell.github.io/solve-engine/syntax/cancelling-fractions/
@@ -539,6 +544,13 @@ plot x^2 from -3 to 3 // x^2 over [-3, 3]
 plot sin(x) from 0 to 2pi // sin(x) over [0, 6.28]
 plot 1000 * 1.05^x from 0 to 10 // 1000 * 1.05^x over [0, 10]
 plot 1/x from 0.5 to 5 // 1/x over [0.5, 5]
+```
+
+```
+(one document)
+p = 2 // 2
+plot x + prev from 0 to 1 // ERROR: plot's expression reads other lines of the document, and it is worked out away from the line, where there are no lines to read: give the line's value a name first, as in p = prev, and use p in the expression
+plot x + p from 0 to 1 // x + p over [0, 1]
 ```
 
 ## cheatsheet
@@ -3072,9 +3084,26 @@ Item 2:45 // ERROR: Expected an operator or the end of the line, but found "2:45
 (one document)
 1 + 24:00 // ERROR: "24:00" is not a valid time
 1:23:99 // ERROR: "1:23:99" is not a valid time
+Total: 24:00 // ERROR: "24:00" is not a valid time
+Total: 1000:1002 // ERROR: "1000:1002" is not a valid time
 true ? 25 : 30 // ERROR: There is no choice written with "?" and ":": write if true then 25 else 30
 a > b: 1 // ERROR: "a > b" before the colon is a comparison, not a label: a label names the figure in words, and a choice is written if ... then ... else
 (1+2): 5 // ERROR: "(1+2)" before the colon is a calculation, not a label: a label names the figure in words
+```
+
+```
+(one document)
+٢٤:00 // ERROR: "٢٤" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 24
+Total: ٢٤:00 // ERROR: "٢٤" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 24
+Start: ٩:٣٠ // ERROR: "٩" is written in digits the engine does not read: numbers are written in the digits 0 to 9, as in 9
+Week ٢: 5 // 5
+```
+
+```
+(one document)
+Total: average(10:12) // ERROR: In average(...), 10:12 is a clock time, not a range, and a time cannot be averaged: a colon between two numbers is a range only as the list of sum, prod, map or reduce. To average numbers, list them with commas, as in average(1, 2, 3).
+Total: (1 + 2 // ERROR: The line ends where ")" was expected
+Rent: $1200 + // ERROR: The line ends after "+", where a value was expected
 ```
 
 ```
@@ -3298,6 +3327,13 @@ sum(x, [1 hour, 30 min]) // 1.50 hours
 
 ```
 (one document)
+sum(100:200, 50) // ERROR: In sum(...), 100:200 is a range, and a range is read only as the last argument, the list sum works through. To add other numbers in as well, write them outside the call: sum(100:200) + 50.
+sum(100:200) + 50 // 15,200
+map(100:200, 5) // ERROR: In map(...), 100:200 is a range, and a range is read only as the last argument, the list map works through. Write the expression first and the range last, as in map(x * 2, 100:200).
+```
+
+```
+(one document)
 sum(1,0000:1) // ERROR: "1,0000" is not a number: a grouping comma needs exactly three digits after it. To give two values, put a space after the comma: 1, 0000.
 sum(12,3456:1) // ERROR: "12,3456" is not a number: a grouping comma needs exactly three digits after it. To give two values, put a space after the comma: 12, 3456.
 sum(1, 0000:1) // 2
@@ -3318,6 +3354,15 @@ sum(x * 2, xs) // 12
 sum(5:1) // ERROR: A range's min (5) cannot be greater than its max (1). Did you mean "1:5"?
 total(1 + 24:00) // ERROR: A range's min (1 + 24, which is 25) cannot be greater than its max (00, which is 0). Did you mean "0:25"?
 total(2*3:1) // ERROR: A range's min (2*3, which is 6) cannot be greater than its max (1). Did you mean "1:6"?
+```
+
+```
+(one document)
+5 // 5
+map(x + prev, 1:3) // ERROR: map's expression reads other lines of the document, and it is worked out away from the line, where there are no lines to read: give the line's value a name first, as in p = prev, and use p in the expression
+p = 5 // 5
+map(x + p, 1:3) // [6, 7, 8]
+sum(x + p, 1:3) // 21
 ```
 
 ## moles
@@ -3749,6 +3794,13 @@ atanh(0.5) // 0.55
 trunc(3.7 m) // 3.00 m
 hypot(3 m, 400 cm) // 5.00 m
 fact(3 m) // ERROR: fact takes a plain number, not a length
+```
+
+```
+(one document)
+sqrt([4, 9]) // [2, 3]
+root(3, [8, 27]) // ERROR: root takes numbers, not a list: a list holds several numbers, and root works on one at a time. To work it out for each number, use map, with x standing for each one.
+map(root(3, x), [8, 27]) // [2, 3]
 ```
 
 ```
@@ -4678,6 +4730,22 @@ round(-2.5) // -3
 37 to nearest 10 // 40
 490 rounded to nearest hundred // 500
 21 rounded up to nearest 5 // 25
+```
+
+```
+[0.001, 0.006] to 4 dp // [0.0010, 0.0060]
+map(x/1000, 1:3) to 4 dp // [0.0010, 0.0020, 0.0030]
+round([1.5, 2.4]) // [2, 2]
+[1.005, 2.675] to 2 dp // [1.01, 2.68]
+[1234, 0.5] to 2 sf // [1,200, 0.50]
+[12, 37] to nearest 10 // [10, 40]
+[1 km, 2.345 km] to 1 dp // [1.0 km, 2.3 km]
+```
+
+```
+[1234, 5678] as sci // A list cannot be written in scientific notation: it holds several numbers, not one. Convert one value at a time.
+[0.5, 0.25] as % // A list cannot be written as a percentage: it holds several numbers, not one. Convert one value at a time.
+[true, false] to 2 dp // A list can be rounded only when every cell is a number: this one holds a true or false.
 ```
 
 ## savings-goals
@@ -6809,6 +6877,14 @@ det([1 km, 2 km; 3 km, 4 km]) // A determinant of a list in km is not covered: m
 ```
 
 ```
+sqrt([4, 9]) // [2, 3]
+sqrt([4, 9; 16, 25]) // [2, 3; 4, 5]
+sin([30 deg, 90 deg]) // [0.50, 1]
+[3, 4]! // [6, 24]
+sqrt([4 m2, 9 m2]) // [2.00 m, 3.00 m]
+```
+
+```
 [1, 2; 3, 4] * [1; 2] // [5; 11]
 ```
 
@@ -6844,6 +6920,19 @@ det([1,2;3,4]) // -2
 ```
 (one document)
 [(1, 2), 3] // ERROR: A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3].
+```
+
+```
+(one document)
+sqrt([4, -9]) // ERROR: sqrt of -9 in this list has no real answer, and a list holds real numbers. Work that number out on its own line.
+ln([1, 0]) // ERROR: ln(0) has no real value: ln is only defined for positive numbers.
+sqrt([true, 4]) // ERROR: sqrt works on a list only when every cell is a number: this one holds a true or false.
+```
+
+```
+(one document)
+gcd([4, 6], 2) // ERROR: gcd takes numbers, not a list: a list holds several numbers, and gcd works on one at a time. To work it out for each number, use map, with x standing for each one.
+map(gcd(x, 2), [4, 6]) // [2, 2]
 ```
 
 ```
