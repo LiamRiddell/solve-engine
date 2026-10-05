@@ -242,7 +242,7 @@
   },
   "devDependencies": {
     "@jest/globals": "^30.5.2",
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "convert": "^7.0.0",
     "jest": "^30.5.2",
     "temporal-polyfill": "1.0.5",
