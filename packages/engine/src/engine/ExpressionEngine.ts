@@ -101,6 +101,7 @@ import {
 } from "@solve-js/engine/ExpressionEngineSafety";
 import { containsSymbolicCall } from "@solve-js/packages/symbolic";
 import { solveEquationValues } from "@solve-js/vm/SymbolicOps";
+import { readsWithoutValue } from "@solve-js/vm/LineReads";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
@@ -136,8 +137,9 @@ import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { trailingTokenWording } from "@solve-js/parser/ParseMessages";
 import { wordLabelEnd } from "@solve-js/engine/WordLabel";
 import { MultiWordNameTable, multiWordDefinitionRule, multiWordNameRule, multiWordNameRefusal } from "@solve-js/packages/variables/MultiWordNames";
-import { isTopLevel, namesSomething, severalUnknownsRefusal } from "@solve-js/engine/SeveralUnknowns";
+import { isTopLevel, namesSomething, severalUnknownsRefusal, typedText, undefinedFactorMessage } from "@solve-js/engine/SeveralUnknowns";
 import { documentErrors, errorOnLine, inlineExpressionOffset, lineFailureOf, recordLineFailure } from "@solve-js/engine/LineDiagnostics";
+import { NO_HIDDEN_DIRECTIONS, directionControlRefusal, findHiddenDirections, hasDirectionControl, hiddenDirectionToRefuse, type HiddenDirection } from "@solve-js/engine/DirectionControls";
 import {
     type DiagnosticPipelineResult,
     type PipelineStageResult,
@@ -496,6 +498,12 @@ interface FailedParse {
      * handed to the caller, which may change it.
      */
     span: SourceSpan | undefined;
+    /**
+     * The words holding a direction control the text was lexed with (see
+     * engine/DirectionControls.ts). A replay is not lexed again, so this is
+     * how it still knows to keep such a line out of the effectful shapes.
+     */
+    hidden: readonly HiddenDirection[];
 }
 
 /**
@@ -3019,6 +3027,50 @@ export class ExpressionEngine {
         return this.accumulatorNames.has(name);
     }
 
+    /**
+     * The names the document's lines define that this engine still holds: its
+     * variables, names of several words among them (`hourly rate`), and its
+     * functions (`f(x) = x * 2` gives `f`).
+     *
+     * The same after whichever pass ran: `parseDocument`, `evaluateLines`,
+     * `evaluateDocument`, a live editor's incremental pass, or `evaluateLine`
+     * on a numbered line. A name only read (`x * 2` where nothing defines `x`)
+     * is not among them, nor one set outside a document
+     * (`evaluateExpression(":x = 5")`), nor one whose defining line was edited
+     * away or deleted. {@link clear} and the next document pass empty it.
+     *
+     * The language service's default `variableNameSource` reads this.
+     *
+     * @returns Each name once, in the order first defined. A fresh iterator on
+     * every call over the engine's own table rather than a copy, so asking on
+     * every keystroke allocates no list.
+     */
+    *documentVariableNames(): IterableIterator<string> {
+        for (const name of this.documentNames) {
+            // A name a line wrote that no longer holds a value or a function
+            // (a restore took it back) is not offered: the VM is asked, so the
+            // answer is what a reader of the name would find.
+            if (this.holdsDocumentName(name)) yield name;
+        }
+    }
+
+    /**
+     * Whether `name` is one of {@link documentVariableNames}, answered without
+     * walking them: the language service asks it of every line holding a lone
+     * word.
+     *
+     * @param name - The name as written, case and spaces included.
+     * @returns True when a document line defines it and the engine still holds it.
+     */
+    isDocumentVariableName(name: string): boolean {
+        return this.documentNames.has(name) && this.holdsDocumentName(name);
+    }
+
+    /** Whether the VM still binds `name` as a value or a function. */
+    private holdsDocumentName(name: string): boolean {
+        return this.vm.getVar(name) !== undefined || this.vm.hasUserFunction(name);
+    }
+
     /** The names of every user-defined unit in scope, for detecting a removal. */
     /**
      * The names of the units the document in progress defines, for the evaluator to tell whether a pass removed one.
@@ -3960,6 +4012,7 @@ export class ExpressionEngine {
             if (stillDefined.has(name)) continue;
             forgotten.push(name);
             this.vm.deleteVar(name);
+            this.documentNames.delete(name);
             // A name can be a function as easily as a variable, and a function
             // whose defining line was edited away stayed callable until now.
             if (this.vm.hasUserFunction(name)) this.vm.deleteUserFunction(name);
@@ -4900,10 +4953,9 @@ export class ExpressionEngine {
         for (const name of equation.factorNames) {
             const v = this.vm.getVar(name);
             if (v === undefined) {
-                return errorValue(
-                    'EQUATION_FACTOR_UNDEFINED',
-                    `Cannot solve for "${equation.variable}": "${name}" is not yet defined.`,
-                );
+                // Pointing at `solve`, which answers `b/a` for `a*x = b`; the
+                // product path multiplies values and has none here.
+                return errorValue('EQUATION_FACTOR_UNDEFINED', undefinedFactorMessage(equation.variable, name, equation.text));
             }
             if (v.type !== ValueType.Matrix) {
                 return errorValue(
@@ -5224,7 +5276,13 @@ export class ExpressionEngine {
         if (refusedName !== null) throw refusedName;
 
         const names = this.parseFactorChain(normalizedTokens.slice(0, eqIdx));
-        if (names === null) {
+        // A chain with `π` or `ans` in it (`x*π = 2`) is not a product of
+        // matrices: those names read as values, so the line is the scalar
+        // equation it looks like, solved for its one real unknown rather than
+        // keyed by π. A single name (`π = 3`) is still an assignment.
+        const chainReadsAValue = names !== null && names.length > 1
+            && names.some(name => readsWithoutValue(name) && this.vm.getVar(name) === undefined);
+        if (names === null || chainReadsAValue) {
             // Not a product chain. It may still be a general scalar equation
             // (`x^2-4 = 0`), which is a strictly narrower attempt made only
             // after every existing shape has declined. See
@@ -5263,7 +5321,7 @@ export class ExpressionEngine {
             this.compileAdHoc(normalizedTokens.slice(0, eqIdx));
             return { value: CHECKED_NOT_RUN, assigned: null };
         }
-        this.vm.defineEquation(freeVar, factorNames, this.compileAdHoc(rhsTokens));
+        this.vm.defineEquation(freeVar, factorNames, this.compileAdHoc(rhsTokens), typedText(normalizedTokens));
         this.noteEquationOwner("matrix", freeVar, lineNumber);
         // Also stored as a scalar equation, so that `a*n = 10` with a numeric
         // `a` still has an answer. Which of the two kinds applies depends on
@@ -5360,6 +5418,7 @@ export class ExpressionEngine {
             const token = tokens[i];
             if (!namesSomething(tokens, i) || named.includes(token.value)) continue;
             if (this.vm.getVar(token.value) !== undefined || this.vm.hasUserFunction(token.value)) continue;
+            if (readsWithoutValue(token.value)) continue;
             named.push(token.value);
         }
         if (named.length < 2 || !isTopLevel(tokens, eqIdx)) return null;
@@ -5391,6 +5450,8 @@ export class ExpressionEngine {
             if (token.type !== 'IDENT' && token.type !== 'UNIT') continue;
             if (this.vm.getVar(token.value) !== undefined) continue;
             if (this.vm.hasUserFunction(token.value)) continue;
+            // `π` and `ans` read as values, so `2x = π` has one unknown.
+            if (readsWithoutValue(token.value)) continue;
             if (!unknowns.includes(token.value)) unknowns.push(token.value);
         }
         return unknowns;
@@ -5612,22 +5673,34 @@ export class ExpressionEngine {
         // user-unit definition records neither: it reads no name, and what it
         // defines is a unit, tracked by the unit table rather than the graph.
         let symbolicReadsWrites: { reads: string[]; writes: string[] } | null = null;
+        // Words holding an invisible direction control (`<U+202E>rent`), which
+        // no name may hold; see engine/DirectionControls.ts. The line's text is
+        // tested first, so a line without one pays a single scan of it. A
+        // replayed failure was not lexed again, and carries its own.
+        const hidden = failed ? failed.hidden : hasDirectionControl(expression) ? findHiddenDirections(tokens) : NO_HIDDEN_DIRECTIONS;
+        // A line with a word holding a direction control is only matched
+        // against the effectful shapes, never run through one: each stores or
+        // reads a name before any parse could refuse it. A line that has one of
+        // those shapes is a definition or a running total, so the word is a
+        // name and the line is refused; any other line is parsed below, where
+        // the refusal is decided.
+        const shapeEffects: EffectMode = hidden.length > 0 ? "check" : effects;
         try {
             // A user-unit definition (`1 sprint = 2 weeks`) is an effectful line
             // like the symbolic shapes below, so it rides the same non-bytecode
             // channel. Checked first, so it claims its narrow pattern before the
             // scalar-equation grammar sees the bare `=`.
             const definingLineId = this.documentModel?.getLineAt(lineNumber)?.lineId ?? -1;
-            symbolicResult = this.tryDefineUserUnit(normalizedTokens, definingLineId, effects);
+            symbolicResult = this.tryDefineUserUnit(normalizedTokens, definingLineId, shapeEffects);
             if (symbolicResult === null) {
-                const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber, effects);
+                const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber, shapeEffects);
                 if (compound !== null) {
                     symbolicResult = compound;
                     symbolicReadsWrites = extractReadsAndWrites(normalizedTokens);
                 }
             }
             if (symbolicResult === null) {
-                const symbolic = this.trySymbolicGrammar(normalizedTokens, lineNumber, effects);
+                const symbolic = this.trySymbolicGrammar(normalizedTokens, lineNumber, shapeEffects);
                 if (symbolic?.colonForm !== undefined) {
                     normalizedTokens = symbolic.colonForm;
                 } else if (symbolic !== null) {
@@ -5646,9 +5719,14 @@ export class ExpressionEngine {
             // yet parse, so a caller tracking dependencies can re-evaluate it
             // once the user finishes typing.
             const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+            if (hidden.length > 0) return this.refuseHiddenDirection(expression, hidden[0], normalizedTokens, reads, writes, tokens, hidden);
             return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes, normalizedTokens };
         }
         if (symbolicResult !== null) {
+            if (hidden.length > 0) {
+                const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+                return this.refuseHiddenDirection(expression, hidden[0], normalizedTokens, reads, writes, tokens, hidden);
+            }
             return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: symbolicReadsWrites?.reads, writes: symbolicReadsWrites?.writes };
         }
         if (failed) {
@@ -5668,11 +5746,16 @@ export class ExpressionEngine {
         } catch (e) {
             const error = normalizeUnknownError(e);
             const { reads, writes } = extractReadsAndWrites(normalizedTokens);
-            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span } });
+            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span }, hidden });
             return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
         }
 
         const { reads, writes } = extractReadsAndWrites(frozenLine?.operand ?? normalizedTokens);
+
+        if (frozenLine?.program && hidden.length > 0) {
+            const refused = hiddenDirectionToRefuse(hidden, this.codeStartOffset(frozenLine.operand));
+            if (refused !== null) return this.refuseHiddenDirection(expression, refused, normalizedTokens, reads, writes, tokens, hidden);
+        }
 
         // ══ BYTECODE CACHE / PARSE+COMPILE ══
         // Reached with a cached program only when its front half is missing
@@ -5714,6 +5797,11 @@ export class ExpressionEngine {
                 program = builder.build();
             }
         } catch (e) {
+            if (hidden.length > 0) {
+                const thrown = normalizeUnknownError(e);
+                const refused = hiddenDirectionToRefuse(hidden, null, thrown.span?.start);
+                if (refused !== null) return this.refuseHiddenDirection(expression, refused, normalizedTokens, reads, writes, tokens, hidden);
+            }
             // reads/writes were already extracted above from the full token
             // list (independent of whether parsing succeeds), returned
             // alongside the error (not merged into its context here, since
@@ -5723,12 +5811,50 @@ export class ExpressionEngine {
             // learn what this line references and can re-evaluate it once
             // those variables become defined.
             const error = normalizeUnknownError(e);
-            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span } });
+            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span }, hidden });
             return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
+        }
+
+        if (hidden.length > 0) {
+            const refused = hiddenDirectionToRefuse(hidden, this.codeStartOffset(normalizedTokens));
+            if (refused !== null) return this.refuseHiddenDirection(expression, refused, normalizedTokens, reads, writes, tokens, hidden);
         }
 
         this.cacheBytecode(expression, program, { normalizedTokens, reads, writes });
         return { kind: 'ready', normalizedTokens, reads, writes, program, cached: false, parserAlloc };
+    }
+
+    /**
+     * Where the code part of a line that just parsed begins: the offset of the
+     * first token past the label the parse set aside, so a label's words (prose)
+     * are not held to the rules a name is.
+     *
+     * @param tokens - The tokens the parse was given.
+     */
+    private codeStartOffset(tokens: readonly Token[]): number {
+        return tokens[this.parsedLabelEnd]?.offset ?? tokens[0]?.offset ?? 0;
+    }
+
+    /**
+     * The parse failure for a line with a word holding a direction control
+     * (see engine/DirectionControls.ts), remembered like any other failure so
+     * the next evaluation of the same text does not parse it again.
+     *
+     * @param hidden - The word the refusal names.
+     * @param all - Every such word on the line, for the remembered failure.
+     */
+    private refuseHiddenDirection(
+        expression: string,
+        hidden: HiddenDirection,
+        normalizedTokens: Token[],
+        reads: string[],
+        writes: string[],
+        tokens: Token[],
+        all: readonly HiddenDirection[],
+    ): { kind: 'error'; stage: 'parse'; error: EngineError; reads: string[]; writes: string[]; normalizedTokens: Token[] } {
+        const error = directionControlRefusal(hidden);
+        this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span }, hidden: all });
+        return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
     }
 
     /**
@@ -7826,12 +7952,16 @@ export class ExpressionEngine {
 	readExpressionTokens(expression: string, units: readonly DocumentUnit[] = [], names: readonly string[] = []): ExpressionTokens | null {
 		if (expression.length > this.config.validation.maxExpressionLength) return null;
 		let tokens: Token[];
+		// Words holding a direction control, which compiling refuses as names
+		// (see engine/DirectionControls.ts); read from the lexer's own tokens.
+		let hidden: readonly HiddenDirection[] = NO_HIDDEN_DIRECTIONS;
 		try {
 			// Lexed afresh even when the expression is compiled and cached: the
 			// cached tokens are not guaranteed to be the ones a fresh read of this
 			// text produces once a user unit has been defined or dropped since.
 			const raw = this.lexToTokens(expression, undefined, false).tokens;
 			if (raw.length === 0) return null;
+			if (hasDirectionControl(expression)) hidden = findHiddenDirections(raw);
 			// The note's own units are in place for the normaliser, which is the
 			// one stage that reads them, and gone again before this returns.
 			tokens = this.userUnits.withUnits(units, () => this.multiWordNames.withNames(names, () => this.normalizer.normalize(raw)));
@@ -7889,6 +8019,7 @@ export class ExpressionEngine {
 		// 4 hours`), which neither side would parse as on its own.
 		const unit = userUnitDefinitionShape(tokens);
 		if (unit !== null) {
+			if (hidden.length > 0) return null;
 			return {
 				tokens,
 				start: 0,
@@ -7903,8 +8034,15 @@ export class ExpressionEngine {
 		const last = tokens.length - 1;
 		if (tokens[last].type === 'EQUALS' && last > 0 && isNameProduct(tokens, last)) return null;
 
-		if (this.parsesWhole(tokens, hasParens)) return { tokens, start: this.parsedLabelEnd, unit: null };
-		if (this.readsAsStatement(tokens, hasParens)) return { tokens, start: 0, unit: null };
+		// A statement shape stores or reads a name, so a word holding a
+		// direction control refuses it outright, as compiling does; a parsed
+		// line is refused only when such a word is past its label.
+		if (this.parsesWhole(tokens, hasParens)) {
+			const start = this.parsedLabelEnd;
+			if (hidden.length > 0 && hiddenDirectionToRefuse(hidden, this.codeStartOffset(tokens)) !== null) return null;
+			return { tokens, start, unit: null };
+		}
+		if (hidden.length === 0 && this.readsAsStatement(tokens, hasParens)) return { tokens, start: 0, unit: null };
 		return null;
 	}
 
@@ -8394,6 +8532,9 @@ export class ExpressionEngine {
             // checkpoint does not have to widen its format to carry them, and a
             // restore cannot silently drop the edges a tagged line had.
             this.registerLineWithTags(e.line, e.expression, e.reads, e.writeVar ? [e.writeVar] : []);
+            // The line's name was the document's on the engine that evaluated
+            // it, so the restored engine offers it as one too.
+            if (e.line >= 1 && e.writeVar) this.documentNames.add(e.writeVar);
         }
         for (const { expression, program } of snapshot.bytecodeCache) {
             const restored = restoreBytecode(program, link);

@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { DELETED_LINE_REF } from "../normalizer/LineRefNormalizerRule";
 import { DELETED_LINE_NUMBER } from "../LinesPluginFunctions";
+import { aggregateRangeRefusal } from "@solve-js/packages/mathphrases/parselets/AggregateRangeArgument";
 
 /**
  * `sum(line 1 : line 4)` / `total(line 1 : line 4)` / `average(line 1 :
@@ -37,6 +38,12 @@ export class RangeAggregateParselet implements PrefixParselet {
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     parser.consume("LPAREN");
+    // `average(1:3)` and `total(1:3)`: a colon between two numbers is a clock
+    // time here, and the line reference this call wants was never written.
+    if (parser.peek()?.type !== "LINE_REF") {
+      const range = aggregateRangeRefusal(parser, String(token.value));
+      if (range) throw range;
+    }
     const fromToken = parser.consume("LINE_REF");
     parser.consume("COLON");
     const toToken = parser.consume("LINE_REF");

@@ -51,7 +51,7 @@ is conventional for a calculator. With two bounds after the variable it is a
 [definite integral](#definite-integrals) instead, an area.
 
 ```solve
-integral(x^2, x) // 1/3x^3
+integral(x^2, x) // x^3/3
 integral(3x^2+2x+1, x) // x^3+x^2+x
 integral(cos(x), x) // sin(x)
 integral(1/x, x) // log(x)
@@ -240,8 +240,8 @@ expression with a second unknown in it.
 `taylor(expression, variable = point, degree)` expands about a point.
 
 ```solve
-taylor(exp(x), x=0, 4) // 1/24x^4+1/6x^3+0.5x^2+x+1
-taylor(sin(x), x=0, 5) // 1/120x^5-1/6x^3+x
+taylor(exp(x), x=0, 4) // x^4/24+x^3/6+0.5x^2+x+1
+taylor(sin(x), x=0, 5) // x^5/120-x^3/6+x
 ```
 
 The coefficients are exact, because each one is a derivative evaluated at the

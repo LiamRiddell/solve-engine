@@ -1665,6 +1665,88 @@ describe("names of several words across entry points (#743)", () => {
   });
 });
 
+describe("the document's names in the language service, across entry points", () => {
+  // Completions and the lone-word highlight read the names the whole document
+  // defines, so they are a whole-document read. The language service's default
+  // source knew none after the batch pass, since it read the dependency graph,
+  // which only the incremental pass fills for a plain assignment.
+  const doc = ["rent = 1200", "rate = 5", "hourly rate = $50", "f(x) = x * 2", "rent * missing", "re"];
+
+  /** The completion labels and categories for `prefix`, and whether a lone `word` line is highlighted, over `engine`. */
+  function readNames(engine: ExpressionEngine, prefix: string, word: string): { offered: string[]; highlighted: boolean } {
+    const ls = new LanguageService(engine);
+    return {
+      offered: ls.getCompletions(prefix, prefix.length).map((c) => `${c.label}:${c.category}`),
+      highlighted: ls.getSemanticTokens(word, 1).length > 0,
+    };
+  }
+
+  /** The same reading with only the document's own variables kept. */
+  function variablesOf(read: { offered: string[]; highlighted: boolean }): { offered: string[]; highlighted: boolean } {
+    return { offered: read.offered.filter((item) => item.endsWith(":variable")), highlighted: read.highlighted };
+  }
+
+  test.each([["re", "rent"], ["r", "rate"], ["h", "hourly"], ["f", "f"], ["mis", "missing"]])("%j: both document passes give the same completions and the same lone-word answer", (prefix, word) => {
+    const batchEngine = newTrackedEngine();
+    batchEngine.parseDocument(doc.join("\n"));
+    const incrementalEngine = newTrackedEngine();
+    evaluateDocument(incrementalEngine, doc.join("\n"));
+    expect(readNames(incrementalEngine, prefix, word)).toEqual(readNames(batchEngine, prefix, word));
+  });
+
+  test("the batch pass offers each defined name, and neither a name only read nor the half-typed word", () => {
+    const engine = newTrackedEngine();
+    engine.parseDocument(doc.join("\n"));
+    expect([...engine.documentVariableNames()]).toEqual(["rent", "rate", "hourly rate", "f"]);
+    expect(variablesOf(readNames(engine, "re", "rent"))).toEqual({ offered: ["rent:variable"], highlighted: true });
+    expect(readNames(engine, "mis", "missing").highlighted).toBe(false);
+  });
+
+  test("a rename in a live editor offers the new name and drops the old, as a fresh pass of the edited text does", () => {
+    const live = new DocumentModel();
+    live.setDocument(doc.join("\n"));
+    const engine = newTrackedEngine();
+    const evaluator = new ThreeTierEvaluator(live, engine);
+    try {
+      evaluator.evaluate({ startLine: 1, endLine: live.lineCount });
+      live.editLine(1, "rental = 1200");
+      evaluator.evaluate({ startLine: 1, endLine: live.lineCount });
+      const fresh = newTrackedEngine();
+      fresh.parseDocument(["rental = 1200", ...doc.slice(1)].join("\n"));
+      expect(readNames(engine, "ren", "rent")).toEqual(readNames(fresh, "ren", "rent"));
+      expect(variablesOf(readNames(engine, "ren", "rent"))).toEqual({ offered: ["rental:variable"], highlighted: false });
+    } finally {
+      evaluator.terminateWorker();
+    }
+  });
+
+  test("the single-expression path: a name set outside a document is not offered, and nothing throws", () => {
+    // Not an Error value: completions are a list, so the honest answer for a
+    // path with no document is an empty one, and the name still evaluates.
+    const engine = newTrackedEngine();
+    engine.evaluateExpression("rent = 1200");
+    expect(variablesOf(readNames(engine, "re", "rent"))).toEqual({ offered: [], highlighted: false });
+    expect(engine.evaluateNumber("rent")).toBe(1200);
+  });
+
+  test("the worker's completions after its parseDocument offer the document's names, as after its evaluateDocument", async () => {
+    const { client, host } = createLinkedTransports();
+    const stopRuntime = startWorkerRuntime(host);
+    const worker = await createWorkerEngine({ transport: client });
+    try {
+      await worker.parseDocument(doc.join("\n"));
+      const afterBatch = (await worker.getCompletions("re", 2)).filter((c) => c.category === "variable").map((c) => c.label);
+      await worker.evaluateDocument(doc.join("\n"));
+      const afterIncremental = (await worker.getCompletions("re", 2)).filter((c) => c.category === "variable").map((c) => c.label);
+      expect(afterBatch).toEqual(["rent"]);
+      expect(afterIncremental).toEqual(afterBatch);
+    } finally {
+      worker.terminate();
+      stopRuntime();
+    }
+  });
+});
+
 describe("a possessive name of several words across entry points", () => {
   // The straight apostrophe after a letter is part of its word, as the curly
   // one always was, and a name's value reads either as the straight one. The
@@ -1729,6 +1811,37 @@ describe("an unknown under the arrow across entry points", () => {
     const { shown, edited } = editThenEvaluate(["x = 1", "foo percent =>"], [[1, "foo = 12"]]);
     expect(shown).toEqual(batch(edited));
     expect(shown[1]).toBe("12.00%");
+  });
+});
+
+describe("a product equation and the line above under the arrow, across entry points", () => {
+  // `a*x = b` with `a` unknown points at `solve`, which answers `b/a`
+  // (FoundBug_productEquationUndefinedFactor); `ans` under the arrow is the
+  // line above, as it is without the arrow (FoundBug_constantUnderTheArrow).
+  const solveHint = 'Cannot solve for "x": "a" is not yet defined. Give "a" a value on a line above, or solve for "x" in terms of it with solve(a*x = b, x).';
+
+  test("both passes give the refusal, and the solve it names answers", () => {
+    const doc = ["a*x = b", "x =>", "solve(a*x = b, x)"];
+    expect(batch(doc)).toEqual(['x stored as an equation: solve with "x =>"', `ERROR: ${solveHint}`, "b/a"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an edit that gives the factor a value solves it in a live editor, as a fresh pass does", () => {
+    const { shown, edited } = editThenEvaluate(["b = 1", "a*x = 10", "x =>"], [[1, "a = 4"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[2]).toBe("2.5");
+  });
+
+  test("the single-expression path: the equation has no document to keep it, and the solve answers", () => {
+    expect(single("solve(a*x = b, x)").message).toBe("b/a");
+    expect(single("x =>").message).toBe("x");
+  });
+
+  test("ans under the arrow reads the line above on both passes, and needs a document on its own", () => {
+    const doc = ["2 + 3", "ans km =>", "3", "ans * x =>"];
+    expect(batch(doc)).toEqual(["5", "5.00 km", "3", "3x"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+    expectNeedsDocument("ans km =>");
   });
 });
 

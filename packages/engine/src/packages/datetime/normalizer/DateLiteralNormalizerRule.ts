@@ -261,6 +261,23 @@ const ISO_TOKEN_TYPES = new Set(["NUMBER", "MINUS", "PLUS", "COLON", "IDENT"]);
 const ISO_MAX_TOKENS = 16;
 
 /**
+ * Whether the token after a number could carry on a date literal, so the rule
+ * is worth trying at all: a second number (the year of `25.12.2026`, which the
+ * lexer splits at its second dot), a slash or a minus (`25/12/2026`,
+ * `2026-03-11`), or a token whose text opens with `-` (the rest of an ISO
+ * timestamp, however a lexer splits it). Anything else ends every shape the
+ * rule reads, and the rule is tried at every number of every line, so this
+ * turns `12 + 34` away before the calendar is read or any pattern runs.
+ *
+ * @param next - The token after the number, or `undefined` at the line's end.
+ */
+export function mayContinueDate(next: Token | undefined): boolean {
+  if (next === undefined) return false;
+  const type = next.type;
+  return type === "NUMBER" || type === "SLASH" || type === "MINUS" || next.text.charCodeAt(0) === 45;
+}
+
+/**
  * Fuses a bare (unquoted) ISO 8601 timestamp into one DATETIME_LITERAL.
  *
  * `Iso8601.ts` could always parse this shape, and still does the parsing here;
@@ -415,6 +432,7 @@ export function dateLiteralNormalizerRule(
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       const t0 = tokens[pos];
       if (t0.type !== "NUMBER") return null;
+      if (!mayContinueDate(tokens[pos + 1])) return null;
       const calendar = getCalendar();
 
       // ── Dot format: 2-token window (see module doc) ──────────────────

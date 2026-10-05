@@ -62,8 +62,10 @@ function differs(key, expected, actual) {
 // ── Settings that must be identical ──────────────────────────────────────
 // Not every key: `roots`, `rootDir` and `setupFiles` differ by construction,
 // and are checked in their own shape below.
+// `testEnvironment` is a path into the engine package (its own environment,
+// `tools/jestEnvironment.cjs`), so it is compared as the engine would write it.
 for (const key of ["preset", "testEnvironment", "coverageProvider"]) {
-	if (JSON.stringify(rootConfig[key]) !== JSON.stringify(engineConfig[key])) {
+	if (JSON.stringify(asEngineWouldWrite(rootConfig[key])) !== JSON.stringify(engineConfig[key])) {
 		differs(key, rootConfig[key], engineConfig[key]);
 	}
 }

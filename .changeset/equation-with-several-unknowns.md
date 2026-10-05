@@ -6,7 +6,7 @@ An equation on a line of its own with several unknowns is refused by name, sayin
 
 An equation line is stored under its one unknown, the one name in it with no value, and asking for that name with the arrow solves it. With two or more unknowns there is no telling which one a later arrow means, so the line is not stored, as the solving-equations page says. It fell through to the ordinary parse, which stops at the `=`: Calca's `(salary / 12) * rate / 100 = net` answered `Expected an operator or the end of the line, but found "="`, and `rate =>` on the next line answered `rate` (found while collecting the other-apps parity corpus). The line is now refused by name with a new code, `EQUATION_SEVERAL_UNKNOWNS`, listing the unknowns and the two ways to write it: give the others values on the lines above, which leaves one, or name the unknown with `solve`.
 
-Supporting the line was weighed and not done. Storing it under every unknown would turn every `a + b = c` line, a parse error until now, into a stored equation, and the answer to the Calca example would be the algebra's unsimplified `net/(1/1200salary)` rather than the `1200net/salary` Calca documents. The refusal is the smaller honest change, and the two forms it points at already answer.
+Supporting the line was weighed and not done. Storing it under every unknown would turn every `a + b = c` line, a parse error until now, into a stored equation. The refusal is the smaller honest change, and the two forms it points at already answer.
 
 | line | before | now |
 | --- | --- | --- |

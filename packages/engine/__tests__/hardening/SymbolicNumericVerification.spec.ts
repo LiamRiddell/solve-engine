@@ -1009,7 +1009,7 @@ describe("naming a variable as a verb's unknown shadows the value the document g
 		// d/dx of x^3/3 is x^2, which is the check the integral block above
 		// makes for every integrand; here what matters is that it is a
 		// polynomial in x at all rather than the `25x` it used to be.
-		expect(formatSymbolic(antiderivative.value as SymbolicNode)).toBe("1/3x^3");
+		expect(formatSymbolic(antiderivative.value as SymbolicNode)).toBe("x^3/3");
 	});
 
 	test("taylor expands the function rather than the number", () => {
@@ -1105,7 +1105,9 @@ describe("a printed algebraic answer re-reads as the value it printed", () => {
 		expect(formatSymbolic(symbolicResult(engine, "der(sqrt(x), x)"))).toBe("1/(2*sqrt(x))");
 		expect(formatSymbolic(symbolicResult(engine, "1/(2x) =>"))).toBe("1/(2x)");
 		expect(formatSymbolic(symbolicResult(engine, "1/(x*y) =>"))).toBe("1/(x*y)");
-		expect(formatSymbolic(symbolicResult(engine, "a/(b/c) =>"))).toBe("a/(b/c)");
+		// A quotient under a quotient is turned over by the simplifier, so it
+		// reads plainly rather than relying on its brackets.
+		expect(formatSymbolic(symbolicResult(engine, "a/(b/c) =>"))).toBe("a*c/b");
 		engine.clear();
 	});
 });

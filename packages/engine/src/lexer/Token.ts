@@ -438,9 +438,11 @@ export const TokenTypes = {
   // assuming" before parsing ever ran.
   ASSUMING: "ASSUMING",
   // Fused by a custom NormalizerRule (not `phrases`), carrying the
-  // year as its value -- see
-  // finance/normalizer/InYearDollarsNormalizerRule.ts.
+  // year as its value, one type per currency the phrase names -- see
+  // finance/normalizer/InYearMoneyNormalizerRule.ts.
   IN_YEAR_DOLLARS: "IN_YEAR_DOLLARS",
+  IN_YEAR_POUNDS: "IN_YEAR_POUNDS",
+  IN_YEAR_EUROS: "IN_YEAR_EUROS",
   // Cooking/UoM (packages/uom/) -- fused ingredient name (single- or
   // multi-word, e.g. "butter"/"olive oil") carrying the matched name
   // as its value. NOT a bare-word phrase-trie keyword -- see

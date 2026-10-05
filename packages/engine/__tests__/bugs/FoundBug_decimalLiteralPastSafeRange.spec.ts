@@ -73,8 +73,11 @@ describe("the lines that exposed it", () => {
 		expect(shown("9007199254740993")).toBe("9,007,199,254,740,993");
 	});
 
-	test("the boundary: a unit, and a result with no exact reading, keep their double", () => {
-		expect(shown("9007199254740993.5 m")).toBe("9,007,199,254,740,994.00 m");
+	// A unit was part of this boundary (the length read ...994.00 m); a
+	// quantity past 2^53 now keeps its exact value
+	// (FoundBug_quantityPastTheDouble.spec.ts).
+	test("the boundary: a result with no exact reading keeps its double, and a unit keeps the literal", () => {
+		expect(shown("9007199254740993.5 m")).toBe("9,007,199,254,740,993.50 m");
 		expect(shown("sqrt(2^106) + 0.5")).toBe("9,007,199,254,740,992");
 		expect(shown("1e16 + 0.5")).toBe("10,000,000,000,000,000");
 	});

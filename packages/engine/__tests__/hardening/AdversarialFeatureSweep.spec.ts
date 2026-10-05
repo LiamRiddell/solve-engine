@@ -67,7 +67,18 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"inflationAdjust(£100, X, 2020)",
 		"inflationAdjust(€100, 2000, X)",
 		"what was £X worth in 1965",
+		// The pound and euro spellings of `in <year> dollars`, an amount worked
+		// out on the line, and a word where a currency would be.
+		"£X in 1990 pounds",
+		"€X in 2010 euros",
+		"£100 in X pounds",
+		"what is $X * 2 from 1990",
+		"what is X apples from 1990",
 	],
+	// A large quantity keeps its exact value, and the aggregates refuse a range
+	// they would read as a clock time.
+	largeQuantities: ["ceil((X) m)", "round((X) m) + 1 m", "(X) kg * 2", "trunc((X) days)"],
+	aggregateRanges: ["average(X:3)", "mean(1:X)", "total(X:3)", "median(X)"],
 	// A derived unit's prefix read in its own case after `as` and `in` (#824).
 	derivedPrefixes: ["X W as mW", "X W as MW", "X W as mw", "X V in MV", "X J as pJ"],
 	// The qualified cups, the typographic point, imperial mpg and a stated
@@ -203,6 +214,26 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"monthly take = X",
 		"(salary / 12) * rate / X = net",
 		"x + y = X",
+	],
+	// A constant under the arrow, a quantity or a percentage met by an unknown,
+	// a formula the printer must write so it reads back, and a product equation
+	// solved by `solve` (FoundBug_constantUnderTheArrow, FoundBug_unitInAFormula,
+	// FoundBug_percentOfAnUnknown, FoundBug_formulaDisplayRoundTrip,
+	// FoundBug_productEquationUndefinedFactor).
+	formulaArithmetic: [
+		"π X km =>",
+		"X * π + foo =>",
+		"2x = π + X",
+		"foo + X km =>",
+		"hypot(foo, X km) =>",
+		"solve(2x = X km, x)",
+		"foo + X% =>",
+		"foo - X% =>",
+		"solve(x + X% = 220, x)",
+		"solve(net = rate * salary / X, salary)",
+		"-(foo^X) =>",
+		"foo / (1/X) =>",
+		"solve(a*x = X, x)",
 	],
 	// The forms the found-bug batch changed: a difference in words, two rates
 	// added, an approximate check to its written places, two booleans checked,
@@ -348,6 +379,16 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"P.5D + X",
 		"P * .5 + X",
 	],
+	// A length of several units led by a day or longer, applied to a date a
+	// part at a time, after a plus or minus and in front of after or before.
+	compoundLengthsOnADate: [
+		"2026-01-31 + 1 month 1 day + X days",
+		"2026-03-31 - 1 month 1 day - X days",
+		"1 month 1 day after 2026-01-31 + X days",
+		"1 month 1 day before 2026-03-31 * X",
+		"X + 1 month 1 day",
+		"(2026-01-31 + 1 year 1 month 1 day) * X",
+	],
 };
 
 describe("every form stays honest over the numeric edges", () => {
@@ -384,6 +425,23 @@ describe("an ISO 8601 duration and a timecode stay honest over the text edges an
 	});
 
 	test.each(PROTOTYPE_WORDS.flatMap((word) => [`P${word}`, `${word} + PT1H`, `PT1H in ${word}`, `01:02:03:04 at 30 fps in ${word}`, `(01:02:03:04 at 30 fps) in ${word}`]))("%s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line);
+		});
+	});
+});
+
+/**
+ * A length of several units is read from the words after its numbers, so the
+ * prototype words go where a unit or the connector of an offset would be, and
+ * the text edges beside the length.
+ */
+describe("a compound length on a date stays honest over the text edges and the prototype words", () => {
+	test.each(fill("2026-01-31 + 1 month 1 day + X", TEXT_EDGES.filter((t) => t.trim() !== "")))("%j", (line) => {
+		expectHonestLine(line);
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`2026-01-31 + 1 month 1 ${word}`, `1 month 1 day ${word} 2026-01-31`, `5 days ${word} 3`]))("%s", (line) => {
 		expectPrototypeUntouched(() => {
 			expectHonestLine(line);
 		});
@@ -437,6 +495,15 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "Alice's food = X\nAlice’s food * 2" },
 	{ form: "y = x + X\ny km\ny percent =>" },
 	{ form: "salary = X\nnet = 1000\n(salary / 12) * rate / 100 = net\nrate =>" },
+	// `ans` under the arrow, a percentage of a stored unknown, a quantity met
+	// by one, and a product equation with a factor and without (the ninth
+	// found-bug batch).
+	{ form: "X\nans km =>\nans + x =>" },
+	{ form: "y = x + 10%\nx = X\ny" },
+	{ form: "y = x * 2\ny * X km" },
+	{ form: "a*x = X\nx =>" },
+	{ form: "a = 4\na*x = X\nx =>" },
+	{ form: "x*π = X\nx =>" },
 	// A named scenario and a date sweep (#744).
 	{ form: "a = 1\nb = a * 2\nscenario s with a = X\nline 2 under s" },
 	{ form: "d = 2026-01-01\n(d - 2026-01-01) in days\nline 2 for d from 2026-01-01 to 2026-06-01 step X months" },
@@ -529,6 +596,9 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 			expectHonestDocument(`${word}'s rate = 5\n${word}’s rate * 2`);
 			expectHonestDocument(`${word} percent =>\n${word} km =>`);
 			expectHonestDocument(`${word} + y = 10\n${word} =>`);
+			// Met by a quantity or a percentage, and as a product equation's factor.
+			expectHonestDocument(`${word} * 5 km =>\n${word} + 10% =>`);
+			expectHonestDocument(`${word}*x = 10\nx =>`);
 			expectHonestDocument(`# ${word}\n10\ntotal of section "${word}"`, { agree: false });
 			expectHonestDocument(`| ${word} | cost |\n| --- | --- |\n| food | 10 |\n\ncolumn "${word}" for "food"`, { agree: false });
 		});

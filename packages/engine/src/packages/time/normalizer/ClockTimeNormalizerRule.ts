@@ -102,8 +102,6 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
     match(tokens, pos): NormalizerMatch | null {
       const hourToken = tokens[pos];
       if (hourToken.type !== "NUMBER") return null;
-      const hour = parseInt(hourToken.value, 10);
-      if (isNaN(hour) || hour < 0 || hour > 23) return null;
 
       // The two shapes: `9:00am` (NUMBER COLON NUMBER [am|pm]) and the
       // bare hour `4pm` (NUMBER am|pm). Decided before the range guard below,
@@ -115,6 +113,10 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
       const colonShape = colonToken?.type === "COLON" && minuteToken?.type === "NUMBER";
       const bareShape = !colonShape && isAmPmToken(tokens[pos + 1]);
       if (!colonShape && !bareShape) return null;
+      // The hour is read only for one of those shapes: `parseInt` and `isNaN`
+      // are globals, which cost a lookup each, and most numbers are no time.
+      const hour = parseInt(hourToken.value, 10);
+      if (isNaN(hour) || hour < 0 || hour > 23) return null;
 
       // A clock time inside `[...]` (matrix literal/index/slice) has no
       // legitimate meaning, reserve bare `NUMBER:NUMBER` there for a

@@ -48,7 +48,7 @@ describe("the lines that exposed it", () => {
 		["workdays between 5 m and 10", '"working days between" expects two dates, but got an amount in m and a number.'],
 		["2nd tuesday of 5", '"nth weekday of month" expects a date, but got a number.'],
 		["the 2nd tuesday of 5", 'THROWS Expected an operator or the end of the line, but found "2nd tuesday"'],
-		["‮foo + 1", "THROWS Undefined variable: <U+202E>foo"],
+		["‮foo + 1", "THROWS \"<U+202E>foo\" holds U+202E (right-to-left override), an invisible character that changes the direction text is shown in, so it would not read as what it is. A name, a number or a unit cannot hold one: delete it and type the word again."],
 	])("%s says %s", (line, message) => {
 		expect(shown(line)).toBe(message);
 	});

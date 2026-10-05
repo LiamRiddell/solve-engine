@@ -112,6 +112,54 @@ budgte * 2 // ERROR: Undefined variable: budgte. Did you mean budget?
 sqr(16) // ERROR: Undefined function: sqr. Did you mean sqrt?
 ```
 
+## Invisible characters in a name
+
+A few characters are never drawn. Most are spacing, such as the zero-width
+space, which the engine reads as a space. A dozen others exist to say which way
+the text around them runs: Arabic and Hebrew are written right to left, and a
+sentence that mixes them with English needs these **direction controls** (in
+Unicode's terms, bidirectional formatting characters) to show in the right
+order. Each one is invisible and changes how the characters beside it are
+drawn, so one inside a name makes the name look like something it is not. A
+line can appear to define `rent` while it defines another name that only shows
+as `rent`, which is the shape of the attack known as "Trojan Source".
+
+A name, a number or a unit that holds a direction control is refused, and the
+error names the character by its code point, the number Unicode gives it,
+written `U+202E`. The second line below looks like `rent = 5`, but a
+right-to-left override sits in front of the name; the refusal shows it where it
+stands, and the `rent` defined above is untouched:
+
+```solve-doc
+rent = 1200 // 1,200
+‮rent = 5 // ERROR: "<U+202E>rent" holds U+202E (right-to-left override), an invisible character that changes the direction text is shown in, so it would not read as what it is. A name, a number or a unit cannot hold one: delete it and type the word again.
+rent * 12 // 14,400
+```
+
+To fix the line, retype the name (an invisible character is hard to find with
+the cursor), and it then reads as the name it shows. These are the characters
+refused:
+
+| Code point | Name |
+| --- | --- |
+| `U+200E`, `U+200F` | left-to-right mark, right-to-left mark |
+| `U+061C` | Arabic letter mark |
+| `U+202A`, `U+202B` | left-to-right embedding, right-to-left embedding |
+| `U+202C` | pop directional formatting |
+| `U+202D`, `U+202E` | left-to-right override, right-to-left override |
+| `U+2066`, `U+2067`, `U+2068` | left-to-right isolate, right-to-left isolate, first strong isolate |
+| `U+2069` | pop directional isolate |
+
+Refused rather than removed: dropping the character silently would leave the
+line showing one thing while the engine read another, which is the problem
+itself. The boundary is text. Text in quotes, a comment, a heading, the label
+before a colon (`Rent: $1,200`) and a line of prose keep these characters,
+since a right-to-left script needs them to show correctly there, and nothing
+is looked up by them. A prose line that is already refused before it reaches
+the character keeps its own message, so the rule adds no error to a sentence.
+A name written in Arabic or Hebrew letters, with no control inside it, is an
+ordinary name.
+
 ## A value that is still arriving
 
 Some values come from outside the note: a share price, an exchange rate, the

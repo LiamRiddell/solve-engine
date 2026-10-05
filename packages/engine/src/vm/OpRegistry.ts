@@ -31,6 +31,12 @@ export interface EquationDef {
 	variable: string;
 	factorNames: string[];
 	rhsProgram: BytecodeProgram;
+	/**
+	 * The equation as the reader typed it (`a*x = b`), quoted by the refusal for
+	 * a factor with no value so it can point at `solve(a*x = b, x)`. Absent for
+	 * an equation registered without its text.
+	 */
+	text?: string;
 }
 
 /**
@@ -268,7 +274,7 @@ export interface VM {
 	/** Every user-defined function currently defined, as a fresh array copy, for snapshotting (see {@link getVariableEntries}). */
 	getUserFunctionDefs(): UserFunctionDef[];
 	/** Register (or redefine) a bare equation (`a*x = rhs`), keyed by its free variable. See {@link EquationDef}. */
-	defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram): void;
+	defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram, text?: string): void;
 	getEquation(variable: string): EquationDef | undefined;
 	hasEquation(variable: string): boolean;
 	/** Remove the bare equation stored for `variable`, for the line that stored it being edited or deleted. */

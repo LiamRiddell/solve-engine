@@ -1,6 +1,7 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { lowersTo } from "@solve-js/normalizer/RuleIndex";
 
 /**
  * The retyped operator token for a `up`/`down` at position `i`, or `null` when
@@ -10,13 +11,16 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
  * then a NUMBER then a `%`. Requiring the `%` is what keeps the words safe to
  * use in prose, the same guard the `on`/`off` markup rule relies on.
  */
-function stepTokenAt(tokens: Token[], i: number): Token | null {
+export function stepTokenAt(tokens: Token[], i: number): Token | null {
 	const word = tokens[i];
 	if (word?.type !== "IDENT") return null;
-	const text = (word.text ?? word.value ?? "").toLowerCase();
-	if (text !== "up" && text !== "down") return null;
+	// The percentage after it first: asked at every word of a line, the word
+	// itself was lower-cased each time only to be told it was not `up`.
 	if (tokens[i + 1]?.type !== "NUMBER") return null;
 	if (tokens[i + 2]?.type !== "PERCENT") return null;
+	const written = word.text ?? word.value ?? "";
+	const text = lowersTo(written, "up") ? "up" : lowersTo(written, "down") ? "down" : null;
+	if (text === null) return null;
 	return createFusedToken(text === "up" ? "PCT_UP" : "PCT_DOWN", text, [word]);
 }
 

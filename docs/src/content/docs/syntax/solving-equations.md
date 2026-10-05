@@ -54,6 +54,38 @@ a*n = 10
 n => // 5
 ```
 
+A constant is not an unknown: `π` is read as its value, as `pi` is, so an
+equation over it has one unknown and the arrow solves it. A percentage of the
+unknown is a share of it, as `200 + 10%` is a share of 200.
+
+```solve
+2x = π
+x => // 1.5707963268
+```
+
+```solve
+solve(x + 10% = 220, x) // 200
+```
+
+A product of names (`a*x = b`) is stored on sight, because whether its factors
+are matrices is only known when it is solved (see
+[solving a linear system](/syntax/symbolic/#solving-a-linear-system)). If a
+factor still has no value when the arrow asks for the last name, there is
+nothing to multiply out, and the line says so and names the other way to ask:
+`solve`, which treats the factor as one more unknown and answers with a
+formula.
+
+```solve-doc
+a*x = b // x stored as an equation: solve with "x =>"
+x => // ERROR: Cannot solve for "x": "a" is not yet defined. Give "a" a value on a line above, or solve for "x" in terms of it with solve(a*x = b, x).
+solve(a*x = b, x) // b/a
+```
+
+The arrow does not fall back to that formula on its own: an arrow solves an
+equation for its one unknown, and with `a` unknown this one has two. A factor
+that holds a plain number makes the line the scalar equation it also is, so
+`:a = 2` above it gives `x =>` the number it asks for.
+
 An equation with two or more unknowns is not stored, because there would be no
 way to tell which one a later arrow asks for. Other calculators, Calca among
 them, keep such a line and solve it for whichever name is asked; here the line
