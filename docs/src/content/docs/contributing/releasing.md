@@ -53,7 +53,10 @@ green.
    written by hand.
 
    It needs the network and `gh`, so it is a maintainer's script rather than a
-   CI gate; without `gh` it names the GitHub checks as skipped.
+   CI gate. Without `gh`, or with `gh` installed but not signed in (`gh auth
+   status`), it names the GitHub checks as skipped; when `gh` is signed in but a
+   call fails or answers something that is not a list, it says that part is
+   unknown rather than reporting nothing found.
    `-- --skip-version` leaves out the throwaway version, and `-- --offline`
    leaves out npm and GitHub as well.
 

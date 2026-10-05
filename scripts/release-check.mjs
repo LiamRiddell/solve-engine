@@ -21,9 +21,10 @@
  * It checks and reports. It publishes nothing, edits nothing in the working
  * tree and cancels nothing, and exits 0 whatever it finds: the findings are for
  * a person to read. It needs network access for npm and `gh` for the GitHub
- * half, so it is a maintainer's script rather than a CI gate; without `gh` the
- * GitHub checks are named as skipped. The note it drafts is a skeleton, and the
- * prose is written by hand in the house voice.
+ * half, so it is a maintainer's script rather than a CI gate; without `gh`, or
+ * signed out of it, the GitHub checks are named as skipped, and a `gh` call
+ * that fails is named as unknown, never read as nothing found. The note it
+ * drafts is a skeleton, and the prose is written by hand in the house voice.
  *
  * Usage:
  *   npm run release:check
@@ -152,9 +153,33 @@ export function draftNote({ version, changesets, stats }) {
 	return lines.join("\n");
 }
 
+/** An argument a command line can carry as it is, with no quoting. */
+const PLAIN_ARGUMENT = /^[\w.,:@/=+-]+$/;
+
+/**
+ * Run a command and wait for it. On Windows `npm` and `npx` are `.cmd`
+ * shims, which only a shell runs, and Node 24 deprecates handing a shell an
+ * argument list (DEP0190), so there the command is joined into one line. That
+ * is safe only for arguments a shell reads as they are, so anything else is
+ * refused rather than quoted: every argument this script passes is a constant.
+ *
+ * @param command - The program, `npm`, `npx`, `gh` or `git`.
+ * @param args - Its arguments, each plain.
+ * @param options - Passed to `spawnSync`, a working directory say.
+ * @returns What `spawnSync` returns, with output as text.
+ * @throws Error when an argument holds a space or a shell character.
+ */
+export function runCommand(command, args, options = {}) {
+	for (const arg of [command, ...args]) {
+		if (!PLAIN_ARGUMENT.test(arg)) throw new Error(`release-check runs only plain arguments, not ${JSON.stringify(arg)}`);
+	}
+	if (process.platform !== "win32") return spawnSync(command, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...options });
+	return spawnSync([command, ...args].join(" "), { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...options, shell: true });
+}
+
 /** Run a command, returning its stdout, or null when it could not run or failed. */
 function capture(command, args, options = {}) {
-	const run = spawnSync(command, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, shell: process.platform === "win32", ...options });
+	const run = runCommand(command, args, options);
 	return run.status === 0 ? run.stdout : null;
 }
 
@@ -182,9 +207,9 @@ function throwawayVersion(root) {
 		return [`  could not create a worktree: ${(added.stderr ?? "").trim()}`];
 	}
 	try {
-		const install = spawnSync("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: tree, encoding: "utf8", shell: process.platform === "win32" });
+		const install = runCommand("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: tree });
 		if (install.status !== 0) return [`  npm ci failed in the worktree:\n${(install.stderr ?? "").trim().split("\n").slice(-5).join("\n")}`];
-		const version = spawnSync("npx", ["changeset", "version"], { cwd: tree, encoding: "utf8", shell: process.platform === "win32" });
+		const version = runCommand("npx", ["changeset", "version"], { cwd: tree });
 		if (version.status !== 0) {
 			return [`  changeset version FAILED, so the version job on main would fail too:\n${`${version.stdout}${version.stderr}`.trim()}`];
 		}
@@ -217,7 +242,10 @@ function main() {
 	say();
 	say("1. npm against the changelog and the GitHub releases");
 	let releases = [];
-	const hasGh = !offline && capture("gh", ["--version"]) !== null;
+	// Signed in, not merely installed: `gh --version` answers either way, and a
+	// later call that then failed read as an empty list, an all-clear.
+	const hasGh = !offline && capture("gh", ["auth", "status", "--hostname", "github.com"], { cwd: root }) !== null;
+	let releasesKnown = hasGh;
 	if (offline) {
 		say("  skipped (--offline)");
 	} else {
@@ -230,8 +258,9 @@ function main() {
 			say(`  dist-tags: ${Object.entries(tags).map(([t, v]) => `${t} ${v}`).join(", ") || "(none)"}`);
 			say(`  package.json ${manifest.version} is ${versions.includes(manifest.version) ? "already on npm" : "not on npm yet"}.`);
 			if (hasGh) {
-				const list = json(capture("gh", ["release", "list", "--limit", "200", "--json", "tagName,isDraft"], { cwd: root })) ?? [];
-				releases = list.filter((r) => !r.isDraft).map((r) => r.tagName);
+				const list = json(capture("gh", ["release", "list", "--limit", "200", "--json", "tagName,isDraft"], { cwd: root }));
+				if (Array.isArray(list)) releases = list.filter((r) => r && !r.isDraft && typeof r.tagName === "string").map((r) => r.tagName);
+				else releasesKnown = false;
 			}
 			// The version about to be released is expected to be missing, and is
 			// reported on the line above instead.
@@ -241,7 +270,8 @@ function main() {
 				npm: versions,
 			});
 			say(missing.changelog.length > 0 ? `  in the changelog and not on npm: ${missing.changelog.join(", ")}` : "  every changelog version is on npm.");
-			if (hasGh) say(missing.releases.length > 0 ? `  a GitHub release and not on npm: ${missing.releases.join(", ")}` : "  every GitHub release is on npm.");
+			if (releasesKnown) say(missing.releases.length > 0 ? `  a GitHub release and not on npm: ${missing.releases.join(", ")}` : "  every GitHub release is on npm.");
+			else if (hasGh) say("  GitHub releases unknown: gh release list failed. Check gh auth status and the network.");
 			else say("  GitHub releases skipped: gh is not installed or not signed in.");
 		}
 	}
@@ -251,12 +281,16 @@ function main() {
 	if (!hasGh) {
 		say(offline ? "  skipped (--offline)" : "  skipped: gh is not installed or not signed in.");
 	} else {
-		const runs = json(capture("gh", ["run", "list", "--workflow", "publish.yml", "--limit", "100", "--json", "databaseId,status,conclusion,event,displayTitle,createdAt,url"], { cwd: root })) ?? [];
-		const { unfinished, cancelledReleases } = runsToWatch(runs);
-		say(unfinished.length > 0 ? "  not finished:" : "  none queued, waiting or in progress.");
-		for (const r of unfinished) say(`    ${r.databaseId}  ${r.status}  ${r.event}  ${r.displayTitle}  ${r.url}`);
-		say(cancelledReleases.length > 0 ? "  release runs that were cancelled (a re-run publishes that version):" : "  no cancelled release runs.");
-		for (const r of cancelledReleases) say(`    ${r.databaseId}  ${r.createdAt}  ${r.displayTitle}  ${r.url}`);
+		const runs = json(capture("gh", ["run", "list", "--workflow", "publish.yml", "--limit", "100", "--json", "databaseId,status,conclusion,event,displayTitle,createdAt,url"], { cwd: root }));
+		if (!Array.isArray(runs)) {
+			say("  unknown: gh run list failed, so the publish runs were not read. Check gh auth status and the network.");
+		} else {
+			const { unfinished, cancelledReleases } = runsToWatch(runs.filter((r) => r !== null && typeof r === "object"));
+			say(unfinished.length > 0 ? "  not finished:" : "  none queued, waiting or in progress.");
+			for (const r of unfinished) say(`    ${r.databaseId}  ${r.status}  ${r.event}  ${r.displayTitle}  ${r.url}`);
+			say(cancelledReleases.length > 0 ? "  release runs that were cancelled (a re-run publishes that version):" : "  no cancelled release runs.");
+			for (const r of cancelledReleases) say(`    ${r.databaseId}  ${r.createdAt}  ${r.displayTitle}  ${r.url}`);
+		}
 	}
 
 	say();
