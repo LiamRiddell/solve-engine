@@ -101,6 +101,7 @@ export enum OpCode {
 	DATE_LITERAL = 95,       // Push a datetime literal whose epoch-ms was already resolved at parse time (see DateLiteralParselet)
 	DATE_WORKDAY_OFFSET = 96,   // "N working days after/before/from <date>" — a business-day walk from the anchor date. One operand byte: 0 forward, 1 backward. Same walk as `<date> + N workdays` (vm/VM.ts's addBusinessDays). See WorkdayOffsetParselet.
 	DATE_WORKDAYS_BETWEEN = 97, // "working days between <date> and <date>" — the count of working days in the inclusive span. See WorkdaysBetweenParselet and vm/BusinessDays.ts's countBusinessDaysBetween.
+	DATE_TODAY = 98,         // "today", and the days counted from it: the current instant, or the start of the day under `date.relativeDays: 'midnight'`. See calendar/RelativeDays.ts.
 
 	// Rate, "quantity per unit of something" ($99/week, 30 fps). See
 	// vm/Value.ts's rateValue()/isRateUnit()/splitRateUnit() for the

@@ -154,7 +154,13 @@ describe("periodOf", () => {
 describe("agoNormalizerRule", () => {
 	const rule = agoNormalizerRule();
 
-	test.each(["3 days ago", "3 days AGO", "2 hours Ago", "10 minutes agO"])("%s reads as a length before now", (line) => {
+	// A span of a day or more counts back from `today`, which is `now` unless
+	// the host starts relative days at midnight (`date.relativeDays`).
+	test.each(["3 days ago", "3 days AGO", "2 weeks Ago"])("%s reads as a length before today", (line) => {
+		expect(attempt(rule, lex(line), 0)).toMatch(/^NUMBER:\d+ DATE_OFFSET_BEFORE:\S+ TODAY:today$/);
+	});
+
+	test.each(["2 hours Ago", "10 minutes agO"])("%s reads as a length before now", (line) => {
 		expect(attempt(rule, lex(line), 0)).toMatch(/^NUMBER:\d+ DATE_OFFSET_BEFORE:\S+ NOW:now$/);
 	});
 

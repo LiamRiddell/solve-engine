@@ -30,6 +30,7 @@ import { FrozenValueStore } from "@solve-js/vm/FrozenValues";
 import { mintScope, type ScopeId } from "@solve-js/vm/CellScope";
 import { resolveCalendar, type CalendarOption } from "@solve-js/calendar/resolveCalendar";
 import { DEFAULT_WEEK, type WeekShape } from "@solve-js/calendar/WeekShape";
+import type { RelativeDayAnchor } from "@solve-js/calendar/RelativeDays";
 import { PluginCallCache } from "@solve-js/vm/PluginCallCache";
 import { AsConverterRegistry } from "@solve-js/vm/AsConverterRegistry";
 import { TokenCategoryTable } from "@solve-js/language/TokenCategoryMap";
@@ -145,6 +146,15 @@ export interface EngineContext {
 	readonly week: WeekShape;
 
 	/**
+	 * Where this engine's relative days start, from `date.relativeDays`: the
+	 * current instant, or the start of the day. Held here beside the calendar,
+	 * since the VM reads it where `today` is pushed and the plugin functions
+	 * that find a weekday read it through the context. See
+	 * `calendar/RelativeDays.ts`.
+	 */
+	readonly relativeDays: RelativeDayAnchor;
+
+	/**
 	 * The scope this engine's lines execute under: the owner of every
 	 * `global :name` cell they write, and the default scope a cell read is
 	 * attributed to.
@@ -208,6 +218,8 @@ export interface EngineContextOptions {
 	calendar?: CalendarOption;
 	/** The shape of the week. Defaults to Saturday and Sunday off, starting on Monday. See `calendar/WeekShape.ts`. */
 	week?: WeekShape;
+	/** Where a relative day starts. Defaults to `"now"`, the historic behaviour. See `calendar/RelativeDays.ts`. */
+	relativeDays?: RelativeDayAnchor;
 	/** The owning engine's query cache; see {@link EngineContext.queryClient}. Defaults to null. */
 	queryClient?: QueryClient | null;
 }
@@ -227,6 +239,7 @@ export function createEngineContext(options: EngineContextOptions = {}): EngineC
 		networkEnabled: options.networkEnabled ?? true,
 		calendar: resolveCalendar(options.calendar),
 		week: options.week ?? DEFAULT_WEEK,
+		relativeDays: options.relativeDays ?? "now",
 		scope: mintScope(),
 		frozenValues: new FrozenValueStore(),
 		asConverters: new AsConverterRegistry(),

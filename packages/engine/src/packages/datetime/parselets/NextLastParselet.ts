@@ -33,7 +33,9 @@ export class NextLastParselet implements PrefixParselet {
     }
     parser.consume(); // consume the weekday token
 
-    builder.emitOpcode(OpCode.DATE_NOW);
+    // Counted from today, so the answer is a date when the host reads
+    // relative days from the start of the day (`date.relativeDays`).
+    builder.emitOpcode(OpCode.DATE_TODAY);
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(targetDay);
     builder.emitOpcode(this.direction === "next" ? OpCode.DATE_NEXT_WEEKDAY : OpCode.DATE_LAST_WEEKDAY);

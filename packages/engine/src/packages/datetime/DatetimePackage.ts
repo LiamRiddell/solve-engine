@@ -225,7 +225,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
   },
   prefixParselets: {
     DAYS_IN_PERIOD: new DaysInPeriodParselet(),
-    NOW: new NowParselet(0),
+    NOW: new NowParselet(0, "now"),
     TODAY: new NowParselet(0),
     TOMORROW: new NowParselet(1),
     YESTERDAY: new NowParselet(-1),

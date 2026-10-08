@@ -12,7 +12,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
-import { getMeasure } from "@solve-js/uom/UomConverter";
+import { getMeasure, isDayOrLonger } from "@solve-js/uom/UomConverter";
 import { lowerCased } from "@solve-js/normalizer/RuleIndex";
 
 /** The weekday tokens the lexer makes, to their day of the week (0 is Sunday). */
@@ -87,8 +87,11 @@ function endOf(token: Token): number {
 
 /**
  * `3 days ago`, `2 hours ago`: a length of time and `ago`, read as that length
- * before now, the form `3 days before now` already is. `now` carries the time of
- * day, as `today` does, so `3 days ago` is a date and a time.
+ * before now, the form `3 days before now` already is. A span of a day or more
+ * counts back from `today` instead, which is the same instant by default (so
+ * `3 days ago` is a date and a time) and the start of the day under
+ * `date.relativeDays: 'midnight'` (so it is a date). A shorter span always
+ * counts back from `now`: `2 hours ago` is a time whatever the setting.
  *
  * @param priority - Where the rule sits among the normalizer's rules.
  */
@@ -104,8 +107,9 @@ export function agoNormalizerRule(priority = 62): NormalizerRule {
 			if (amount.type !== "NUMBER" || unit?.type !== "UNIT" || !isAgo(ago)) return null;
 			if (getMeasure(unit.value ?? "") !== "time") return null;
 			const before = new LexerToken("DATE_OFFSET_BEFORE", tokenTypeId("DATE_OFFSET_BEFORE"), unit.value, unit.text, unit.offset, 0, unit.line, unit.col, endOf(unit));
-			const now = new LexerToken("NOW", tokenTypeId("NOW"), "now", ago!.text, ago!.offset, 0, ago!.line, ago!.col, endOf(ago!));
-			return { consumed: 3, replacement: [amount, before, now], ruleName: "datetime:ago" };
+			const anchor = isDayOrLonger(unit.value) ? "TODAY" : "NOW";
+			const from = new LexerToken(anchor, tokenTypeId(anchor), anchor === "TODAY" ? "today" : "now", ago!.text, ago!.offset, 0, ago!.line, ago!.col, endOf(ago!));
+			return { consumed: 3, replacement: [amount, before, from], ruleName: "datetime:ago" };
 		},
 	};
 }

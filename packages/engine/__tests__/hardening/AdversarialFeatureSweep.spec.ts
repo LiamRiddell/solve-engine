@@ -821,4 +821,18 @@ describe("the configured forms stay honest over the numeric and text edges", () 
 			expectHonestLine(line, { engine: aliased });
 		});
 	});
+	// Relative days read from the start of the day (`date.relativeDays:
+	// 'midnight'`): the forms that count from today, with an edge where the
+	// count or the date goes.
+	const midnight = newTrackedEngine({ config: { date: { relativeDays: "midnight" } } });
+	const RELATIVE_DAY_FORMS = ["X days ago", "X weeks ago", "X hours ago", "today + X days", "X days from today", "tomorrow + X", "next friday + X days", "days until X", "this friday - X"];
+	test.each(RELATIVE_DAY_FORMS.flatMap((form) => [...fill(form, NUMERIC_EDGES), ...fill(form, TEXT_EDGES)]))("a relative day from midnight over the edges: %j", (line) => {
+		expectHonestLine(line, { engine: midnight, allowNaN: line.includes("0/0") });
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`days until ${word}`, `${word} days ago`, `today + ${word}`]))("a prototype word beside a relative day from midnight: %s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line, { engine: midnight });
+		});
+	});
 });

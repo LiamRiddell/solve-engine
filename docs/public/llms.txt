@@ -74,12 +74,12 @@ Each line of a note is worked out on its own unless it reads another: a name def
 
 - [Date literals](https://liamriddell.github.io/solve-engine/syntax/date-literals/): a date written day first, year first, or with the month's name.
 - [Date arithmetic](https://liamriddell.github.io/solve-engine/syntax/date-arithmetic/): adding days, weeks, months or hours to a date, or taking them away.
-- [Relative dates](https://liamriddell.github.io/solve-engine/syntax/relative-dates/): a day named by its relation to today, such as tomorrow, next friday, three days ago or the end of the month.
+- [Relative dates](https://liamriddell.github.io/solve-engine/syntax/relative-dates/): a day named by its relation to today, such as tomorrow, next friday, three days ago or the end of the month. Each keeps the time of day unless the app starts relative days at midnight.
 - [Relative months](https://liamriddell.github.io/solve-engine/syntax/relative-months/): a month named by its relation to now, which gives the month's first day.
 - [The nth weekday](https://liamriddell.github.io/solve-engine/syntax/nth-weekday/): the nth, or the last, weekday of a month, the way many holidays and meetings are set.
 - [Weekdays & week numbers](https://liamriddell.github.io/solve-engine/syntax/weekdays-and-week-numbers/): the day of the week, the month, or the ISO week number a date falls in.
 - [Age](https://liamriddell.github.io/solve-engine/syntax/age/): whole years from a birth date, today or on a day you name.
-- [Date differences](https://liamriddell.github.io/solve-engine/syntax/date-differences/): the span between two dates, or the time until or since one. A count from today includes the part of today already gone, which is why it is not a whole number at noon.
+- [Date differences](https://liamriddell.github.io/solve-engine/syntax/date-differences/): the span between two dates, or the time until or since one. A count from today includes the part of today already gone, which is why it is not a whole number at noon, unless the app starts relative days at midnight.
 - [Timestamps](https://liamriddell.github.io/solve-engine/syntax/timestamps/): a Unix timestamp, a count of seconds since 1970, read as the date it names, and a date written as one.
 - [Working days](https://liamriddell.github.io/solve-engine/syntax/working-days/): counting only the days that are not weekends (nor public holidays, when the host application supplies them).
 - [Displaying dates](https://liamriddell.github.io/solve-engine/syntax/displaying-dates/): whether a date is spelled out or written in numbers is a setting in the host application, not something a line writes. A date before year 1 is written with its era.

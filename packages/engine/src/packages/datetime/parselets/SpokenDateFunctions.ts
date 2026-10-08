@@ -10,6 +10,7 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
 import { daysInMonth } from "@solve-js/calendar/Gregorian";
 import { weekOf } from "@solve-js/calendar/WeekShape";
+import { landOnDayStart } from "@solve-js/calendar/RelativeDays";
 
 /** The instant a date form was handed, or the refusal when it is not a date. */
 function instantOf(value: Value | undefined, form: string): number | Value {
@@ -57,9 +58,10 @@ export function periodEdgeHandler(args: Value[], context?: LineExecutionContext)
 
 /**
  * `this friday`: the coming day of a weekday, today when today is one, at the
- * time of day now is, as `next friday` keeps it.
+ * time of day `today` carries, as `next friday` keeps it: the current one by
+ * default, and none under `date.relativeDays: 'midnight'`.
  *
- * @param args - Now, and the day of the week (0 is Sunday).
+ * @param args - Today, and the day of the week (0 is Sunday).
  * @param context - The line's context, for the calendar backend.
  * @returns The date, or an error Value.
  */
@@ -69,7 +71,10 @@ export function thisWeekdayHandler(args: Value[], context?: LineExecutionContext
 	const day = args[1]?.toNumber() ?? 0;
 	const calendar = calendarOf(context);
 	const ahead = (day - calendar.fields(now).weekday + 7) % 7;
-	return datetimeValue(calendar.addDays(now, ahead));
+	// A calendar day in (`today` under `date.relativeDays: 'midnight'`) is a
+	// calendar day out, so `this friday` shows as a date.
+	const stepped = calendar.addDays(now, ahead);
+	return args[0]?.grain === "date" ? datetimeValue(landOnDayStart(calendar, now, stepped), "date") : datetimeValue(stepped);
 }
 
 /**

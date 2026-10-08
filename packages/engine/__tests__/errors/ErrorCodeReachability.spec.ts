@@ -482,6 +482,7 @@ const HOST_API: Readonly<Record<string, string>> = {
 	CONFIG_SECTION_NOT_FOUND: "the configuration manager's get and set, given a section that does not exist",
 	DATE_CLOCK_INVALID: "a calendar backend's now option, a host clock that is not a function or answers no moment in time",
 	DATE_INPUT_LOCALE_INVALID: "the date.inputLocale setting, given something that is not a locale tag",
+	DATE_RELATIVE_DAYS_INVALID: "the date.relativeDays setting, given something other than now or midnight",
 	DATE_WEEKDAY_INVALID: "the date.weekend and date.firstDayOfWeek settings, given something that is not a day of the week",
 	DATE_ZONE_UNKNOWN: "dateCalendarInZone, given a zone the runtime cannot compute in",
 	DEFINE_FUNCTION_ARGUMENT_TYPE: "a host's own function from defineFunction, which no built-in line calls",

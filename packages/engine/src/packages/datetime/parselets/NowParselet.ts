@@ -7,6 +7,11 @@ import { OpCode } from "@solve-js/parser/OpCode";
 /**
  * `now` / `today` (dayOffset 0), `tomorrow` (+1 day), `yesterday` (-1 day).
  *
+ * `now` reads the clock (DATE_NOW). `today` and the two days either side of it
+ * start from DATE_TODAY, which is the same instant by default and the start of
+ * the day under `date.relativeDays: 'midnight'`, so a host that plans by the
+ * day sees `tomorrow` as a date. See `calendar/RelativeDays.ts`.
+ *
  * Previously all four keywords shared one zero-offset implementation
  * "tomorrow"/"yesterday" silently evaluated to the exact same instant as
  * "now" (a real bug: `evaluate("tomorrow") - evaluate("now")` was 0, not
@@ -14,7 +19,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
  * checked internal consistency (e.g. `"yesterday + 1 day" - "yesterday"
  * === 1 day`), which holds regardless of what "yesterday" itself resolves
  * to. dayOffset must stay applied at evaluation time (ADD on top of
- * DATE_NOW), not baked in at parse time, so "now"/"tomorrow"/"yesterday"
+ * DATE_NOW or DATE_TODAY), not baked in at parse time, so "now"/"tomorrow"/"yesterday"
  * stay relative to whenever the bytecode actually runs.
  *
  * The offset is emitted as a duration IN DAYS rather than as its length in
@@ -30,13 +35,19 @@ import { OpCode } from "@solve-js/parser/OpCode";
 export class NowParselet implements PrefixParselet {
 	readonly category = "Date/Time";
 	private readonly dayOffset: number;
+	private readonly anchor: OpCode.DATE_NOW | OpCode.DATE_TODAY;
 
-	constructor(dayOffset: number = 0) {
+	/**
+	 * @param dayOffset - Whole days from the anchor: 1 for `tomorrow`.
+	 * @param anchor - `"now"` for the keyword `now`, `"today"` for the days counted from today.
+	 */
+	constructor(dayOffset: number = 0, anchor: "now" | "today" = "today") {
 		this.dayOffset = dayOffset;
+		this.anchor = anchor === "now" ? OpCode.DATE_NOW : OpCode.DATE_TODAY;
 	}
 
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-    builder.emitOpcode(OpCode.DATE_NOW);
+    builder.emitOpcode(this.anchor);
     if (this.dayOffset !== 0) {
       builder.emitOpcode(OpCode.PUSH_NUMBER);
       builder.emitNumber(this.dayOffset);

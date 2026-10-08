@@ -23,7 +23,10 @@ it as 3 April, as an English one does. It is `config.date.inputOrder`, and
 weekend days and the day it starts on, is `config.date.weekend` and
 `config.date.firstDayOfWeek`, and otherwise comes from the region of the locale
 tag, as [working days](/syntax/working-days/#which-days-are-the-weekend) sets
-out.
+out. Whether `today`, `tomorrow` and `next friday` carry the time of day or
+start at midnight is `config.date.relativeDays`, `"now"` by default or
+`"midnight"` for an app that plans by the day (see
+[counting from the start of the day](/syntax/relative-dates/#counting-from-the-start-of-the-day)).
 
 ## Configuration
 

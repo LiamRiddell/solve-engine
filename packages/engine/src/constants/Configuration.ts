@@ -24,6 +24,7 @@
 
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import type { WeekdayName } from "@solve-js/calendar/WeekShape";
+import type { RelativeDayAnchor } from "@solve-js/calendar/RelativeDays";
 
 /**
  * A host's test for whether a calendar date is a public holiday, given the
@@ -198,6 +199,24 @@ export interface DateConfig {
    * of`) stays ISO, Monday-based, whatever this says.
    */
   readonly firstDayOfWeek?: WeekdayName;
+  /**
+   * Where a day named by its relation to today starts: `today`, `tomorrow`,
+   * `yesterday`, `next friday`, `this friday`, `3 days ago`, and the count in
+   * `days until`. Defaults to `'now'`.
+   *
+   * - `'now'`: the current instant, with its time of day, as every version
+   *   before this setting read them. At noon `tomorrow` is noon tomorrow, and
+   *   `days until 25 december` counts the half day already gone.
+   * - `'midnight'`: the start of the day, a date with no time of day.
+   *   `tomorrow` shows as a date, `today + 3 weeks` is a date, and `days until`
+   *   counts whole days.
+   *
+   * `now` stays the current instant under both, and so does a span shorter
+   * than a day (`2 hours ago`, `minutes until 5pm`), since those ask about the
+   * clock. Anything other than the two values raises
+   * `DATE_RELATIVE_DAYS_INVALID` at construction. See `calendar/RelativeDays.ts`.
+   */
+  readonly relativeDays: RelativeDayAnchor;
 }
 
 /**
@@ -540,6 +559,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
      // answering the fraction it is spelled like. See DateConfig.onAmbiguous
      // for the shapes this covers and the ones it deliberately does not.
      onAmbiguous: 'refuse',
+     // The current instant, as every version before the setting read
+     // `today`. See DateConfig.relativeDays for the start-of-day reading.
+     relativeDays: 'now',
    },
    performance: {
      // Preserves the effective cache size the hardcoded (now-removed)

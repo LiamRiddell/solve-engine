@@ -30,6 +30,9 @@ are the same moment, with the time of day included, so `tomorrow` and
 `yesterday` are that same time a day later or earlier. A count of days from
 today includes the part of today already gone, which is why it is usually not a
 whole number: at noon, `days until 25 december` is 288.50 days rather than 289.
+That is the engine's default; an app can choose to start these days at midnight
+instead, as [counting from the start of the day](#counting-from-the-start-of-the-day)
+sets out.
 
 ```solve
 today // Wednesday, March 11, 2026, 12:00:00 PM
@@ -134,6 +137,51 @@ text, so a line that is only a weekday is refused with a message suggesting
 `this friday` or `next friday`. A heading with a colon, `Friday: 3 hours`, is
 unaffected: the part after the colon is the line.
 
+## Counting from the start of the day
+
+A note that plans by the day usually means a date, not a moment, when it says
+`tomorrow`: `today + 3 weeks` is a deadline, and the minute the line was typed
+is noise on it. An app that embeds the engine can choose that reading with one
+setting, `date.relativeDays`. It takes two values:
+
+- `"now"`, the default: each relative day is the current instant moved by whole
+  days, with the time of day, as the examples above show.
+- `"midnight"`: each relative day starts at midnight, so it is a date with no
+  time of day, and a count of days from today is a whole number.
+
+```ts
+createEngine({ config: { date: { relativeDays: "midnight" } } });
+```
+
+The same lines at the same moment, noon on Wednesday 11 March 2026, under each:
+
+| line | `"now"` (the default) | `"midnight"` |
+| --- | --- | --- |
+| `today` | Wednesday, March 11, 2026, 12:00:00 PM | Wednesday, March 11, 2026 |
+| `tomorrow` | Thursday, March 12, 2026, 12:00:00 PM | Thursday, March 12, 2026 |
+| `next friday` | Friday, March 13, 2026, 12:00:00 PM | Friday, March 13, 2026 |
+| `3 days ago` | Sunday, March 8, 2026, 12:00:00 PM | Sunday, March 8, 2026 |
+| `today + 3 weeks` | Wednesday, April 1, 2026, 12:00:00 PM | Wednesday, April 1, 2026 |
+| `days until 25 december` | 288.50 days | 289 days |
+| `tomorrow - today` | 24:00 | 1 day |
+| `now` | Wednesday, March 11, 2026, 12:00:00 PM | Wednesday, March 11, 2026, 12:00:00 PM |
+| `2 hours ago` | Wednesday, March 11, 2026, 10:00:00 AM | Wednesday, March 11, 2026, 10:00:00 AM |
+
+Under `"midnight"` the setting reaches `today`, `tomorrow` and `yesterday`,
+`next` and `last` with a weekday, `this friday` and a bare weekday in a sum, a
+span of a day or more followed by `ago`, and the count in `days until` and
+`days since` (and in weeks, months or years). Two days subtract to a count of
+days, as two written dates do, rather than to hours on a clock.
+
+The boundary, and why: `now` stays the current instant under both settings, and
+so does a span shorter than a day (`2 hours ago`, `hours until 5pm`), because
+those are questions about the clock. A time added to the start of the day is a
+time on it, so `today + 2 hours` is 2:00 AM; write `now + 2 hours` for two hours
+from now. `next week`, `end of month` and the other whole periods already name a
+day, so they read the same under both. The default stays `"now"` within the
+current major version, because changing it would change every answer at the top
+of this page for apps that rely on them.
+
 ## The boundary
 
 Some natural spellings are still not read, and a line that uses one is refused
@@ -154,6 +202,7 @@ otherwise. A date so far away that no calendar holds it,
 past AD 275760 or before 271821 BC, is refused rather than shown:
 `99999999999 days ago` is an error, not a date.
 
-Reading `today` as a date with no time of day, or counting `days until` in whole
-calendar days, would change the answers described above, so neither is changed
-within the current major version.
+Reading `today` as a date with no time of day, and counting `days until` in
+whole calendar days, is a setting an app opts into
+([counting from the start of the day](#counting-from-the-start-of-the-day)),
+not the default, since the default's answers are the ones described above.
