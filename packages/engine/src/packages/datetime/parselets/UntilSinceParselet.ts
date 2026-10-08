@@ -3,7 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { isWorkdayUnit } from "@solve-js/uom/UomConverter";
+import { isDayOrLonger, isWorkdayUnit } from "@solve-js/uom/UomConverter";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
@@ -46,11 +46,16 @@ export class UntilSinceParselet implements PrefixParselet {
       );
     }
 
+    // A count in days or longer starts from today, which is the start of the
+    // day under `date.relativeDays: 'midnight'`, so `days until 25 december`
+    // is a whole number there. A shorter span (`hours until 5pm`) asks about
+    // the clock and always counts from now.
+    const from = isDayOrLonger(unit) ? OpCode.DATE_TODAY : OpCode.DATE_NOW;
     if (this.direction === "until") {
       parser.parseExpression(0, builder); // target datetime
-      builder.emitOpcode(OpCode.DATE_NOW); // now
+      builder.emitOpcode(from);
     } else {
-      builder.emitOpcode(OpCode.DATE_NOW); // now
+      builder.emitOpcode(from);
       parser.parseExpression(0, builder); // target datetime
     }
     // SUB pops (r, l) and computes l - r. Pushing [target, now] for

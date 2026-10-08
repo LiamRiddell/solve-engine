@@ -11,7 +11,7 @@ import { matrixMultiply, matrixPower, matIndex, matAt, inBounds, collectionToVal
 import { listFromCells, listCellValue, needsUnitCells, unitListArithmetic, listConverted } from "@solve-js/vm/MatrixUnits";
 import { percentageMeetsList, type PercentageCell } from "@solve-js/vm/ListPercentage";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
-import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
+import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isDayOrLonger, isWorkdayUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { CoreErrorCodes, DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
@@ -51,6 +51,7 @@ import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { WeekShape } from "@solve-js/calendar/WeekShape";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
+import { landOnDayStart, relativeDayInstant } from "@solve-js/calendar/RelativeDays";
 import { fieldsShownIn, noonOnDay, shownZone, zoneAnswerJoinedText } from "@solve-js/vm/ZoneAnswers";
 import { descendingRangeMessage } from "@solve-js/vm/RangeBounds";
 import { addZonedCalendarDays, addZonedCalendarMonths, walkDatesInZone, zonedDateAsLocalMidnight } from "@solve-js/calendar/ZonedSteps";
@@ -1808,6 +1809,14 @@ function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Valu
         if (e instanceof RangeError) return dateOutOfRange();
         throw e;
     }
+    // A calendar day moved by a whole number of days (or weeks, months,
+    // years) lands on the start of the day it reaches, so the hour a skipped
+    // midnight starts a day with is not carried to the next. A fraction of a
+    // day is a time on that day, and keeps it. See calendar/RelativeDays.ts's
+    // landOnDayStart().
+    if (date.grain === "date" && date.zone === undefined && isDayOrLonger(unit) && Number.isInteger(duration.toNumber())) {
+        movedMs = landOnDayStart(vm.context.calendar, date.toNumber(), movedMs);
+    }
     const moved = datetimeValue(movedMs, date.grain, date.zone, date.timeAnchor);
     // A time of day keeps how finely it is written, so a time in a zone moved
     // by an hour still reads to the minute (#757). A day past the calendar's
@@ -2698,8 +2707,9 @@ function nextOrLastWeekday(stack: Value[], op: OpCode, vm: VM): void {
     // NOT a blind ±7-day offset, "next Monday" from a Monday lands
     // 7 days ahead (next week's Monday), not today; "last Monday"
     // from a Monday lands 7 days back, not today. Time-of-day is
-    // preserved from `now` (matches "today"/"now" both resolving to
-    // the current instant elsewhere in this file, not midnight).
+    // preserved from the `today` it was given: the current instant by
+    // default, or a calendar day under `date.relativeDays: 'midnight'`,
+    // whose grain the answer keeps so it shows as a date.
     const targetDayValue = safePop(stack);
     const nowValue = safePop(stack);
     const weekdayFault = faultedOperand(nowValue, targetDayValue);
@@ -2716,7 +2726,10 @@ function nextOrLastWeekday(stack: Value[], op: OpCode, vm: VM): void {
     // 86,400,000 ms long, and being an hour out is enough to land on the
     // day before or after the weekday that was asked for. See
     // addCalendarDays() above.
-    stack.push(datetimeValue(addCalendarDays(now, op === OpCode.DATE_NEXT_WEEKDAY ? diffDays : -diffDays, vm.context.calendar)));
+    const stepped = addCalendarDays(now, op === OpCode.DATE_NEXT_WEEKDAY ? diffDays : -diffDays, vm.context.calendar);
+    stack.push(nowValue.grain === "date"
+        ? datetimeValue(landOnDayStart(vm.context.calendar, now, stepped), "date")
+        : datetimeValue(stepped));
 }
 
 /** A clock time today, `9:00am` (CLOCK_TIME_TODAY), moved out of the dispatch loop. */
@@ -5399,9 +5412,18 @@ export function executeBytecode(
         // §9  Datetime  (OpCode 90–93)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.DATE_NOW:
-          // `now` (and `today`, which is the same opcode) reads the clock, so
-          // the instant is fixed rather than a reading that depends on a zone.
+          // `now` reads the clock, so the instant is fixed rather than a
+          // reading that depends on a zone.
           stack.push(datetimeValue(vm.context.calendar.now(), "instant"));
+          break;
+        case OpCode.DATE_TODAY:
+          // `today` and the days counted from it. The same instant as `now`
+          // by default; under `date.relativeDays: 'midnight'` the start of
+          // the day, held as a calendar DAY so it shows as a date and two of
+          // them subtract to whole days. See calendar/RelativeDays.ts.
+          stack.push(vm.context.relativeDays === "midnight"
+            ? datetimeValue(relativeDayInstant(vm.context.calendar, "midnight"), "date")
+            : datetimeValue(vm.context.calendar.now(), "instant"));
           break;
         case OpCode.DATE_LITERAL:
           // A literal reaching this opcode is a calendar DAY, held as its local

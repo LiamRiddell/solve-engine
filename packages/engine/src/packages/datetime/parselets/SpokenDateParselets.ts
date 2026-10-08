@@ -75,7 +75,8 @@ export class ThisWeekdayParselet implements PrefixParselet {
 				`A day of the week on its own is read as text, so a note can head a day with it. For the date, write "this ${String(token.text).toLowerCase()}" or "next ${String(token.text).toLowerCase()}".`,
 			);
 		}
-		builder.emitOpcode(OpCode.DATE_NOW);
+		// Counted from today, as `next friday` is (see NextLastParselet).
+		builder.emitOpcode(OpCode.DATE_TODAY);
 		builder.emitOpcode(OpCode.PUSH_NUMBER);
 		builder.emitNumber(day);
 		emitBuiltinPluginCall(builder, THIS_WEEKDAY_FN, 2);

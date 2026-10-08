@@ -438,6 +438,7 @@ hours to a date, or taking them away.
 
 **[Relative dates](/syntax/relative-dates/)**: a day named by its relation to
 today, such as tomorrow, next friday, three days ago or the end of the month.
+Each keeps the time of day unless the app starts relative days at midnight.
 
 ```solve
 tomorrow // Thursday, March 12, 2026, 12:00:00 PM
@@ -478,7 +479,8 @@ age of 15/06/1990 on 25/12/2030 // 40 years
 
 **[Date differences](/syntax/date-differences/)**: the span between two dates,
 or the time until or since one. A count from today includes the part of today
-already gone, which is why it is not a whole number at noon.
+already gone, which is why it is not a whole number at noon, unless the app
+starts relative days at midnight.
 
 ```solve
 days until 25/12/2026 // 288.50 days

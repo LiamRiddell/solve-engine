@@ -663,6 +663,8 @@ export const DatetimeZoneErrorCodes = {
   DATE_ZONE_UNKNOWN: "DATE_ZONE_UNKNOWN",
   /** `date: { weekend: ["fri"] }`: `date.weekend` or `date.firstDayOfWeek` named something that is not a day of the week. Raised at construction, because a weekend quietly ignored is every working-day answer quietly wrong (#702). */
   DATE_WEEKDAY_INVALID: "DATE_WEEKDAY_INVALID",
+  /** `date: { relativeDays: "today" }`: `date.relativeDays` given something other than `"now"` or `"midnight"`. Raised at construction, because a setting quietly ignored is every relative date quietly showing the time of day the host asked it not to. */
+  DATE_RELATIVE_DAYS_INVALID: "DATE_RELATIVE_DAYS_INVALID",
 } as const;
 
 /** Every code from {@link DatetimeZoneErrorCodes}. */

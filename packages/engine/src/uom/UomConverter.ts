@@ -48,6 +48,25 @@ export function isWorkdayUnit(unit: string | undefined): unit is string {
 }
 
 /**
+ * Whether `unit` is a length of time of a day or longer (`day`, `week`,
+ * `month`, `year`, and their spellings), the spans a relative date counts in
+ * whole days. A shorter one (`hour`, `minute`) asks about the clock, and
+ * anything that is not a time is neither.
+ *
+ * Read by the forms that count from today (`3 days ago`, `days until`), which
+ * start from the start of the day under `date.relativeDays: 'midnight'` only
+ * when the span is one of these. See `calendar/RelativeDays.ts`.
+ *
+ * @param unit - A unit name as the lexer read it.
+ * @returns True for a time unit at least one day long.
+ */
+export function isDayOrLonger(unit: string | undefined): boolean {
+  if (typeof unit !== "string" || getMeasure(unit) !== "time") return false;
+  const days = convertUnit(1, unit, "day");
+  return Number.isFinite(days) && days >= 1;
+}
+
+/**
  * Validate `unit` against the known unit table.
  *
  * @returns `unit` unchanged in all cases. This does NOT normalize casing

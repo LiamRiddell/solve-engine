@@ -18,6 +18,7 @@ import { cellDecimal } from "@solve-js/vm/ListRounding";
 import { formatSymbolic, type Rational, type SymbolicNode } from "@solve-js/symbolic";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 import { decodeFixedOffsetMinutes, isFixedOffset, isNamedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
+import { startOfDay } from "@solve-js/calendar/RelativeDays";
 
 function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number, exact?: DecimalData, rational?: Rational): string {
   // A zero is written without a sign. IEEE's negative zero is kept on the value,
@@ -395,7 +396,7 @@ export function slashYear(year: number): string {
  * backend its engine computes with (`FormattingSettings.calendar`) and a
  * date shows the day it was computed on, in that backend's zone.
  */
-function formatDatetime(instant: number, locale: ILocale, settings: FormattingSettings, valueZone?: string): string {
+function formatDatetime(instant: number, locale: ILocale, settings: FormattingSettings, valueZone?: string, isDay = false): string {
   const calendar = settings.calendar ?? DATE_CALENDAR;
   const format = settings.dateResult?.format ?? "long";
 
@@ -417,7 +418,12 @@ function formatDatetime(instant: number, locale: ILocale, settings: FormattingSe
   const named = zone !== undefined && !isFixedOffset(zone);
   const d = named ? calendar.fieldsInZone(zone, value) : calendar.fields(value);
   const millisecond = named ? 0 : calendar.fields(value).millisecond;
-  const isMidnight = d.hour === 0 && d.minute === 0 && d.second === 0 && millisecond === 0;
+  // A calendar day (grain `date`) shows no time when it sits at the start of
+  // its day, which is not midnight on a day whose midnight the zone skips:
+  // Chile and Cuba spring forward at 00:00, so 6 September 2026 in Santiago
+  // begins at 01:00 and showed as "1:00:00 AM" on a date nobody gave a time.
+  const isMidnight = (d.hour === 0 && d.minute === 0 && d.second === 0 && millisecond === 0)
+    || (isDay && valueZone === undefined && instant === startOfDay(calendar, instant));
 
   // The spelled-out default, localised through the host's own tag where Intl
   // has names for it; see dateNamesLocale.
@@ -1355,7 +1361,7 @@ export function formatValue(value: Value, settings?: FormattingOverrides): strin
       return formatBoolean(value.value as boolean);
     case ValueType.Datetime:
       if (value.grain === "time") return formatTimeOfDayValue(value.value as number, locale, us, value.zone, value.timeAnchor, value.timePrecision);
-      return formatDatetime(value.value as number, locale, us, value.zone);
+      return formatDatetime(value.value as number, locale, us, value.zone, value.grain === "date");
     case ValueType.Uom:
       if (value.zoneDifference !== undefined) {
         const gap = formatZoneDifference(value, us);

@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 571 codes, grouped below by the part
+ship. The engine and its built-in packages ship 572 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -470,6 +470,7 @@ In the package as `ERROR_CODE_CATALOGUES.DatetimeZoneErrorCodes`.
 | `DATETIME_NOT_CONVERTIBLE` | as a value | A date converted `in <unit>` where the name is a real unit that a date has no reading in, as in `2026-04-03 in furlongs`. Separate from `DATETIME_ZONE_UNKNOWN`, since the fix is different. |
 | `DATE_ZONE_UNKNOWN` | thrown | `dateCalendarInZone` given a zone this runtime cannot compute in, as in `"Europe/Atlantis"`. Raised when the host builds the calendar, not per line. |
 | `DATE_WEEKDAY_INVALID` | thrown | `date: { weekend: ["fri"] }`: `date.weekend` or `date.firstDayOfWeek` named something that is not a day of the week. Raised at construction, because a weekend quietly ignored is every working-day answer quietly wrong (#702). |
+| `DATE_RELATIVE_DAYS_INVALID` | thrown | `date: { relativeDays: "today" }`: `date.relativeDays` given something other than `"now"` or `"midnight"`. Raised at construction, because a setting quietly ignored is every relative date quietly showing the time of day the host asked it not to. |
 
 ### CurrencyErrorCodes
 

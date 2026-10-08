@@ -25,6 +25,7 @@ import { BackgroundRefreshManager } from "@solve-js/engine/BackgroundRefreshMana
 import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import { resolveWeekShape } from "@solve-js/calendar/WeekShape";
+import { resolveRelativeDays } from "@solve-js/calendar/RelativeDays";
 import { splitFrozenSuffix, frozenDirectiveFor } from "@solve-js/engine/FrozenSuffix";
 import type { FrozenRecord } from "@solve-js/vm/FrozenValues";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
@@ -2510,6 +2511,9 @@ export class ExpressionEngine {
             // Resolved once, like the date order above, and raising
             // DATE_WEEKDAY_INVALID here for a day that is not one (#702).
             week: resolveWeekShape(locale, this.config.date.weekend, this.config.date.firstDayOfWeek),
+            // Checked here too, raising DATE_RELATIVE_DAYS_INVALID for a value
+            // that is neither "now" nor "midnight".
+            relativeDays: resolveRelativeDays(this.config.date.relativeDays),
             queryClient: this.queryClient,
         });
         // The lexer paints a token with this engine's categories, which the

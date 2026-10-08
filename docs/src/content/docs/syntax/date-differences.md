@@ -10,6 +10,10 @@ ask for, or the time until or since a single date reckoned from now.
 
 A duration to or from now moves with the day. The answers shown for those are
 for noon on Wednesday 11 March 2026 in London, the fixed moment these pages are checked against, and the notepad gives yours.
+A count from today includes the part of today already gone, so at noon it ends
+in a half. An app that starts relative days at midnight counts whole days
+instead, 289 rather than 288.50 (see
+[counting from the start of the day](/syntax/relative-dates/#counting-from-the-start-of-the-day)).
 
 ```solve
 weeks between 01/01/2024 and 01/06/2024 // 21.71 weeks
