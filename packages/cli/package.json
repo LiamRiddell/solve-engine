@@ -30,7 +30,7 @@
     "solve-engine": "^2.43.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.1",
+    "@types/node": "^26.6.4",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
   }
