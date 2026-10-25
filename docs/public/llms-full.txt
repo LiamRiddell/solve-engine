@@ -787,9 +787,9 @@ irr of -1000, 300, 400, 500 // 8.90%
 ```
 
 ```
-tomorrow // Thursday, March 12, 2026, 12:00:00 PM
-next friday // Friday, March 13, 2026, 12:00:00 PM
-3 days ago // Sunday, March 8, 2026, 12:00:00 PM
+tomorrow // Thursday, March 12, 2026
+next friday // Friday, March 13, 2026
+3 days ago // Sunday, March 8, 2026
 end of month // Tuesday, March 31, 2026
 ```
 
@@ -812,7 +812,7 @@ age of 15/06/1990 on 25/12/2030 // 40 years
 ```
 
 ```
-days until 25/12/2026 // 288.50 days
+days until 25/12/2026 // 289 days
 weeks between 01/01/2024 and 01/06/2024 // 21.71 weeks
 ```
 
@@ -1983,7 +1983,7 @@ https://liamriddell.github.io/solve-engine/syntax/date-arithmetic/
 
 ```
 now + 3 hours // Wednesday, March 11, 2026, 3:00:00 PM
-today - 1 week // Wednesday, March 4, 2026, 12:00:00 PM
+today - 1 week // Wednesday, March 4, 2026
 ```
 
 ```
@@ -1994,7 +1994,7 @@ today - 1 week // Wednesday, March 4, 2026, 12:00:00 PM
 ```
 
 ```
-3 days from today // Saturday, March 14, 2026, 12:00:00 PM
+3 days from today // Saturday, March 14, 2026
 ```
 
 ```
@@ -2045,8 +2045,8 @@ weeks between 01/01/2024 and 01/06/2024 // 21.71 weeks
 ```
 
 ```
-days until 25/12/2026 // 288.50 days
-days since 01/01/2023 // 1,165.50 days
+days until 25/12/2026 // 289 days
+days since 01/01/2023 // 1,165 days
 ```
 
 ```
@@ -4755,30 +4755,31 @@ https://liamriddell.github.io/solve-engine/syntax/relative-dates/
 
 ```
 now // Wednesday, March 11, 2026, 12:00:00 PM
-today // Wednesday, March 11, 2026, 12:00:00 PM
-tomorrow // Thursday, March 12, 2026, 12:00:00 PM
-yesterday // Tuesday, March 10, 2026, 12:00:00 PM
-next friday // Friday, March 13, 2026, 12:00:00 PM
-last monday // Monday, March 9, 2026, 12:00:00 PM
+today // Wednesday, March 11, 2026
+tomorrow // Thursday, March 12, 2026
+yesterday // Tuesday, March 10, 2026
+next friday // Friday, March 13, 2026
+last monday // Monday, March 9, 2026
 ```
 
 ```
-today // Wednesday, March 11, 2026, 12:00:00 PM
-days until 25 december // 288.50 days
-3 days from today // Saturday, March 14, 2026, 12:00:00 PM
-3 days before today // Sunday, March 8, 2026, 12:00:00 PM
+now // Wednesday, March 11, 2026, 12:00:00 PM
+today // Wednesday, March 11, 2026
+days until 25 december // 289 days
+3 days from today // Saturday, March 14, 2026
+3 days before today // Sunday, March 8, 2026
 ```
 
 ```
-next friday // Friday, March 13, 2026, 12:00:00 PM
-last friday // Friday, March 6, 2026, 12:00:00 PM
-next saturday // Saturday, March 14, 2026, 12:00:00 PM
+next friday // Friday, March 13, 2026
+last friday // Friday, March 6, 2026
+next saturday // Saturday, March 14, 2026
 ```
 
 ```
-3 days ago // Sunday, March 8, 2026, 12:00:00 PM
+3 days ago // Sunday, March 8, 2026
 2 hours ago // Wednesday, March 11, 2026, 10:00:00 AM
-1 year ago // Tuesday, March 11, 2025, 12:00:00 PM
+1 year ago // Tuesday, March 11, 2025
 ```
 
 ```
@@ -4805,13 +4806,13 @@ next week + 2 days // Wednesday, March 18, 2026
 ```
 
 ```
-this friday // Friday, March 13, 2026, 12:00:00 PM
-this wednesday // Wednesday, March 11, 2026, 12:00:00 PM
-next wednesday // Wednesday, March 18, 2026, 12:00:00 PM
+this friday // Friday, March 13, 2026
+this wednesday // Wednesday, March 11, 2026
+next wednesday // Wednesday, March 18, 2026
 ```
 
 ```
-friday + 1 week // Friday, March 20, 2026, 12:00:00 PM
+friday + 1 week // Friday, March 20, 2026
 days until friday // 2 days
 ```
 
@@ -7357,7 +7358,7 @@ workdays in 3 weeks // 15
 ```
 
 ```
-3 business days from today // Monday, March 16, 2026, 12:00:00 PM
+3 business days from today // Monday, March 16, 2026
 ```
 
 ```

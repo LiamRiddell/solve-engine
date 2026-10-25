@@ -36,8 +36,8 @@ function refusalCode(run: () => unknown): string | null {
 }
 
 describe("resolveRelativeDays: the setting, checked once", () => {
-	test("unset is the historic reading, and both values are taken as written", () => {
-		expect(resolveRelativeDays(undefined)).toBe("now");
+	test("unset is the start of the day, and both values are taken as written", () => {
+		expect(resolveRelativeDays(undefined)).toBe("midnight");
 		expect(resolveRelativeDays("now")).toBe("now");
 		expect(resolveRelativeDays("midnight")).toBe("midnight");
 		expect(RELATIVE_DAY_ANCHORS).toEqual(["now", "midnight"]);
@@ -150,12 +150,16 @@ describe("DATE_TODAY: the opcode `today` compiles to", () => {
 		return unwrapEvalResult(executeBytecode({ opcodes: new Uint8Array([OpCode.DATE_TODAY, OpCode.HALT]), numbers: new Float64Array(), strings: [] }, vm));
 	}
 
-	test("by default it is the clock's instant, exactly as DATE_NOW pushes it", () => {
-		for (const anchor of [undefined, "now"] as const) {
-			const value = today(anchor);
-			expect(value.value).toBe(Date.parse("2026-03-11T12:00:00Z"));
-			expect(value.grain).toBe("instant");
-		}
+	test("under 'now' it is the clock's instant, exactly as DATE_NOW pushes it", () => {
+		const value = today("now");
+		expect(value.value).toBe(Date.parse("2026-03-11T12:00:00Z"));
+		expect(value.grain).toBe("instant");
+	});
+
+	test("by default it is the start of the day, as under 'midnight'", () => {
+		const value = today(undefined);
+		expect(value.value).toBe(Date.parse("2026-03-11T00:00:00Z"));
+		expect(value.grain).toBe("date");
 	});
 
 	test("under 'midnight' it is the start of the day, held as a calendar day", () => {

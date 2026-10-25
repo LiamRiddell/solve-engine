@@ -10,9 +10,9 @@ ask for, or the time until or since a single date reckoned from now.
 
 A duration to or from now moves with the day. The answers shown for those are
 for noon on Wednesday 11 March 2026 in London, the fixed moment these pages are checked against, and the notepad gives yours.
-A count from today includes the part of today already gone, so at noon it ends
-in a half. An app that starts relative days at midnight counts whole days
-instead, 289 rather than 288.50 (see
+A count from today is in whole days, because today is a day: 289 days to
+25 December, not 288.50 at noon. An app that keeps the time of day with
+`date.relativeDays: "now"` counts the part of today already gone instead (see
 [counting from the start of the day](/syntax/relative-dates/#counting-from-the-start-of-the-day)).
 
 ```solve
@@ -20,8 +20,8 @@ weeks between 01/01/2024 and 01/06/2024 // 21.71 weeks
 ```
 
 ```solve
-days until 25/12/2026 // 288.50 days
-days since 01/01/2023 // 1,165.50 days
+days until 25/12/2026 // 289 days
+days since 01/01/2023 // 1,165 days
 ```
 
 ## Subtracting one date from another

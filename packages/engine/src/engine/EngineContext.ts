@@ -218,7 +218,7 @@ export interface EngineContextOptions {
 	calendar?: CalendarOption;
 	/** The shape of the week. Defaults to Saturday and Sunday off, starting on Monday. See `calendar/WeekShape.ts`. */
 	week?: WeekShape;
-	/** Where a relative day starts. Defaults to `"now"`, the historic behaviour. See `calendar/RelativeDays.ts`. */
+	/** Where a relative day starts. Defaults to `"midnight"`; `"now"` keeps the current instant. See `calendar/RelativeDays.ts`. */
 	relativeDays?: RelativeDayAnchor;
 	/** The owning engine's query cache; see {@link EngineContext.queryClient}. Defaults to null. */
 	queryClient?: QueryClient | null;
@@ -239,7 +239,7 @@ export function createEngineContext(options: EngineContextOptions = {}): EngineC
 		networkEnabled: options.networkEnabled ?? true,
 		calendar: resolveCalendar(options.calendar),
 		week: options.week ?? DEFAULT_WEEK,
-		relativeDays: options.relativeDays ?? "now",
+		relativeDays: options.relativeDays ?? "midnight",
 		scope: mintScope(),
 		frozenValues: new FrozenValueStore(),
 		asConverters: new AsConverterRegistry(),

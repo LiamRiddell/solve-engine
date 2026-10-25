@@ -268,7 +268,8 @@ describe("#774 MCP, the tools", () => {
 
 	test("pins: --now and tz, and a seed that repeats", async () => {
 		const { kit } = recordingKit();
-		expect(body(await evaluateExpressionTool({ expression: "today", tz: "Asia/Tokyo", now: "2026-01-01T09:00:00Z" }, settings(), kit)).display).toBe("= Thursday, January 1, 2026, 6:00:00 PM");
+		expect(body(await evaluateExpressionTool({ expression: "today", tz: "Asia/Tokyo", now: "2026-01-01T09:00:00Z" }, settings(), kit)).display).toBe("= Thursday, January 1, 2026");
+		expect(body(await evaluateExpressionTool({ expression: "now", tz: "Asia/Tokyo", now: "2026-01-01T09:00:00Z" }, settings(), kit)).display).toBe("= Thursday, January 1, 2026, 6:00:00 PM");
 		expect(body(await evaluateExpressionTool({ expression: "now", now: "2026-03-29T01:00:00Z", tz: "Europe/London" }, settings(), kit)).display).toBe("= Sunday, March 29, 2026, 2:00:00 AM");
 		const a = body(await evaluateExpressionTool({ expression: "roll(1, 1000000)", seed: 42 }, settings(), kit));
 		const b = body(await evaluateExpressionTool({ expression: "roll(1, 1000000)", seed: "42" }, settings(), kit));

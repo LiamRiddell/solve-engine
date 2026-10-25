@@ -13,11 +13,11 @@ checked; the notepad under each example works them out for your own today.
 
 ```solve
 now // Wednesday, March 11, 2026, 12:00:00 PM
-today // Wednesday, March 11, 2026, 12:00:00 PM
-tomorrow // Thursday, March 12, 2026, 12:00:00 PM
-yesterday // Tuesday, March 10, 2026, 12:00:00 PM
-next friday // Friday, March 13, 2026, 12:00:00 PM
-last monday // Monday, March 9, 2026, 12:00:00 PM
+today // Wednesday, March 11, 2026
+tomorrow // Thursday, March 12, 2026
+yesterday // Tuesday, March 10, 2026
+next friday // Friday, March 13, 2026
+last monday // Monday, March 9, 2026
 ```
 
 ## What each one means
@@ -25,20 +25,20 @@ last monday // Monday, March 9, 2026, 12:00:00 PM
 A few of these read differently from how they are often said, so each is set
 out here, against the same fixed moment.
 
-**`today` is the current instant, not the start of the day.** `today` and `now`
-are the same moment, with the time of day included, so `tomorrow` and
-`yesterday` are that same time a day later or earlier. A count of days from
-today includes the part of today already gone, which is why it is usually not a
-whole number: at noon, `days until 25 december` is 288.50 days rather than 289.
-That is the engine's default; an app can choose to start these days at midnight
-instead, as [counting from the start of the day](#counting-from-the-start-of-the-day)
-sets out.
+**`today` is a day, not the current instant.** `today`, `tomorrow` and
+`yesterday` name a day, anchored at local midnight, so each shows as a date with
+no time of day. `now` is the current instant, with its time of day. A count of
+days from today is a whole number: at noon, `days until 25 december` is 289 days
+rather than 288.50. An app can keep the time of day on these instead, as
+[counting from the start of the day](#counting-from-the-start-of-the-day) sets
+out.
 
 ```solve
-today // Wednesday, March 11, 2026, 12:00:00 PM
-days until 25 december // 288.50 days
-3 days from today // Saturday, March 14, 2026, 12:00:00 PM
-3 days before today // Sunday, March 8, 2026, 12:00:00 PM
+now // Wednesday, March 11, 2026, 12:00:00 PM
+today // Wednesday, March 11, 2026
+days until 25 december // 289 days
+3 days from today // Saturday, March 14, 2026
+3 days before today // Sunday, March 8, 2026
 ```
 
 **`next` and `last` step over today.** `next friday` is the first Friday after
@@ -48,21 +48,22 @@ the 13th and `last friday` the 6th, and `next saturday` is the 14th, the day
 after that Friday.
 
 ```solve
-next friday // Friday, March 13, 2026, 12:00:00 PM
-last friday // Friday, March 6, 2026, 12:00:00 PM
-next saturday // Saturday, March 14, 2026, 12:00:00 PM
+next friday // Friday, March 13, 2026
+last friday // Friday, March 6, 2026
+next saturday // Saturday, March 14, 2026
 ```
 
 ## Days ago
 
-A length of time followed by `ago` counts back from now, the way
-`3 days before today` does, so it carries the time of day as `today` does. Any
+A length of time followed by `ago` counts back from now. A span of a day or more
+counts back from today, the way `3 days before today` does, so it is a date. A
+shorter span counts back from the clock, so it keeps the time of day. Any
 length of time works, from minutes to years.
 
 ```solve
-3 days ago // Sunday, March 8, 2026, 12:00:00 PM
+3 days ago // Sunday, March 8, 2026
 2 hours ago // Wednesday, March 11, 2026, 10:00:00 AM
-1 year ago // Tuesday, March 11, 2025, 12:00:00 PM
+1 year ago // Tuesday, March 11, 2025
 ```
 
 `ago` is read this way only straight after a length of time. Anywhere else it
@@ -115,19 +116,19 @@ as names: `start = 5` and `end - start` work as they always have.
 
 `this friday` is the coming Friday: later this week, or today when today is a
 Friday. That is the difference from `next friday`, which always steps over
-today. Like `next friday`, it keeps the time of day.
+today. Like `next friday`, it is a date with no time of day.
 
 ```solve
-this friday // Friday, March 13, 2026, 12:00:00 PM
-this wednesday // Wednesday, March 11, 2026, 12:00:00 PM
-next wednesday // Wednesday, March 18, 2026, 12:00:00 PM
+this friday // Friday, March 13, 2026
+this wednesday // Wednesday, March 11, 2026
+next wednesday // Wednesday, March 18, 2026
 ```
 
 A day of the week on its own inside a sum, or after `days until`, reads as
 `this friday` does:
 
 ```solve
-friday + 1 week // Friday, March 20, 2026, 12:00:00 PM
+friday + 1 week // Friday, March 20, 2026
 days until friday // 2 days
 ```
 
@@ -139,31 +140,32 @@ unaffected: the part after the colon is the line.
 
 ## Counting from the start of the day
 
-A note that plans by the day usually means a date, not a moment, when it says
+A note that plans by the day means a date, not a moment, when it says
 `tomorrow`: `today + 3 weeks` is a deadline, and the minute the line was typed
-is noise on it. An app that embeds the engine can choose that reading with one
-setting, `date.relativeDays`. It takes two values:
+would be noise on it. So the engine reads a relative day as a date, anchored at
+local midnight. An app that wants the time of day kept can choose that reading
+with one setting, `date.relativeDays`. It takes two values:
 
-- `"now"`, the default: each relative day is the current instant moved by whole
-  days, with the time of day, as the examples above show.
-- `"midnight"`: each relative day starts at midnight, so it is a date with no
-  time of day, and a count of days from today is a whole number.
+- `"midnight"`, the default: each relative day starts at midnight, so it is a
+  date with no time of day, and a count of days from today is a whole number.
+- `"now"`: each relative day is the current instant moved by whole days, with
+  the time of day, as every version before 2.44.0 read them.
 
 ```ts
-createEngine({ config: { date: { relativeDays: "midnight" } } });
+createEngine({ config: { date: { relativeDays: "now" } } });
 ```
 
 The same lines at the same moment, noon on Wednesday 11 March 2026, under each:
 
-| line | `"now"` (the default) | `"midnight"` |
+| line | `"midnight"` (the default) | `"now"` |
 | --- | --- | --- |
-| `today` | Wednesday, March 11, 2026, 12:00:00 PM | Wednesday, March 11, 2026 |
-| `tomorrow` | Thursday, March 12, 2026, 12:00:00 PM | Thursday, March 12, 2026 |
-| `next friday` | Friday, March 13, 2026, 12:00:00 PM | Friday, March 13, 2026 |
-| `3 days ago` | Sunday, March 8, 2026, 12:00:00 PM | Sunday, March 8, 2026 |
-| `today + 3 weeks` | Wednesday, April 1, 2026, 12:00:00 PM | Wednesday, April 1, 2026 |
-| `days until 25 december` | 288.50 days | 289 days |
-| `tomorrow - today` | 24:00 | 1 day |
+| `today` | Wednesday, March 11, 2026 | Wednesday, March 11, 2026, 12:00:00 PM |
+| `tomorrow` | Thursday, March 12, 2026 | Thursday, March 12, 2026, 12:00:00 PM |
+| `next friday` | Friday, March 13, 2026 | Friday, March 13, 2026, 12:00:00 PM |
+| `3 days ago` | Sunday, March 8, 2026 | Sunday, March 8, 2026, 12:00:00 PM |
+| `today + 3 weeks` | Wednesday, April 1, 2026 | Wednesday, April 1, 2026, 12:00:00 PM |
+| `days until 25 december` | 289 days | 288.50 days |
+| `tomorrow - today` | 1 day | 24:00 |
 | `now` | Wednesday, March 11, 2026, 12:00:00 PM | Wednesday, March 11, 2026, 12:00:00 PM |
 | `2 hours ago` | Wednesday, March 11, 2026, 10:00:00 AM | Wednesday, March 11, 2026, 10:00:00 AM |
 
@@ -173,14 +175,17 @@ span of a day or more followed by `ago`, and the count in `days until` and
 `days since` (and in weeks, months or years). Two days subtract to a count of
 days, as two written dates do, rather than to hours on a clock.
 
-The boundary, and why: `now` stays the current instant under both settings, and
-so does a span shorter than a day (`2 hours ago`, `hours until 5pm`), because
-those are questions about the clock. A time added to the start of the day is a
-time on it, so `today + 2 hours` is 2:00 AM; write `now + 2 hours` for two hours
-from now. `next week`, `end of month` and the other whole periods already name a
-day, so they read the same under both. The default stays `"now"` within the
-current major version, because changing it would change every answer at the top
-of this page for apps that rely on them.
+The boundary, and why: `now` is the current instant under both settings, and so
+is a span shorter than a day (`2 hours ago`, `hours until 5pm`), because those
+are questions about the clock. A time added to the start of the day is a time on
+it, so `today + 2 hours` is 2:00 AM; write `now + 2 hours` for two hours from
+now. `next week`, `end of month` and the other whole periods already name a day,
+so they read the same under both.
+
+The start of the day is the zone's own. On a day whose midnight the zone skips
+(Santiago springs forward at 00:00, so 6 September 2026 begins at 01:00) the day
+still shows as a date, and a whole number of days from it lands on the start of
+the day reached.
 
 ## The boundary
 
@@ -201,8 +206,3 @@ The week starts on Monday unless the host or the locale's region says
 otherwise. A date so far away that no calendar holds it,
 past AD 275760 or before 271821 BC, is refused rather than shown:
 `99999999999 days ago` is an error, not a date.
-
-Reading `today` as a date with no time of day, and counting `days until` in
-whole calendar days, is a setting an app opts into
-([counting from the start of the day](#counting-from-the-start-of-the-day)),
-not the default, since the default's answers are the ones described above.

@@ -25,7 +25,7 @@ Counted from today, the answer moves with the day. The one shown is for
 noon on Wednesday 11 March 2026 in London, the fixed moment these pages are checked against, and the notepad gives yours.
 
 ```solve
-3 business days from today // Monday, March 16, 2026, 12:00:00 PM
+3 business days from today // Monday, March 16, 2026
 ```
 
 `working` and `business` days mean the same thing, and either reads in the

@@ -2,8 +2,9 @@
  * `date.relativeDays: 'midnight'`: `today`, `tomorrow`, `yesterday`, `next
  * friday`, `this friday`, `3 days ago` and the count in `days until` read from
  * the start of the day, so each is a date with no time of day, while `now` and
- * a span shorter than a day keep the clock. The default, `'now'`, is the
- * reading every version before the setting had, and is pinned here unchanged.
+ * a span shorter than a day keep the clock. `midnight` is the default, so an
+ * engine built with no setting reads the same; `'now'` keeps the reading every
+ * version before the default changed, and is pinned here unchanged.
  *
  * Every engine runs on a pinned clock in a named zone, on the calendar backend
  * under test (`Date`, or `Temporal` under `test:temporal`). The pins are the
@@ -49,7 +50,7 @@ function at(iso: string, relativeDays?: RelativeDayAnchor, zone = "Europe/London
 	return { engine, make, show, batch, incremental, calendar, config };
 }
 
-/** Each form at the docs moment: the default reading, then the start-of-day one. */
+/** Each form at the docs moment: the `"now"` reading, then the start-of-day one that is the default. */
 const AT_DOCS_MOMENT: ReadonlyArray<readonly [string, string, string]> = [
 	["today", "Wednesday, March 11, 2026, 12:00:00 PM", "Wednesday, March 11, 2026"],
 	["tomorrow", "Thursday, March 12, 2026, 12:00:00 PM", "Thursday, March 12, 2026"],
@@ -94,12 +95,13 @@ describe("each form at the docs moment, under both settings", () => {
 	const midnight = at(DOCS, "midnight");
 
 	test.each(AT_DOCS_MOMENT)("%s", (line, before, after) => {
-		expect(unset.show(line)).toBe(before);
+		expect(unset.show(line)).toBe(after);
 		expect(now.show(line)).toBe(before);
 		expect(midnight.show(line)).toBe(after);
 	});
 
 	test.each(CLOCK_FORMS)("a question about the clock is the same under both: %s", (line, answer) => {
+		expect(unset.show(line)).toBe(answer);
 		expect(now.show(line)).toBe(answer);
 		expect(midnight.show(line)).toBe(answer);
 	});
@@ -150,7 +152,7 @@ describe("edges: the clock at the boundaries of a day", () => {
 	});
 
 	test("a date literal on a skipped midnight shows as a date too, and steps to midnights", () => {
-		// The same repair, reached by a literal under the default setting.
+		// The same repair, reached by a literal, under either setting.
 		const { show } = at("2026-09-01T12:00:00Z", undefined, "America/Santiago");
 		expect(show("6 september 2026")).toBe("Sunday, September 6, 2026");
 		expect(show("6 september 2026 + 1 day")).toBe("Monday, September 7, 2026");
@@ -168,6 +170,80 @@ describe("edges: the clock at the boundaries of a day", () => {
 		const { show } = at(DOCS, "midnight");
 		expect(show("99999999999 days ago")).toMatch(/range|calendar/i);
 		expect(show("today + 99999999999 days")).toMatch(/range|calendar/i);
+	});
+});
+
+describe("the default is the start of the day", () => {
+	test("an engine built with no setting holds the start-of-day anchor", () => {
+		expect(newTrackedEngine({ config: { network: { enabled: false } } }).getVM().context.relativeDays).toBe("midnight");
+		expect(newTrackedEngine({ config: { date: { relativeDays: "now" } } }).getVM().context.relativeDays).toBe("now");
+	});
+
+	test.each([
+		// Midnight and the millisecond either side of it.
+		["2026-03-10T23:59:59.999Z", "Tuesday, March 10, 2026", "Wednesday, March 11, 2026", "Europe/London"],
+		["2026-03-11T00:00:00.000Z", "Wednesday, March 11, 2026", "Thursday, March 12, 2026", "Europe/London"],
+		// A leap day and the day after it.
+		["2028-02-29T12:00:00Z", "Tuesday, February 29, 2028", "Wednesday, March 1, 2028", "Europe/London"],
+		["2028-02-28T12:00:00Z", "Monday, February 28, 2028", "Tuesday, February 29, 2028", "Europe/London"],
+		// The year end.
+		["2026-12-31T23:59:59.999Z", "Thursday, December 31, 2026", "Friday, January 1, 2027", "Europe/London"],
+		// Clocks going forward (23-hour day) and back (25-hour day), in each hemisphere.
+		["2026-03-29T12:00:00Z", "Sunday, March 29, 2026", "Monday, March 30, 2026", "Europe/London"],
+		["2026-10-25T12:00:00Z", "Sunday, October 25, 2026", "Monday, October 26, 2026", "Europe/London"],
+		["2026-03-08T12:00:00Z", "Sunday, March 8, 2026", "Monday, March 9, 2026", "America/New_York"],
+		["2026-11-01T12:00:00Z", "Sunday, November 1, 2026", "Monday, November 2, 2026", "America/New_York"],
+		["2026-04-05T12:00:00Z", "Sunday, April 5, 2026", "Monday, April 6, 2026", "Australia/Sydney"],
+		["2026-10-04T12:00:00Z", "Sunday, October 4, 2026", "Monday, October 5, 2026", "Australia/Sydney"],
+	])("by default at %s, today is %s and tomorrow %s (%s)", (iso, today, tomorrow, zone) => {
+		const { show } = at(iso, undefined, zone);
+		expect(show("today")).toBe(today);
+		expect(show("tomorrow")).toBe(tomorrow);
+		expect(show("tomorrow - today")).toBe("1 day");
+	});
+
+	test.each([
+		["London falls back", "2026-10-24T12:00:00Z", "Europe/London", "Monday, October 26, 2026"],
+		["New York falls back", "2026-10-31T12:00:00Z", "America/New_York", "Monday, November 2, 2026"],
+		["London springs forward", "2026-03-28T12:00:00Z", "Europe/London", "Monday, March 30, 2026"],
+		["New York springs forward", "2026-03-07T12:00:00Z", "America/New_York", "Monday, March 9, 2026"],
+	])("a count of days across a change of clocks stays whole by default: %s", (_label, iso, zone, monday) => {
+		const { show } = at(iso, undefined, zone);
+		expect(show("next monday")).toBe(monday);
+		expect(show("3 days from today - today")).toBe("3 days");
+		expect(show("today + 2 days - today")).toBe("2 days");
+	});
+
+	test("a count of days lands on a whole number of days at noon, where the clock reading would not", () => {
+		const { show } = at(DOCS);
+		expect(show("days until 25 december")).toBe("289 days");
+		expect(show("days since 1 january")).toBe("69 days");
+		expect(at(DOCS, "now").show("days until 25 december")).toBe("288.50 days");
+	});
+
+	test("the issue's own line: today + 3 weeks is a date, and now + 3 weeks keeps its time", () => {
+		const { show } = at("2026-10-25T15:01:59Z", undefined, "UTC");
+		expect(show("today + 3 weeks")).toBe("Sunday, November 15, 2026");
+		expect(show("now + 3 weeks")).toBe("Sunday, November 15, 2026, 3:01:59 PM");
+	});
+
+	test("a huge offset is refused by name, not shown as a date or an Invalid Date, by default", () => {
+		const { show } = at(DOCS);
+		for (const line of ["today + 99999999999 days", "tomorrow + 99999999999 weeks", "99999999999 days from today", "99999999999 years ago", "today - 99999999999 days"]) {
+			expect({ line, shown: show(line) }).toEqual({ line, shown: expect.stringMatching(/range|calendar/i) });
+		}
+		expect(show("today + 1e308 days")).not.toMatch(/Invalid/);
+		expect(show("today + 1e308 days")).not.toMatch(/^[A-Z][a-z]+day, /);
+	});
+
+	test("a far year is still a date by default, and an offset past the calendar is refused", () => {
+		const { show } = at(DOCS);
+		expect(show("today + 99999999999 days")).toMatch(/range|calendar/i);
+		expect(show("today + 1000 years")).toBe("Saturday, March 11, 3026");
+	});
+
+	test.each(["Mars/Base", "", "UTC+25", "__proto__", "Europe/Atlantis", "constructor"])("a zone this runtime does not know is refused when the calendar is built: %j", (zone) => {
+		expect(() => dateCalendarInZone(zone)).toThrow(/time zone/i);
 	});
 });
 

@@ -38,9 +38,11 @@ function kiritimati() {
 
 describe("engine.formatValue writes a date in the engine's own zone", () => {
 	test.each([
-		["next friday", "= Friday, October 2, 2026, 4:24:57 AM"],
-		["today", "= Saturday, September 26, 2026, 4:24:57 AM"],
-		["tomorrow", "= Sunday, September 27, 2026, 4:24:57 AM"],
+		["next friday", "= Friday, October 2, 2026"],
+		["today", "= Saturday, September 26, 2026"],
+		["tomorrow", "= Sunday, September 27, 2026"],
+		["now", "= Saturday, September 26, 2026, 4:24:57 AM"],
+		["now + 1 week", "= Saturday, October 3, 2026, 4:24:57 AM"],
 		["3 October 2026", "= Saturday, October 3, 2026"],
 	])("%s is %s", (line, expected) => {
 		const { engine } = kiritimati();
@@ -58,11 +60,11 @@ describe("engine.formatValue writes a date in the engine's own zone", () => {
 
 	test("overrides merge over the engine's settings, group by group", () => {
 		const { engine } = kiritimati();
-		const value = engine.evaluateExpression("next friday");
-		expect(engine.formatValue(value, { dateResult: { format: "iso" } })).toBe("= 2026-10-02T04:24:57");
-		expect(engine.formatValue(value, { dateResult: { format: "dmy" } })).toBe("= 02/10/2026 04:24:57");
+		const value = engine.evaluateExpression("now + 1 week");
+		expect(engine.formatValue(value, { dateResult: { format: "iso" } })).toBe("= 2026-10-03T04:24:57");
+		expect(engine.formatValue(value, { dateResult: { format: "dmy" } })).toBe("= 03/10/2026 04:24:57");
 		// An override naming another calendar is the host asking for another zone.
-		expect(engine.formatValue(value, { calendar: dateCalendarInZone("UTC"), dateResult: { format: "iso" } })).toBe("= 2026-10-01T14:24:57");
+		expect(engine.formatValue(value, { calendar: dateCalendarInZone("UTC"), dateResult: { format: "iso" } })).toBe("= 2026-10-02T14:24:57");
 	});
 
 	test("a bare formatValue still reads the process zone, as it always has", () => {
@@ -319,7 +321,7 @@ describe("adversarial", () => {
 				const engine = newTrackedEngine({ calendar: dateCalendarInZone("Pacific/Kiritimati", { now: () => ms }) });
 				return engine.formatValue(engine.evaluateExpression("today"), { dateResult: { format: "iso" } });
 			};
-			expect(on(midnight - 1)).toBe("= 2026-09-25T23:59:59");
+			expect(on(midnight - 1)).toBe("= 2026-09-25");
 			expect(on(midnight)).toBe("= 2026-09-26");
 		});
 	});
