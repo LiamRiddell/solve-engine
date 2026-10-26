@@ -438,12 +438,12 @@ hours to a date, or taking them away.
 
 **[Relative dates](/syntax/relative-dates/)**: a day named by its relation to
 today, such as tomorrow, next friday, three days ago or the end of the month.
-Each keeps the time of day unless the app starts relative days at midnight.
+Each is a date with no time of day, unless the app keeps the time of day (`date.relativeDays: "now"`).
 
 ```solve
-tomorrow // Thursday, March 12, 2026, 12:00:00 PM
-next friday // Friday, March 13, 2026, 12:00:00 PM
-3 days ago // Sunday, March 8, 2026, 12:00:00 PM
+tomorrow // Thursday, March 12, 2026
+next friday // Friday, March 13, 2026
+3 days ago // Sunday, March 8, 2026
 end of month // Tuesday, March 31, 2026
 ```
 
@@ -478,12 +478,12 @@ age of 15/06/1990 on 25/12/2030 // 40 years
 ```
 
 **[Date differences](/syntax/date-differences/)**: the span between two dates,
-or the time until or since one. A count from today includes the part of today
-already gone, which is why it is not a whole number at noon, unless the app
-starts relative days at midnight.
+or the time until or since one. A count from today is a whole number of days,
+because today is a day, unless the app keeps the time of day
+(`date.relativeDays: "now"`).
 
 ```solve
-days until 25/12/2026 // 288.50 days
+days until 25/12/2026 // 289 days
 weeks between 01/01/2024 and 01/06/2024 // 21.71 weeks
 ```
 

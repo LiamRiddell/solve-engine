@@ -231,16 +231,36 @@ describe("`tomorrow`, `yesterday` and `next <weekday>` move by the calendar too"
 		jest.useRealTimers();
 	});
 
-	function at(instant: string): ExpressionEngine {
+	function at(instant: string, relativeDays?: "now" | "midnight"): ExpressionEngine {
 		jest.useFakeTimers();
 		jest.setSystemTime(new Date(instant));
-		return newTrackedEngine();
+		return newTrackedEngine(relativeDays === undefined ? {} : { config: { date: { relativeDays } } });
 	}
 
-	test.each(TRANSITION_INSTANTS)("tomorrow is the next date at the same time (%s)", (_label, instant) => {
+	/** The local start of the day `offset` days from the faked clock's day, by the calendar. */
+	function localMidnight(offset: number): number {
+		const day = new Date();
+		day.setDate(day.getDate() + offset);
+		day.setHours(0, 0, 0, 0);
+		return day.getTime();
+	}
+
+	test.each(TRANSITION_INSTANTS)("tomorrow is the next date, at its local midnight (%s)", (_label, instant) => {
 		const engine = at(instant);
-		const now = new Date();
-		const expected = new Date(now);
+		const value = engine.evaluateExpression("tomorrow");
+		expect(value.type).toBe(ValueType.Datetime);
+		expect(value.toNumber()).toBe(localMidnight(1));
+		expect(localFields(value.toNumber()).slice(0, 3)).toEqual(localFields(localMidnight(1)).slice(0, 3));
+	});
+
+	test.each(TRANSITION_INSTANTS)("yesterday is the previous date, at its local midnight (%s)", (_label, instant) => {
+		const engine = at(instant);
+		expect(engine.evaluateExpression("yesterday").toNumber()).toBe(localMidnight(-1));
+	});
+
+	test.each(TRANSITION_INSTANTS)("with date.relativeDays \"now\", tomorrow is the next date at the same time (%s)", (_label, instant) => {
+		const engine = at(instant, "now");
+		const expected = new Date();
 		expected.setDate(expected.getDate() + 1);
 
 		const value = engine.evaluateExpression("tomorrow");
@@ -249,14 +269,12 @@ describe("`tomorrow`, `yesterday` and `next <weekday>` move by the calendar too"
 		expect(localFields(value.toNumber()).slice(0, 3)).toEqual(localFields(expected.getTime()).slice(0, 3));
 	});
 
-	test.each(TRANSITION_INSTANTS)("yesterday is the previous date at the same time (%s)", (_label, instant) => {
-		const engine = at(instant);
-		const now = new Date();
-		const expected = new Date(now);
+	test.each(TRANSITION_INSTANTS)("with date.relativeDays \"now\", yesterday is the previous date at the same time (%s)", (_label, instant) => {
+		const engine = at(instant, "now");
+		const expected = new Date();
 		expected.setDate(expected.getDate() - 1);
 
-		const value = engine.evaluateExpression("yesterday");
-		expect(value.toNumber()).toBe(expected.getTime());
+		expect(engine.evaluateExpression("yesterday").toNumber()).toBe(expected.getTime());
 	});
 
 	test("`next <weekday>` lands on that weekday even when the week is not 7 x 24 hours", () => {
@@ -270,8 +288,7 @@ describe("`tomorrow`, `yesterday` and `next <weekday>` move by the calendar too"
 		const landed = new Date(value.toNumber());
 		expect(landed.getDay()).toBe(1); // Monday
 		expect(value.toNumber()).toBeGreaterThan(now);
-		expect(landed.getHours()).toBe(new Date(now).getHours());
-		expect(landed.getMinutes()).toBe(new Date(now).getMinutes());
+		expect([landed.getHours(), landed.getMinutes(), landed.getSeconds()]).toEqual([0, 0, 0]);
 	});
 
 	test("`last <weekday>` does the same going backwards", () => {
@@ -282,7 +299,22 @@ describe("`tomorrow`, `yesterday` and `next <weekday>` move by the calendar too"
 		const landed = new Date(value.toNumber());
 		expect(landed.getDay()).toBe(1);
 		expect(value.toNumber()).toBeLessThan(now);
-		expect(landed.getHours()).toBe(new Date(now).getHours());
+		expect([landed.getHours(), landed.getMinutes(), landed.getSeconds()]).toEqual([0, 0, 0]);
+	});
+
+	test("with date.relativeDays \"now\", `next <weekday>` and `last <weekday>` keep the time of day across the longer week", () => {
+		const next = at("2024-10-28T07:30:00Z", "now");
+		const nowNext = Date.now();
+		const forward = new Date(next.evaluateExpression("next monday").toNumber());
+		expect(forward.getDay()).toBe(1);
+		expect(forward.getHours()).toBe(new Date(nowNext).getHours());
+		expect(forward.getMinutes()).toBe(new Date(nowNext).getMinutes());
+
+		const last = at("2024-11-04T08:30:00Z", "now");
+		const nowLast = Date.now();
+		const back = new Date(last.evaluateExpression("last monday").toNumber());
+		expect(back.getDay()).toBe(1);
+		expect(back.getHours()).toBe(new Date(nowLast).getHours());
 	});
 });
 

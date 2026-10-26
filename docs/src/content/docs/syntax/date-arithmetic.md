@@ -20,7 +20,7 @@ against now.
 
 ```solve
 now + 3 hours // Wednesday, March 11, 2026, 3:00:00 PM
-today - 1 week // Wednesday, March 4, 2026, 12:00:00 PM
+today - 1 week // Wednesday, March 4, 2026
 ```
 
 ## The same sum in words
@@ -40,7 +40,7 @@ the operators above in words, so they answer the same thing.
 date the engine reads, including a relative one:
 
 ```solve
-3 days from today // Saturday, March 14, 2026, 12:00:00 PM
+3 days from today // Saturday, March 14, 2026
 ```
 
 The connector is only read this way when a span is in front of it, which is what
