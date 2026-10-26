@@ -64,7 +64,7 @@ describe("a worker result reads as the same engine's formatValue writes it", () 
 				expect({ line, text: (await worker.evaluateExpression(line)).text })
 					.toEqual({ line, text: main.formatValue(main.evaluateExpression(line)) });
 			}
-			expect((await worker.evaluateExpression("next friday")).text).toBe("= Friday, October 2, 2026, 4:24:57 AM");
+			expect((await worker.evaluateExpression("next friday")).text).toBe("= Friday, October 2, 2026");
 		});
 	});
 

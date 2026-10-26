@@ -44,7 +44,7 @@ const DOCS = "2026-03-11T12:00:00Z";
 describe("#704: each form at the docs moment", () => {
 	const { show } = at(DOCS);
 	test.each([
-		["3 days ago", "Sunday, March 8, 2026, 12:00:00 PM"],
+		["3 days ago", "Sunday, March 8, 2026"],
 		["2 hours ago", "Wednesday, March 11, 2026, 10:00:00 AM"],
 		["next week", "Monday, March 16, 2026"],
 		["this week", "Monday, March 9, 2026"],
@@ -66,9 +66,9 @@ describe("#704: each form at the docs moment", () => {
 		["noon + 90 minutes", "1:30:00 PM"],
 		["9am until 5pm", "480 minutes"],
 		["9am to noon", "180 minutes"],
-		["this friday", "Friday, March 13, 2026, 12:00:00 PM"],
-		["this wednesday", "Wednesday, March 11, 2026, 12:00:00 PM"],
-		["friday + 1 week", "Friday, March 20, 2026, 12:00:00 PM"],
+		["this friday", "Friday, March 13, 2026"],
+		["this wednesday", "Wednesday, March 11, 2026"],
+		["friday + 1 week", "Friday, March 20, 2026"],
 		["days until friday", "2 days"],
 		["first Monday of next month", "Monday, April 6, 2026"],
 		["second Tuesday of April", "Tuesday, April 14, 2026"],
@@ -115,9 +115,9 @@ describe("#704: a month end and a leap February", () => {
 		expect(show("start of next month")).toBe("Sunday, February 1, 2026");
 		expect(show("this week")).toBe("Monday, January 26, 2026");
 		expect(show("end of week")).toBe("Sunday, February 1, 2026");
-		expect(show("this sunday")).toBe("Sunday, February 1, 2026, 10:00:00 AM");
-		expect(show("3 days ago")).toBe("Wednesday, January 28, 2026, 10:00:00 AM");
-		expect(show("1 month ago")).toBe("Wednesday, December 31, 2025, 10:00:00 AM");
+		expect(show("this sunday")).toBe("Sunday, February 1, 2026");
+		expect(show("3 days ago")).toBe("Wednesday, January 28, 2026");
+		expect(show("1 month ago")).toBe("Wednesday, December 31, 2025");
 		expect(show("first Monday of next month")).toBe("Monday, February 2, 2026");
 	});
 
@@ -142,8 +142,8 @@ describe("#704: a year end", () => {
 		["this week", "Monday, December 28, 2026"],
 		["next week", "Monday, January 4, 2027"],
 		["end of week", "Sunday, January 3, 2027"],
-		["this friday", "Friday, January 1, 2027, 11:30:00 PM"],
-		["3 days ago", "Monday, December 28, 2026, 11:30:00 PM"],
+		["this friday", "Friday, January 1, 2027"],
+		["3 days ago", "Monday, December 28, 2026"],
 		["2 hours ago", "Thursday, December 31, 2026, 9:30:00 PM"],
 		["end of next month", "Sunday, January 31, 2027"],
 	])("%s", (line, expected) => {
@@ -157,15 +157,15 @@ describe("#704: the week's edges", () => {
 		expect(show("this week")).toBe("Monday, March 9, 2026");
 		expect(show("end of week")).toBe("Sunday, March 15, 2026");
 		expect(show("next week")).toBe("Monday, March 16, 2026");
-		expect(show("this sunday")).toBe("Sunday, March 15, 2026, 9:00:00 AM");
-		expect(show("this monday")).toBe("Monday, March 16, 2026, 9:00:00 AM");
+		expect(show("this sunday")).toBe("Sunday, March 15, 2026");
+		expect(show("this monday")).toBe("Monday, March 16, 2026");
 		expect(show("days until sunday")).toBe("0 days");
 	});
 
 	test("this friday on a Friday is today, where next friday steps over it", () => {
 		const { show } = at("2026-03-13T12:00:00Z");
-		expect(show("this friday")).toBe("Friday, March 13, 2026, 12:00:00 PM");
-		expect(show("next friday")).toBe("Friday, March 20, 2026, 12:00:00 PM");
+		expect(show("this friday")).toBe("Friday, March 13, 2026");
+		expect(show("next friday")).toBe("Friday, March 20, 2026");
 	});
 });
 
@@ -181,7 +181,7 @@ describe("#704: across a daylight-saving change", () => {
 
 	test("a day ago keeps the time of day across the change, where 24 hours ago does not", () => {
 		const { show, value } = at("2026-03-29T11:00:00Z");
-		expect(show("1 day ago")).toBe("Saturday, March 28, 2026, 12:00:00 PM");
+		expect(show("1 day ago")).toBe("Saturday, March 28, 2026");
 		expect(show("24 hours ago")).toBe("Saturday, March 28, 2026, 11:00:00 AM");
 		expect(value("1 day ago").toNumber()).toBe(value("1 day before today").toNumber());
 	});
@@ -242,10 +242,10 @@ describe("#704 adversarial: the words stay free in prose and as names", () => {
 
 	test("the shipped forms these sit beside still answer as before", () => {
 		const { show } = at(DOCS);
-		expect(show("next friday")).toBe("Friday, March 13, 2026, 12:00:00 PM");
-		expect(show("last friday")).toBe("Friday, March 6, 2026, 12:00:00 PM");
-		expect(show("3 days before today")).toBe("Sunday, March 8, 2026, 12:00:00 PM");
-		expect(show("days until 25 december")).toBe("288.50 days");
+		expect(show("next friday")).toBe("Friday, March 13, 2026");
+		expect(show("last friday")).toBe("Friday, March 6, 2026");
+		expect(show("3 days before today")).toBe("Sunday, March 8, 2026");
+		expect(show("days until 25 december")).toBe("289 days");
 		expect(show("2nd Tuesday of March 2027")).toBe("Tuesday, March 9, 2027");
 	});
 });
@@ -267,8 +267,9 @@ describe("#704 adversarial: edges and refusals", () => {
 	});
 
 	test("a negative length ago is that length ahead, as the arithmetic reads", () => {
-		expect(show("-3 days ago")).toBe("Saturday, March 14, 2026, 12:00:00 PM");
-		expect(value("0 days ago").toNumber()).toBe(value("now").toNumber());
+		expect(show("-3 days ago")).toBe("Saturday, March 14, 2026");
+		expect(value("0 days ago").toNumber()).toBe(value("today").toNumber());
+		expect(value("0 hours ago").toNumber()).toBe(value("now").toNumber());
 	});
 
 	test("an ordinal past fifth is not read, and a fifth the month lacks is refused", () => {

@@ -609,7 +609,7 @@ describe("the runtime's calendar backend", () => {
 	test("the worker's engine computes dates through the backend the runtime was given", async () => {
 		const calendar = new RecordingCalendar(FIXED_NOW);
 		const engine = await worker({}, { calendar });
-		const value = await engine.evaluateExpression("today");
+		const value = await engine.evaluateExpression("now");
 		// The pinned clock is the backend's, so it can only have come through it.
 		expect(value.number).toBe(FIXED_NOW);
 		expect(calendar.calls).toContain("now");

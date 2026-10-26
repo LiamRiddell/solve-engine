@@ -70,8 +70,8 @@ describe("the context carries the backend", () => {
 		// The pinned clock belongs to the first engine only; the default backend
 		// reads the real run clock, so `other`'s `today` sits on the current day
 		// (within a day of now) rather than merely differing from the pinned instant.
-		expect(engine.evaluateExpression("today").toNumber()).toBe(FIXED_NOW);
-		expect(Math.abs(other.evaluateExpression("today").toNumber() - Date.now())).toBeLessThan(25 * 60 * 60 * 1000);
+		expect(engine.evaluateExpression("now").toNumber()).toBe(FIXED_NOW);
+		expect(Math.abs(other.evaluateExpression("now").toNumber() - Date.now())).toBeLessThan(25 * 60 * 60 * 1000);
 		other.clear();
 	});
 

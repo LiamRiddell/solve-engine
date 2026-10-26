@@ -83,7 +83,7 @@ check("a directory exits 2", () => expectRun(solve([scratch]), 2, ""));
 // expression; the CLI spec skips the same case there.
 if (process.platform === "win32") console.log("  skip  a device exits 2 (no device path on Windows)");
 else check("a device exits 2", () => expectRun(solve(["/dev/zero"]), 2, ""));
-check("--now and --tz pin the clock", () => expectRun(solve(["--now", "2026-01-01T09:00:00Z", "--tz", "Asia/Tokyo", "today"]), 0, "Thursday, January 1, 2026, 6:00:00 PM\n"));
+check("--now and --tz pin the clock", () => expectRun(solve(["--now", "2026-01-01T09:00:00Z", "--tz", "Asia/Tokyo", "now"]), 0, "Thursday, January 1, 2026, 6:00:00 PM\n"));
 check("--seed repeats a roll", () => {
 	const a = solve(["--seed", "42", "roll(1, 1000000)"]);
 	const b = solve(["--seed", "42", "roll(1, 1000000)"]);

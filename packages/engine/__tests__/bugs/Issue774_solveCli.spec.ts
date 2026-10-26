@@ -818,14 +818,16 @@ describe("#774 --tz, --now, --seed and --network", () => {
 	});
 
 	test("--now pins the clock, read in the --tz zone", async () => {
-		expect((await solve(["--now", "2026-01-01T09:00:00Z", "--tz", "Asia/Tokyo", "today"])).out).toBe("Thursday, January 1, 2026, 6:00:00 PM\n");
-		expect((await solve(["--now", "2026-01-01T09:00:00Z", "--tz", "America/New_York", "today"])).out).toBe("Thursday, January 1, 2026, 4:00:00 AM\n");
+		expect((await solve(["--now", "2026-01-01T09:00:00Z", "--tz", "Asia/Tokyo", "now"])).out).toBe("Thursday, January 1, 2026, 6:00:00 PM\n");
+		expect((await solve(["--now", "2026-01-01T09:00:00Z", "--tz", "Asia/Tokyo", "today"])).out).toBe("Thursday, January 1, 2026\n");
+		expect((await solve(["--now", "2026-01-01T09:00:00Z", "--tz", "America/New_York", "now"])).out).toBe("Thursday, January 1, 2026, 4:00:00 AM\n");
 		// Without --tz, the machine's zone (UTC here).
-		expect((await solve(["--now", "2026-01-01T09:00:00Z", "today"])).out).toBe("Thursday, January 1, 2026, 9:00:00 AM\n");
+		expect((await solve(["--now", "2026-01-01T09:00:00Z", "now"])).out).toBe("Thursday, January 1, 2026, 9:00:00 AM\n");
 	});
 
 	test("--now on a leap day and across a change of clocks", async () => {
-		expect((await solve(["--now", "2028-02-29T12:00:00Z", "--tz", "UTC", "today + 1 day"])).out).toBe("Wednesday, March 1, 2028, 12:00:00 PM\n");
+		expect((await solve(["--now", "2028-02-29T12:00:00Z", "--tz", "UTC", "now + 1 day"])).out).toBe("Wednesday, March 1, 2028, 12:00:00 PM\n");
+		expect((await solve(["--now", "2028-02-29T12:00:00Z", "--tz", "UTC", "today + 1 day"])).out).toBe("Wednesday, March 1, 2028\n");
 		// 01:00 UTC on 29 March 2026 is the moment London moves to summer time.
 		expect((await solve(["--now", "2026-03-29T01:00:00Z", "--tz", "Europe/London", "now"])).out).toBe("Sunday, March 29, 2026, 2:00:00 AM\n");
 		expect((await solve(["--now", "2026-03-29T00:59:00Z", "--tz", "Europe/London", "now"])).out).toBe("Sunday, March 29, 2026, 12:59:00 AM\n");
