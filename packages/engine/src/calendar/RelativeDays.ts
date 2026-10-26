@@ -2,17 +2,15 @@
  * Where a day named by its relation to today starts: `today`, `tomorrow`,
  * `next friday`, `3 days ago`.
  *
- * Every version of the engine has read these as the current instant moved by
- * whole days, so at noon `tomorrow` is noon tomorrow and `days until 25
- * december` counts the half of today already gone. That is a fair reading of a
- * clock, and the wrong one for a note that plans by the day, where `tomorrow`
- * is a date and `today + 3 weeks` should not carry the minute the line was
- * typed. A host chooses which its readers mean with `date.relativeDays`:
+ * A note that plans by the day means a date when it says `tomorrow`:
+ * `today + 3 weeks` is a deadline and should not carry the minute the line was
+ * typed. A host chooses what its readers mean with `date.relativeDays`:
  *
- * - `'now'` (the default): the current instant, with its time of day, as
- *   before. Leaving the setting unset changes nothing.
- * - `'midnight'`: the start of the day, a date with no time of day, so
- *   `tomorrow` shows as a date and `days until` counts whole days.
+ * - `'midnight'` (the default): the start of the day, a date with no time of
+ *   day, so `tomorrow` shows as a date and `days until` counts whole days.
+ * - `'now'`: the current instant, with its time of day, so at noon `tomorrow`
+ *   is noon tomorrow and `days until 25 december` counts the half of today
+ *   already gone.
  *
  * `now` is the current instant under both, and so is a span shorter than a day
  * (`2 hours ago`, `minutes until 5pm`), which is a question about the clock.
@@ -38,11 +36,11 @@ export const RELATIVE_DAY_ANCHORS: readonly RelativeDayAnchor[] = ["now", "midni
  * asked it not to.
  *
  * @param value - What `date.relativeDays` holds, typed or not.
- * @returns The anchor, `'now'` when unset.
+ * @returns The anchor, `'midnight'` when unset.
  * @throws {EngineError} `DATE_RELATIVE_DAYS_INVALID` for anything else.
  */
 export function resolveRelativeDays(value: unknown): RelativeDayAnchor {
-	if (value === undefined) return "now";
+	if (value === undefined) return "midnight";
 	if (value === "now" || value === "midnight") return value;
 	const shown = typeof value === "string" ? JSON.stringify(value) : typeof value;
 	throw ErrorFactory.config(

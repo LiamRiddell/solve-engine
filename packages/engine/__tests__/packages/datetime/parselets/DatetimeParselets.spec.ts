@@ -55,13 +55,15 @@ describe("Datetime Parselets", () => {
     expect((result.value as number)).toBeLessThanOrEqual(after);
   });
 
-  test("today returns current time", () => {
-    const before = Date.now();
+  test("today returns the start of the current day", () => {
+    const before = new Date().setHours(0, 0, 0, 0);
     const result = parseAndExecute("today");
-    const after = Date.now();
+    const after = new Date().setHours(0, 0, 0, 0);
     expect(result.type).toBe(ValueType.Datetime);
     expect((result.value as number)).toBeGreaterThanOrEqual(before);
     expect((result.value as number)).toBeLessThanOrEqual(after);
+    const landed = new Date(result.value as number);
+    expect([landed.getHours(), landed.getMinutes(), landed.getSeconds(), landed.getMilliseconds()]).toEqual([0, 0, 0, 0]);
   });
 
   test("now + 1 day lands on tomorrow's date at the same time of day", () => {
@@ -182,9 +184,16 @@ describe("Datetime Parselets", () => {
     expect(elapsed).toBeLessThanOrEqual(7210000);
   });
 
-  test("today + 3 days yields ~259200000", () => {
+  test("today + 3 days is the start of the day three days on", () => {
+    const expected = new Date();
+    expected.setDate(expected.getDate() + 3);
+    expected.setHours(0, 0, 0, 0);
+    expect(parseAndExecute("today + 3 days").value).toBe(expected.getTime());
+  });
+
+  test("now + 3 days yields ~259200000", () => {
     const now = Date.now();
-    const result = parseAndExecute("today + 3 days");
+    const result = parseAndExecute("now + 3 days");
     const elapsed = (result.value as number) - now;
     // `+ 3 days` is calendar arithmetic at the same wall-clock time, so a span that
     // crosses a daylight-saving boundary is an hour short or long of 3 * 24h. Allow

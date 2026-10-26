@@ -30,6 +30,7 @@ import { untilSinceNormalizerRule } from "@solve-js/packages/datetime/normalizer
 
 const normalizer = new TokenNormalizer();
 const DATE_CONTEXT = createEngineContext({ calendar: "date" });
+const DATE_CONTEXT_NOW = createEngineContext({ calendar: "date", relativeDays: "now" });
 normalizer.register(untilSinceNormalizerRule());
 
 function tokenize(lexer: Lexer, input: string) {
@@ -42,7 +43,7 @@ function tokenize(lexer: Lexer, input: string) {
   return tokens;
 }
 
-function parseAndExecute(input: string): Value {
+function parseAndExecute(input: string, context = DATE_CONTEXT): Value {
   const lexer = new Lexer();
   const rawTokens = tokenize(lexer, input);
   const tokens = normalizer.normalize(rawTokens);
@@ -60,7 +61,7 @@ function parseAndExecute(input: string): Value {
   // The Date backend, pinned: these tests fix `now` by mocking Date.now, which
   // native Temporal's clock does not read, so on Node 26 the default backend
   // computed from the real day (#621).
-  const vm = createVM(sharedOpRegistry, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, DATE_CONTEXT);
+  const vm = createVM(sharedOpRegistry, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, context);
   const result = executeBytecode(
     { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
     vm
@@ -75,6 +76,8 @@ describe("next/last <Weekday>", () => {
 
   // Monday 2024-01-01, noon local time — a fixed, known weekday to pin `now` to.
   const MONDAY_NOON = new Date(2024, 0, 1, 12, 0, 0).getTime();
+  // The start of that Monday: `next` and `last` name a day, at its midnight.
+  const MONDAY_START = new Date(2024, 0, 1).getTime();
 
   function withFixedNow<T>(fn: () => T): T {
     jest.spyOn(Date, "now").mockReturnValue(MONDAY_NOON);
@@ -91,16 +94,14 @@ describe("next/last <Weekday>", () => {
     const resultMs = result.value as number;
     expect(new Date(resultMs).getDay()).toBe(6); // Saturday
     expect(resultMs).toBeGreaterThan(MONDAY_NOON);
-    const diffDays = Math.round((resultMs - MONDAY_NOON) / 86400000);
-    expect(diffDays).toBe(5);
+    expect(resultMs - MONDAY_START).toBe(5 * 86400000);
   });
 
   test("next Monday from a Monday jumps a full week ahead (not +0)", () => {
     const result = withFixedNow(() => parseAndExecute("next Monday"));
     const resultMs = result.value as number;
     expect(new Date(resultMs).getDay()).toBe(1); // Monday
-    const diffDays = Math.round((resultMs - MONDAY_NOON) / 86400000);
-    expect(diffDays).toBe(7);
+    expect(resultMs - MONDAY_START).toBe(7 * 86400000);
   });
 
   test("last Saturday lands on a Saturday strictly before now", () => {
@@ -109,16 +110,14 @@ describe("next/last <Weekday>", () => {
     const resultMs = result.value as number;
     expect(new Date(resultMs).getDay()).toBe(6); // Saturday
     expect(resultMs).toBeLessThan(MONDAY_NOON);
-    const diffDays = Math.round((MONDAY_NOON - resultMs) / 86400000);
-    expect(diffDays).toBe(2);
+    expect(MONDAY_START - resultMs).toBe(2 * 86400000);
   });
 
   test("last Monday from a Monday jumps a full week back (not -0)", () => {
     const result = withFixedNow(() => parseAndExecute("last Monday"));
     const resultMs = result.value as number;
     expect(new Date(resultMs).getDay()).toBe(1); // Monday
-    const diffDays = Math.round((MONDAY_NOON - resultMs) / 86400000);
-    expect(diffDays).toBe(7);
+    expect(MONDAY_START - resultMs).toBe(7 * 86400000);
   });
 
   test("next Sunday and last Sunday are 7 days apart from each other, straddling now", () => {
@@ -131,6 +130,13 @@ describe("next/last <Weekday>", () => {
     expect(nextMs).toBeGreaterThan(MONDAY_NOON);
     expect(lastMs).toBeLessThan(MONDAY_NOON);
     expect(Math.round((nextMs - lastMs) / 86400000)).toBe(7);
+  });
+
+  test("with relativeDays \"now\", next and last keep the time of day", () => {
+    const next = withFixedNow(() => parseAndExecute("next Saturday", DATE_CONTEXT_NOW));
+    const last = withFixedNow(() => parseAndExecute("last Saturday", DATE_CONTEXT_NOW));
+    expect((next.value as number) - MONDAY_NOON).toBe(5 * 86400000);
+    expect(MONDAY_NOON - (last.value as number)).toBe(2 * 86400000);
   });
 
   test("next/last without a following weekday throws a clear parse error", () => {
@@ -154,10 +160,20 @@ describe("<unit> until/since <Datetime>", () => {
     expect(result.value as number).toBeCloseTo(1, 1);
   });
 
-  test("hours until tomorrow is ~24", () => {
+  test("hours until tomorrow is the hours left in today, since tomorrow starts at midnight", () => {
     const result = parseAndExecute("hours until tomorrow");
+    const tomorrow = new Date();
+    tomorrow.setHours(24, 0, 0, 0);
+    const expected = (tomorrow.getTime() - Date.now()) / 3600000;
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("hours");
+    expect(Math.abs((result.value as number) - expected)).toBeLessThan(0.01);
+    expect(result.value as number).toBeGreaterThan(0);
+    expect(result.value as number).toBeLessThanOrEqual(25.1);
+  });
+
+  test("with relativeDays \"now\", hours until tomorrow is ~24", () => {
+    const result = parseAndExecute("hours until tomorrow", DATE_CONTEXT_NOW);
     // 24 hours, but 23 or 25 when the day ahead crosses a daylight-saving boundary.
     expect(result.value as number).toBeGreaterThanOrEqual(22.9);
     expect(result.value as number).toBeLessThanOrEqual(25.1);
@@ -175,9 +191,20 @@ describe("<unit> until/since <Datetime>", () => {
     expect(result.value as number).toBeCloseTo(-1, 1);
   });
 
-  test("weeks until now is ~0", () => {
-    const result = parseAndExecute("weeks until now");
+  test("hours until now is ~0", () => {
+    const result = parseAndExecute("hours until now");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.value as number).toBeCloseTo(0, 1);
+  });
+
+  test("weeks until now counts from the start of today, so it is under a day's worth of a week", () => {
+    const result = parseAndExecute("weeks until now");
+    expect(result.type).toBe(ValueType.Uom);
+    expect(result.value as number).toBeGreaterThanOrEqual(0);
+    expect(result.value as number).toBeLessThanOrEqual(25 / 168);
+  });
+
+  test("with relativeDays \"now\", weeks until now is ~0", () => {
+    expect(parseAndExecute("weeks until now", DATE_CONTEXT_NOW).value as number).toBeCloseTo(0, 1);
   });
 });

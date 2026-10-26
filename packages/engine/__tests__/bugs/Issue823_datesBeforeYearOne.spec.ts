@@ -115,9 +115,10 @@ describe("a date before year 1 is shown with its era, on every backend", () => {
 });
 
 describe("the zone-bound Date backend reads the year before year 1 (the 2924 row)", () => {
-	test("3000 years before noon on 11 March 2026 is 975 BC, at noon", () => {
+	test("3000 years before 11 March 2026 is 975 BC, a date; before now it is at noon", () => {
 		const calendar = pinned(dateCalendarInZone("Europe/London"));
-		expect(shown(calendar, "today - 3000 years")).toBe("= Saturday, March 11, 975 BC, 12:00:00 PM");
+		expect(shown(calendar, "today - 3000 years")).toBe("= Saturday, March 11, 975 BC");
+		expect(shown(calendar, "now - 3000 years")).toBe("= Saturday, March 11, 975 BC, 12:00:00 PM");
 	});
 
 	test("it agrees with the Temporal backend in the same zone, instant for instant", () => {

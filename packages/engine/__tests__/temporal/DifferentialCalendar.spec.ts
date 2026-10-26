@@ -230,8 +230,11 @@ describe("what a zone of its own changes", () => {
 	test("`today` is the zone's day, and displays as it through the backend on the settings", () => {
 		const tokyo = engineIn("Asia/Tokyo");
 		const newYork = engineIn("America/New_York");
-		expect(render(tokyo.engine.evaluateExpression("today"), tokyo.calendar)).toBe(`Datetime = Thursday, August 27, 2026, 7:00:00 AM @${NOW}`);
-		expect(render(newYork.engine.evaluateExpression("today"), newYork.calendar)).toBe(`Datetime = Wednesday, August 26, 2026, 6:00:00 PM @${NOW}`);
+		expect(render(tokyo.engine.evaluateExpression("now"), tokyo.calendar)).toBe(`Datetime = Thursday, August 27, 2026, 7:00:00 AM @${NOW}`);
+		expect(render(newYork.engine.evaluateExpression("now"), newYork.calendar)).toBe(`Datetime = Wednesday, August 26, 2026, 6:00:00 PM @${NOW}`);
+		// `today` is the start of that day in the zone, shown as a date.
+		expect(render(tokyo.engine.evaluateExpression("today"), tokyo.calendar)).toMatch(/^Datetime = Thursday, August 27, 2026 @/);
+		expect(render(newYork.engine.evaluateExpression("today"), newYork.calendar)).toMatch(/^Datetime = Wednesday, August 26, 2026 @/);
 		expect(newYork.engine.evaluateExpression("today as weekday").value).toBe("Wednesday");
 		expect(tokyo.engine.evaluateExpression("today as weekday").value).toBe("Thursday");
 	});
