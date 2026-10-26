@@ -323,6 +323,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
+          # Astro refuses a Node older than the one it was released against, and the
+          # runner image's cached 22.x lags the newest by a patch or two.
+          check-latest: true
           cache: npm
 
       - run: npm ci
