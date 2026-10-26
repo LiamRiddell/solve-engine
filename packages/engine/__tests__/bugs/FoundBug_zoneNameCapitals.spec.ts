@@ -1,8 +1,19 @@
-import { describe, expect, test } from "@jest/globals";
+import { afterAll, beforeAll, describe, expect, jest, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { PROTOTYPE_WORDS, TEXT_EDGES, expectHonestDocument, expectHonestLine, expectPrototypeUntouched, fill } from "@tools/adversarial";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { zoneDisplayName } from "@solve-js/packages/time/parselets/shared/ZoneReference";
+
+// The answers below are for London on British Summer Time, when these lines
+// were written. A time in a zone is read on today's date, so on the real
+// clock they changed by an hour whenever London left summer time; the clock
+// is pinned to a summer day instead. Only Date is faked, not the timers.
+beforeAll(() => {
+	jest.useFakeTimers({ now: new Date("2026-09-23T12:00:00Z"), doNotFake: ["nextTick", "setImmediate", "clearImmediate", "setInterval", "clearInterval", "setTimeout", "clearTimeout", "queueMicrotask", "hrtime", "performance", "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback", "cancelIdleCallback"] });
+});
+afterAll(() => {
+	jest.useRealTimers();
+});
 
 /**
  * Found bug: a multi-zone time list labelled "Rio de Janeiro" as "Rio De
