@@ -218,6 +218,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # The publish job's npm, installed the way it installs it, on the same Node.
+      # The 2.44.0 publish failed on this step, the first time it ran on this Node,
+      # with nothing in a pull request to say so.
+      - name: Use the npm the publish job uses
+        run: sh scripts/use-pinned-npm.sh
+
       - run: npm ci
       - run: npm run build
 
