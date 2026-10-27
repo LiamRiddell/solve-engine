@@ -16,7 +16,7 @@
 /**
  * Unit tests do not use the real network.
  *
- * About thirty spec files reach a live service through a resolver (Frankfurter
+ * Twenty-two spec files reach a live service through a resolver (Frankfurter
  * for exchange rates, CoinGecko, Open-Meteo, the Grand Exchange prices)
  * without meaning to: a line such as `100 USD in EUR` starts a fetch, and the
  * spec asserts only that it goes pending or falls back. Each request left a
