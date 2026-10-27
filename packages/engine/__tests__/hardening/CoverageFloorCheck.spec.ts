@@ -247,11 +247,32 @@ describe("run-coverage.mjs --check-only, against the real floor in jest.coverage
 	});
 });
 
-describe("run-coverage.mjs shard count", () => {
-	test.each(["0", "17", "2.5", "three", "-1", " "])("SOLVE_COVERAGE_SHARDS=%j is refused before any shard starts", (value) => {
-		const run = spawnSync(process.execPath, [RUNNER], { encoding: "utf8", env: { ...process.env, SOLVE_COVERAGE_SHARDS: value }, timeout: 20_000 });
+describe("run-coverage.mjs shard and parallel counts", () => {
+	const refused = (name: string, value: string, upTo: number) => {
+		const run = spawnSync(process.execPath, [RUNNER], { encoding: "utf8", env: { ...process.env, [name]: value }, timeout: 20_000 });
 		expect(run.status).toBe(2);
-		expect(run.stderr).toContain("SOLVE_COVERAGE_SHARDS is");
-		expect(run.stderr).toContain("give a whole number from 1 to 16");
+		expect(run.stderr).toContain(`${name} is`);
+		expect(run.stderr).toContain(`give a whole number from 1 to ${upTo}`);
+	};
+
+	test.each(["0", "33", "2.5", "three", "-1", " ", "1e2", "0x10", "Infinity", "NaN"])("SOLVE_COVERAGE_SHARDS=%j is refused before any shard starts", (value) => {
+		refused("SOLVE_COVERAGE_SHARDS", value, 32);
+	});
+
+	test.each(["0", "9", "2.5", "four", "-1", " ", "1e1", "Infinity"])("SOLVE_COVERAGE_PARALLEL=%j is refused before any shard starts", (value) => {
+		refused("SOLVE_COVERAGE_PARALLEL", value, 8);
+	});
+
+	test("the defaults are eight shards, four at a time, one per core of the runner", () => {
+		const source = fs.readFileSync(RUNNER, "utf8");
+		expect(source).toContain('envCount("SOLVE_COVERAGE_SHARDS", 8, 32)');
+		expect(source).toContain('envCount("SOLVE_COVERAGE_PARALLEL", 4, 8)');
+	});
+
+	test("a signal is reported with the shards still running, and passed on", () => {
+		const source = fs.readFileSync(RUNNER, "utf8");
+		expect(source).toContain('for (const signal of ["SIGTERM", "SIGINT"])');
+		expect(source).toContain("still running");
+		expect(source).toContain("child.kill(signal)");
 	});
 });
