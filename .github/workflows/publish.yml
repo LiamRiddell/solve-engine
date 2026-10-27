@@ -162,18 +162,14 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
 
-      # Node 22 ships npm 10, and trusted publishing needs 11.5.1 or newer. The
-      # failure without this is not obvious: npm simply looks for a token it
-      # cannot find and reports an authentication error, rather than saying the
-      # client is too old to speak OIDC.
+      # Trusted publishing needs npm 11.5.1 or newer, and the failure without it
+      # is not obvious: npm simply looks for a token it cannot find and reports an
+      # authentication error, rather than saying the client is too old to speak
+      # OIDC. The pinned npm is installed beside the runner's and put first on the
+      # PATH, not over it: replacing npm with itself failed the 2.44.0 publish on
+      # this step. The script says why, and why the version is pinned.
       - name: Use an npm that understands trusted publishing
-        run: |
-          # Pinned, not `@latest`. This runs in the job holding `id-token: write`,
-          # so whatever it installs can mint a publishing credential for the
-          # package. `@latest` means that code is chosen at run time by whoever
-          # last published npm, with no review and no way to notice a change.
-          npm install -g npm@12.0.2
-          npm --version
+        run: sh scripts/use-pinned-npm.sh
 
       - run: npm ci
 

@@ -39,9 +39,15 @@ describe("the compilers", () => {
 
 	test("`tsc` on the PATH is still 5.9, for typecheck:tsc", () => {
 		const bin = path.join(REPO_ROOT, "node_modules/.bin/tsc");
-		// npm links the bin on POSIX; on Windows it writes a shell shim naming the target instead.
-		const shimTarget = process.platform === "win32" ? /"\$basedir\/(\.\.\/[^"]+)"/.exec(fs.readFileSync(bin, "utf8"))?.[1] : undefined;
-		const target = shimTarget === undefined ? fs.realpathSync(bin) : path.join(path.dirname(bin), shimTarget);
+		// npm links the bin on POSIX, and on Windows writes a shell shim that names
+		// the target; the shim's layout has changed between npm versions, so it is
+		// read only for which package it runs, and that package's own tsc is run.
+		const shim = process.platform === "win32" ? fs.readFileSync(bin, "utf8") : undefined;
+		if (shim !== undefined) {
+			expect(shim).toMatch(/typescript\/bin\/tsc/);
+			expect(shim).not.toMatch(/typescript7/);
+		}
+		const target = shim === undefined ? fs.realpathSync(bin) : path.join(REPO_ROOT, "node_modules/typescript/bin/tsc");
 		const run = spawnSync(process.execPath, [target, "--version"], { encoding: "utf8" });
 		expect(run.stdout.trim()).toBe("Version 5.9.3");
 	});
