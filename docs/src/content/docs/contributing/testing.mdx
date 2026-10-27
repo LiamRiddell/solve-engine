@@ -60,16 +60,22 @@ request, because the per-file coverage conversion makes the run several times
 slower than the suite itself. `npm run test:coverage` is the same check
 locally; run it for a change that removes tests.
 
-Coverage is measured in shards. `scripts/run-coverage.mjs` starts three Jest
-processes side by side, each running a third of the spec files with
-`--shard`, and each writes its raw counts without checking any threshold,
-because a third of the specs covers only part of the code. The script then
-adds the three sets of counts together and checks the floor once, on the
-whole suite's figures, so the number is the same one a single run would give.
-`SOLVE_COVERAGE_SHARDS` changes the count (a machine with less memory can use
-one or two). A single run had grown to 80 to 90 minutes, against the
-workflow's 90-minute limit, and about half the daily runs were cancelled
-before the floor was measured (#890).
+Coverage is measured in shards. `scripts/run-coverage.mjs` cuts the spec files
+into eight pieces with Jest's `--shard`, runs four of them at a time (one per
+core of the runner), and each writes its raw counts without checking any
+threshold, because an eighth of the specs covers only part of the code. The
+script then adds the eight sets of counts together and checks the floor once,
+on the whole suite's figures, so the number is the same one a single run would
+give. `SOLVE_COVERAGE_SHARDS` sets how many pieces and `SOLVE_COVERAGE_PARALLEL`
+how many run at once; a machine with less memory can run fewer at a time.
+
+The pieces are small on purpose. A shard merges every spec file's coverage into
+one map as it goes, and its time per spec file climbs the longer it lives:
+three long shards started at about 9 seconds per file, reached 20 and more, and
+then slowed to minutes per file until the runner ended the job at 51 minutes. A
+single run had grown to 80 to 90 minutes against the workflow's 90-minute
+limit, and about half the daily runs were cancelled before the floor was
+measured (#890).
 
 No pull request shows a scheduled run's result, so the coverage workflow and
 the nightly fuzz soak each end in a report job: when the run does not succeed,
