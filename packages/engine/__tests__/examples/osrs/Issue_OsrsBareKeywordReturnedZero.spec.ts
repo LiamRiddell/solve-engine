@@ -4,6 +4,10 @@ import { ValueType } from "@solve-js/vm/Value";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { keepOsrsOffline } from "@tools/offlineOsrs";
+
+// The package fetches the real Grand Exchange API for a price; see tools/offlineOsrs.ts.
+keepOsrsOffline();
 
 /**
  * Bug: typing the bare word "osrs" (or "osrs" followed by anything that

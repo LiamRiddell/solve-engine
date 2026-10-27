@@ -34,6 +34,10 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
 import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
+import { keepOsrsOffline } from "@tools/offlineOsrs";
+
+// The package fetches the real Grand Exchange API for a price; see tools/offlineOsrs.ts.
+keepOsrsOffline();
 
 /**
  * The engine assigns OSRS's `gameitem` plugin function a runtime CALL_PLUGIN

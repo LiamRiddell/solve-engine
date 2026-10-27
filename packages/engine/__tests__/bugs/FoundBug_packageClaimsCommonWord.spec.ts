@@ -7,6 +7,10 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { osrsLexerVocabulary } from "@solve-js-examples/osrs/OsrsLexerVocabulary";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
 import { expectPackage } from "@solve-js/testing";
+import { keepOsrsOffline } from "@tools/offlineOsrs";
+
+// The package fetches the real Grand Exchange API for a price; see tools/offlineOsrs.ts.
+keepOsrsOffline();
 
 /**
  * Found bug: under the playground's package set, the OSRS example package
